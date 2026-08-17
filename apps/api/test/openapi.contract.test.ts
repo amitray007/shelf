@@ -136,6 +136,34 @@ describe('OpenAPI v1', () => {
       'application/octet-stream',
     ]);
     expect(serialized).toContain('if-none-match');
+    expect(document).toHaveProperty(
+      [
+        'paths',
+        '/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/shares',
+        'post',
+        'operationId',
+      ],
+      'createShareV1',
+    );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/workspaces/{workspaceId}/shares', 'get', 'operationId'],
+      'listSharesV1',
+    );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/workspaces/{workspaceId}/shares/{shareId}', 'delete', 'operationId'],
+      'revokeShareV1',
+    );
+    for (const [path, operationId] of [
+      ['/api/v1/public/shares/{shareId}/resolve', 'resolvePublicShareV1'],
+      ['/api/v1/public/shares/{shareId}/content', 'downloadPublicShareContentV1'],
+      ['/api/v1/public/shares/{shareId}/tree', 'getPublicShareTreeV1'],
+    ] as const) {
+      expect(document).toHaveProperty(['paths', path, 'post', 'operationId'], operationId);
+      const operation = document.paths?.[path]?.post;
+      expect(operation?.security).toBeUndefined();
+      expect(JSON.stringify(operation?.parameters ?? [])).not.toContain('secret');
+      expect(JSON.stringify(operation?.requestBody ?? {})).toContain('secret');
+    }
   });
 
   it('matches the checked generated contract', async () => {

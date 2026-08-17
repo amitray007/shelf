@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
@@ -7,8 +7,12 @@ import {
   ErrorEnvelopeSchema,
   FolderPublishResultSchema,
   FolderTreePageSchema,
+  PublicShareResolutionSchema,
   PublishResultSchema,
   RevisionComparisonSchema,
+  ShareCreateResultSchema,
+  ShareManagementSummarySchema,
+  SharePageSchema,
 } from '@shelf/contracts';
 import type {
   ArtifactCatalogRepository,
@@ -20,10 +24,15 @@ import type {
   FolderRevisionRepository,
   RevisionComparisonRepository,
   RevisionRepository,
+  ShareCapabilityCodec,
+  ShareClock,
+  ShareIdGenerator,
+  ShareRepository,
 } from '@shelf/core';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import { MemoryRevisionRepository } from './adapters/memory-revision-repository.js';
+import { MemoryShareRepository } from './adapters/memory-share-repository.js';
 import { TemporaryContentStore } from './adapters/temporary-content-store.js';
 import { registerHumanAuthRoutes } from './auth/runtime.js';
 import type { Authenticator } from './authenticate.js';
@@ -33,6 +42,8 @@ import { registerArtifactRoutes } from './routes/artifacts.js';
 import { FolderMultipartOpenApiSchema, registerFolderRoutes } from './routes/folders.js';
 import { PublishMultipartOpenApiSchema, registerPublishRoute } from './routes/publish.js';
 import { registerRevisionRoutes } from './routes/revisions.js';
+import { registerShareRoutes } from './routes/shares.js';
+import { createHmacShareCapabilityCodec } from './share-capability.js';
 
 declare module 'fastify' {
   interface FastifyContextConfig {
@@ -62,6 +73,17 @@ export const DEFAULT_MULTIPART_LIMITS: ShelfMultipartLimits = Object.freeze({
   parts: 2,
 });
 
+function withoutNestedSchemaIds<T>(schema: T): T {
+  const copy = structuredClone(schema);
+  function visit(value: unknown, root: boolean): void {
+    if (typeof value !== 'object' || value === null) return;
+    if (!root && !Array.isArray(value)) delete (value as Record<string, unknown>).$id;
+    for (const child of Object.values(value)) visit(child, false);
+  }
+  visit(copy, true);
+  return copy;
+}
+
 export interface ShelfAppDependencies {
   authenticator: Authenticator;
   authorizer: Authorizer;
@@ -73,6 +95,10 @@ export interface ShelfAppDependencies {
     ArtifactLifecycleRepository &
     FolderRevisionRepository &
     RevisionComparisonRepository;
+  shareRepository: ShareRepository;
+  shareCapabilityCodec: ShareCapabilityCodec;
+  shareClock?: ShareClock;
+  generateShareId?: ShareIdGenerator;
 }
 
 export interface CreateShelfAppOptions {
@@ -87,6 +113,10 @@ export interface CreateShelfAppOptions {
     ArtifactLifecycleRepository &
     FolderRevisionRepository &
     RevisionComparisonRepository;
+  shareRepository?: ShareRepository;
+  shareCapabilityCodec?: ShareCapabilityCodec;
+  shareClock?: ShareClock;
+  generateShareId?: ShareIdGenerator;
   multipartLimits?: Partial<ShelfMultipartLimits>;
   logger?: boolean;
   humanAuth?: HumanAuth;
@@ -115,12 +145,18 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
     genReqId: () => randomUUID(),
   });
   const limits = { ...DEFAULT_MULTIPART_LIMITS, ...options.multipartLimits };
+  const revisionRepository = options.revisionRepository ?? new MemoryRevisionRepository();
   const dependencies: ShelfAppDependencies = {
     authenticator: options.authenticator,
     authorizer: options.authorizer,
     contentStore,
     contentReader,
-    revisionRepository: options.revisionRepository ?? new MemoryRevisionRepository(),
+    revisionRepository,
+    shareRepository: options.shareRepository ?? new MemoryShareRepository(revisionRepository),
+    shareCapabilityCodec:
+      options.shareCapabilityCodec ?? createHmacShareCapabilityCodec(randomBytes(32)),
+    ...(options.shareClock === undefined ? {} : { shareClock: options.shareClock }),
+    ...(options.generateShareId === undefined ? {} : { generateShareId: options.generateShareId }),
   };
 
   await app.register(swagger, {
@@ -149,11 +185,16 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   app.addSchema(FolderTreePageSchema);
   app.addSchema(ErrorEnvelopeSchema);
   app.addSchema(RevisionComparisonSchema);
+  app.addSchema(withoutNestedSchemaIds(ShareManagementSummarySchema));
+  app.addSchema(withoutNestedSchemaIds(ShareCreateResultSchema));
+  app.addSchema(withoutNestedSchemaIds(SharePageSchema));
+  app.addSchema(withoutNestedSchemaIds(PublicShareResolutionSchema));
   registerErrorHandler(app);
   await registerPublishRoute(app, dependencies, limits);
   await registerFolderRoutes(app, dependencies);
   await registerArtifactRoutes(app, dependencies);
   await registerRevisionRoutes(app, dependencies);
+  await registerShareRoutes(app, dependencies);
   await app.ready();
   return app;
 }

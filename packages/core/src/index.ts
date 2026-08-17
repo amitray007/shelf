@@ -10,6 +10,7 @@ export * from './reconciliation/ports.js';
 export * from './reconciliation/reconcile.js';
 export * from './revisions/compare.js';
 export * from './revisions/read.js';
+export * from './shares/access.js';
 export * from './shares/lifecycle.js';
 export * from './shares/ports.js';
 export * from './shares/resolution.js';
