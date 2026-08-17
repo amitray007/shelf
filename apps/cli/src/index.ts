@@ -15,6 +15,12 @@ import {
   type RestoreArtifactCommandOptions,
   type ShowArtifactCommandOptions,
 } from './commands/artifacts.js';
+import {
+  executeFolderTree,
+  executePublishFolder,
+  type FolderTreeCommandOptions,
+  type PublishFolderCommandOptions,
+} from './commands/folders.js';
 import { executePublish, type PublishCommandOptions } from './commands/publish.js';
 import { CliFailure, failure, jsonLine, redactEnvelope, usageFailure } from './output.js';
 import type { CliRuntime } from './runtime.js';
@@ -59,6 +65,32 @@ export async function runCli(
         runtime.env,
         runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
       );
+    });
+
+  const folders = program.command('folders').description('Publish and inspect folder snapshots');
+  folders
+    .command('publish')
+    .description('Publish one complete immutable folder snapshot')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .requiredOption('--directory <path>')
+    .requiredOption('--idempotency-key <key>')
+    .option('--artifact <artifact-id>', 'publish another snapshot to this folder artifact')
+    .option('--metadata <key=value>', 'publisher metadata; repeatable', collect, [])
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: PublishFolderCommandOptions) => {
+      result = await executePublishFolder(options, runtime);
+    });
+  folders
+    .command('tree')
+    .description('Read one immutable folder revision tree')
+    .requiredOption('--url <url>')
+    .requiredOption('--revision <revision-id>')
+    .option('--limit <count>')
+    .option('--cursor <cursor>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: FolderTreeCommandOptions) => {
+      result = await executeFolderTree(options, runtime);
     });
 
   const artifacts = program.command('artifacts').description('Inspect versioned artifacts');

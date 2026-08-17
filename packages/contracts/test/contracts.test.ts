@@ -14,11 +14,13 @@ describe('the versioned machine contract', () => {
   it('accepts the complete publish result and rejects undeclared response fields', () => {
     const result = {
       apiVersion: 'v1',
+      kind: 'file',
       workspaceId: 'ws_example',
       artifactId: 'art_AAAAAAAAAAAAAAAAAAAAAA',
       revisionId: 'rev_BBBBBBBBBBBBBBBBBBBBBB',
       contentHash: 'sha256:'.concat('a'.repeat(64)),
       byteCount: 12,
+      fileCount: 1,
       provenance: {
         classification: 'direct-publish',
         observed: {

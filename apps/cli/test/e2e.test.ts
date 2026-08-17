@@ -36,6 +36,17 @@ describe('CLI wire contract', () => {
       operationId: 'restoreArtifactRevisionV1',
       security: [{ bearerAuth: [] }],
     });
+    expect(document.paths['/api/v1/workspaces/{workspaceId}/folders'].post).toMatchObject({
+      operationId: 'publishFolderV1',
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        content: { 'multipart/form-data': { schema: { required: ['manifest'] } } },
+      },
+    });
+    expect(document.paths['/api/v1/revisions/{revisionId}/tree'].get).toMatchObject({
+      operationId: 'getFolderTreeV1',
+      security: [{ bearerAuth: [] }],
+    });
   });
 
   it('does not couple the CLI to core or API server modules', async () => {
@@ -46,6 +57,7 @@ describe('CLI wire contract', () => {
         '../src/output.ts',
         '../src/commands/publish.ts',
         '../src/commands/artifacts.ts',
+        '../src/commands/folders.ts',
       ].map((path) => readFile(new URL(path, import.meta.url), 'utf8')),
     );
     expect(sources.join('\n')).not.toMatch(/@shelf\/core|apps\/api|\.\.\/\.\.\/api/);

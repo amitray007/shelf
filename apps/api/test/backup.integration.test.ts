@@ -3,7 +3,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { CommitPublishInput, StoredPublish } from '@shelf/core';
+import {
+  type CommitFolderPublishInput,
+  type CommitPublishInput,
+  canonicalFolderManifest,
+  type StoredPublish,
+} from '@shelf/core';
 import {
   createPostgresDatabase,
   migratePostgresToLatest,
@@ -71,6 +76,57 @@ describePostgres('offline Local File backup and restore', () => {
     const sealed = await sourceStorage.seal(staged, descriptor('recoverable bytes'));
     const revision = storedRevision(sealed);
     await sourceRepository.commitPublish(publishInput(revision));
+    const folderFileStage = await sourceStorage.stage(chunks(''), {});
+    const folderFile = await sourceStorage.seal(folderFileStage, descriptor(''));
+    const folderEntries = [
+      { path: 'empty', kind: 'directory' as const },
+      {
+        path: 'nested.txt',
+        kind: 'file' as const,
+        mediaType: 'text/plain',
+        content: folderFile,
+      },
+    ];
+    const canonical = canonicalFolderManifest(folderEntries);
+    const manifestStage = await sourceStorage.stage(
+      (async function* content() {
+        yield canonical.bytes;
+      })(),
+      {},
+    );
+    const manifest = await sourceStorage.seal(manifestStage, {
+      contentHash: canonical.contentHash,
+      byteCount: canonical.bytes.byteLength,
+    });
+    const folderPublish: CommitFolderPublishInput = {
+      namespace: {
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        actorId: 'actor-agent',
+        operation: 'file.publish',
+        key: 'backup-folder',
+      },
+      fingerprint: `folder-publish-request/v1:sha256:${'b'.repeat(64)}`,
+      result: {
+        apiVersion: 'v1',
+        kind: 'folder',
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        artifactId: 'art_backup_folder_AAAAAAA',
+        revisionId: 'rev_backup_folder_AAAAAAA',
+        manifest,
+        rootName: 'Project',
+        totalByteCount: folderFile.byteCount,
+        fileCount: 1,
+        provenance: {
+          classification: 'direct-publish',
+          observed: { actorId: 'actor-agent', operation: 'file.publish' },
+        },
+        publisherMetadata: {},
+      },
+      entries: folderEntries,
+    };
+    await sourceRepository.commitFolderPublish(folderPublish);
     await sourceDatabase.destroy();
 
     const created = await command(environment(sourceUrl, sourceContentRoot), [
@@ -85,7 +141,7 @@ describePostgres('offline Local File backup and restore', () => {
     expect(JSON.parse(created.stdout)).toMatchObject({
       status: 'created',
       backupId: 'backup-one',
-      referencedContent: 1,
+      referencedContent: 3,
     });
 
     const blockedTarget = new Pool({ connectionString: restoreUrl });
@@ -134,7 +190,7 @@ describePostgres('offline Local File backup and restore', () => {
     expect(JSON.parse(restored.stdout)).toMatchObject({
       status: 'restored',
       backupId: 'backup-one',
-      referencedContent: 1,
+      referencedContent: 3,
     });
 
     const restoredDatabase = createPostgresDatabase({ connectionString: restoreUrl });
@@ -146,6 +202,17 @@ describePostgres('offline Local File backup and restore', () => {
     await expect(collect(await restoredStorage.read(revision.content, {}))).resolves.toBe(
       'recoverable bytes',
     );
+    await expect(collect(await restoredStorage.read(folderFile, {}))).resolves.toBe('');
+    await expect(collect(await restoredStorage.read(manifest, {}))).resolves.toBe(
+      new TextDecoder().decode(canonical.bytes),
+    );
+    await expect(
+      new PostgresRevisionRepository(restoredDatabase).listFolderEntries({
+        installationId: 'installation-main',
+        revisionId: folderPublish.result.revisionId,
+        limit: 10,
+      }),
+    ).resolves.toEqual({ items: folderEntries });
     await restoredDatabase.destroy();
   });
 });

@@ -17,7 +17,7 @@ export interface PublishCommandOptions {
   allowInsecureLoopback?: boolean;
 }
 
-function publisherMetadata(entries: readonly string[]): PublisherMetadata {
+export function publisherMetadata(entries: readonly string[]): PublisherMetadata {
   if (entries.length > PUBLISHER_METADATA_LIMITS.maxKeys) {
     throw usageFailure('Too many publisher metadata entries.');
   }

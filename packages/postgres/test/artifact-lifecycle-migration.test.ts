@@ -82,6 +82,7 @@ describePostgres('artifact lifecycle migration', () => {
 
       await expect(migratePostgresToLatest(database)).resolves.toEqual([
         { migrationName: '0004_artifact_lifecycle', status: 'Success' },
+        { migrationName: '0005_folder_snapshots', status: 'Success' },
       ]);
       await expect(
         new PostgresRevisionRepository(database).findArtifact('art_AAAAAAAAAAAAAAAAAAAAAA'),

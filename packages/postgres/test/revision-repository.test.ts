@@ -1,8 +1,10 @@
 import { randomBytes } from 'node:crypto';
 
 import type {
+  CommitFolderPublishInput,
   CommitPublishInput,
   CommitRestoreInput,
+  StoredFolderPublish,
   StoredPublish,
   StoredRestore,
 } from '@shelf/core';
@@ -118,9 +120,164 @@ function restoreInput(
   };
 }
 
+function folderInput(): CommitFolderPublishInput {
+  const result: StoredFolderPublish = {
+    apiVersion: 'v1',
+    kind: 'folder',
+    installationId: 'installation-main',
+    workspaceId: 'workspace-main',
+    artifactId: 'art_folder_AAAAAAAAAAAAAAAA',
+    revisionId: 'rev_folder_AAAAAAAAAAAAAAAA',
+    manifest: {
+      contentId: 'cnt_folder_manifest_aaaaaaaaaaaaaa',
+      contentHash: `sha256:${'c'.repeat(64)}`,
+      byteCount: 181,
+    },
+    rootName: 'Project',
+    totalByteCount: 7,
+    fileCount: 1,
+    provenance: {
+      classification: 'direct-publish',
+      observed: { actorId: 'actor-agent', operation: 'file.publish' },
+    },
+    publisherMetadata: { source: 'test' },
+  };
+  return {
+    namespace: {
+      installationId: result.installationId,
+      workspaceId: result.workspaceId,
+      actorId: 'actor-agent',
+      operation: 'file.publish',
+      key: 'publish-folder',
+    },
+    fingerprint: `folder-publish-request/v1:sha256:${'d'.repeat(64)}`,
+    result,
+    entries: [
+      { path: 'docs', kind: 'directory' },
+      {
+        path: 'docs/README.md',
+        kind: 'file',
+        mediaType: 'text/markdown',
+        content: {
+          contentId: 'cnt_folder_readme_aaaaaaaaaaaaaa',
+          contentHash: `sha256:${'e'.repeat(64)}`,
+          byteCount: 7,
+        },
+      },
+      { path: 'empty', kind: 'directory' },
+    ],
+  };
+}
+
 const describePostgres = adminConnectionString === undefined ? describe.skip : describe;
 
 describePostgres('PostgresRevisionRepository', () => {
+  it('commits and pages one complete folder entry set atomically', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const repository = new PostgresRevisionRepository(database);
+    const input = folderInput();
+
+    await expect(repository.commitFolderPublish(input)).resolves.toEqual({
+      status: 'committed',
+      result: input.result,
+    });
+    await expect(repository.commitFolderPublish(input)).resolves.toEqual({
+      status: 'replayed',
+      result: input.result,
+    });
+    await expect(repository.findArtifact(input.result.artifactId)).resolves.toMatchObject({
+      kind: 'folder',
+      name: 'Project',
+      latestRevision: {
+        kind: 'folder',
+        rootName: 'Project',
+        contentHash: input.result.manifest.contentHash,
+        byteCount: 7,
+        fileCount: 1,
+      },
+    });
+    await expect(repository.findFolderRevision(input.result.revisionId)).resolves.toEqual(
+      input.result,
+    );
+    await expect(
+      repository.listFolderEntries({
+        installationId: input.result.installationId,
+        revisionId: input.result.revisionId,
+        limit: 2,
+      }),
+    ).resolves.toEqual({
+      items: input.entries.slice(0, 2),
+      nextPath: 'docs/README.md',
+    });
+    await expect(
+      repository.listFolderEntries({
+        installationId: input.result.installationId,
+        revisionId: input.result.revisionId,
+        limit: 2,
+        afterPath: 'docs/README.md',
+      }),
+    ).resolves.toEqual({ items: [input.entries[2]] });
+    await expect(
+      new PostgresReferencedContentInventory(database).listReferencedContent(
+        input.result.installationId,
+      ),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        {
+          contentId: input.result.manifest.contentId,
+          contentHash: input.result.manifest.contentHash,
+          byteCount: input.result.manifest.byteCount,
+          revisionCount: 1,
+        },
+        {
+          contentId: 'cnt_folder_readme_aaaaaaaaaaaaaa',
+          contentHash: `sha256:${'e'.repeat(64)}`,
+          byteCount: 7,
+          revisionCount: 1,
+        },
+      ]),
+    );
+    const restore: CommitRestoreInput = {
+      namespace: {
+        installationId: input.result.installationId,
+        workspaceId: input.result.workspaceId,
+        actorId: 'actor-restorer',
+        operation: 'revision.restore',
+        key: 'restore-folder',
+      },
+      fingerprint: `restore-request/v1:sha256:${'9'.repeat(64)}`,
+      result: {
+        ...input.result,
+        revisionId: 'rev_folder_BBBBBBBBBBBBBBBB',
+        provenance: {
+          classification: 'restore',
+          observed: { actorId: 'actor-restorer', operation: 'revision.restore' },
+          source: { revisionId: input.result.revisionId },
+        },
+      },
+    };
+    await expect(repository.commitRestore(restore)).resolves.toMatchObject({
+      status: 'committed',
+      revisionNumber: 2,
+      result: { kind: 'folder', revisionId: restore.result.revisionId },
+    });
+    await expect(repository.findFolderRevision(restore.result.revisionId)).resolves.toMatchObject({
+      kind: 'folder',
+      provenance: {
+        classification: 'restore',
+        source: { revisionId: input.result.revisionId },
+      },
+    });
+    await expect(
+      repository.listFolderEntries({
+        installationId: input.result.installationId,
+        revisionId: restore.result.revisionId,
+        limit: 10,
+      }),
+    ).resolves.toEqual({ items: input.entries });
+    await database.destroy();
+  });
+
   it('migrates, commits atomically, and preserves replay state across repository instances', async () => {
     const firstDatabase = createPostgresDatabase({ connectionString });
     await migratePostgresToLatest(firstDatabase);

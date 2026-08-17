@@ -272,14 +272,18 @@ export class S3ContentStorage implements ContentStorage {
   ): Promise<AsyncIterable<Uint8Array>> {
     options.signal?.throwIfAborted();
     assertSealedContent(content);
-    const range = resolveContentRange(options.range, content.byteCount);
-    const expectedLength = range.end - range.start + 1;
+    if (content.byteCount === 0 && options.range !== undefined) {
+      resolveContentRange(options.range, content.byteCount);
+    }
+    const range =
+      content.byteCount === 0 ? undefined : resolveContentRange(options.range, content.byteCount);
+    const expectedLength = range === undefined ? 0 : range.end - range.start + 1;
     const partial = options.range !== undefined;
     const result = await this.#client.send(
       new GetObjectCommand({
         Bucket: this.#bucket,
         Key: this.#key(content.contentId),
-        ...(partial ? { Range: `bytes=${range.start}-${range.end}` } : {}),
+        ...(partial && range !== undefined ? { Range: `bytes=${range.start}-${range.end}` } : {}),
       }),
       options.signal === undefined ? undefined : { abortSignal: options.signal },
     );
@@ -288,6 +292,7 @@ export class S3ContentStorage implements ContentStorage {
     }
     if (
       partial &&
+      range !== undefined &&
       result.ContentRange !== `bytes ${range.start}-${range.end}/${content.byteCount}`
     ) {
       throw new Error('Stored content range response does not match the requested range.');

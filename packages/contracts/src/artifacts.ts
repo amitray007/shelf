@@ -56,23 +56,27 @@ export const RevisionProvenanceSchema = Type.Union([
   RestoreProvenanceSchema,
 ]);
 
-export const ArtifactRevisionSchema = Type.Object(
+const ArtifactRevisionCommon = {
+  revisionId: OpaqueRevisionIdSchema,
+  revisionNumber: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+  contentHash: Type.String({ pattern: '^sha256:[a-f0-9]{64}$' }),
+  createdAt: IsoInstantSchema,
+  provenance: RevisionProvenanceSchema,
+  publisherMetadata: Type.Record(
+    Type.String({ minLength: 1, maxLength: PUBLISHER_METADATA_LIMITS.maxKeyLength }),
+    Type.String({ maxLength: PUBLISHER_METADATA_LIMITS.maxValueLength }),
+    { maxProperties: PUBLISHER_METADATA_LIMITS.maxKeys },
+  ),
+};
+
+export const FileArtifactRevisionSchema = Type.Object(
   {
-    revisionId: OpaqueRevisionIdSchema,
-    revisionNumber: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+    ...ArtifactRevisionCommon,
+    kind: Type.Literal('file'),
     originalFileName: Type.String({ minLength: 1, maxLength: 255 }),
     mediaType: Type.String({ minLength: 1, maxLength: 255 }),
-    contentHash: Type.String({ pattern: '^sha256:[a-f0-9]{64}$' }),
     byteCount: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-    createdAt: IsoInstantSchema,
-    provenance: RevisionProvenanceSchema,
-    publisherMetadata: Type.Record(
-      Type.String({ minLength: 1, maxLength: PUBLISHER_METADATA_LIMITS.maxKeyLength }),
-      Type.String({ maxLength: PUBLISHER_METADATA_LIMITS.maxValueLength }),
-      {
-        maxProperties: PUBLISHER_METADATA_LIMITS.maxKeys,
-      },
-    ),
+    fileCount: Type.Literal(1),
     paths: Type.Object(
       {
         revision: Type.String({ pattern: '^/api/v1/revisions/[^/]+$' }),
@@ -81,7 +85,30 @@ export const ArtifactRevisionSchema = Type.Object(
       { additionalProperties: false },
     ),
   },
-  { additionalProperties: false, $id: 'ArtifactRevision' },
+  { additionalProperties: false },
+);
+
+export const FolderArtifactRevisionSchema = Type.Object(
+  {
+    ...ArtifactRevisionCommon,
+    kind: Type.Literal('folder'),
+    rootName: Type.String({ minLength: 1, maxLength: 255 }),
+    byteCount: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+    fileCount: Type.Integer({ minimum: 0, maximum: 1_000 }),
+    paths: Type.Object(
+      {
+        revision: Type.String({ pattern: '^/api/v1/revisions/[^/]+$' }),
+        tree: Type.String({ pattern: '^/api/v1/revisions/[^/]+/tree$' }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const ArtifactRevisionSchema = Type.Union(
+  [FileArtifactRevisionSchema, FolderArtifactRevisionSchema],
+  { $id: 'ArtifactRevision' },
 );
 
 export const ArtifactSchema = Type.Object(
@@ -89,6 +116,7 @@ export const ArtifactSchema = Type.Object(
     apiVersion: Type.Literal('v1'),
     workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
     artifactId: OpaqueArtifactIdSchema,
+    kind: Type.Union([Type.Literal('file'), Type.Literal('folder')]),
     name: ArtifactNameSchema,
     createdAt: IsoInstantSchema,
     updatedAt: IsoInstantSchema,
@@ -124,18 +152,25 @@ export const ArtifactRevisionPageSchema = Type.Object(
   { additionalProperties: false, $id: 'ArtifactRevisionPage' },
 );
 
-export const RestoreResultSchema = Type.Object(
+const RestoreResultCommon = {
+  apiVersion: Type.Literal('v1'),
+  workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
+  artifactId: OpaqueArtifactIdSchema,
+  revisionId: OpaqueRevisionIdSchema,
+  revisionNumber: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+  sourceRevisionId: OpaqueRevisionIdSchema,
+  contentHash: Type.String({ pattern: '^sha256:[a-f0-9]{64}$' }),
+  provenance: RestoreProvenanceSchema,
+  requestId: Type.String({ minLength: 1, maxLength: 128 }),
+  replayed: Type.Boolean(),
+};
+
+export const FileRestoreResultSchema = Type.Object(
   {
-    apiVersion: Type.Literal('v1'),
-    workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
-    artifactId: OpaqueArtifactIdSchema,
-    revisionId: OpaqueRevisionIdSchema,
-    revisionNumber: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-    sourceRevisionId: OpaqueRevisionIdSchema,
-    contentHash: Type.String({ pattern: '^sha256:[a-f0-9]{64}$' }),
+    ...RestoreResultCommon,
+    kind: Type.Literal('file'),
     byteCount: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-    provenance: RestoreProvenanceSchema,
-    requestId: Type.String({ minLength: 1, maxLength: 128 }),
+    fileCount: Type.Literal(1),
     paths: Type.Object(
       {
         artifact: Type.String({ pattern: '^/api/v1/artifacts/[^/]+$' }),
@@ -144,9 +179,31 @@ export const RestoreResultSchema = Type.Object(
       },
       { additionalProperties: false },
     ),
-    replayed: Type.Boolean(),
   },
-  { additionalProperties: false, $id: 'RestoreResult' },
+  { additionalProperties: false },
+);
+
+export const FolderRestoreResultSchema = Type.Object(
+  {
+    ...RestoreResultCommon,
+    kind: Type.Literal('folder'),
+    byteCount: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+    fileCount: Type.Integer({ minimum: 0, maximum: 1_000 }),
+    paths: Type.Object(
+      {
+        artifact: Type.String({ pattern: '^/api/v1/artifacts/[^/]+$' }),
+        revision: Type.String({ pattern: '^/api/v1/revisions/[^/]+$' }),
+        tree: Type.String({ pattern: '^/api/v1/revisions/[^/]+/tree$' }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const RestoreResultSchema = Type.Union(
+  [FileRestoreResultSchema, FolderRestoreResultSchema],
+  { $id: 'RestoreResult' },
 );
 
 export type ArtifactRevision = Static<typeof ArtifactRevisionSchema>;

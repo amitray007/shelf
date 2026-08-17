@@ -42,11 +42,13 @@ export const PublisherMetadataSchema = Type.Record(
 export const PublishResultSchema = Type.Object(
   {
     apiVersion: Type.Literal(PUBLISH_CONTRACT_VERSION),
+    kind: Type.Literal('file'),
     workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
     artifactId: OpaqueArtifactIdSchema,
     revisionId: OpaqueRevisionIdSchema,
     contentHash: Type.String({ pattern: '^sha256:[a-f0-9]{64}$' }),
     byteCount: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+    fileCount: Type.Literal(1),
     provenance: Type.Object(
       {
         classification: Type.Literal('direct-publish'),

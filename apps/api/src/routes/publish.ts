@@ -166,7 +166,7 @@ export async function registerPublishRoute(
   app.post(
     PUBLISH_ROUTE_URL,
     {
-      config: { shelfMultipartBody: true, multipartOptions: { limits } },
+      config: { shelfMultipartBody: 'file', multipartOptions: { limits } },
       schema: {
         operationId: 'publishFileV1',
         summary: 'Publish one immutable file revision',
@@ -193,7 +193,7 @@ export async function registerPublishRoute(
   app.post(
     PUBLISH_REVISION_ROUTE_URL,
     {
-      config: { shelfMultipartBody: true, multipartOptions: { limits } },
+      config: { shelfMultipartBody: 'file', multipartOptions: { limits } },
       schema: {
         operationId: 'publishArtifactRevisionV1',
         summary: 'Publish another immutable revision to one artifact',

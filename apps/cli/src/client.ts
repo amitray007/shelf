@@ -4,10 +4,15 @@ import {
   type Artifact,
   type ArtifactPage,
   type ArtifactRevisionPage,
+  type FolderManifestInput,
+  type FolderPublishResult,
+  type FolderTreePage,
   isArtifact,
   isArtifactPage,
   isArtifactRevisionPage,
   isErrorEnvelope,
+  isFolderPublishResult,
+  isFolderTreePage,
   isPublishResult,
   isRestoreResult,
   type PublisherMetadata,
@@ -66,6 +71,28 @@ export interface RestoreArtifactOptions extends GetArtifactOptions {
   workspaceId: string;
   sourceRevisionId: string;
   idempotencyKey: string;
+}
+
+export interface PublishFolderOptions {
+  installationUrl: string;
+  workspaceId: string;
+  directoryPath: string;
+  idempotencyKey: string;
+  artifactId?: string;
+  token: string;
+  publisherMetadata: PublisherMetadata;
+  manifest: FolderManifestInput;
+  files: readonly { path: string; absolutePath: string }[];
+  allowInsecureLoopback?: boolean;
+}
+
+export interface GetFolderTreeOptions {
+  installationUrl: string;
+  revisionId: string;
+  limit: number;
+  cursor?: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
 }
 
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
@@ -297,6 +324,104 @@ export async function listArtifactRevisions(
     dependencies,
     isArtifactRevisionPage,
   );
+}
+
+export async function getFolderTree(
+  options: GetFolderTreeOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<FolderTreePage> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(`/api/v1/revisions/${encodeURIComponent(options.revisionId)}/tree`, origin);
+  url.searchParams.set('limit', String(options.limit));
+  if (options.cursor !== undefined) url.searchParams.set('cursor', options.cursor);
+  return requestApiJson(
+    url,
+    { token: options.token, allowInsecureLoopback },
+    dependencies,
+    isFolderTreePage,
+  );
+}
+
+function folderPublishUrl(origin: URL, workspaceId: string, artifactId?: string): URL {
+  const workspacePath = `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/folders`;
+  return new URL(
+    artifactId === undefined
+      ? workspacePath
+      : `${workspacePath}/${encodeURIComponent(artifactId)}/revisions`,
+    origin,
+  );
+}
+
+async function folderRequestBody(
+  options: PublishFolderOptions,
+  dependencies: ShelfClientDependencies,
+): Promise<FormData> {
+  const form = new FormData();
+  if (Object.keys(options.publisherMetadata).length > 0) {
+    form.append('publisherMetadata', JSON.stringify(options.publisherMetadata));
+  }
+  form.append('manifest', JSON.stringify(options.manifest));
+  for (const file of options.files) {
+    let blob: Blob;
+    try {
+      blob = await dependencies.openFileBlob(file.absolutePath);
+    } catch {
+      throw usageFailure(`A folder file cannot be read: ${file.path}`);
+    }
+    form.append('file', blob, file.path);
+  }
+  return form;
+}
+
+export async function publishFolder(
+  options: PublishFolderOptions,
+  dependencies: ShelfClientDependencies = defaultDependencies,
+): Promise<FolderPublishResult> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  let url = folderPublishUrl(origin, options.workspaceId, options.artifactId);
+  for (let redirects = 0; redirects <= 5; redirects += 1) {
+    const body = await folderRequestBody(options, dependencies);
+    let response: Response;
+    try {
+      response = await dependencies.fetch(url, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${options.token}`,
+          'idempotency-key': options.idempotencyKey,
+        },
+        body,
+      });
+    } catch {
+      throw failure('SERVICE_UNAVAILABLE', 'Shelf could not be reached.', { retryable: true });
+    }
+    if (redirectStatuses.has(response.status)) {
+      await cancelResponseBody(response);
+      const location = response.headers.get('location');
+      if (location === null) throw failure('INTERNAL_ERROR', 'Shelf returned an invalid redirect.');
+      if (redirects === 5) throw failure('INTERNAL_ERROR', 'Shelf returned too many redirects.');
+      const redirected = new URL(location, url);
+      installationOrigin(redirected.origin, allowInsecureLoopback);
+      if (redirected.origin !== url.origin) {
+        throw failure('INTERNAL_ERROR', 'Shelf refused a cross-origin credential redirect.');
+      }
+      url = redirected;
+      continue;
+    }
+    const payload = await responseJson(response);
+    if (response.status === 201) {
+      if (!isFolderPublishResult(payload)) {
+        throw failure('INTERNAL_ERROR', 'Shelf returned an invalid folder publish result.');
+      }
+      return payload;
+    }
+    if (isErrorEnvelope(payload)) throw remoteFailure(payload);
+    throw failure('INTERNAL_ERROR', 'Shelf returned an invalid error response.');
+  }
+  throw failure('INTERNAL_ERROR', 'Shelf returned too many redirects.');
 }
 
 function publishUrl(origin: URL, workspaceId: string, artifactId?: string): URL {

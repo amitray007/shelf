@@ -6,6 +6,7 @@ export interface ArtifactTable {
   installation_id: string;
   workspace_id: string;
   name: string;
+  kind: 'file' | 'folder';
   latest_revision_id: string | null;
   created_at: Date;
   updated_at: Date;
@@ -16,10 +17,13 @@ export interface RevisionTable {
   installation_id: string;
   workspace_id: string;
   artifact_id: string;
+  kind: 'file' | 'folder';
   revision_number: string;
   content_id: string;
   content_hash: string;
   byte_count: string;
+  total_byte_count: string;
+  file_count: number;
   original_file_name: string;
   media_type: string;
   provenance_classification: string;
@@ -28,6 +32,19 @@ export interface RevisionTable {
   publisher_metadata: unknown;
   source_revision_id: string | null;
   created_at: Date;
+}
+
+export interface RevisionEntryTable {
+  installation_id: string;
+  workspace_id: string;
+  artifact_id: string;
+  revision_id: string;
+  path: string;
+  kind: 'directory' | 'file';
+  media_type: string | null;
+  content_id: string | null;
+  content_hash: string | null;
+  byte_count: string | null;
 }
 
 export interface IdempotencyTable {
@@ -95,6 +112,7 @@ export interface ShelfPostgresSchema {
   shelf_artifacts: ArtifactTable;
   shelf_auth_events: AuthEventTable;
   shelf_revisions: RevisionTable;
+  shelf_revision_entries: RevisionEntryTable;
   shelf_idempotency: IdempotencyTable;
 }
 

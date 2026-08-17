@@ -14,12 +14,14 @@ import {
 } from '../src/index.js';
 
 const revision = {
+  kind: 'file',
   revisionId: 'rev_BBBBBBBBBBBBBBBBBBBBBB',
   revisionNumber: 2,
   originalFileName: 'CHANGELOG.md',
   mediaType: 'text/markdown',
   contentHash: `sha256:${'b'.repeat(64)}`,
   byteCount: 24,
+  fileCount: 1,
   createdAt: '2026-08-17T12:01:00.000Z',
   provenance: {
     classification: 'direct-publish',
@@ -36,6 +38,7 @@ const artifact = {
   apiVersion: 'v1',
   workspaceId: 'workspace-main',
   artifactId: 'art_AAAAAAAAAAAAAAAAAAAAAA',
+  kind: 'file',
   name: 'Release notes',
   createdAt: '2026-08-17T12:00:00.000Z',
   updatedAt: '2026-08-17T12:01:00.000Z',
@@ -91,6 +94,7 @@ describe('artifact catalog contracts', () => {
   it('accepts one canonical restore result for CLI replay safety', () => {
     const result = {
       apiVersion: 'v1',
+      kind: 'file',
       workspaceId: artifact.workspaceId,
       artifactId: artifact.artifactId,
       revisionId: 'rev_CCCCCCCCCCCCCCCCCCCCCC',
@@ -98,6 +102,7 @@ describe('artifact catalog contracts', () => {
       sourceRevisionId: 'rev_AAAAAAAAAAAAAAAAAAAAAA',
       contentHash: `sha256:${'a'.repeat(64)}`,
       byteCount: 18,
+      fileCount: 1,
       provenance: {
         classification: 'restore',
         observed: { actorId: 'actor_example', operation: 'revision.restore' },

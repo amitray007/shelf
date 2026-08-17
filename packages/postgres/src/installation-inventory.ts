@@ -19,6 +19,7 @@ export class PostgresInstallationInventory implements InstallationInventory {
       from (
         select installation_id from shelf_artifacts
         union all select installation_id from shelf_revisions
+        union all select installation_id from shelf_revision_entries
         union all select installation_id from shelf_idempotency
         union all select installation_id from shelf_actors
         union all select installation_id from shelf_actor_grants

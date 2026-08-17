@@ -21,7 +21,7 @@ export function assertDescriptor(descriptor: { contentHash: string; byteCount: n
   if (!CONTENT_HASH_PATTERN.test(descriptor.contentHash)) {
     throw new Error('Invalid content hash.');
   }
-  if (!Number.isSafeInteger(descriptor.byteCount) || descriptor.byteCount <= 0) {
+  if (!Number.isSafeInteger(descriptor.byteCount) || descriptor.byteCount < 0) {
     throw new Error('Invalid content byte count.');
   }
 }

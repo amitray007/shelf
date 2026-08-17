@@ -231,7 +231,7 @@ function parseBackupManifest(value: unknown): ShelfBackupBundleManifest {
       typeof reference.contentId !== 'string' ||
       !/^cnt_[a-f0-9]{32}$/u.test(reference.contentId) ||
       !Number.isSafeInteger(reference.byteCount) ||
-      (reference.byteCount as number) <= 0 ||
+      (reference.byteCount as number) < 0 ||
       !Number.isSafeInteger(reference.revisionCount) ||
       (reference.revisionCount as number) <= 0
     ) {

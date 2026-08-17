@@ -14,22 +14,36 @@ import { ArtifactNotFoundError } from '../publishing/publish.js';
 const OPAQUE_ARTIFACT_ID_PATTERN = /^art_[A-Za-z0-9_-]{22}$/u;
 const OPAQUE_CURSOR_PATTERN = /^[A-Za-z0-9_-]{1,2048}$/u;
 
-export interface StoredArtifactRevision {
+interface StoredArtifactRevisionCommon {
   revisionId: string;
   revisionNumber: number;
-  originalFileName: string;
-  mediaType: string;
   contentHash: string;
   byteCount: number;
+  fileCount?: number;
   createdAt: string;
   provenance: ArtifactRevision['provenance'];
   publisherMetadata: PublisherMetadata;
 }
 
+export interface StoredFileArtifactRevision extends StoredArtifactRevisionCommon {
+  kind?: 'file';
+  originalFileName: string;
+  mediaType: string;
+}
+
+export interface StoredFolderArtifactRevision extends StoredArtifactRevisionCommon {
+  kind: 'folder';
+  rootName: string;
+  fileCount: number;
+}
+
+export type StoredArtifactRevision = StoredFileArtifactRevision | StoredFolderArtifactRevision;
+
 export interface StoredArtifact {
   installationId: string;
   workspaceId: string;
   artifactId: string;
+  kind?: 'file' | 'folder';
   name: string;
   createdAt: string;
   updatedAt: string;
@@ -118,19 +132,34 @@ function revisionCursor(value: string | undefined): number | undefined {
 }
 
 export function storedRevisionToArtifactRevision(stored: StoredArtifactRevision): ArtifactRevision {
+  const provenance =
+    stored.provenance.classification === 'restore'
+      ? {
+          classification: 'restore' as const,
+          observed: { ...stored.provenance.observed },
+          source: { ...stored.provenance.source },
+        }
+      : {
+          classification: 'direct-publish' as const,
+          observed: { ...stored.provenance.observed },
+        };
+  if (stored.kind === 'folder') {
+    return {
+      ...stored,
+      kind: 'folder',
+      provenance,
+      publisherMetadata: { ...stored.publisherMetadata },
+      paths: {
+        revision: `/api/v1/revisions/${stored.revisionId}`,
+        tree: `/api/v1/revisions/${stored.revisionId}/tree`,
+      },
+    };
+  }
   return {
     ...stored,
-    provenance:
-      stored.provenance.classification === 'restore'
-        ? {
-            classification: 'restore',
-            observed: { ...stored.provenance.observed },
-            source: { ...stored.provenance.source },
-          }
-        : {
-            classification: 'direct-publish',
-            observed: { ...stored.provenance.observed },
-          },
+    kind: 'file',
+    fileCount: 1,
+    provenance,
     publisherMetadata: { ...stored.publisherMetadata },
     paths: {
       revision: `/api/v1/revisions/${stored.revisionId}`,
@@ -144,6 +173,7 @@ export function storedArtifactToArtifact(stored: StoredArtifact): Artifact {
     apiVersion: 'v1',
     workspaceId: stored.workspaceId,
     artifactId: stored.artifactId,
+    kind: stored.kind ?? stored.latestRevision.kind ?? 'file',
     name: stored.name,
     createdAt: stored.createdAt,
     updatedAt: stored.updatedAt,

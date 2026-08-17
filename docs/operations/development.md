@@ -163,6 +163,16 @@ pnpm shelf artifacts restore \
   --revision rev_... \
   --idempotency-key local-readme-restore-1 \
   --allow-insecure-loopback
+pnpm shelf folders publish \
+  --url http://127.0.0.1:3000 \
+  --workspace workspace-main \
+  --directory ./my-project \
+  --idempotency-key local-project-1 \
+  --allow-insecure-loopback
+pnpm shelf folders tree \
+  --url http://127.0.0.1:3000 \
+  --revision rev_... \
+  --allow-insecure-loopback
 unset SHELF_TOKEN
 ```
 
@@ -170,3 +180,8 @@ Use a new idempotency key after changing the file, target artifact, semantic met
 source. Rename changes only the artifact's display name. Restore creates a new immutable latest
 revision whose provenance names the selected source; it does not rewrite or duplicate stored
 content bytes.
+
+Folder publication sends one complete snapshot. The CLI includes empty directories, refuses
+symlinks and special files before making a request, and emits paths in a portable deterministic
+order. Use the returned folder revision ID with `shelf folders tree`; add `--artifact art_...` with
+a new idempotency key to publish another complete snapshot to the same folder artifact.

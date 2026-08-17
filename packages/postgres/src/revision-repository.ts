@@ -1,10 +1,14 @@
 import type {
   ArtifactCatalogRepository,
   ArtifactLifecycleRepository,
+  CommitFolderPublishInput,
+  CommitFolderPublishOutcome,
   CommitPublishInput,
   CommitPublishOutcome,
   CommitRestoreInput,
   CommitRestoreOutcome,
+  FolderIdempotencyRecord,
+  FolderRevisionRepository,
   IdempotencyNamespace,
   IdempotencyRecord,
   RestoreIdempotencyNamespace,
@@ -12,6 +16,10 @@ import type {
   RevisionRepository,
   StoredArtifact,
   StoredArtifactRevision,
+  StoredFolderEntry,
+  StoredFolderPublish,
+  StoredFolderRestore,
+  StoredFolderRevision,
   StoredPublish,
   StoredRestore,
   StoredRevision,
@@ -42,6 +50,14 @@ function parseByteCount(value: string): number {
   return parsed;
 }
 
+function parseNonNegativeByteCount(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error('Stored aggregate byte count is invalid.');
+  }
+  return parsed;
+}
+
 function parseRevisionNumber(value: string): number {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1) {
@@ -51,14 +67,30 @@ function parseRevisionNumber(value: string): number {
 }
 
 function storedArtifactRevision(row: RevisionRow): StoredArtifactRevision {
+  if (row.kind === 'folder') {
+    return {
+      kind: 'folder',
+      revisionId: row.revision_id,
+      revisionNumber: parseRevisionNumber(row.revision_number),
+      rootName: row.original_file_name,
+      contentHash: row.content_hash,
+      byteCount: parseNonNegativeByteCount(row.total_byte_count),
+      fileCount: row.file_count,
+      createdAt: row.created_at.toISOString(),
+      provenance: storedProvenance(row),
+      publisherMetadata: parsePublisherMetadata(row.publisher_metadata),
+    };
+  }
   const publish = storedRevision(row);
   return {
+    kind: 'file',
     revisionId: publish.revisionId,
     revisionNumber: parseRevisionNumber(row.revision_number),
     originalFileName: publish.originalFileName,
     mediaType: publish.mediaType,
     contentHash: publish.content.contentHash,
     byteCount: publish.content.byteCount,
+    fileCount: 1,
     createdAt: row.created_at.toISOString(),
     provenance: publish.provenance,
     publisherMetadata: publish.publisherMetadata,
@@ -67,6 +99,7 @@ function storedArtifactRevision(row: RevisionRow): StoredArtifactRevision {
 
 type ArtifactWithLatestRow = RevisionRow & {
   artifact_name: string;
+  artifact_kind: 'file' | 'folder';
   artifact_created_at: Date;
   artifact_updated_at: Date;
 };
@@ -76,6 +109,7 @@ function storedArtifact(row: ArtifactWithLatestRow): StoredArtifact {
     installationId: row.installation_id,
     workspaceId: row.workspace_id,
     artifactId: row.artifact_id,
+    kind: row.artifact_kind,
     name: row.artifact_name,
     createdAt: row.artifact_created_at.toISOString(),
     updatedAt: row.artifact_updated_at.toISOString(),
@@ -83,7 +117,33 @@ function storedArtifact(row: ArtifactWithLatestRow): StoredArtifact {
   };
 }
 
+function storedProvenance(row: RevisionRow): StoredRevision['provenance'] {
+  if (
+    row.provenance_classification === 'direct-publish' &&
+    row.operation === 'file.publish' &&
+    row.source_revision_id === null
+  ) {
+    return {
+      classification: 'direct-publish',
+      observed: { actorId: row.actor_id, operation: 'file.publish' },
+    };
+  }
+  if (
+    row.provenance_classification === 'restore' &&
+    row.operation === 'revision.restore' &&
+    row.source_revision_id !== null
+  ) {
+    return {
+      classification: 'restore',
+      observed: { actorId: row.actor_id, operation: 'revision.restore' },
+      source: { revisionId: row.source_revision_id },
+    };
+  }
+  throw new Error('Stored revision provenance is invalid.');
+}
+
 function storedRevision(row: RevisionRow): StoredRevision {
+  if (row.kind !== 'file') throw new Error('Folder revision requires the folder repository seam.');
   const common = {
     apiVersion: 'v1' as const,
     installationId: row.installation_id,
@@ -99,34 +159,86 @@ function storedRevision(row: RevisionRow): StoredRevision {
     mediaType: row.media_type,
     publisherMetadata: parsePublisherMetadata(row.publisher_metadata),
   };
-  if (
-    row.provenance_classification === 'direct-publish' &&
-    row.operation === 'file.publish' &&
-    row.source_revision_id === null
-  ) {
+  const provenance = storedProvenance(row);
+  if (provenance.classification === 'direct-publish') {
     return {
       ...common,
-      provenance: {
-        classification: 'direct-publish',
-        observed: { actorId: row.actor_id, operation: 'file.publish' },
-      },
+      provenance,
     };
   }
+  return { ...common, provenance };
+}
+
+function storedFolderPublish(row: RevisionRow): StoredFolderPublish {
+  const revision = storedFolderRevision(row);
+  if (!isStoredFolderPublish(revision)) {
+    throw new Error('Stored folder publish provenance is invalid.');
+  }
+  return revision;
+}
+
+function storedFolderRevision(row: RevisionRow): StoredFolderRevision {
+  const provenance = storedProvenance(row);
+  if (row.kind !== 'folder') {
+    throw new Error('Stored folder revision kind is invalid.');
+  }
+  const common = {
+    apiVersion: 'v1' as const,
+    kind: 'folder' as const,
+    installationId: row.installation_id,
+    workspaceId: row.workspace_id,
+    artifactId: row.artifact_id,
+    revisionId: row.revision_id,
+    manifest: {
+      contentId: row.content_id,
+      contentHash: row.content_hash,
+      byteCount: parseByteCount(row.byte_count),
+    },
+    rootName: row.original_file_name,
+    totalByteCount: parseNonNegativeByteCount(row.total_byte_count),
+    fileCount: row.file_count,
+    publisherMetadata: parsePublisherMetadata(row.publisher_metadata),
+  };
+  return provenance.classification === 'direct-publish'
+    ? { ...common, provenance }
+    : { ...common, provenance };
+}
+
+function isStoredFolderPublish(revision: StoredFolderRevision): revision is StoredFolderPublish {
+  return revision.provenance.classification === 'direct-publish';
+}
+
+function isStoredFolderRestore(revision: StoredFolderRevision): revision is StoredFolderRestore {
+  return revision.provenance.classification === 'restore';
+}
+
+function storedFolderEntry(row: {
+  path: string;
+  kind: 'directory' | 'file';
+  media_type: string | null;
+  content_id: string | null;
+  content_hash: string | null;
+  byte_count: string | null;
+}): StoredFolderEntry {
+  if (row.kind === 'directory') return { path: row.path, kind: 'directory' };
   if (
-    row.provenance_classification === 'restore' &&
-    row.operation === 'revision.restore' &&
-    row.source_revision_id !== null
+    row.media_type === null ||
+    row.content_id === null ||
+    row.content_hash === null ||
+    row.byte_count === null
   ) {
-    return {
-      ...common,
-      provenance: {
-        classification: 'restore',
-        observed: { actorId: row.actor_id, operation: 'revision.restore' },
-        source: { revisionId: row.source_revision_id },
-      },
-    };
+    throw new Error('Stored folder file entry is invalid.');
   }
-  throw new Error('Stored revision provenance is invalid.');
+  return {
+    path: row.path,
+    kind: 'file',
+    mediaType: row.media_type,
+    content: {
+      contentId: row.content_id,
+      contentHash: row.content_hash,
+      byteCount: parseNonNegativeByteCount(row.byte_count),
+    },
+  };
 }
 
 function isStoredPublish(revision: StoredRevision): revision is StoredPublish {
@@ -174,7 +286,10 @@ async function findIdempotency(
     .executeTakeFirst();
   if (row === undefined) return undefined;
   const { fingerprint, ...revision } = row;
-  return { fingerprint, result: storedPublish(revision) };
+  return {
+    fingerprint,
+    ...(revision.kind === 'file' ? { result: storedPublish(revision) } : {}),
+  };
 }
 
 async function findRestoreIdempotency(
@@ -194,14 +309,43 @@ async function findRestoreIdempotency(
     .executeTakeFirst();
   if (row === undefined) return undefined;
   const { fingerprint, ...revisionRow } = row;
-  const revision = storedRevision(revisionRow);
-  if (!isStoredRestore(revision)) {
+  const revision =
+    revisionRow.kind === 'folder' ? storedFolderRevision(revisionRow) : storedRevision(revisionRow);
+  if (
+    (revision.kind === 'folder' && !isStoredFolderRestore(revision)) ||
+    (revision.kind !== 'folder' && !isStoredRestore(revision))
+  ) {
     throw new Error('Stored restore idempotency provenance is invalid.');
   }
   return {
     fingerprint,
     result: revision,
     revisionNumber: parseRevisionNumber(revisionRow.revision_number),
+  };
+}
+
+async function findFolderIdempotency(
+  database: DatabaseExecutor,
+  namespace: IdempotencyNamespace,
+): Promise<FolderIdempotencyRecord | undefined> {
+  const row = await database
+    .selectFrom('shelf_idempotency as idempotency')
+    .innerJoin('shelf_revisions as revision', 'revision.revision_id', 'idempotency.revision_id')
+    .selectAll('revision')
+    .select('idempotency.fingerprint')
+    .where('idempotency.installation_id', '=', namespace.installationId)
+    .where('idempotency.workspace_id', '=', namespace.workspaceId)
+    .where('idempotency.actor_id', '=', namespace.actorId)
+    .where('idempotency.operation', '=', namespace.operation)
+    .where('idempotency.client_key', '=', namespace.key)
+    .executeTakeFirst();
+  if (row === undefined) return undefined;
+  const { fingerprint, ...revision } = row;
+  return {
+    fingerprint,
+    ...(revision.kind === 'folder' && revision.provenance_classification === 'direct-publish'
+      ? { result: storedFolderPublish(revision) }
+      : {}),
   };
 }
 
@@ -232,7 +376,7 @@ async function commitNewPublish(
   if (claim === undefined) {
     const existing = await findIdempotency(transaction, input.namespace);
     if (existing === undefined) throw new Error('Idempotency conflict resolved without a record.');
-    return existing.fingerprint === input.fingerprint
+    return existing.fingerprint === input.fingerprint && existing.result !== undefined
       ? { status: 'replayed', result: existing.result }
       : { status: 'conflict' };
   }
@@ -244,6 +388,7 @@ async function commitNewPublish(
       installation_id: input.result.installationId,
       workspace_id: input.result.workspaceId,
       name: initialArtifactNameFromFileName(input.result.originalFileName),
+      kind: 'file',
       latest_revision_id: null,
       created_at: sql`transaction_timestamp()`,
       updated_at: sql`transaction_timestamp()`,
@@ -253,13 +398,14 @@ async function commitNewPublish(
 
   const artifact = await transaction
     .selectFrom('shelf_artifacts')
-    .select(['installation_id', 'workspace_id'])
+    .select(['installation_id', 'workspace_id', 'kind'])
     .where('artifact_id', '=', input.result.artifactId)
     .forUpdate()
     .executeTakeFirstOrThrow();
   if (
     artifact.installation_id !== input.result.installationId ||
-    artifact.workspace_id !== input.result.workspaceId
+    artifact.workspace_id !== input.result.workspaceId ||
+    artifact.kind !== 'file'
   ) {
     throw new Error('Artifact identity belongs to another workspace.');
   }
@@ -277,10 +423,13 @@ async function commitNewPublish(
       installation_id: input.result.installationId,
       workspace_id: input.result.workspaceId,
       artifact_id: input.result.artifactId,
+      kind: 'file',
       revision_number: ordinal.next_revision_number,
       content_id: input.result.content.contentId,
       content_hash: input.result.content.contentHash,
       byte_count: String(input.result.content.byteCount),
+      total_byte_count: String(input.result.content.byteCount),
+      file_count: 1,
       original_file_name: input.result.originalFileName,
       media_type: input.result.mediaType,
       provenance_classification: input.result.provenance.classification,
@@ -337,14 +486,15 @@ async function commitNewRestore(
 
   const artifact = await transaction
     .selectFrom('shelf_artifacts')
-    .select(['installation_id', 'workspace_id'])
+    .select(['installation_id', 'workspace_id', 'kind'])
     .where('artifact_id', '=', input.result.artifactId)
     .forUpdate()
     .executeTakeFirst();
   if (
     artifact === undefined ||
     artifact.installation_id !== input.result.installationId ||
-    artifact.workspace_id !== input.result.workspaceId
+    artifact.workspace_id !== input.result.workspaceId ||
+    artifact.kind !== (input.result.kind === 'folder' ? 'folder' : 'file')
   ) {
     throw new Error('Restore artifact identity is invalid.');
   }
@@ -357,7 +507,12 @@ async function commitNewRestore(
     .where('artifact_id', '=', input.result.artifactId)
     .where('revision_id', '=', input.result.provenance.source.revisionId)
     .executeTakeFirst();
-  if (source === undefined) throw new Error('Restore source revision is invalid.');
+  if (
+    source === undefined ||
+    source.kind !== (input.result.kind === 'folder' ? 'folder' : 'file')
+  ) {
+    throw new Error('Restore source revision is invalid.');
+  }
 
   const ordinal = await transaction
     .selectFrom('shelf_revisions')
@@ -372,10 +527,13 @@ async function commitNewRestore(
       installation_id: input.result.installationId,
       workspace_id: input.result.workspaceId,
       artifact_id: input.result.artifactId,
+      kind: source.kind,
       revision_number: ordinal.next_revision_number,
       content_id: source.content_id,
       content_hash: source.content_hash,
       byte_count: source.byte_count,
+      total_byte_count: source.total_byte_count,
+      file_count: source.file_count,
       original_file_name: source.original_file_name,
       media_type: source.media_type,
       provenance_classification: 'restore',
@@ -388,6 +546,41 @@ async function commitNewRestore(
     .returningAll()
     .executeTakeFirstOrThrow();
 
+  if (inserted.kind === 'folder') {
+    await transaction
+      .insertInto('shelf_revision_entries')
+      .columns([
+        'installation_id',
+        'workspace_id',
+        'artifact_id',
+        'revision_id',
+        'path',
+        'kind',
+        'media_type',
+        'content_id',
+        'content_hash',
+        'byte_count',
+      ])
+      .expression(
+        transaction
+          .selectFrom('shelf_revision_entries')
+          .select([
+            'installation_id',
+            'workspace_id',
+            'artifact_id',
+            sql<string>`${inserted.revision_id}`.as('revision_id'),
+            'path',
+            'kind',
+            'media_type',
+            'content_id',
+            'content_hash',
+            'byte_count',
+          ])
+          .where('revision_id', '=', source.revision_id),
+      )
+      .execute();
+  }
+
   await transaction
     .updateTable('shelf_artifacts')
     .set({
@@ -397,8 +590,12 @@ async function commitNewRestore(
     .where('artifact_id', '=', input.result.artifactId)
     .executeTakeFirstOrThrow();
 
-  const result = storedRevision(inserted);
-  if (!isStoredRestore(result)) {
+  const result =
+    inserted.kind === 'folder' ? storedFolderRevision(inserted) : storedRevision(inserted);
+  if (
+    (result.kind === 'folder' && !isStoredFolderRestore(result)) ||
+    (result.kind !== 'folder' && !isStoredRestore(result))
+  ) {
     throw new Error('Committed restore provenance is invalid.');
   }
   return {
@@ -408,8 +605,129 @@ async function commitNewRestore(
   };
 }
 
+async function commitNewFolderPublish(
+  transaction: Transaction<ShelfPostgresSchema>,
+  input: CommitFolderPublishInput,
+): Promise<CommitFolderPublishOutcome> {
+  const claim = await transaction
+    .insertInto('shelf_idempotency')
+    .values({
+      installation_id: input.namespace.installationId,
+      workspace_id: input.namespace.workspaceId,
+      actor_id: input.namespace.actorId,
+      operation: input.namespace.operation,
+      client_key: input.namespace.key,
+      fingerprint: input.fingerprint,
+      revision_id: input.result.revisionId,
+      created_at: sql`transaction_timestamp()`,
+    })
+    .onConflict((conflict) =>
+      conflict
+        .columns(['installation_id', 'workspace_id', 'actor_id', 'operation', 'client_key'])
+        .doNothing(),
+    )
+    .returning('revision_id')
+    .executeTakeFirst();
+  if (claim === undefined) {
+    const existing = await findFolderIdempotency(transaction, input.namespace);
+    if (existing === undefined) throw new Error('Idempotency conflict resolved without a record.');
+    return existing.fingerprint === input.fingerprint && existing.result !== undefined
+      ? { status: 'replayed', result: existing.result }
+      : { status: 'conflict' };
+  }
+
+  await transaction
+    .insertInto('shelf_artifacts')
+    .values({
+      artifact_id: input.result.artifactId,
+      installation_id: input.result.installationId,
+      workspace_id: input.result.workspaceId,
+      name: initialArtifactNameFromFileName(input.result.rootName),
+      kind: 'folder',
+      latest_revision_id: null,
+      created_at: sql`transaction_timestamp()`,
+      updated_at: sql`transaction_timestamp()`,
+    })
+    .onConflict((conflict) => conflict.column('artifact_id').doNothing())
+    .execute();
+  const artifact = await transaction
+    .selectFrom('shelf_artifacts')
+    .select(['installation_id', 'workspace_id', 'kind'])
+    .where('artifact_id', '=', input.result.artifactId)
+    .forUpdate()
+    .executeTakeFirstOrThrow();
+  if (
+    artifact.installation_id !== input.result.installationId ||
+    artifact.workspace_id !== input.result.workspaceId ||
+    artifact.kind !== 'folder'
+  ) {
+    throw new Error('Folder artifact identity is invalid.');
+  }
+  const ordinal = await transaction
+    .selectFrom('shelf_revisions')
+    .select(sql<string>`coalesce(max(revision_number), 0) + 1`.as('next_revision_number'))
+    .where('artifact_id', '=', input.result.artifactId)
+    .executeTakeFirstOrThrow();
+  await transaction
+    .insertInto('shelf_revisions')
+    .values({
+      revision_id: input.result.revisionId,
+      installation_id: input.result.installationId,
+      workspace_id: input.result.workspaceId,
+      artifact_id: input.result.artifactId,
+      kind: 'folder',
+      revision_number: ordinal.next_revision_number,
+      content_id: input.result.manifest.contentId,
+      content_hash: input.result.manifest.contentHash,
+      byte_count: String(input.result.manifest.byteCount),
+      total_byte_count: String(input.result.totalByteCount),
+      file_count: input.result.fileCount,
+      original_file_name: input.result.rootName,
+      media_type: 'application/vnd.shelf.folder-manifest+json',
+      provenance_classification: 'direct-publish',
+      actor_id: input.result.provenance.observed.actorId,
+      operation: 'file.publish',
+      publisher_metadata: input.result.publisherMetadata,
+      source_revision_id: null,
+      created_at: sql`transaction_timestamp()`,
+    })
+    .execute();
+  if (input.entries.length > 0) {
+    await transaction
+      .insertInto('shelf_revision_entries')
+      .values(
+        input.entries.map((entry) => ({
+          installation_id: input.result.installationId,
+          workspace_id: input.result.workspaceId,
+          artifact_id: input.result.artifactId,
+          revision_id: input.result.revisionId,
+          path: entry.path,
+          kind: entry.kind,
+          media_type: entry.kind === 'file' ? entry.mediaType : null,
+          content_id: entry.kind === 'file' ? entry.content.contentId : null,
+          content_hash: entry.kind === 'file' ? entry.content.contentHash : null,
+          byte_count: entry.kind === 'file' ? String(entry.content.byteCount) : null,
+        })),
+      )
+      .execute();
+  }
+  await transaction
+    .updateTable('shelf_artifacts')
+    .set({
+      latest_revision_id: input.result.revisionId,
+      updated_at: sql`transaction_timestamp()`,
+    })
+    .where('artifact_id', '=', input.result.artifactId)
+    .executeTakeFirstOrThrow();
+  return { status: 'committed', result: input.result };
+}
+
 export class PostgresRevisionRepository
-  implements RevisionRepository, ArtifactCatalogRepository, ArtifactLifecycleRepository
+  implements
+    RevisionRepository,
+    ArtifactCatalogRepository,
+    ArtifactLifecycleRepository,
+    FolderRevisionRepository
 {
   readonly #database: ShelfPostgresDatabase;
 
@@ -421,10 +739,57 @@ export class PostgresRevisionRepository
     return findIdempotency(this.#database, namespace);
   }
 
+  findFolderIdempotency(
+    namespace: IdempotencyNamespace,
+  ): Promise<FolderIdempotencyRecord | undefined> {
+    return findFolderIdempotency(this.#database, namespace);
+  }
+
+  commitFolderPublish(input: CommitFolderPublishInput): Promise<CommitFolderPublishOutcome> {
+    return this.#database
+      .transaction()
+      .execute((transaction) => commitNewFolderPublish(transaction, input));
+  }
+
+  async findFolderRevision(revisionId: string): Promise<StoredFolderRevision | undefined> {
+    const row = await this.#database
+      .selectFrom('shelf_revisions')
+      .selectAll()
+      .where('revision_id', '=', revisionId)
+      .where('kind', '=', 'folder')
+      .executeTakeFirst();
+    return row === undefined ? undefined : storedFolderRevision(row);
+  }
+
+  async listFolderEntries(request: {
+    installationId: string;
+    revisionId: string;
+    limit: number;
+    afterPath?: string;
+  }) {
+    let query = this.#database
+      .selectFrom('shelf_revision_entries')
+      .selectAll()
+      .where('installation_id', '=', request.installationId)
+      .where('revision_id', '=', request.revisionId);
+    if (request.afterPath !== undefined) query = query.where('path', '>', request.afterPath);
+    const rows = await query
+      .orderBy('path')
+      .limit(request.limit + 1)
+      .execute();
+    const hasMore = rows.length > request.limit;
+    const items = rows.slice(0, request.limit).map(storedFolderEntry);
+    const last = items.at(-1);
+    return {
+      items,
+      ...(hasMore && last !== undefined ? { nextPath: last.path } : {}),
+    };
+  }
+
   async findArtifactIdentity(artifactId: string) {
     const artifact = await this.#database
       .selectFrom('shelf_artifacts')
-      .select(['artifact_id', 'installation_id', 'workspace_id'])
+      .select(['artifact_id', 'installation_id', 'workspace_id', 'kind'])
       .where('artifact_id', '=', artifactId)
       .executeTakeFirst();
     return artifact === undefined
@@ -433,6 +798,7 @@ export class PostgresRevisionRepository
           artifactId: artifact.artifact_id,
           installationId: artifact.installation_id,
           workspaceId: artifact.workspace_id,
+          kind: artifact.kind,
         };
   }
 
@@ -448,6 +814,7 @@ export class PostgresRevisionRepository
       .selectAll('revision')
       .select([
         'artifact.name as artifact_name',
+        'artifact.kind as artifact_kind',
         'artifact.created_at as artifact_created_at',
         'artifact.updated_at as artifact_updated_at',
       ])
@@ -473,6 +840,7 @@ export class PostgresRevisionRepository
       .selectAll('revision')
       .select([
         'artifact.name as artifact_name',
+        'artifact.kind as artifact_kind',
         'artifact.created_at as artifact_created_at',
         'artifact.updated_at as artifact_updated_at',
       ])

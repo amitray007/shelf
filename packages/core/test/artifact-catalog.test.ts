@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { type ArtifactCatalogRepository, createArtifactCatalogService } from '../src/index.js';
 
 const storedRevision = {
+  kind: 'file' as const,
   revisionId: 'rev_BBBBBBBBBBBBBBBBBBBBBB',
   revisionNumber: 2,
   originalFileName: 'CHANGELOG.md',
   mediaType: 'text/markdown',
   contentHash: `sha256:${'b'.repeat(64)}`,
   byteCount: 24,
+  fileCount: 1,
   createdAt: '2026-08-17T12:01:00.000Z',
   provenance: {
     classification: 'direct-publish' as const,
@@ -21,6 +23,7 @@ const storedArtifact = {
   installationId: 'installation-main',
   workspaceId: 'workspace-main',
   artifactId: 'art_AAAAAAAAAAAAAAAAAAAAAA',
+  kind: 'file' as const,
   name: 'Release notes',
   createdAt: '2026-08-17T12:00:00.000Z',
   updatedAt: '2026-08-17T12:01:00.000Z',
@@ -63,6 +66,7 @@ describe('artifact catalog service', () => {
       apiVersion: 'v1',
       workspaceId: 'workspace-main',
       artifactId: storedArtifact.artifactId,
+      kind: 'file',
       name: 'Release notes',
       createdAt: '2026-08-17T12:00:00.000Z',
       updatedAt: '2026-08-17T12:01:00.000Z',

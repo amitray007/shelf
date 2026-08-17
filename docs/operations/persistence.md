@@ -1,6 +1,6 @@
 # Persistence and content storage
 
-Shelf uses PostgreSQL for authoritative metadata and selects content storage independently. A revision stores a provider-neutral opaque content ID, SHA-256 hash, and byte count; it does not store an R2 endpoint, filesystem path, credential, or public provider URL.
+Shelf uses PostgreSQL for authoritative metadata and selects content storage independently. A file revision stores one provider-neutral opaque content ID, SHA-256 hash, and byte count. A folder revision stores one canonical manifest descriptor plus a transactional entry set whose regular files each carry the same provider-neutral descriptor; empty directories remain explicit. Neither model stores an R2 endpoint, filesystem path, credential, or public provider URL.
 
 ## Supported profiles
 
@@ -74,7 +74,9 @@ node --env-file=.env.dev apps/api/dist/operator/cli.js reconcile scan \
 Local inventory reads the `staging/` and `objects/` directories without following unknown entries.
 The S3-protocol inventory lists completed objects plus incomplete multipart uploads beneath the
 configured Shelf prefix. Database references remain scoped by `SHELF_INSTALLATION_ID`; independent
-installations must still use independent local roots or object prefixes.
+installations must still use independent local roots or object prefixes. Folder manifest objects and
+every regular-file entry are independent references, so reconciliation and backup verification cover
+the complete browsable snapshot rather than only its manifest.
 
 The reported orphan and staging entries are candidates, not proof that deletion is safe. A later
 destructive command must perform a fresh reference check, retain an independently configurable age

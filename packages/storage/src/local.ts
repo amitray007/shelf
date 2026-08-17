@@ -223,13 +223,18 @@ export class LocalContentStorage implements ContentStorage {
   ): Promise<AsyncIterable<Uint8Array>> {
     options.signal?.throwIfAborted();
     assertSealedContent(content);
-    const range = resolveContentRange(options.range, content.byteCount);
     const handle = await open(this.#objectPath(content.contentId), 'r');
     try {
       const stats = await handle.stat();
       if (!stats.isFile() || stats.size !== content.byteCount) {
         throw new Error('Sealed content size mismatch.');
       }
+      if (content.byteCount === 0) {
+        if (options.range !== undefined) resolveContentRange(options.range, content.byteCount);
+        await handle.close();
+        return (async function* emptyContent() {})();
+      }
+      const range = resolveContentRange(options.range, content.byteCount);
       return handle.createReadStream({
         start: range.start,
         end: range.end,

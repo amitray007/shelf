@@ -37,6 +37,24 @@ function descriptor(value: string) {
 }
 
 describe('LocalContentStorage', () => {
+  it('seals and reads an empty immutable object for complete folder snapshots', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'shelf-local-zero-byte-'));
+    roots.push(root);
+    const storage = new LocalContentStorage({ root });
+    const staged = await storage.stage((async function* empty() {})(), {});
+    const descriptor = {
+      contentHash: `sha256:${createHash('sha256').update('').digest('hex')}`,
+      byteCount: 0,
+    };
+    const sealed = await storage.seal(staged, descriptor);
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of await storage.read(sealed, {})) chunks.push(chunk);
+    expect(Buffer.concat(chunks)).toEqual(Buffer.alloc(0));
+    await expect(storage.read(sealed, { range: { start: 0, end: 0 } })).rejects.toThrow(
+      'Invalid content byte range',
+    );
+  });
+
   it('inventories an uninitialized root as empty without creating it', async () => {
     const parent = await mkdtemp(join(tmpdir(), 'shelf-local-empty-'));
     const root = join(parent, 'content');

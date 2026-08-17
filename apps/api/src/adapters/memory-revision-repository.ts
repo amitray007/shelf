@@ -1,10 +1,14 @@
 import type {
   ArtifactCatalogRepository,
   ArtifactLifecycleRepository,
+  CommitFolderPublishInput,
+  CommitFolderPublishOutcome,
   CommitPublishInput,
   CommitPublishOutcome,
   CommitRestoreInput,
   CommitRestoreOutcome,
+  FolderIdempotencyRecord,
+  FolderRevisionRepository,
   IdempotencyNamespace,
   IdempotencyRecord,
   RestoreIdempotencyNamespace,
@@ -12,6 +16,9 @@ import type {
   RevisionRepository,
   StoredArtifact,
   StoredArtifactRevision,
+  StoredFolderEntry,
+  StoredFolderRestore,
+  StoredFolderRevision,
   StoredRestore,
   StoredRevision,
 } from '@shelf/core';
@@ -35,11 +42,18 @@ function namespaceKey(namespace: {
 
 /** Process-local validation adapter. It deliberately does not settle Shelf's persistence model. */
 export class MemoryRevisionRepository
-  implements RevisionRepository, ArtifactCatalogRepository, ArtifactLifecycleRepository
+  implements
+    RevisionRepository,
+    ArtifactCatalogRepository,
+    ArtifactLifecycleRepository,
+    FolderRevisionRepository
 {
   readonly #artifacts = new Map<string, StoredArtifact>();
   readonly #artifactRevisions = new Map<string, StoredArtifactRevision[]>();
   readonly #idempotency = new Map<string, IdempotencyRecord>();
+  readonly #folderIdempotency = new Map<string, FolderIdempotencyRecord>();
+  readonly #folderRevisions = new Map<string, StoredFolderRevision>();
+  readonly #folderEntries = new Map<string, readonly StoredFolderEntry[]>();
   readonly #restoreIdempotency = new Map<string, RestoreIdempotencyRecord>();
   readonly #revisions = new Map<string, StoredRevision>();
 
@@ -51,9 +65,10 @@ export class MemoryRevisionRepository
     // This method has no suspension point. JavaScript's run-to-completion rule makes the read and
     // both writes one process-local linearization point for concurrent callers.
     const key = namespaceKey(input.namespace);
+    if (this.#folderIdempotency.has(key)) return { status: 'conflict' };
     const existing = this.#idempotency.get(key);
     if (existing !== undefined) {
-      return existing.fingerprint === input.fingerprint
+      return existing.fingerprint === input.fingerprint && existing.result !== undefined
         ? { status: 'replayed', result: existing.result }
         : { status: 'conflict' };
     }
@@ -85,6 +100,7 @@ export class MemoryRevisionRepository
       installationId: input.result.installationId,
       workspaceId: input.result.workspaceId,
       artifactId: input.result.artifactId,
+      kind: 'file',
       name: previous?.name ?? initialArtifactNameFromFileName(input.result.originalFileName),
       createdAt: previous?.createdAt ?? createdAt,
       updatedAt: createdAt,
@@ -93,6 +109,95 @@ export class MemoryRevisionRepository
     this.#revisions.set(input.result.revisionId, input.result);
     this.#idempotency.set(key, record);
     return { status: 'committed', result: input.result };
+  }
+
+  async findFolderIdempotency(
+    namespace: IdempotencyNamespace,
+  ): Promise<FolderIdempotencyRecord | undefined> {
+    const key = namespaceKey(namespace);
+    return (
+      this.#folderIdempotency.get(key) ??
+      (this.#idempotency.has(key)
+        ? { fingerprint: this.#idempotency.get(key)?.fingerprint ?? '' }
+        : undefined)
+    );
+  }
+
+  async commitFolderPublish(input: CommitFolderPublishInput): Promise<CommitFolderPublishOutcome> {
+    const key = namespaceKey(input.namespace);
+    const existing = await this.findFolderIdempotency(input.namespace);
+    if (existing !== undefined) {
+      return existing.fingerprint === input.fingerprint && existing.result !== undefined
+        ? { status: 'replayed', result: existing.result }
+        : { status: 'conflict' };
+    }
+    const previous = this.#artifacts.get(input.result.artifactId);
+    if (
+      previous !== undefined &&
+      (previous.installationId !== input.result.installationId ||
+        previous.workspaceId !== input.result.workspaceId ||
+        previous.kind !== 'folder')
+    ) {
+      throw new Error('Folder artifact identity is invalid.');
+    }
+    const history = this.#artifactRevisions.get(input.result.artifactId) ?? [];
+    const createdAt = new Date().toISOString();
+    const revision: StoredArtifactRevision = {
+      kind: 'folder',
+      revisionId: input.result.revisionId,
+      revisionNumber: history.length + 1,
+      rootName: input.result.rootName,
+      contentHash: input.result.manifest.contentHash,
+      byteCount: input.result.totalByteCount,
+      fileCount: input.result.fileCount,
+      createdAt,
+      provenance: input.result.provenance,
+      publisherMetadata: input.result.publisherMetadata,
+    };
+    this.#artifactRevisions.set(input.result.artifactId, [...history, revision]);
+    this.#artifacts.set(input.result.artifactId, {
+      installationId: input.result.installationId,
+      workspaceId: input.result.workspaceId,
+      artifactId: input.result.artifactId,
+      kind: 'folder',
+      name: previous?.name ?? initialArtifactNameFromFileName(input.result.rootName),
+      createdAt: previous?.createdAt ?? createdAt,
+      updatedAt: createdAt,
+      latestRevision: revision,
+    });
+    this.#folderRevisions.set(input.result.revisionId, input.result);
+    this.#folderEntries.set(input.result.revisionId, [...input.entries]);
+    this.#folderIdempotency.set(key, {
+      fingerprint: input.fingerprint,
+      result: input.result,
+    });
+    return { status: 'committed', result: input.result };
+  }
+
+  async findFolderRevision(revisionId: string): Promise<StoredFolderRevision | undefined> {
+    return this.#folderRevisions.get(revisionId);
+  }
+
+  async listFolderEntries(request: {
+    installationId: string;
+    revisionId: string;
+    limit: number;
+    afterPath?: string;
+  }) {
+    const revision = this.#folderRevisions.get(request.revisionId);
+    if (revision === undefined || revision.installationId !== request.installationId) {
+      return { items: [] };
+    }
+    const ordered = [...(this.#folderEntries.get(request.revisionId) ?? [])]
+      .sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)))
+      .filter((entry) => request.afterPath === undefined || entry.path > request.afterPath);
+    const hasMore = ordered.length > request.limit;
+    const items = ordered.slice(0, request.limit);
+    const last = items.at(-1);
+    return {
+      items,
+      ...(hasMore && last !== undefined ? { nextPath: last.path } : {}),
+    };
   }
 
   async findRevision(revisionId: string): Promise<StoredRevision | undefined> {
@@ -107,6 +212,7 @@ export class MemoryRevisionRepository
           artifactId: artifact.artifactId,
           installationId: artifact.installationId,
           workspaceId: artifact.workspaceId,
+          ...(artifact.kind === undefined ? {} : { kind: artifact.kind }),
         };
   }
 
@@ -152,7 +258,10 @@ export class MemoryRevisionRepository
         : { status: 'conflict' };
     }
     const artifact = this.#artifacts.get(input.result.artifactId);
-    const source = this.#revisions.get(input.result.provenance.source.revisionId);
+    const source =
+      input.result.kind === 'folder'
+        ? this.#folderRevisions.get(input.result.provenance.source.revisionId)
+        : this.#revisions.get(input.result.provenance.source.revisionId);
     if (
       artifact === undefined ||
       source === undefined ||
@@ -166,6 +275,45 @@ export class MemoryRevisionRepository
     }
     const history = this.#artifactRevisions.get(input.result.artifactId) ?? [];
     const createdAt = new Date().toISOString();
+    if (input.result.kind === 'folder') {
+      if (source.kind !== 'folder' || artifact.kind !== 'folder') {
+        throw new Error('Folder restore identity is invalid.');
+      }
+      const result: StoredFolderRestore = {
+        ...input.result,
+        manifest: { ...source.manifest },
+        rootName: source.rootName,
+        totalByteCount: source.totalByteCount,
+        fileCount: source.fileCount,
+        publisherMetadata: { ...source.publisherMetadata },
+      };
+      const revisionNumber = history.length + 1;
+      const revision: StoredArtifactRevision = {
+        kind: 'folder',
+        revisionId: result.revisionId,
+        revisionNumber,
+        rootName: result.rootName,
+        contentHash: result.manifest.contentHash,
+        byteCount: result.totalByteCount,
+        fileCount: result.fileCount,
+        createdAt,
+        provenance: result.provenance,
+        publisherMetadata: result.publisherMetadata,
+      };
+      this.#artifactRevisions.set(result.artifactId, [...history, revision]);
+      this.#artifacts.set(result.artifactId, {
+        ...artifact,
+        updatedAt: createdAt,
+        latestRevision: revision,
+      });
+      this.#folderRevisions.set(result.revisionId, result);
+      this.#folderEntries.set(result.revisionId, [
+        ...(this.#folderEntries.get(source.revisionId) ?? []),
+      ]);
+      this.#restoreIdempotency.set(key, { fingerprint: input.fingerprint, result, revisionNumber });
+      return { status: 'committed', result, revisionNumber };
+    }
+    if (source.kind === 'folder') throw new Error('File restore identity is invalid.');
     const result: StoredRestore = {
       ...input.result,
       content: { ...source.content },

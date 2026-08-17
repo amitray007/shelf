@@ -106,7 +106,7 @@ export function createOpaqueId(kind: OpaqueIdKind): string {
   return `${kind}_${randomBytes(16).toString('base64url')}`;
 }
 
-function canonicalizeMetadata(metadata: PublisherMetadata): PublisherMetadata {
+export function canonicalizePublisherMetadata(metadata: PublisherMetadata): PublisherMetadata {
   return Object.fromEntries(
     Object.entries(metadata).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
   );
@@ -125,7 +125,7 @@ export function createPublishFingerprint(input: {
     contentHash: input.contentHash,
     originalFileName: input.originalFileName,
     mediaType: input.mediaType,
-    publisherMetadata: canonicalizeMetadata(input.publisherMetadata),
+    publisherMetadata: canonicalizePublisherMetadata(input.publisherMetadata),
   });
   return `publish-request/v1:sha256:${createHash('sha256').update(canonicalRequest).digest('hex')}`;
 }
@@ -136,41 +136,12 @@ function validateIdentity(field: string, value: string, details: ErrorDetail[]):
   }
 }
 
-function validateRequest(request: PublishFileRequest): PublisherMetadata {
+export function validatePublisherMetadata(metadata: PublisherMetadata): PublisherMetadata {
   const details: ErrorDetail[] = [];
-  validateIdentity('installationId', request.installationId, details);
-  validateIdentity('workspaceId', request.workspaceId, details);
-  validateIdentity('actorId', request.actorId, details);
-  validateIdentity('requestId', request.requestId, details);
-  validateIdentity('idempotencyKey', request.idempotencyKey, details);
-  if (request.artifactId !== undefined && !OPAQUE_ARTIFACT_ID_PATTERN.test(request.artifactId)) {
-    details.push({ field: 'artifactId', reason: 'must be a valid opaque artifact ID' });
-  }
-
-  if (
-    request.originalFileName.length === 0 ||
-    request.originalFileName.length > MAX_FILE_NAME_LENGTH
-  ) {
-    details.push({
-      field: 'originalFileName',
-      reason: `must contain 1-${MAX_FILE_NAME_LENGTH} characters`,
-    });
-  }
-  if (
-    request.mediaType.length > MAX_MEDIA_TYPE_LENGTH ||
-    !MEDIA_TYPE_PATTERN.test(request.mediaType)
-  ) {
-    details.push({ field: 'mediaType', reason: 'must be a valid type/subtype media type' });
-  }
-
-  if (
-    typeof request.publisherMetadata !== 'object' ||
-    request.publisherMetadata === null ||
-    Array.isArray(request.publisherMetadata)
-  ) {
+  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
     details.push({ field: 'publisherMetadata', reason: 'must be an object of string values' });
   } else {
-    const entries = Object.entries(request.publisherMetadata);
+    const entries = Object.entries(metadata);
     if (entries.length > PUBLISHER_METADATA_LIMITS.maxKeys) {
       details.push({
         field: 'publisherMetadata',
@@ -199,7 +170,37 @@ function validateRequest(request: PublishFileRequest): PublisherMetadata {
   }
 
   if (details.length > 0) throw new InvalidPublishRequestError(details);
-  return canonicalizeMetadata(request.publisherMetadata);
+  return canonicalizePublisherMetadata(metadata);
+}
+
+function validateRequest(request: PublishFileRequest): PublisherMetadata {
+  const details: ErrorDetail[] = [];
+  validateIdentity('installationId', request.installationId, details);
+  validateIdentity('workspaceId', request.workspaceId, details);
+  validateIdentity('actorId', request.actorId, details);
+  validateIdentity('requestId', request.requestId, details);
+  validateIdentity('idempotencyKey', request.idempotencyKey, details);
+  if (request.artifactId !== undefined && !OPAQUE_ARTIFACT_ID_PATTERN.test(request.artifactId)) {
+    details.push({ field: 'artifactId', reason: 'must be a valid opaque artifact ID' });
+  }
+
+  if (
+    request.originalFileName.length === 0 ||
+    request.originalFileName.length > MAX_FILE_NAME_LENGTH
+  ) {
+    details.push({
+      field: 'originalFileName',
+      reason: `must contain 1-${MAX_FILE_NAME_LENGTH} characters`,
+    });
+  }
+  if (
+    request.mediaType.length > MAX_MEDIA_TYPE_LENGTH ||
+    !MEDIA_TYPE_PATTERN.test(request.mediaType)
+  ) {
+    details.push({ field: 'mediaType', reason: 'must be a valid type/subtype media type' });
+  }
+  if (details.length > 0) throw new InvalidPublishRequestError(details);
+  return validatePublisherMetadata(request.publisherMetadata);
 }
 
 function throwIfCancelled(signal?: AbortSignal): void {
@@ -227,11 +228,13 @@ function idempotencyNamespace(request: PublishFileRequest): IdempotencyNamespace
 function asResult(stored: StoredPublish, requestId: string, replayed: boolean): PublishResult {
   return {
     apiVersion: stored.apiVersion,
+    kind: 'file',
     workspaceId: stored.workspaceId,
     artifactId: stored.artifactId,
     revisionId: stored.revisionId,
     contentHash: stored.content.contentHash,
     byteCount: stored.content.byteCount,
+    fileCount: 1,
     provenance: {
       classification: stored.provenance.classification,
       observed: { ...stored.provenance.observed },
@@ -326,7 +329,9 @@ export function createPublishService(dependencies: PublishServiceDependencies) {
       const existing = await dependencies.revisionRepository.findIdempotency(namespace);
       if (existing !== undefined) {
         await discardBestEffort(dependencies.contentStore, staged);
-        if (existing.fingerprint !== fingerprint) throw new IdempotencyConflictError();
+        if (existing.fingerprint !== fingerprint || existing.result === undefined) {
+          throw new IdempotencyConflictError();
+        }
         return asResult(existing.result, request.requestId, true);
       }
       throwIfCancelled(request.signal);
@@ -352,6 +357,7 @@ export function createPublishService(dependencies: PublishServiceDependencies) {
     const revisionId = generateId('rev');
     const stored: StoredPublish = Object.freeze({
       apiVersion: PUBLISH_CONTRACT_VERSION,
+      kind: 'file',
       installationId: request.installationId,
       workspaceId: request.workspaceId,
       artifactId,

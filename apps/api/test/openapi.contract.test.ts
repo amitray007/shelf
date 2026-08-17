@@ -62,6 +62,23 @@ describe('OpenAPI v1', () => {
       ],
       'restoreArtifactRevisionV1',
     );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/workspaces/{workspaceId}/folders', 'post', 'operationId'],
+      'publishFolderV1',
+    );
+    expect(document).toHaveProperty(
+      [
+        'paths',
+        '/api/v1/workspaces/{workspaceId}/folders/{artifactId}/revisions',
+        'post',
+        'operationId',
+      ],
+      'publishFolderRevisionV1',
+    );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/revisions/{revisionId}/tree', 'get', 'operationId'],
+      'getFolderTreeV1',
+    );
     expect(serialized).toContain('multipart/form-data');
     expect(serialized).toContain('PublishResult');
     expect(serialized).toContain('ErrorEnvelope');

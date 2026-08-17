@@ -21,11 +21,13 @@ async function fileFixture(contents = 'hello shelf') {
 
 const publishResult = {
   apiVersion: 'v1' as const,
+  kind: 'file' as const,
   workspaceId: 'workspace-main',
   artifactId: 'art_0123456789abcdefghijkl',
   revisionId: 'rev_0123456789abcdefghijkl',
   contentHash: `sha256:${'a'.repeat(64)}`,
   byteCount: 11,
+  fileCount: 1 as const,
   provenance: {
     classification: 'direct-publish' as const,
     observed: { actorId: 'actor-agent', operation: 'file.publish' as const },

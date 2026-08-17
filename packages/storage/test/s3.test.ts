@@ -215,6 +215,31 @@ describe('S3ContentStorage', () => {
     );
   });
 
+  it('seals and reads a zero-byte object for empty files in folder snapshots', async () => {
+    const handler = new InMemoryS3RequestHandler();
+    const client = new S3Client({
+      region: 'auto',
+      endpoint: 'https://storage.test',
+      forcePathStyle: true,
+      credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
+      maxAttempts: 1,
+      requestHandler: handler,
+    });
+    const storage = new S3ContentStorage({ client, bucket: 'test-bucket', prefix: 'shelf-test' });
+    const staged = await storage.stage(chunks(), {});
+    const sealed = await storage.seal(staged, {
+      contentHash: `sha256:${createHash('sha256').update('').digest('hex')}`,
+      byteCount: 0,
+    });
+
+    await expect(collect(await storage.read(sealed, {}))).resolves.toBe('');
+    await expect(storage.read(sealed, { range: { start: 0, end: 0 } })).rejects.toThrow(
+      'Invalid content byte range',
+    );
+  });
+
   it('uses bounded multipart upload for content larger than one configured part', async () => {
     const handler = new InMemoryS3RequestHandler();
     const client = new S3Client({

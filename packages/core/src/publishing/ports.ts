@@ -71,6 +71,7 @@ export interface IdempotencyNamespace {
 
 export interface StoredPublish {
   apiVersion: 'v1';
+  kind?: 'file';
   installationId: string;
   workspaceId: string;
   artifactId: string;
@@ -90,6 +91,7 @@ export interface StoredPublish {
 
 export interface StoredRestore {
   apiVersion: 'v1';
+  kind?: 'file';
   installationId: string;
   workspaceId: string;
   artifactId: string;
@@ -112,7 +114,7 @@ export type StoredRevision = StoredPublish | StoredRestore;
 
 export interface IdempotencyRecord {
   fingerprint: string;
-  result: StoredPublish;
+  result?: StoredPublish;
 }
 
 export interface CommitPublishInput {
@@ -125,6 +127,7 @@ export interface ArtifactIdentity {
   installationId: string;
   workspaceId: string;
   artifactId: string;
+  kind?: 'file' | 'folder';
 }
 
 export interface ArtifactIdentityRepository {

@@ -3,7 +3,12 @@ import { randomUUID } from 'node:crypto';
 import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import type { HumanAuth } from '@shelf/auth';
-import { ErrorEnvelopeSchema, PublishResultSchema } from '@shelf/contracts';
+import {
+  ErrorEnvelopeSchema,
+  FolderPublishResultSchema,
+  FolderTreePageSchema,
+  PublishResultSchema,
+} from '@shelf/contracts';
 import type {
   ArtifactCatalogRepository,
   ArtifactIdentityRepository,
@@ -11,6 +16,7 @@ import type {
   Authorizer,
   ContentReader,
   ContentStore,
+  FolderRevisionRepository,
   RevisionRepository,
 } from '@shelf/core';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -22,12 +28,13 @@ import type { Authenticator } from './authenticate.js';
 import { type ReadinessState, registerHealthRoutes } from './health.js';
 import { registerErrorHandler } from './plugins/errors.js';
 import { registerArtifactRoutes } from './routes/artifacts.js';
+import { FolderMultipartOpenApiSchema, registerFolderRoutes } from './routes/folders.js';
 import { PublishMultipartOpenApiSchema, registerPublishRoute } from './routes/publish.js';
 import { registerRevisionRoutes } from './routes/revisions.js';
 
 declare module 'fastify' {
   interface FastifyContextConfig {
-    shelfMultipartBody?: boolean;
+    shelfMultipartBody?: 'file' | 'folder';
   }
 }
 
@@ -61,7 +68,8 @@ export interface ShelfAppDependencies {
   revisionRepository: RevisionRepository &
     ArtifactIdentityRepository &
     ArtifactCatalogRepository &
-    ArtifactLifecycleRepository;
+    ArtifactLifecycleRepository &
+    FolderRevisionRepository;
 }
 
 export interface CreateShelfAppOptions {
@@ -73,7 +81,8 @@ export interface CreateShelfAppOptions {
   revisionRepository?: RevisionRepository &
     ArtifactIdentityRepository &
     ArtifactCatalogRepository &
-    ArtifactLifecycleRepository;
+    ArtifactLifecycleRepository &
+    FolderRevisionRepository;
   multipartLimits?: Partial<ShelfMultipartLimits>;
   logger?: boolean;
   humanAuth?: HumanAuth;
@@ -119,17 +128,25 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
       },
     },
     transform({ schema, url, route }) {
-      if (route.config?.shelfMultipartBody !== true) return { schema, url };
-      return { schema: { ...schema, body: PublishMultipartOpenApiSchema }, url };
+      if (route.config?.shelfMultipartBody === 'file') {
+        return { schema: { ...schema, body: PublishMultipartOpenApiSchema }, url };
+      }
+      if (route.config?.shelfMultipartBody === 'folder') {
+        return { schema: { ...schema, body: FolderMultipartOpenApiSchema }, url };
+      }
+      return { schema, url };
     },
   });
   await app.register(multipart, { throwFileSizeLimit: true, limits });
   if (options.health !== undefined) registerHealthRoutes(app, options.health);
   if (options.humanAuth !== undefined) await registerHumanAuthRoutes(app, options.humanAuth);
   app.addSchema(PublishResultSchema);
+  app.addSchema(FolderPublishResultSchema);
+  app.addSchema(FolderTreePageSchema);
   app.addSchema(ErrorEnvelopeSchema);
   registerErrorHandler(app);
   await registerPublishRoute(app, dependencies, limits);
+  await registerFolderRoutes(app, dependencies);
   await registerArtifactRoutes(app, dependencies);
   await registerRevisionRoutes(app, dependencies);
   await app.ready();

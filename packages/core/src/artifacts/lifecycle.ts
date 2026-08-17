@@ -9,6 +9,7 @@ import {
 } from '@shelf/contracts';
 
 import { boundaryFailure, ShelfCoreError } from '../errors.js';
+import type { StoredFolderRestore, StoredFolderRevision } from '../folders/publish.js';
 import type {
   Authorizer,
   OpaqueIdGenerator,
@@ -23,6 +24,8 @@ import {
 } from '../publishing/publish.js';
 import { RevisionNotFoundError } from '../revisions/read.js';
 import { type StoredArtifact, storedArtifactToArtifact } from './catalog.js';
+
+type StoredLifecycleRestore = StoredRestore | StoredFolderRestore;
 
 function containsControlCharacter(value: string): boolean {
   return [...value].some((character) => {
@@ -48,6 +51,7 @@ export interface ArtifactLifecycleRepository {
     name: string;
   }): Promise<StoredArtifact | undefined>;
   findRevision(revisionId: string): Promise<StoredRevision | undefined>;
+  findFolderRevision?(revisionId: string): Promise<StoredFolderRevision | undefined>;
   findRestoreIdempotency(
     namespace: RestoreIdempotencyNamespace,
   ): Promise<RestoreIdempotencyRecord | undefined>;
@@ -64,18 +68,18 @@ export interface RestoreIdempotencyNamespace {
 
 export interface RestoreIdempotencyRecord {
   fingerprint: string;
-  result: StoredRestore;
+  result: StoredLifecycleRestore;
   revisionNumber: number;
 }
 
 export interface CommitRestoreInput {
   namespace: RestoreIdempotencyNamespace;
   fingerprint: string;
-  result: StoredRestore;
+  result: StoredLifecycleRestore;
 }
 
 export type CommitRestoreOutcome =
-  | { status: 'committed' | 'replayed'; result: StoredRestore; revisionNumber: number }
+  | { status: 'committed' | 'replayed'; result: StoredLifecycleRestore; revisionNumber: number }
   | { status: 'conflict' };
 
 export class InvalidArtifactNameError extends ShelfCoreError {
@@ -140,13 +144,40 @@ export function createRestoreFingerprint(input: {
 }
 
 function restoreResult(
-  stored: StoredRestore,
+  stored: StoredLifecycleRestore,
   revisionNumber: number,
   requestId: string,
   replayed: boolean,
 ): RestoreResult {
+  if (stored.kind === 'folder') {
+    return {
+      apiVersion: 'v1',
+      kind: 'folder',
+      workspaceId: stored.workspaceId,
+      artifactId: stored.artifactId,
+      revisionId: stored.revisionId,
+      revisionNumber,
+      sourceRevisionId: stored.provenance.source.revisionId,
+      contentHash: stored.manifest.contentHash,
+      byteCount: stored.totalByteCount,
+      fileCount: stored.fileCount,
+      provenance: {
+        classification: 'restore',
+        observed: { ...stored.provenance.observed },
+        source: { ...stored.provenance.source },
+      },
+      requestId,
+      paths: {
+        artifact: `/api/v1/artifacts/${stored.artifactId}`,
+        revision: `/api/v1/revisions/${stored.revisionId}`,
+        tree: `/api/v1/revisions/${stored.revisionId}/tree`,
+      },
+      replayed,
+    };
+  }
   return {
     apiVersion: 'v1',
+    kind: 'file',
     workspaceId: stored.workspaceId,
     artifactId: stored.artifactId,
     revisionId: stored.revisionId,
@@ -154,6 +185,7 @@ function restoreResult(
     sourceRevisionId: stored.provenance.source.revisionId,
     contentHash: stored.content.contentHash,
     byteCount: stored.content.byteCount,
+    fileCount: 1,
     provenance: {
       classification: 'restore',
       observed: { ...stored.provenance.observed },
@@ -280,9 +312,12 @@ export function createArtifactLifecycleService(dependencies: {
       );
       request.signal?.throwIfAborted();
 
-      let source: StoredRevision | undefined;
+      let source: StoredRevision | StoredFolderRevision | undefined;
       try {
-        source = await dependencies.artifacts.findRevision(request.sourceRevisionId);
+        source =
+          artifact.kind === 'folder'
+            ? await dependencies.artifacts.findFolderRevision?.(request.sourceRevisionId)
+            : await dependencies.artifacts.findRevision(request.sourceRevisionId);
       } catch (error) {
         throw boundaryFailure('SERVICE_UNAVAILABLE', 'Revision lookup failed.', error);
       }
@@ -319,22 +354,43 @@ export function createArtifactLifecycleService(dependencies: {
       }
 
       const revisionId = generateId('rev');
-      const stored: StoredRestore = Object.freeze({
-        apiVersion: 'v1',
-        installationId: request.installationId,
-        workspaceId: request.workspaceId,
-        artifactId: request.artifactId,
-        revisionId,
-        content: Object.freeze({ ...source.content }),
-        originalFileName: source.originalFileName,
-        mediaType: source.mediaType,
-        provenance: Object.freeze({
-          classification: 'restore',
-          observed: Object.freeze({ actorId: request.actorId, operation: RESTORE_OPERATION }),
-          source: Object.freeze({ revisionId: source.revisionId }),
-        }),
-        publisherMetadata: Object.freeze({ ...source.publisherMetadata }),
-      });
+      const stored: StoredLifecycleRestore =
+        source.kind === 'folder'
+          ? Object.freeze({
+              apiVersion: 'v1',
+              kind: 'folder',
+              installationId: request.installationId,
+              workspaceId: request.workspaceId,
+              artifactId: request.artifactId,
+              revisionId,
+              manifest: Object.freeze({ ...source.manifest }),
+              rootName: source.rootName,
+              totalByteCount: source.totalByteCount,
+              fileCount: source.fileCount,
+              provenance: Object.freeze({
+                classification: 'restore',
+                observed: Object.freeze({ actorId: request.actorId, operation: RESTORE_OPERATION }),
+                source: Object.freeze({ revisionId: source.revisionId }),
+              }),
+              publisherMetadata: Object.freeze({ ...source.publisherMetadata }),
+            })
+          : Object.freeze({
+              apiVersion: 'v1',
+              kind: 'file',
+              installationId: request.installationId,
+              workspaceId: request.workspaceId,
+              artifactId: request.artifactId,
+              revisionId,
+              content: Object.freeze({ ...source.content }),
+              originalFileName: source.originalFileName,
+              mediaType: source.mediaType,
+              provenance: Object.freeze({
+                classification: 'restore',
+                observed: Object.freeze({ actorId: request.actorId, operation: RESTORE_OPERATION }),
+                source: Object.freeze({ revisionId: source.revisionId }),
+              }),
+              publisherMetadata: Object.freeze({ ...source.publisherMetadata }),
+            });
 
       let outcome: CommitRestoreOutcome;
       try {

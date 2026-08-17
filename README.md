@@ -10,7 +10,7 @@ Shelf is designed for both people and agents: the dashboard and CLI are first-cl
 Shelf now has a validated TypeScript service-first foundation: Fastify for the API, Commander for the CLI, framework-independent publishing and read services, and a generated OpenAPI contract.
 PostgreSQL with Kysely is the authoritative metadata path. Content can use a hardened single-host local-filesystem adapter or Cloudflare R2 through a provider-neutral S3-protocol adapter; AWS S3 and native providers can be added behind the same core interfaces.
 
-The persistence slice proves durable idempotent single-file publishing, stable artifact updates and history, mutable artifact names, restore-as-latest with source provenance, restart recovery, multipart object upload, and byte-range delivery. The authentication foundation uses Better Auth for closed-registration owner sessions and Shelf-owned, workspace-scoped agent credentials with rotation, revocation, and audit history. A production server and host-local operator CLI now make that path runnable through the single-host Docker Compose alpha. The operator can perform an age-gated, read-only reconciliation scan across PostgreSQL and either content adapter, plus an offline PostgreSQL/Local File backup and verified empty-target restore on a host with PostgreSQL client tools. Compose-volume orchestration, R2 backup/recovery, destructive cleanup policy, administrative password recovery, and live R2 conformance remain intentionally incomplete.
+The persistence slice proves durable idempotent file publishing and complete folder snapshots, stable artifact updates and history, mutable artifact names, restore-as-latest with source provenance, restart recovery, multipart object upload, portable folder-tree reads, and byte-range file delivery. Folder manifests and their independently sealed file entries participate in reconciliation and backup verification. The authentication foundation uses Better Auth for closed-registration owner sessions and Shelf-owned, workspace-scoped agent credentials with rotation, revocation, and audit history. A production server and host-local operator CLI now make that path runnable through the single-host Docker Compose alpha. The operator can perform an age-gated, read-only reconciliation scan across PostgreSQL and either content adapter, plus an offline PostgreSQL/Local File backup and verified empty-target restore on a host with PostgreSQL client tools. Compose-volume orchestration, R2 backup/recovery, destructive cleanup policy, administrative password recovery, and live R2 conformance remain intentionally incomplete.
 
 React with Vite and React Router remains the accepted dashboard stack, but the dashboard is intentionally absent until a dashboard behavior enters the active implementation scope.
 
@@ -53,9 +53,12 @@ pnpm shelf artifacts history --url https://shelf.example --artifact art_...
 pnpm shelf artifacts rename --url https://shelf.example --artifact art_... --name "Project notes"
 pnpm shelf artifacts restore --url https://shelf.example --workspace workspace-main \
   --artifact art_... --revision rev_... --idempotency-key restore-1
+pnpm shelf folders publish --url https://shelf.example --workspace workspace-main \
+  --directory ./my-project --idempotency-key project-1
+pnpm shelf folders tree --url https://shelf.example --revision rev_...
 ```
 
-Set `SHELF_TOKEN` before these commands. Publish another immutable revision with the same stable artifact identity by adding `--artifact art_...` and using a new idempotency key. Rename changes only artifact presentation. Restore creates a new latest revision and leaves the selected source plus all later history unchanged.
+Set `SHELF_TOKEN` before these commands. Publish another immutable file revision or complete folder snapshot with the same stable artifact identity by adding `--artifact art_...` and using a new idempotency key. Folder publishing includes regular files and empty directories, rejects symlinks and special files, and never uploads an absolute host path. Rename changes only artifact presentation. Restore creates a new latest revision and leaves the selected source plus all later history unchanged.
 
 For the runnable local profile, follow the [single-host self-hosting guide](docs/operations/self-hosting.md). The delivery roadmap is maintained in the [product contract](docs/plans/2026-08-17-0030-feat-shelf-product-plan.md#product-delivery-roadmap).
 

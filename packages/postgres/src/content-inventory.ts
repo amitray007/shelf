@@ -11,6 +11,14 @@ function positiveInteger(value: string, label: string): number {
   return parsed;
 }
 
+function nonNegativeInteger(value: string, label: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`Stored ${label} is invalid.`);
+  }
+  return parsed;
+}
+
 export class PostgresReferencedContentInventory implements ReferencedContentInventory {
   readonly #database: ShelfPostgresDatabase;
 
@@ -19,21 +27,32 @@ export class PostgresReferencedContentInventory implements ReferencedContentInve
   }
 
   async listReferencedContent(installationId: string): Promise<ReferencedContent[]> {
-    const rows = await this.#database
-      .selectFrom('shelf_revisions')
-      .select(['content_id', 'content_hash', 'byte_count'])
-      .select(sql<string>`count(*)`.as('revision_count'))
-      .where('installation_id', '=', installationId)
-      .groupBy(['content_id', 'content_hash', 'byte_count'])
-      .orderBy('content_id')
-      .execute();
+    const result = await sql<{
+      content_id: string;
+      content_hash: string;
+      byte_count: string;
+      revision_count: string;
+    }>`
+      select content_id, content_hash, byte_count, count(*) as revision_count
+      from (
+        select content_id, content_hash, byte_count
+        from shelf_revisions
+        where installation_id = ${installationId}
+        union all
+        select content_id, content_hash, byte_count
+        from shelf_revision_entries
+        where installation_id = ${installationId} and kind = 'file'
+      ) referenced_objects
+      group by content_id, content_hash, byte_count
+      order by content_id
+    `.execute(this.#database);
 
     const inventory = new Map<string, ReferencedContent>();
-    for (const row of rows) {
+    for (const row of result.rows) {
       const current = {
         contentId: row.content_id,
         contentHash: row.content_hash,
-        byteCount: positiveInteger(row.byte_count, 'content byte count'),
+        byteCount: nonNegativeInteger(row.byte_count, 'content byte count'),
         revisionCount: positiveInteger(row.revision_count, 'revision count'),
       };
       const existing = inventory.get(current.contentId);

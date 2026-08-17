@@ -246,6 +246,7 @@ describe('artifact lifecycle service', () => {
 
     expect(restored).toEqual({
       apiVersion: 'v1',
+      kind: 'file',
       workspaceId: artifact.workspaceId,
       artifactId: artifact.artifactId,
       revisionId: 'rev_DDDDDDDDDDDDDDDDDDDDDD',
@@ -253,6 +254,7 @@ describe('artifact lifecycle service', () => {
       sourceRevisionId: source.revisionId,
       contentHash: source.content.contentHash,
       byteCount: source.content.byteCount,
+      fileCount: 1,
       provenance: {
         classification: 'restore',
         observed: { actorId: 'actor-restorer', operation: 'revision.restore' },
