@@ -465,6 +465,682 @@
         },
         "additionalProperties": false,
         "title": "ErrorDetail"
+      },
+      "def-6": {
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "apiVersion",
+              "workspaceId",
+              "artifactId",
+              "kind",
+              "base",
+              "target",
+              "status",
+              "changes"
+            ],
+            "properties": {
+              "apiVersion": {
+                "type": "string",
+                "enum": ["v1"]
+              },
+              "workspaceId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "artifactId": {
+                "type": "string",
+                "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                "description": "Opaque artifact identifier containing 128 bits of entropy."
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["file"]
+              },
+              "base": {
+                "type": "object",
+                "required": [
+                  "revisionId",
+                  "contentHash",
+                  "byteCount",
+                  "originalFileName",
+                  "mediaType"
+                ],
+                "properties": {
+                  "revisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
+                  },
+                  "contentHash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "byteCount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "originalFileName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "mediaType": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  }
+                },
+                "additionalProperties": false
+              },
+              "target": {
+                "type": "object",
+                "required": [
+                  "revisionId",
+                  "contentHash",
+                  "byteCount",
+                  "originalFileName",
+                  "mediaType"
+                ],
+                "properties": {
+                  "revisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
+                  },
+                  "contentHash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "byteCount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "originalFileName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "mediaType": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  }
+                },
+                "additionalProperties": false
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["unchanged"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["changed"]
+                  }
+                ]
+              },
+              "changes": {
+                "type": "object",
+                "required": ["content", "mediaType", "originalFileName"],
+                "properties": {
+                  "content": {
+                    "type": "boolean"
+                  },
+                  "mediaType": {
+                    "type": "boolean"
+                  },
+                  "originalFileName": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "apiVersion",
+              "workspaceId",
+              "artifactId",
+              "kind",
+              "base",
+              "target",
+              "summary",
+              "items",
+              "nextCursor"
+            ],
+            "properties": {
+              "apiVersion": {
+                "type": "string",
+                "enum": ["v1"]
+              },
+              "workspaceId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "artifactId": {
+                "type": "string",
+                "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                "description": "Opaque artifact identifier containing 128 bits of entropy."
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["folder"]
+              },
+              "base": {
+                "type": "object",
+                "required": ["revisionId", "contentHash", "byteCount", "fileCount", "rootName"],
+                "properties": {
+                  "revisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
+                  },
+                  "contentHash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "byteCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "fileCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "rootName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  }
+                },
+                "additionalProperties": false
+              },
+              "target": {
+                "type": "object",
+                "required": ["revisionId", "contentHash", "byteCount", "fileCount", "rootName"],
+                "properties": {
+                  "revisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
+                  },
+                  "contentHash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "byteCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "fileCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "rootName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  }
+                },
+                "additionalProperties": false
+              },
+              "summary": {
+                "type": "object",
+                "required": ["added", "removed", "moved", "changed", "unchanged"],
+                "properties": {
+                  "added": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4000
+                  },
+                  "removed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4000
+                  },
+                  "moved": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2000
+                  },
+                  "changed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2000
+                  },
+                  "unchanged": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2000
+                  }
+                },
+                "additionalProperties": false
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "required": ["status", "path", "after"],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["added"]
+                        },
+                        "path": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024,
+                          "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                        },
+                        "after": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "required": ["path", "kind"],
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024,
+                                  "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["directory"]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "required": ["path", "kind", "mediaType", "contentHash", "byteCount"],
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024,
+                                  "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["file"]
+                                },
+                                "mediaType": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 255
+                                },
+                                "contentHash": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "byteCount": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "required": ["status", "path", "before"],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["removed"]
+                        },
+                        "path": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024,
+                          "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                        },
+                        "before": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "required": ["path", "kind"],
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024,
+                                  "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["directory"]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "required": ["path", "kind", "mediaType", "contentHash", "byteCount"],
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024,
+                                  "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["file"]
+                                },
+                                "mediaType": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 255
+                                },
+                                "contentHash": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "byteCount": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "required": ["status", "path", "before", "after"],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["changed"]
+                        },
+                        "path": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024,
+                          "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                        },
+                        "before": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "required": ["path", "kind"],
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024,
+                                  "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["directory"]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "required": ["path", "kind", "mediaType", "contentHash", "byteCount"],
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024,
+                                  "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["file"]
+                                },
+                                "mediaType": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 255
+                                },
+                                "contentHash": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "byteCount": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "after": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "required": ["path", "kind"],
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024,
+                                  "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["directory"]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "required": ["path", "kind", "mediaType", "contentHash", "byteCount"],
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024,
+                                  "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["file"]
+                                },
+                                "mediaType": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 255
+                                },
+                                "contentHash": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "byteCount": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "required": ["status", "fromPath", "toPath", "before", "after"],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["moved"]
+                        },
+                        "fromPath": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024,
+                          "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                        },
+                        "toPath": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1024,
+                          "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                        },
+                        "before": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "required": ["path", "kind"],
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024,
+                                  "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["directory"]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "required": ["path", "kind", "mediaType", "contentHash", "byteCount"],
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024,
+                                  "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["file"]
+                                },
+                                "mediaType": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 255
+                                },
+                                "contentHash": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "byteCount": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "after": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "required": ["path", "kind"],
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024,
+                                  "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["directory"]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "required": ["path", "kind", "mediaType", "contentHash", "byteCount"],
+                              "properties": {
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1024,
+                                  "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["file"]
+                                },
+                                "mediaType": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 255
+                                },
+                                "contentHash": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "byteCount": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "maxItems": 100
+              },
+              "nextCursor": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ],
+        "title": "RevisionComparison"
       }
     }
   },
@@ -3842,6 +4518,134 @@
                       "additionalProperties": false
                     }
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/revisions/{baseRevisionId}/comparisons/{targetRevisionId}": {
+      "get": {
+        "operationId": "compareRevisionsV1",
+        "summary": "Compare two immutable revisions of one artifact",
+        "tags": ["revisions"],
+        "description": "Compares immutable descriptors without opening content. Folder changes are paged; exact unambiguous byte matches identify moved files.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "baseRevisionId",
+            "required": true,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "targetRevisionId",
+            "required": true,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-6"
                 }
               }
             }

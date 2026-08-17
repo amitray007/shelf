@@ -8,4 +8,5 @@ export * from './publishing/ports.js';
 export * from './publishing/publish.js';
 export * from './reconciliation/ports.js';
 export * from './reconciliation/reconcile.js';
+export * from './revisions/compare.js';
 export * from './revisions/read.js';

@@ -13,6 +13,7 @@ import type {
   IdempotencyRecord,
   RestoreIdempotencyNamespace,
   RestoreIdempotencyRecord,
+  RevisionComparisonRepository,
   RevisionRepository,
   StoredArtifact,
   StoredArtifactRevision,
@@ -46,7 +47,8 @@ export class MemoryRevisionRepository
     RevisionRepository,
     ArtifactCatalogRepository,
     ArtifactLifecycleRepository,
-    FolderRevisionRepository
+    FolderRevisionRepository,
+    RevisionComparisonRepository
 {
   readonly #artifacts = new Map<string, StoredArtifact>();
   readonly #artifactRevisions = new Map<string, StoredArtifactRevision[]>();
@@ -202,6 +204,12 @@ export class MemoryRevisionRepository
 
   async findRevision(revisionId: string): Promise<StoredRevision | undefined> {
     return this.#revisions.get(revisionId);
+  }
+
+  async findComparableRevision(revisionId: string) {
+    const file = this.#revisions.get(revisionId);
+    if (file !== undefined) return { ...file, kind: 'file' as const };
+    return this.#folderRevisions.get(revisionId);
   }
 
   async findArtifactIdentity(artifactId: string) {

@@ -79,6 +79,15 @@ describe('OpenAPI v1', () => {
       ['paths', '/api/v1/revisions/{revisionId}/tree', 'get', 'operationId'],
       'getFolderTreeV1',
     );
+    expect(document).toHaveProperty(
+      [
+        'paths',
+        '/api/v1/revisions/{baseRevisionId}/comparisons/{targetRevisionId}',
+        'get',
+        'operationId',
+      ],
+      'compareRevisionsV1',
+    );
     expect(serialized).toContain('multipart/form-data');
     expect(serialized).toContain('PublishResult');
     expect(serialized).toContain('ErrorEnvelope');

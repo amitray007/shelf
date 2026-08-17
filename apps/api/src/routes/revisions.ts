@@ -1,7 +1,12 @@
 import { Readable } from 'node:stream';
 
-import { OpaqueRevisionIdSchema } from '@shelf/contracts';
-import { type ContentByteRange, createReadRevisionService, ShelfCoreError } from '@shelf/core';
+import { COMPARISON_LIMITS, OpaqueRevisionIdSchema } from '@shelf/contracts';
+import {
+  type ContentByteRange,
+  createReadRevisionService,
+  createRevisionComparisonService,
+  ShelfCoreError,
+} from '@shelf/core';
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
 
@@ -10,10 +15,30 @@ import { authenticate } from '../authenticate.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
 
 export const REVISION_CONTENT_ROUTE_URL = '/api/v1/revisions/:revisionId/content';
+export const REVISION_COMPARISON_ROUTE_URL =
+  '/api/v1/revisions/:baseRevisionId/comparisons/:targetRevisionId';
 
 const ParamsSchema = Type.Object(
   {
     revisionId: OpaqueRevisionIdSchema,
+  },
+  { additionalProperties: false },
+);
+
+const ComparisonParamsSchema = Type.Object(
+  {
+    baseRevisionId: OpaqueRevisionIdSchema,
+    targetRevisionId: OpaqueRevisionIdSchema,
+  },
+  { additionalProperties: false },
+);
+
+const ComparisonQuerySchema = Type.Object(
+  {
+    limit: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: COMPARISON_LIMITS.pageSize, default: 100 }),
+    ),
+    cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 2048 })),
   },
   { additionalProperties: false },
 );
@@ -180,6 +205,49 @@ export async function registerRevisionRoutes(
   dependencies: ShelfAppDependencies,
 ): Promise<void> {
   const readRevision = createReadRevisionService(dependencies);
+  const compareRevisions = createRevisionComparisonService({
+    authorizer: dependencies.authorizer,
+    revisions: dependencies.revisionRepository,
+  });
+
+  app.get(
+    REVISION_COMPARISON_ROUTE_URL,
+    {
+      schema: {
+        operationId: 'compareRevisionsV1',
+        summary: 'Compare two immutable revisions of one artifact',
+        description:
+          'Compares immutable descriptors without opening content. Folder changes are paged; exact unambiguous byte matches identify moved files.',
+        security: [{ bearerAuth: [] }],
+        tags: ['revisions'],
+        params: ComparisonParamsSchema,
+        querystring: ComparisonQuerySchema,
+        response: {
+          200: Type.Ref('RevisionComparison'),
+          400: Type.Ref('ErrorEnvelope'),
+          401: Type.Ref('ErrorEnvelope'),
+          403: Type.Ref('ErrorEnvelope'),
+          404: Type.Ref('ErrorEnvelope'),
+          500: Type.Ref('ErrorEnvelope'),
+          503: Type.Ref('ErrorEnvelope'),
+        },
+      },
+    },
+    async (request, reply) => {
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { baseRevisionId: string; targetRevisionId: string };
+      const query = request.query as { limit?: number; cursor?: string };
+      return compareRevisions({
+        installationId: identity.installationId,
+        actorId: identity.actorId,
+        baseRevisionId: params.baseRevisionId,
+        targetRevisionId: params.targetRevisionId,
+        limit: query.limit ?? COMPARISON_LIMITS.pageSize,
+        ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+        signal: requestCancellationSignal(request, reply),
+      });
+    },
+  );
 
   app.get(
     REVISION_CONTENT_ROUTE_URL,

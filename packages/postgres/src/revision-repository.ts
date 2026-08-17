@@ -13,6 +13,7 @@ import type {
   IdempotencyRecord,
   RestoreIdempotencyNamespace,
   RestoreIdempotencyRecord,
+  RevisionComparisonRepository,
   RevisionRepository,
   StoredArtifact,
   StoredArtifactRevision,
@@ -727,7 +728,8 @@ export class PostgresRevisionRepository
     RevisionRepository,
     ArtifactCatalogRepository,
     ArtifactLifecycleRepository,
-    FolderRevisionRepository
+    FolderRevisionRepository,
+    RevisionComparisonRepository
 {
   readonly #database: ShelfPostgresDatabase;
 
@@ -759,6 +761,18 @@ export class PostgresRevisionRepository
       .where('kind', '=', 'folder')
       .executeTakeFirst();
     return row === undefined ? undefined : storedFolderRevision(row);
+  }
+
+  async findComparableRevision(revisionId: string) {
+    const row = await this.#database
+      .selectFrom('shelf_revisions')
+      .selectAll()
+      .where('revision_id', '=', revisionId)
+      .executeTakeFirst();
+    if (row === undefined) return undefined;
+    return row.kind === 'folder'
+      ? storedFolderRevision(row)
+      : { ...storedRevision(row), kind: 'file' as const };
   }
 
   async listFolderEntries(request: {

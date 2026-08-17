@@ -22,6 +22,10 @@ import {
   type PublishFolderCommandOptions,
 } from './commands/folders.js';
 import { executePublish, type PublishCommandOptions } from './commands/publish.js';
+import {
+  type CompareRevisionsCommandOptions,
+  executeCompareRevisions,
+} from './commands/revisions.js';
 import { CliFailure, failure, jsonLine, redactEnvelope, usageFailure } from './output.js';
 import type { CliRuntime } from './runtime.js';
 
@@ -91,6 +95,20 @@ export async function runCli(
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: FolderTreeCommandOptions) => {
       result = await executeFolderTree(options, runtime);
+    });
+
+  const revisions = program.command('revisions').description('Inspect immutable revisions');
+  revisions
+    .command('compare')
+    .description('Compare two revisions of one artifact')
+    .requiredOption('--url <url>')
+    .requiredOption('--base <revision-id>')
+    .requiredOption('--target <revision-id>')
+    .option('--limit <count>')
+    .option('--cursor <cursor>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: CompareRevisionsCommandOptions) => {
+      result = await executeCompareRevisions(options, runtime);
     });
 
   const artifacts = program.command('artifacts').description('Inspect versioned artifacts');

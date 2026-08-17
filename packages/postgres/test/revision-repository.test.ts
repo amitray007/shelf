@@ -8,6 +8,7 @@ import type {
   StoredPublish,
   StoredRestore,
 } from '@shelf/core';
+import { createRevisionComparisonService } from '@shelf/core';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -199,6 +200,9 @@ describePostgres('PostgresRevisionRepository', () => {
     await expect(repository.findFolderRevision(input.result.revisionId)).resolves.toEqual(
       input.result,
     );
+    await expect(repository.findComparableRevision(input.result.revisionId)).resolves.toEqual(
+      input.result,
+    );
     await expect(
       repository.listFolderEntries({
         installationId: input.result.installationId,
@@ -275,6 +279,24 @@ describePostgres('PostgresRevisionRepository', () => {
         limit: 10,
       }),
     ).resolves.toEqual({ items: input.entries });
+    const compare = createRevisionComparisonService({
+      authorizer: { async authorize() {} },
+      revisions: repository,
+    });
+    await expect(
+      compare({
+        installationId: input.result.installationId,
+        actorId: 'actor-reader',
+        baseRevisionId: input.result.revisionId,
+        targetRevisionId: restore.result.revisionId,
+        limit: 100,
+      }),
+    ).resolves.toMatchObject({
+      kind: 'folder',
+      summary: { added: 0, removed: 0, moved: 0, changed: 0, unchanged: 3 },
+      items: [],
+      nextCursor: null,
+    });
     await database.destroy();
   });
 
@@ -298,6 +320,10 @@ describePostgres('PostgresRevisionRepository', () => {
       result: input.result,
     });
     await expect(restarted.findRevision(input.result.revisionId)).resolves.toEqual(input.result);
+    await expect(restarted.findComparableRevision(input.result.revisionId)).resolves.toEqual({
+      ...input.result,
+      kind: 'file',
+    });
     await restartedDatabase.destroy();
   });
 

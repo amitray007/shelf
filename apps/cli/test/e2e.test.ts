@@ -47,6 +47,12 @@ describe('CLI wire contract', () => {
       operationId: 'getFolderTreeV1',
       security: [{ bearerAuth: [] }],
     });
+    expect(
+      document.paths['/api/v1/revisions/{baseRevisionId}/comparisons/{targetRevisionId}'].get,
+    ).toMatchObject({
+      operationId: 'compareRevisionsV1',
+      security: [{ bearerAuth: [] }],
+    });
   });
 
   it('does not couple the CLI to core or API server modules', async () => {
@@ -58,6 +64,7 @@ describe('CLI wire contract', () => {
         '../src/commands/publish.ts',
         '../src/commands/artifacts.ts',
         '../src/commands/folders.ts',
+        '../src/commands/revisions.ts',
       ].map((path) => readFile(new URL(path, import.meta.url), 'utf8')),
     );
     expect(sources.join('\n')).not.toMatch(/@shelf\/core|apps\/api|\.\.\/\.\.\/api/);

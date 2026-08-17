@@ -15,9 +15,11 @@ import {
   isFolderTreePage,
   isPublishResult,
   isRestoreResult,
+  isRevisionComparison,
   type PublisherMetadata,
   type PublishResult,
   type RestoreResult,
+  type RevisionComparison,
 } from '@shelf/contracts';
 import { failure, remoteFailure, usageFailure } from './output.js';
 
@@ -89,6 +91,16 @@ export interface PublishFolderOptions {
 export interface GetFolderTreeOptions {
   installationUrl: string;
   revisionId: string;
+  limit: number;
+  cursor?: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface CompareRevisionsOptions {
+  installationUrl: string;
+  baseRevisionId: string;
+  targetRevisionId: string;
   limit: number;
   cursor?: string;
   token: string;
@@ -340,6 +352,26 @@ export async function getFolderTree(
     { token: options.token, allowInsecureLoopback },
     dependencies,
     isFolderTreePage,
+  );
+}
+
+export async function compareRevisions(
+  options: CompareRevisionsOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<RevisionComparison> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/revisions/${encodeURIComponent(options.baseRevisionId)}/comparisons/${encodeURIComponent(options.targetRevisionId)}`,
+    origin,
+  );
+  url.searchParams.set('limit', String(options.limit));
+  if (options.cursor !== undefined) url.searchParams.set('cursor', options.cursor);
+  return requestApiJson(
+    url,
+    { token: options.token, allowInsecureLoopback },
+    dependencies,
+    isRevisionComparison,
   );
 }
 

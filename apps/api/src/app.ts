@@ -8,6 +8,7 @@ import {
   FolderPublishResultSchema,
   FolderTreePageSchema,
   PublishResultSchema,
+  RevisionComparisonSchema,
 } from '@shelf/contracts';
 import type {
   ArtifactCatalogRepository,
@@ -17,6 +18,7 @@ import type {
   ContentReader,
   ContentStore,
   FolderRevisionRepository,
+  RevisionComparisonRepository,
   RevisionRepository,
 } from '@shelf/core';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -69,7 +71,8 @@ export interface ShelfAppDependencies {
     ArtifactIdentityRepository &
     ArtifactCatalogRepository &
     ArtifactLifecycleRepository &
-    FolderRevisionRepository;
+    FolderRevisionRepository &
+    RevisionComparisonRepository;
 }
 
 export interface CreateShelfAppOptions {
@@ -82,7 +85,8 @@ export interface CreateShelfAppOptions {
     ArtifactIdentityRepository &
     ArtifactCatalogRepository &
     ArtifactLifecycleRepository &
-    FolderRevisionRepository;
+    FolderRevisionRepository &
+    RevisionComparisonRepository;
   multipartLimits?: Partial<ShelfMultipartLimits>;
   logger?: boolean;
   humanAuth?: HumanAuth;
@@ -144,6 +148,7 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   app.addSchema(FolderPublishResultSchema);
   app.addSchema(FolderTreePageSchema);
   app.addSchema(ErrorEnvelopeSchema);
+  app.addSchema(RevisionComparisonSchema);
   registerErrorHandler(app);
   await registerPublishRoute(app, dependencies, limits);
   await registerFolderRoutes(app, dependencies);
