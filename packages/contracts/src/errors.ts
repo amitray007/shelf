@@ -8,6 +8,7 @@ export const ERROR_CODES = [
   'IDEMPOTENCY_CONFLICT',
   'ARTIFACT_NOT_FOUND',
   'REVISION_NOT_FOUND',
+  'SHARE_NOT_FOUND',
   'RANGE_NOT_SATISFIABLE',
   'MULTI_RANGE_UNSUPPORTED',
   'REQUEST_CANCELLED',
@@ -77,6 +78,7 @@ export function exitCodeForError(code: ErrorCode): CliExitCode {
     case 'IDEMPOTENCY_CONFLICT':
     case 'ARTIFACT_NOT_FOUND':
     case 'REVISION_NOT_FOUND':
+    case 'SHARE_NOT_FOUND':
     case 'RANGE_NOT_SATISFIABLE':
     case 'MULTI_RANGE_UNSUPPORTED':
       return CLI_EXIT_CODES.validation;

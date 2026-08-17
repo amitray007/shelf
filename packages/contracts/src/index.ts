@@ -4,3 +4,4 @@ export * from './errors.js';
 export * from './folders.js';
 export * from './publish.js';
 export * from './revisions.js';
+export * from './shares.js';
