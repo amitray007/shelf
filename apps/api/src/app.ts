@@ -2,8 +2,12 @@ import { randomBytes, randomUUID } from 'node:crypto';
 
 import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
-import type { HumanAuth } from '@shelf/auth';
+import type { DashboardAccessService, HumanAuth } from '@shelf/auth';
 import {
+  DashboardCredentialIssueSchema,
+  DashboardCredentialPageSchema,
+  DashboardCredentialRevokeSchema,
+  DashboardSessionSchema,
   ErrorEnvelopeSchema,
   FolderPublishResultSchema,
   FolderTreePageSchema,
@@ -39,6 +43,7 @@ import type { Authenticator } from './authenticate.js';
 import { type ReadinessState, registerHealthRoutes } from './health.js';
 import { registerErrorHandler } from './plugins/errors.js';
 import { registerArtifactRoutes } from './routes/artifacts.js';
+import { registerDashboardRoutes } from './routes/dashboard.js';
 import { FolderMultipartOpenApiSchema, registerFolderRoutes } from './routes/folders.js';
 import { registerPublicConfigRoute } from './routes/public-config.js';
 import { PublishMultipartOpenApiSchema, registerPublishRoute } from './routes/publish.js';
@@ -125,6 +130,7 @@ export interface CreateShelfAppOptions {
   health?: ReadinessState;
   rendererPublicOrigin?: string;
   webRoot?: string;
+  dashboardAccess?: DashboardAccessService;
 }
 
 export async function createShelfApp(options: CreateShelfAppOptions): Promise<FastifyInstance> {
@@ -168,7 +174,10 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
       openapi: '3.1.0',
       info: { title: 'Shelf API', version: '1.0.0' },
       components: {
-        securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } },
+        securitySchemes: {
+          bearerAuth: { type: 'http', scheme: 'bearer' },
+          cookieAuth: { type: 'apiKey', in: 'cookie', name: 'better-auth.session_token' },
+        },
       },
     },
     transform({ schema, url, route }) {
@@ -193,12 +202,22 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   app.addSchema(withoutNestedSchemaIds(ShareCreateResultSchema));
   app.addSchema(withoutNestedSchemaIds(SharePageSchema));
   app.addSchema(withoutNestedSchemaIds(PublicShareResolutionSchema));
+  app.addSchema(withoutNestedSchemaIds(DashboardSessionSchema));
+  app.addSchema(withoutNestedSchemaIds(DashboardCredentialPageSchema));
+  app.addSchema(withoutNestedSchemaIds(DashboardCredentialIssueSchema));
+  app.addSchema(withoutNestedSchemaIds(DashboardCredentialRevokeSchema));
   registerErrorHandler(app);
   await registerPublishRoute(app, dependencies, limits);
   await registerFolderRoutes(app, dependencies);
   await registerArtifactRoutes(app, dependencies);
   await registerRevisionRoutes(app, dependencies);
   await registerShareRoutes(app, dependencies);
+  if (options.dashboardAccess !== undefined) {
+    registerDashboardRoutes(app, {
+      authenticator: dependencies.authenticator,
+      access: options.dashboardAccess,
+    });
+  }
   registerPublicConfigRoute(app, options.rendererPublicOrigin);
   if (options.webRoot !== undefined) {
     await registerWebApp(app, {

@@ -218,7 +218,7 @@ export async function registerRevisionRoutes(
         summary: 'Compare two immutable revisions of one artifact',
         description:
           'Compares immutable descriptors without opening content. Folder changes are paged; exact unambiguous byte matches identify moved files.',
-        security: [{ bearerAuth: [] }],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         tags: ['revisions'],
         params: ComparisonParamsSchema,
         querystring: ComparisonQuerySchema,
@@ -258,7 +258,7 @@ export async function registerRevisionRoutes(
         description:
           'Returns the pinned revision as an attachment. Supports validators and one bytes range.',
         produces: ['application/octet-stream'],
-        security: [{ bearerAuth: [] }],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         tags: ['revisions'],
         params: ParamsSchema,
         headers: HeadersSchema,

@@ -30,11 +30,16 @@ export function createHybridAuthenticator(options: {
         const actor = await options.credentials.authenticate(match[1]);
         return actor === undefined
           ? undefined
-          : { installationId: actor.installationId, actorId: actor.actorId };
+          : {
+              installationId: actor.installationId,
+              actorId: actor.actorId,
+              authenticationMethod: 'access-credential',
+            };
       }
       const human = await options.humanAuth.authenticate(requestHeaders(request));
       if (human === undefined) return undefined;
-      return options.actors.findHumanActorByAuthUserId(human.userId);
+      const actor = await options.actors.findHumanActorByAuthUserId(human.userId);
+      return actor === undefined ? undefined : { ...actor, authenticationMethod: 'human-session' };
     },
   };
 }

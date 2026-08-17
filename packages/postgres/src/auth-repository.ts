@@ -1,16 +1,18 @@
-import type {
-  AccessCredentialRepository,
-  AccessCredentialSummary,
-  AuthEvent,
-  AuthenticateCredentialInput,
-  AuthenticatedActor,
-  CreateActorCredentialInput,
-  CreateHumanActorInput,
-  CreateRotatedCredentialInput,
-  CredentialGrant,
-  HumanActorIdentity,
-  RevokeCredentialInput,
-  RotatedCredentialActor,
+import {
+  type AccessCredentialRepository,
+  type AccessCredentialSummary,
+  type AuthEvent,
+  type AuthenticateCredentialInput,
+  type AuthenticatedActor,
+  type CreateActorCredentialInput,
+  type CreateHumanActorInput,
+  type CreateRotatedCredentialInput,
+  type CredentialGrant,
+  type HumanActorIdentity,
+  InvalidCredentialPageError,
+  type ManagedAccessCredentialSummary,
+  type RevokeCredentialInput,
+  type RotatedCredentialActor,
 } from '@shelf/auth';
 import { sql, type Transaction } from 'kysely';
 
@@ -18,9 +20,43 @@ import type { ShelfPostgresDatabase, ShelfPostgresSchema } from './database.js';
 
 type DatabaseExecutor = ShelfPostgresDatabase | Transaction<ShelfPostgresSchema>;
 
-export interface InstallationCredentialSummary extends AccessCredentialSummary {
-  actorName: string;
-  grants: Array<{ workspaceId: string; action: CredentialGrant['action'] }>;
+export interface InstallationCredentialSummary extends ManagedAccessCredentialSummary {}
+
+interface CredentialPageCursor {
+  createdAt: Date;
+  credentialId: string;
+}
+
+function credentialPageCursor(value: string): CredentialPageCursor | undefined {
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      Object.keys(parsed).length !== 2 ||
+      !('createdAt' in parsed) ||
+      typeof parsed.createdAt !== 'string' ||
+      !('credentialId' in parsed) ||
+      typeof parsed.credentialId !== 'string' ||
+      !/^crd_[A-Za-z0-9_-]{22}$/.test(parsed.credentialId)
+    ) {
+      return undefined;
+    }
+    const createdAt = new Date(parsed.createdAt);
+    if (!Number.isFinite(createdAt.valueOf()) || createdAt.toISOString() !== parsed.createdAt) {
+      return undefined;
+    }
+    return { createdAt, credentialId: parsed.credentialId };
+  } catch {
+    return undefined;
+  }
+}
+
+function encodeCredentialPageCursor(value: CredentialPageCursor): string {
+  return Buffer.from(
+    JSON.stringify({ createdAt: value.createdAt.toISOString(), credentialId: value.credentialId }),
+    'utf8',
+  ).toString('base64url');
 }
 
 async function appendEvent(
@@ -248,6 +284,33 @@ export class PostgresAuthRepository implements AccessCredentialRepository {
     return found !== undefined;
   }
 
+  async listActorGrants(input: {
+    installationId: string;
+    actorId: string;
+  }): Promise<CredentialGrant[]> {
+    const rows = await this.#database
+      .selectFrom('shelf_actor_grants as actor_grant')
+      .innerJoin('shelf_actors as actor', 'actor.actor_id', 'actor_grant.actor_id')
+      .select([
+        'actor_grant.installation_id',
+        'actor_grant.actor_id',
+        'actor_grant.workspace_id',
+        'actor_grant.action',
+      ])
+      .where('actor_grant.installation_id', '=', input.installationId)
+      .where('actor_grant.actor_id', '=', input.actorId)
+      .where('actor.disabled_at', 'is', null)
+      .orderBy('actor_grant.workspace_id')
+      .orderBy('actor_grant.action')
+      .execute();
+    return rows.map((row) => ({
+      installationId: row.installation_id,
+      actorId: row.actor_id,
+      workspaceId: row.workspace_id,
+      action: row.action,
+    }));
+  }
+
   async createRotatedCredential(
     input: CreateRotatedCredentialInput,
   ): Promise<RotatedCredentialActor | undefined> {
@@ -371,6 +434,84 @@ export class PostgresAuthRepository implements AccessCredentialRepository {
       actorName: row.actor_name,
       grants: [...(grantsByActor.get(row.actor_id) ?? [])],
     }));
+  }
+
+  async listInstallationCredentialPage(input: {
+    installationId: string;
+    limit: number;
+    cursor?: string;
+  }): Promise<{ items: InstallationCredentialSummary[]; nextCursor?: string }> {
+    if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100) {
+      throw new Error('Credential page limit must be between 1 and 100.');
+    }
+    const cursor = input.cursor === undefined ? undefined : credentialPageCursor(input.cursor);
+    if (input.cursor !== undefined && cursor === undefined) {
+      throw new InvalidCredentialPageError();
+    }
+    let query = this.#database
+      .selectFrom('shelf_access_credentials as credential')
+      .innerJoin('shelf_actors as actor', 'actor.actor_id', 'credential.actor_id')
+      .select([
+        'credential.credential_id',
+        'credential.actor_id',
+        'actor.actor_name',
+        'credential.created_at',
+        'credential.expires_at',
+        'credential.revoked_at',
+        'credential.last_used_at',
+      ])
+      .where('credential.installation_id', '=', input.installationId)
+      .orderBy('credential.created_at', 'desc')
+      .orderBy('credential.credential_id', 'desc')
+      .limit(input.limit + 1);
+    if (cursor !== undefined) {
+      query = query.where((expression) =>
+        expression.or([
+          expression('credential.created_at', '<', cursor.createdAt),
+          expression.and([
+            expression('credential.created_at', '=', cursor.createdAt),
+            expression('credential.credential_id', '<', cursor.credentialId),
+          ]),
+        ]),
+      );
+    }
+    const rows = await query.execute();
+    const pageRows = rows.slice(0, input.limit);
+    const actorIds = [...new Set(pageRows.map((row) => row.actor_id))];
+    const grants =
+      actorIds.length === 0
+        ? []
+        : await this.#database
+            .selectFrom('shelf_actor_grants')
+            .select(['actor_id', 'workspace_id', 'action'])
+            .where('installation_id', '=', input.installationId)
+            .where('actor_id', 'in', actorIds)
+            .orderBy('workspace_id')
+            .orderBy('action')
+            .execute();
+    const grantsByActor = new Map<string, InstallationCredentialSummary['grants']>();
+    for (const grant of grants) {
+      const actorGrants = grantsByActor.get(grant.actor_id) ?? [];
+      actorGrants.push({ workspaceId: grant.workspace_id, action: grant.action });
+      grantsByActor.set(grant.actor_id, actorGrants);
+    }
+    const items = pageRows.map((row) => ({
+      ...credentialSummary(row),
+      actorName: row.actor_name,
+      grants: [...(grantsByActor.get(row.actor_id) ?? [])],
+    }));
+    const last = pageRows.at(-1);
+    return {
+      items,
+      ...(rows.length <= input.limit || last === undefined
+        ? {}
+        : {
+            nextCursor: encodeCredentialPageCursor({
+              createdAt: last.created_at,
+              credentialId: last.credential_id,
+            }),
+          }),
+    };
   }
 
   async findInstallationCredential(

@@ -1,0 +1,271 @@
+@media (hover: hover) and (pointer: fine) {
+  .dashboard-nav-link,
+  .artifact-row,
+  .quiet-button,
+  .icon-button,
+  .control,
+  .back-link {
+    transition-property: color, background-color, border-color, transform;
+    transition-duration: 120ms;
+    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .control:active,
+  .quiet-button:active {
+    transform: scale(0.98);
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 0 14px;
+  }
+
+  .dashboard-nav {
+    position: fixed;
+    z-index: 20;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    min-height: 52px;
+    justify-content: center;
+    border-top: 1px solid var(--rule);
+    background: #0b0d10f5;
+  }
+
+  .dashboard-nav-link {
+    height: 52px;
+  }
+
+  .dashboard-nav-link.is-active::after {
+    top: -1px;
+    bottom: auto;
+  }
+
+  .dashboard-authority {
+    gap: 5px;
+  }
+
+  .dashboard-context,
+  .dashboard-rule {
+    display: none;
+  }
+
+  .workspace-control select {
+    max-width: 160px;
+  }
+
+  .dashboard-page {
+    padding-bottom: 90px;
+  }
+
+  .artifact-management-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .revision-section {
+    grid-row: auto;
+  }
+
+  .credential-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .credential-row .grant-list,
+  .credential-row .credential-dates {
+    grid-column: 1 / -1;
+  }
+
+  .credential-row .quiet-button {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 680px) {
+  .page-heading,
+  .artifact-heading {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .cli-cue {
+    align-items: stretch;
+  }
+
+  .heading-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .artifact-row {
+    min-height: 82px;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    padding: 10px 4px;
+  }
+
+  .artifact-row-main {
+    grid-column: 2;
+  }
+
+  .artifact-row-kind {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .artifact-row-revision,
+  .artifact-row-size,
+  .artifact-row time {
+    grid-row: 2;
+  }
+
+  .artifact-row-revision {
+    grid-column: 2;
+  }
+
+  .artifact-row-size {
+    display: none;
+  }
+
+  .artifact-row time {
+    grid-column: 3;
+  }
+
+  .managed-stage {
+    height: min(58vh, 520px);
+    min-height: 360px;
+  }
+
+  .managed-stage-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+
+  .comparison-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .comparison-controls .control {
+    grid-column: 1 / -1;
+  }
+
+  .access-principle {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .credential-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 16px 4px;
+  }
+
+  .credential-row .quiet-button {
+    grid-column: 2;
+  }
+
+  .dialog-viewport {
+    align-items: end;
+    padding: 8px;
+  }
+
+  .dialog-popup {
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+  }
+
+  .secret-actions,
+  .grant-workspace {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .secret-actions {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .secret-actions .control {
+    width: 100%;
+  }
+}
+
+@media (max-width: 430px) {
+  .dashboard-bar {
+    min-height: 54px;
+  }
+
+  .dashboard-authority .quiet-button {
+    width: 32px;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .signout-label {
+    display: none;
+  }
+
+  .signout-label-short {
+    display: inline;
+  }
+
+  .workspace-control select {
+    max-width: 142px;
+  }
+
+  .dashboard-page {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .utility-section {
+    padding: 15px;
+  }
+
+  .revision-list li {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+  }
+
+  .signin-page {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .signin-panel {
+    min-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-backdrop {
+    transition: opacity 100ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .dialog-popup {
+    transition: opacity 100ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .dialog-popup[data-starting-style],
+  .dialog-popup[data-ending-style] {
+    transform: none;
+  }
+
+  .dashboard-nav-link,
+  .artifact-row,
+  .quiet-button,
+  .icon-button,
+  .control,
+  .back-link {
+    transition: none;
+  }
+}

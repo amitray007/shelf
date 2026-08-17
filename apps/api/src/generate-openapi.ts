@@ -7,6 +7,20 @@ const app = await createShelfApp({
   stagingRoot: '/tmp/shelf-openapi-generation',
   authenticator: { async authenticate() {} },
   authorizer: { async authorize() {} },
+  dashboardAccess: {
+    async session() {
+      return { actorId: 'actor-openapi', workspaces: [] };
+    },
+    async list() {
+      return { items: [] };
+    },
+    async issue() {
+      throw new Error('OpenAPI fixture does not issue credentials.');
+    },
+    async revoke() {
+      throw new Error('OpenAPI fixture does not revoke credentials.');
+    },
+  },
 });
 
 try {

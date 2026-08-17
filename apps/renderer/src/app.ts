@@ -147,7 +147,7 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
     const input = parseRenderRequest(request.body);
     if (
       request.raw.url !== '/render' ||
-      request.headers.origin !== appOrigin ||
+      request.headers.origin !== 'null' ||
       input.request === undefined
     ) {
       return reply

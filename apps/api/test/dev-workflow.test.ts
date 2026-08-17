@@ -47,7 +47,7 @@ test('development setup creates a private local environment and content director
   expect(environment).toMatch(/^SHELF_STORAGE_DRIVER=local$/mu);
   expect(environment).toMatch(/^SHELF_STORAGE_LOCAL_ROOT=\.\/data\/dev-content$/mu);
   expect(environment).toMatch(/^SHELF_INSTALLATION_ID=installation-dev$/mu);
-  expect(environment).toMatch(/^SHELF_AUTH_BASE_URL=http:\/\/127\.0\.0\.1:3000$/mu);
+  expect(environment).toMatch(/^SHELF_AUTH_BASE_URL=http:\/\/127\.0\.0\.1:5173$/mu);
   expect(environment).toMatch(/^SHELF_AUTH_SECRET=[A-Za-z0-9_-]{43}$/mu);
   expect(environment).toMatch(/^SHELF_SHARE_SIGNING_KEY=[A-Za-z0-9_-]{43}$/mu);
   expect(environment).toMatch(/^SHELF_HOST=127\.0\.0\.1$/mu);
@@ -201,6 +201,7 @@ test('development renderer receives only its explicit data-plane environment', a
     {
       env: {
         ...process.env,
+        USER: 'shelf-test-user',
         DATABASE_URL: 'postgresql:///shelf_dev',
         SHELF_SHARE_SIGNING_KEY: 's'.repeat(43),
         SHELF_RENDERER_APP_ORIGIN: 'http://127.0.0.1:5173',
@@ -217,6 +218,7 @@ test('development renderer receives only its explicit data-plane environment', a
     DATABASE_URL: 'postgresql:///shelf_dev',
     SHELF_SHARE_SIGNING_KEY: 's'.repeat(43),
     SHELF_RENDERER_APP_ORIGIN: 'http://127.0.0.1:5173',
+    USER: 'shelf-test-user',
   });
   expect(JSON.stringify(environment)).not.toContain(secret);
   expect(environment).not.toHaveProperty('SHELF_AUTH_SECRET');

@@ -37,7 +37,7 @@ DATABASE_URL=postgresql:///shelf_dev
 SHELF_STORAGE_DRIVER=local
 SHELF_STORAGE_LOCAL_ROOT=./data/dev-content
 SHELF_INSTALLATION_ID=installation-dev
-SHELF_AUTH_BASE_URL=http://127.0.0.1:3000
+SHELF_AUTH_BASE_URL=http://127.0.0.1:5173
 SHELF_AUTH_SECRET=<generated locally>
 SHELF_SHARE_SIGNING_KEY=<generated independently>
 SHELF_HOST=127.0.0.1
@@ -62,6 +62,12 @@ The command runs the TypeScript build in watch mode, restarts the compiled API a
 renderer, and starts the Vite web client. Stop the process group with `Ctrl-C`. Open the web client
 at `http://127.0.0.1:5173`; the API remains at `http://127.0.0.1:3000` and the renderer at
 `http://127.0.0.1:3001`. Confirm the API is ready:
+
+The authentication base URL is the browser-facing Vite origin in development. Vite proxies
+`/api` to the API process, so Better Auth can keep exact-origin checks enabled during sign-in.
+After owner bootstrap, open `http://127.0.0.1:5173/signin`. The authenticated utility redirects to
+the first authorized workspace and exposes only the Artifacts and Access sections; publishing stays
+in the `shelf` CLI.
 
 ```sh
 curl --fail http://127.0.0.1:3000/health/live

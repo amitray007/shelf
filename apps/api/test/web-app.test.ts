@@ -31,6 +31,10 @@ describe('production web application boundary', () => {
     await app.ready();
 
     const document = await app.inject({ method: 'GET', url: '/s/shr_test' });
+    const dashboard = await app.inject({
+      method: 'GET',
+      url: '/app/w/workspace-main/artifacts/art_test',
+    });
     const asset = await app.inject({ method: 'GET', url: '/assets/app.js' });
     const unknownApi = await app.inject({ method: 'GET', url: '/api/v1/unknown' });
 
@@ -44,6 +48,8 @@ describe('production web application boundary', () => {
     expect(document.headers['content-security-policy']).toContain(
       "form-action 'self' https://renderer.shelf.example",
     );
+    expect(dashboard.statusCode).toBe(200);
+    expect(dashboard.headers['cache-control']).toBe('no-store');
     expect(asset.statusCode).toBe(200);
     expect(asset.headers['cache-control']).toContain('immutable');
     expect(unknownApi.statusCode).toBe(404);

@@ -21,6 +21,7 @@ function statusFor(code: ErrorCode): number {
     case 'ARTIFACT_NOT_FOUND':
     case 'REVISION_NOT_FOUND':
     case 'SHARE_NOT_FOUND':
+    case 'ACCESS_CREDENTIAL_NOT_FOUND':
       return 404;
     case 'RANGE_NOT_SATISFIABLE':
     case 'MULTI_RANGE_UNSUPPORTED':

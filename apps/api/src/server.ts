@@ -1,4 +1,9 @@
-import { createAccessCredentialService, createHumanAuth, type HumanAuth } from '@shelf/auth';
+import {
+  createAccessCredentialService,
+  createDashboardAccessService,
+  createHumanAuth,
+  type HumanAuth,
+} from '@shelf/auth';
 import type { FastifyInstance } from 'fastify';
 
 import { createShelfApp } from './app.js';
@@ -35,6 +40,10 @@ export async function createShelfServer(config: ShelfServerConfig): Promise<Shel
         actors: persistence.authRepository,
       }),
       authorizer: createShelfAuthorizer(credentials),
+      dashboardAccess: createDashboardAccessService({
+        repository: persistence.authRepository,
+        credentials,
+      }),
       humanAuth: shelfHumanAuth,
       contentStore: persistence.contentStore,
       contentReader: persistence.contentReader,

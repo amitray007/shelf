@@ -77,7 +77,7 @@ export async function runCli(
     .showHelpAfterError(false)
     .showSuggestionAfterError(false)
     .exitOverride()
-    .configureOutput({ writeOut() {}, writeErr() {} })
+    .configureOutput({ writeOut: runtime.stdout, writeErr() {} })
     .allowExcessArguments(false);
 
   let result: unknown;
@@ -288,6 +288,9 @@ export async function runCli(
     runtime.stdout(jsonLine(result));
     return CLI_EXIT_CODES.success;
   } catch (error) {
+    if (error instanceof CommanderError && error.code === 'commander.helpDisplayed') {
+      return CLI_EXIT_CODES.success;
+    }
     if (error instanceof CliPartialFailure) {
       runtime.stderr(
         jsonLine(redactValue(error.payload, [...error.secrets, runtime.env.SHELF_TOKEN])),

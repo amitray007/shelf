@@ -1,3 +1,4 @@
+// biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable code blocks must be keyboard reachable.
 import type { ComponentPropsWithoutRef } from 'react';
 import ReactMarkdown, { type UrlTransform } from 'react-markdown';
 
@@ -30,11 +31,15 @@ function ImageDescription({ alt }: ComponentPropsWithoutRef<'img'>) {
   return <span className="markdown-image-note">{alt ? `[image: ${alt}]` : '[image omitted]'}</span>;
 }
 
+function ScrollableCodeBlock(props: ComponentPropsWithoutRef<'pre'>) {
+  return <pre tabIndex={0} {...props} />;
+}
+
 export function MarkdownView({ source }: { readonly source: string }) {
   return (
     <div className="markdown-body">
       <ReactMarkdown
-        components={{ a: SafeAnchor, img: ImageDescription }}
+        components={{ a: SafeAnchor, img: ImageDescription, pre: ScrollableCodeBlock }}
         skipHtml={true}
         urlTransform={linkTransform}
       >

@@ -44,7 +44,7 @@ it('composes the existing share data plane into an independently managed rendere
       method: 'POST',
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
-        origin: 'http://127.0.0.1:5173',
+        origin: 'null',
       },
       body: new URLSearchParams({
         shareId: rendererIds.share,

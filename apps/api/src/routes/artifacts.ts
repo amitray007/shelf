@@ -87,7 +87,7 @@ export async function registerArtifactRoutes(
       schema: {
         operationId: 'listArtifactsV1',
         summary: 'List artifacts in one workspace',
-        security: [{ bearerAuth: [] }],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         tags: ['artifacts'],
         params: WorkspaceParamsSchema,
         querystring: PageQuerySchema,
@@ -115,7 +115,7 @@ export async function registerArtifactRoutes(
       schema: {
         operationId: 'getArtifactV1',
         summary: 'Get one artifact and its latest revision',
-        security: [{ bearerAuth: [] }],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         tags: ['artifacts'],
         params: ArtifactParamsSchema,
         response: { 200: ArtifactSchema, ...errorResponses },
@@ -139,7 +139,7 @@ export async function registerArtifactRoutes(
       schema: {
         operationId: 'listArtifactRevisionsV1',
         summary: 'List one artifact revision history newest first',
-        security: [{ bearerAuth: [] }],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         tags: ['artifacts'],
         params: ArtifactParamsSchema,
         querystring: PageQuerySchema,
@@ -167,7 +167,7 @@ export async function registerArtifactRoutes(
       schema: {
         operationId: 'renameArtifactV1',
         summary: 'Rename artifact presentation without changing immutable revisions',
-        security: [{ bearerAuth: [] }],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         tags: ['artifacts'],
         params: ArtifactParamsSchema,
         body: RenameArtifactBodySchema,
@@ -194,7 +194,7 @@ export async function registerArtifactRoutes(
       schema: {
         operationId: 'restoreArtifactRevisionV1',
         summary: 'Restore an immutable revision as a new latest revision',
-        security: [{ bearerAuth: [] }],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         tags: ['artifacts'],
         params: WorkspaceArtifactParamsSchema,
         headers: IdempotencyHeadersSchema,

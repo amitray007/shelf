@@ -1,3 +1,4 @@
+// biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable previews must be keyboard reachable.
 import type { FolderEntry, PublicShareResolution } from '@shelf/contracts';
 
 import { publicShareActionUrl } from '../api.js';
@@ -75,7 +76,7 @@ function DownloadOnly({
   );
 }
 
-function FolderTree({ entries }: { readonly entries: readonly FolderEntry[] }) {
+export function FolderTree({ entries }: { readonly entries: readonly FolderEntry[] }) {
   if (entries.length === 0) {
     return <p className="tree-empty">This folder is empty.</p>;
   }
@@ -108,7 +109,7 @@ function FolderTree({ entries }: { readonly entries: readonly FolderEntry[] }) {
   );
 }
 
-function formatJson(value: string): string {
+export function formatJson(value: string): string {
   try {
     return JSON.stringify(JSON.parse(value), null, 2);
   } catch {
@@ -131,9 +132,13 @@ export function ArtifactContent({
 }: ArtifactContentProps) {
   if (isFolderShareResolution(resolution)) {
     return (
-      <div className="artifact-surface artifact-folder">
+      <section
+        aria-label="Artifact folder preview"
+        className="artifact-surface artifact-folder"
+        tabIndex={0}
+      >
         <FolderTree entries={entries} />
-      </div>
+      </section>
     );
   }
 
@@ -167,14 +172,22 @@ export function ArtifactContent({
   }
   if (renderer.kind === 'markdown') {
     return (
-      <main className="artifact-surface artifact-document">
+      <main
+        aria-label="Artifact document preview"
+        className="artifact-surface artifact-document"
+        tabIndex={0}
+      >
         <MarkdownView source={text} />
       </main>
     );
   }
   return (
-    <main className="artifact-surface artifact-code">
-      <pre>
+    <main
+      aria-label="Artifact code preview"
+      className="artifact-surface artifact-code"
+      tabIndex={0}
+    >
+      <pre tabIndex={0}>
         <code>{renderer.kind === 'json' ? formatJson(text) : text}</code>
       </pre>
     </main>

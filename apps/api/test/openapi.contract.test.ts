@@ -11,6 +11,20 @@ beforeAll(async () => {
     stagingRoot: '/tmp/shelf-openapi-contract',
     authenticator: { async authenticate() {} },
     authorizer: { async authorize() {} },
+    dashboardAccess: {
+      async session() {
+        return { actorId: 'actor-openapi', workspaces: [] };
+      },
+      async list() {
+        return { items: [] };
+      },
+      async issue() {
+        throw new Error('OpenAPI fixture does not issue credentials.');
+      },
+      async revoke() {
+        throw new Error('OpenAPI fixture does not revoke credentials.');
+      },
+    },
   });
 });
 
@@ -171,6 +185,40 @@ describe('OpenAPI v1', () => {
     expect(
       document.paths?.['/api/v1/public/shares/{shareId}/content']?.post?.requestBody?.content,
     ).toHaveProperty('application/x-www-form-urlencoded');
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/dashboard/session', 'get', 'operationId'],
+      'getDashboardSessionV1',
+    );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/access-credentials', 'get', 'operationId'],
+      'listDashboardCredentialsV1',
+    );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/access-credentials', 'post', 'operationId'],
+      'issueDashboardCredentialV1',
+    );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/access-credentials/{credentialId}', 'delete', 'operationId'],
+      'revokeDashboardCredentialV1',
+    );
+    for (const [path, method] of [
+      ['/api/v1/workspaces/{workspaceId}/artifacts', 'get'],
+      ['/api/v1/artifacts/{artifactId}', 'get'],
+      ['/api/v1/artifacts/{artifactId}', 'patch'],
+      ['/api/v1/artifacts/{artifactId}/revisions', 'get'],
+      ['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/restores', 'post'],
+      ['/api/v1/revisions/{revisionId}/content', 'get'],
+      ['/api/v1/revisions/{revisionId}/tree', 'get'],
+      ['/api/v1/revisions/{baseRevisionId}/comparisons/{targetRevisionId}', 'get'],
+      ['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/shares', 'post'],
+      ['/api/v1/workspaces/{workspaceId}/shares', 'get'],
+      ['/api/v1/workspaces/{workspaceId}/shares/{shareId}', 'delete'],
+    ] as const) {
+      expect(document.paths?.[path]?.[method]?.security).toEqual([
+        { bearerAuth: [] },
+        { cookieAuth: [] },
+      ]);
+    }
   });
 
   it('matches the checked generated contract', async () => {

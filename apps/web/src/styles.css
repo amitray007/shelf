@@ -11,7 +11,7 @@
   --rule-strong: #343c46;
   --text: #edf0f3;
   --text-subtle: #a0a8b2;
-  --text-muted: #747e89;
+  --text-muted: #7b8590;
   --accent: #8eb3d4;
   --accent-strong: #b7d2e8;
   --trust: #d5a95a;
@@ -429,16 +429,6 @@ a {
   line-height: 1.55;
 }
 
-.empty-state .eyebrow {
-  color: var(--text-muted);
-  font:
-    500 11px / 1.2 "Geist Mono Variable",
-    ui-monospace,
-    monospace;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 .file-glyph,
 .unavailable-mark {
   position: relative;
@@ -648,4 +638,25 @@ a {
     animation: none;
     transition: none;
   }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.eyebrow,
+.field-label {
+  color: var(--text-muted);
+  font:
+    550 11px / 1.25 "Geist Mono Variable",
+    ui-monospace,
+    monospace;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
 }

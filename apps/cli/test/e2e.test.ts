@@ -6,19 +6,31 @@ describe('CLI wire contract', () => {
     const document = JSON.parse(
       await readFile(new URL('../../api/openapi/v1.json', import.meta.url), 'utf8'),
     );
-    expect(document.paths['/api/v1/workspaces/{workspaceId}/artifacts'].post).toMatchObject({
+    const operations = [
+      document.paths['/api/v1/workspaces/{workspaceId}/artifacts'].post,
+      document.paths['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/revisions'].post,
+      document.paths['/api/v1/workspaces/{workspaceId}/artifacts'].get,
+      document.paths['/api/v1/artifacts/{artifactId}'].patch,
+      document.paths['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/restores'].post,
+      document.paths['/api/v1/workspaces/{workspaceId}/folders'].post,
+      document.paths['/api/v1/revisions/{revisionId}/tree'].get,
+      document.paths['/api/v1/revisions/{baseRevisionId}/comparisons/{targetRevisionId}'].get,
+    ];
+    for (const operation of operations) {
+      expect(operation.security).toContainEqual({ bearerAuth: [] });
+    }
+
+    expect(operations[0]).toMatchObject({
       operationId: 'publishFileV1',
-      security: [{ bearerAuth: [] }],
       requestBody: {
         content: { 'multipart/form-data': { schema: { required: ['file'] } } },
       },
     });
     expect(
       document.paths['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/revisions'].post,
-    ).toMatchObject({ operationId: 'publishArtifactRevisionV1', security: [{ bearerAuth: [] }] });
+    ).toMatchObject({ operationId: 'publishArtifactRevisionV1' });
     expect(document.paths['/api/v1/workspaces/{workspaceId}/artifacts'].get).toMatchObject({
       operationId: 'listArtifactsV1',
-      security: [{ bearerAuth: [] }],
     });
     expect(document.paths['/api/v1/artifacts/{artifactId}'].get).toMatchObject({
       operationId: 'getArtifactV1',
@@ -28,30 +40,25 @@ describe('CLI wire contract', () => {
     });
     expect(document.paths['/api/v1/artifacts/{artifactId}'].patch).toMatchObject({
       operationId: 'renameArtifactV1',
-      security: [{ bearerAuth: [] }],
     });
     expect(
       document.paths['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/restores'].post,
     ).toMatchObject({
       operationId: 'restoreArtifactRevisionV1',
-      security: [{ bearerAuth: [] }],
     });
     expect(document.paths['/api/v1/workspaces/{workspaceId}/folders'].post).toMatchObject({
       operationId: 'publishFolderV1',
-      security: [{ bearerAuth: [] }],
       requestBody: {
         content: { 'multipart/form-data': { schema: { required: ['manifest'] } } },
       },
     });
     expect(document.paths['/api/v1/revisions/{revisionId}/tree'].get).toMatchObject({
       operationId: 'getFolderTreeV1',
-      security: [{ bearerAuth: [] }],
     });
     expect(
       document.paths['/api/v1/revisions/{baseRevisionId}/comparisons/{targetRevisionId}'].get,
     ).toMatchObject({
       operationId: 'compareRevisionsV1',
-      security: [{ bearerAuth: [] }],
     });
   });
 

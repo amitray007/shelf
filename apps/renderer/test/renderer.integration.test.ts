@@ -33,7 +33,7 @@ async function postRender(
     url: '/render',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
-      origin: appOrigin,
+      origin: 'null',
     },
     payload: new URLSearchParams({
       shareId: values.shareId ?? 'shr_AAAAAAAAAAAAAAAAAAAAAA',
@@ -96,7 +96,7 @@ describe('isolated HTML renderer', () => {
       url: '/render',
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
-        origin: appOrigin,
+        origin: 'null',
       },
       payload: new URLSearchParams({
         shareId: 'shr_AAAAAAAAAAAAAAAAAAAAAA',
@@ -165,7 +165,7 @@ describe('isolated HTML renderer', () => {
     expect(response.body).toContain('shelf:renderer-unavailable');
   });
 
-  it('accepts capabilities only from the exact parent-origin form body', async () => {
+  it('accepts capabilities only from an opaque sandbox form body', async () => {
     const resolveHtml = vi.fn(async () => ({
       status: 'available' as const,
       html: '<!doctype html><title>Artifact</title>',
@@ -198,13 +198,21 @@ describe('isolated HTML renderer', () => {
           'content-type': 'application/x-www-form-urlencoded',
           origin: appOrigin,
         },
+        payload: validBody,
+        url: '/render',
+      },
+      {
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          origin: 'null',
+        },
         payload: `${validBody}&secret=${secretCanary}`,
         url: '/render',
       },
       {
         headers: {
           'content-type': 'application/x-www-form-urlencoded',
-          origin: appOrigin,
+          origin: 'null',
         },
         payload: `${validBody}&unexpected=value`,
         url: '/render',
@@ -212,7 +220,7 @@ describe('isolated HTML renderer', () => {
       {
         headers: {
           'content-type': 'application/x-www-form-urlencoded',
-          origin: appOrigin,
+          origin: 'null',
         },
         payload: validBody,
         url: `/render?secret=${secretCanary}`,
@@ -237,7 +245,7 @@ describe('isolated HTML renderer', () => {
       url: '/render',
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
-        origin: appOrigin,
+        origin: 'null',
       },
       payload: `nonce=${'n'.repeat(22)}&padding=${'x'.repeat(3_000)}`,
     });

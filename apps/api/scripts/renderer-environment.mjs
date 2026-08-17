@@ -17,6 +17,7 @@ const rendererEnvironmentNames = [
   'SHELF_RENDERER_MAX_HTML_BYTES',
   'PATH',
   'HOME',
+  'USER',
   'TMPDIR',
   'TMP',
   'TEMP',

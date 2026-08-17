@@ -3,7 +3,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { bootstrapShelfOwner, createAccessCredentialService, createHumanAuth } from '@shelf/auth';
+import {
+  bootstrapShelfOwner,
+  createAccessCredentialService,
+  createDashboardAccessService,
+  createHumanAuth,
+} from '@shelf/auth';
 import {
   createPostgresDatabase,
   migratePostgresToLatest,
@@ -79,6 +84,7 @@ describePostgres('hybrid HTTP authentication', () => {
     const app = await createShelfApp({
       authenticator: createHybridAuthenticator({ humanAuth, credentials, actors: repository }),
       authorizer: createShelfAuthorizer(credentials),
+      dashboardAccess: createDashboardAccessService({ repository, credentials }),
       humanAuth,
       contentStore: content,
       contentReader: content,
@@ -129,6 +135,64 @@ describePostgres('hybrid HTTP authentication', () => {
       actorName: 'release-agent',
       createdByActorId: owner.actorId,
       grants: [{ workspaceId: 'workspace-main', action: 'file.publish' }],
+    });
+
+    const dashboardSession = await app.inject({
+      method: 'GET',
+      url: '/api/v1/dashboard/session',
+      headers: { cookie: sessionCookie },
+    });
+    expect(dashboardSession.statusCode).toBe(200);
+    expect(dashboardSession.json()).toMatchObject({
+      actorId: owner.actorId,
+      workspaces: [{ workspaceId: 'workspace-main', actions: ['file.publish', 'revision.read'] }],
+    });
+
+    const dashboardIssue = await app.inject({
+      method: 'POST',
+      url: '/api/v1/access-credentials',
+      headers: { cookie: sessionCookie },
+      payload: {
+        actorName: 'dashboard-agent',
+        grants: [{ workspaceId: 'workspace-main', action: 'revision.read' }],
+      },
+    });
+    expect(dashboardIssue.statusCode).toBe(201);
+    expect(dashboardIssue.json()).toMatchObject({
+      actorName: 'dashboard-agent',
+      token: expect.stringMatching(/^shf_v1\./),
+    });
+    const dashboardCredentialId = dashboardIssue.json().credentialId as string;
+    const dashboardList = await app.inject({
+      method: 'GET',
+      url: '/api/v1/access-credentials',
+      headers: { cookie: sessionCookie },
+    });
+    expect(dashboardList.statusCode).toBe(200);
+    expect(dashboardList.json().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          credentialId: dashboardCredentialId,
+          actorName: 'dashboard-agent',
+        }),
+      ]),
+    );
+    expect(JSON.stringify(dashboardList.json())).not.toContain(dashboardIssue.json().token);
+    const bearerCannotAdminister = await app.inject({
+      method: 'GET',
+      url: '/api/v1/access-credentials',
+      headers: { authorization: `Bearer ${agent.token}` },
+    });
+    expect(bearerCannotAdminister.statusCode).toBe(403);
+    const dashboardRevoke = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/access-credentials/${dashboardCredentialId}`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(dashboardRevoke.statusCode).toBe(200);
+    expect(dashboardRevoke.json()).toMatchObject({
+      credentialId: dashboardCredentialId,
+      revoked: true,
     });
 
     const body = multipart();

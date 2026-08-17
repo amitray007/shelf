@@ -135,6 +135,11 @@ export function RendererFrame({
       submitRenderer();
       return;
     }
+    try {
+      if (frameRef.current?.contentWindow?.location.href === 'about:blank') return;
+    } catch {
+      // The renderer document is cross-origin and intentionally unreadable.
+    }
     if (rendererLoadSeenRef.current) {
       terminateFrame();
       return;
@@ -144,6 +149,11 @@ export function RendererFrame({
       if (!readyRef.current) terminateFrame();
     }, 250);
   }, [submitRenderer, terminateFrame]);
+
+  useEffect(() => {
+    submitRenderer();
+  }, [submitRenderer]);
+
   const attachFrame = useCallback((frame: HTMLIFrameElement | null) => {
     frameRef.current = frame;
     frame?.setAttribute('credentialless', '');

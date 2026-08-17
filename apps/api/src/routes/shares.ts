@@ -218,7 +218,7 @@ export async function registerShareRoutes(
       schema: {
         operationId: 'createShareV1',
         summary: 'Create an unlisted latest or pinned share',
-        security: [{ bearerAuth: [] }],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         tags: ['shares'],
         params: WorkspaceArtifactParamsSchema,
         headers: IdempotencyHeadersSchema,
@@ -252,7 +252,7 @@ export async function registerShareRoutes(
       schema: {
         operationId: 'listSharesV1',
         summary: 'List share management records without capability material',
-        security: [{ bearerAuth: [] }],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         tags: ['shares'],
         params: WorkspaceParamsSchema,
         querystring: SharePageQuerySchema,
@@ -280,7 +280,7 @@ export async function registerShareRoutes(
       schema: {
         operationId: 'revokeShareV1',
         summary: 'Idempotently revoke one share',
-        security: [{ bearerAuth: [] }],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         tags: ['shares'],
         params: WorkspaceShareParamsSchema,
         response: { 200: Type.Ref('ShareManagementSummary'), ...managementErrors },

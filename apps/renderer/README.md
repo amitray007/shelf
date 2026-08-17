@@ -8,7 +8,9 @@ parent-owned form POST and never receives Shelf cookies or authentication creden
 
 - `GET /` is an inert availability document. It does not accept a capability.
 - `POST /render` accepts exactly `shareId`, `secret`, and `nonce` as
-  `application/x-www-form-urlencoded` body fields from the configured application origin.
+  `application/x-www-form-urlencoded` body fields from the iframe's opaque sandbox origin. A
+  sandboxed form navigation reports `Origin: null`; missing, application-origin, and other-origin
+  requests are rejected. The capability is the request authority and no renderer cookie exists.
 - The parent targets a transient form at an iframe with `sandbox="allow-scripts"`, an empty
   Permissions Policy, a no-referrer policy, and a credentialless browsing context. The iframe
   must not grant same-origin, forms, popups, downloads, or top-navigation.
@@ -31,6 +33,8 @@ styles plus embedded data/blob media are allowed. Every response is `no-store`, 
 A real Chromium probe on 2026-08-18 established the transport and its remaining boundary:
 
 - a parent form can navigate a named `sandbox="allow-scripts"` iframe without `allow-forms`;
+- that sandboxed navigation sends `Origin: null`, while the configured application origin remains
+  the only allowed frame ancestor and renderer-message recipient;
 - a capability stays in the POST body;
 - `connect-src 'none'` blocked an authored `fetch` (`0` requests observed);
 - authored `location.href` still made one iframe navigation GET (`1` request observed), including

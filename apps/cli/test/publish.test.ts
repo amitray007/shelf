@@ -70,6 +70,22 @@ function argv(file: string, ...extra: string[]) {
 }
 
 describe('shelf publish', () => {
+  it('prints shelf help to stdout and exits successfully', async () => {
+    const stdout = capture();
+    const stderr = capture();
+
+    const exitCode = await runCli(['node', 'shelf', '--help'], {
+      env: {},
+      stdout: stdout.write,
+      stderr: stderr.write,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stdout.value()).toContain('Usage: shelf');
+    expect(stdout.value()).toContain('publish');
+    expect(stderr.value()).toBe('');
+  });
+
   it('returns the usage exit class and one canonical error when required arguments are missing', async () => {
     const stdout = capture();
     const stderr = capture();
