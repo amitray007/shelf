@@ -28,6 +28,8 @@
     "renderer:start": "node apps/api/dist/renderer-cli.js",
     "shelf": "node apps/cli/dist/index.js",
     "test": "vitest run --passWithNoTests",
+    "test:browser": "pnpm --filter @shelf/web test:browser",
+    "test:browser:install": "pnpm --filter @shelf/web test:browser:install",
     "test:runtime-e2e": "pnpm build && vitest run apps/api/test/runtime.e2e.test.ts",
     "test:streaming-memory": "pnpm --filter @shelf/api test:streaming-memory",
     "typecheck": "tsc -b packages/contracts packages/core packages/auth packages/postgres packages/storage apps/renderer apps/api apps/cli apps/web"

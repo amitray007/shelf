@@ -1,0 +1,236 @@
+import { open } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { extname, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import axe from 'axe-core';
+
+import {
+  artifact,
+  artifactId,
+  artifactPage,
+  credentialPage,
+  dashboardSession,
+  historyPage,
+  htmlResolution,
+  htmlShareId,
+  markdownResolution,
+  markdownShareId,
+  rendererOrigin,
+  revisionId,
+  sharePage,
+  shareSecret,
+  workspaceId,
+} from './fixtures.ts';
+
+const fixtureRoot = resolve(fileURLToPath(new URL('../dist/', import.meta.url)));
+const mimeTypes = new Map([
+  ['.css', 'text/css; charset=utf-8'],
+  ['.html', 'text/html; charset=utf-8'],
+  ['.js', 'text/javascript; charset=utf-8'],
+  ['.json', 'application/json; charset=utf-8'],
+  ['.map', 'application/json; charset=utf-8'],
+  ['.woff2', 'font/woff2'],
+]);
+
+const documentHeaders = {
+  'cache-control': 'no-store',
+  'content-security-policy': [
+    "default-src 'none'",
+    "base-uri 'none'",
+    "connect-src 'self'",
+    "font-src 'self'",
+    `form-action 'self' ${rendererOrigin}`,
+    `frame-src ${rendererOrigin}`,
+    "frame-ancestors 'none'",
+    "img-src 'self' data: blob:",
+    "object-src 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+  ].join('; '),
+  'cross-origin-opener-policy': 'same-origin',
+  'referrer-policy': 'no-referrer',
+  'x-content-type-options': 'nosniff',
+};
+
+function json(response, status, value) {
+  response.writeHead(status, {
+    'cache-control': 'no-store',
+    'content-type': 'application/json; charset=utf-8',
+  });
+  response.end(JSON.stringify(value));
+}
+
+async function body(request) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > 4_096) throw new Error('Fixture body is too large.');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function api(request, response, url) {
+  const path = url.pathname;
+  if (path === '/api/v1/dashboard/session') {
+    if ((request.headers.cookie ?? '').includes('shelf-browser-anonymous=1')) {
+      response.writeHead(401, { 'cache-control': 'no-store', 'content-type': 'text/plain' });
+      response.end('Authentication required.');
+      return;
+    }
+    json(response, 200, dashboardSession);
+    return;
+  }
+  if (path === `/api/v1/workspaces/${workspaceId}/artifacts`) {
+    json(response, 200, artifactPage);
+    return;
+  }
+  if (path === `/api/v1/artifacts/${artifactId}`) {
+    json(response, 200, artifact);
+    return;
+  }
+  if (path === `/api/v1/artifacts/${artifactId}/revisions`) {
+    json(response, 200, historyPage);
+    return;
+  }
+  if (path === `/api/v1/workspaces/${workspaceId}/shares`) {
+    json(response, 200, sharePage);
+    return;
+  }
+  if (path === `/api/v1/revisions/${revisionId}/content`) {
+    response.writeHead(200, {
+      'cache-control': 'no-store',
+      'content-type': 'text/markdown; charset=utf-8',
+    });
+    response.end('# One useful idea\n\nA durable artifact should stay quick to share.');
+    return;
+  }
+  if (path === '/api/v1/access-credentials') {
+    json(response, 200, credentialPage);
+    return;
+  }
+  if (path === '/api/v1/public/config') {
+    json(response, 200, { apiVersion: 'v1', rendererOrigin });
+    return;
+  }
+  if (
+    request.method === 'POST' &&
+    (path === `/api/v1/public/shares/${markdownShareId}/resolve` ||
+      path === `/api/v1/public/shares/${htmlShareId}/resolve`)
+  ) {
+    const value = JSON.parse(await body(request));
+    if (value.secret !== shareSecret || Object.keys(value).length !== 1) {
+      json(response, 404, {});
+      return;
+    }
+    json(response, 200, path.includes(markdownShareId) ? markdownResolution : htmlResolution);
+    return;
+  }
+  if (request.method === 'POST' && path === `/api/v1/public/shares/${markdownShareId}/content`) {
+    const value = JSON.parse(await body(request));
+    if (value.secret !== shareSecret || Object.keys(value).length !== 1) {
+      json(response, 404, {});
+      return;
+    }
+    response.writeHead(200, {
+      'cache-control': 'no-store',
+      'content-type': 'text/markdown; charset=utf-8',
+    });
+    response.end('# One useful idea\n\nA durable artifact should stay quick to share.');
+    return;
+  }
+  json(response, 404, {
+    apiVersion: 'v1',
+    error: { code: 'NOT_FOUND', message: 'Fixture route not found.' },
+  });
+}
+
+async function staticFile(request, response, url) {
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(url.pathname);
+  } catch {
+    response.writeHead(400);
+    response.end();
+    return;
+  }
+  const candidate = resolve(fixtureRoot, `.${decodedPath}`);
+  if (candidate !== fixtureRoot && !candidate.startsWith(fixtureRoot + sep)) {
+    response.writeHead(400);
+    response.end();
+    return;
+  }
+  let file = candidate;
+  let handle;
+  try {
+    handle = await open(file, 'r');
+    if (!(await handle.stat()).isFile()) {
+      await handle.close();
+      handle = undefined;
+    }
+  } catch {
+    await handle?.close();
+    handle = undefined;
+  }
+  if (handle === undefined) {
+    const acceptsDocument = (request.headers.accept ?? '').includes('text/html');
+    const isClientRoute =
+      decodedPath === '/' ||
+      decodedPath === '/signin' ||
+      decodedPath === '/app' ||
+      decodedPath.startsWith('/app/') ||
+      /^\/s\/shr_[A-Za-z0-9_-]{22}\/?$/u.test(decodedPath);
+    if (!isClientRoute || (decodedPath !== '/' && !acceptsDocument)) {
+      response.writeHead(404, { 'cache-control': 'no-store' });
+      response.end();
+      return;
+    }
+    file = resolve(fixtureRoot, 'index.html');
+    handle = await open(file, 'r');
+  }
+  const contentType = mimeTypes.get(extname(file)) ?? 'application/octet-stream';
+  const isDocument = file.endsWith('index.html');
+  response.writeHead(200, {
+    ...(isDocument
+      ? documentHeaders
+      : {
+          'cache-control': 'public, max-age=31536000, immutable',
+          'x-content-type-options': 'nosniff',
+        }),
+    'content-type': contentType,
+  });
+  if (request.method === 'HEAD') response.end();
+  else handle.createReadStream().pipe(response);
+  if (request.method === 'HEAD') await handle.close();
+}
+
+const server = createServer((request, response) => {
+  void (async () => {
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1:43873');
+    if (url.pathname === '/__fixture/axe.js') {
+      response.writeHead(200, {
+        'cache-control': 'no-store',
+        'content-type': 'text/javascript; charset=utf-8',
+        'x-content-type-options': 'nosniff',
+      });
+      response.end(axe.source);
+    } else if (url.pathname.startsWith('/api/')) await api(request, response, url);
+    else await staticFile(request, response, url);
+  })().catch(() => {
+    if (!response.headersSent) json(response, 500, {});
+    else response.destroy();
+  });
+});
+
+server.listen(43873, '127.0.0.1');
+
+function stop() {
+  server.close(() => {
+    process.exitCode = 0;
+  });
+}
+
+process.once('SIGINT', stop);
+process.once('SIGTERM', stop);

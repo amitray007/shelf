@@ -76,6 +76,24 @@ curl --fail http://127.0.0.1:3000/health/ready
 
 `pnpm dev:check` performs a non-running preflight when diagnosing an incomplete setup.
 
+## Browser qualification
+
+Install the browser builds matched to Shelf's pinned Playwright version once, then run the
+cross-browser suite:
+
+```sh
+pnpm test:browser:install
+pnpm test:browser
+```
+
+The suite builds and serves the production web client on `127.0.0.1:43873`, starts a fixture-backed
+instance of Shelf's real isolated renderer on `127.0.0.1:43874`, and exercises desktop Chromium,
+Firefox, WebKit, a 320 px Chromium viewport, and a 200% layout-equivalent Chromium viewport. API
+responses are deterministic in-browser fixtures, so this qualification command neither needs
+PostgreSQL nor reads `.env.dev`. It covers dark-only layout, keyboard focus, reduced motion,
+capability scrubbing, axe, horizontal overflow, and renderer escape attempts. Unit, API,
+PostgreSQL, and runtime suites remain separate gates because browser fixtures do not replace them.
+
 Run a read-only metadata/storage reconciliation from another terminal when needed:
 
 ```sh

@@ -24,11 +24,17 @@ Requires Node.js 24 and pnpm 10.
 pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm test
+pnpm test:browser
 pnpm build
 pnpm format:check
 pnpm lint
 pnpm test:streaming-memory
 ```
+
+Install Playwright's pinned Chromium, Firefox, and WebKit builds once with
+`pnpm test:browser:install`. The browser suite starts an isolated production web preview and a
+fixture-backed instance of Shelf's real HTML renderer; it does not require PostgreSQL or reuse
+`.env.dev`.
 
 For host-local development, install and start PostgreSQL, then run:
 
