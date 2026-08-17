@@ -138,6 +138,7 @@
                   "AUTHORIZATION_DENIED",
                   "INVALID_REQUEST",
                   "IDEMPOTENCY_CONFLICT",
+                  "ARTIFACT_NOT_FOUND",
                   "REVISION_NOT_FOUND",
                   "RANGE_NOT_SATISFIABLE",
                   "MULTI_RANGE_UNSUPPORTED",
@@ -197,6 +198,7 @@
           "AUTHORIZATION_DENIED",
           "INVALID_REQUEST",
           "IDEMPOTENCY_CONFLICT",
+          "ARTIFACT_NOT_FOUND",
           "REVISION_NOT_FOUND",
           "RANGE_NOT_SATISFIABLE",
           "MULTI_RANGE_UNSUPPORTED",
@@ -335,6 +337,955 @@
             }
           },
           "499": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listArtifactsV1",
+        "summary": "List artifacts in one workspace",
+        "tags": ["artifacts"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "workspaceId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["apiVersion", "items", "nextCursor"],
+                  "properties": {
+                    "apiVersion": {
+                      "type": "string",
+                      "enum": ["v1"]
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "apiVersion",
+                          "workspaceId",
+                          "artifactId",
+                          "createdAt",
+                          "updatedAt",
+                          "latestRevision",
+                          "paths"
+                        ],
+                        "properties": {
+                          "apiVersion": {
+                            "type": "string",
+                            "enum": ["v1"]
+                          },
+                          "workspaceId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "artifactId": {
+                            "type": "string",
+                            "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                            "description": "Opaque artifact identifier containing 128 bits of entropy."
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                          },
+                          "latestRevision": {
+                            "type": "object",
+                            "required": [
+                              "revisionId",
+                              "revisionNumber",
+                              "originalFileName",
+                              "mediaType",
+                              "contentHash",
+                              "byteCount",
+                              "createdAt",
+                              "provenance",
+                              "publisherMetadata",
+                              "paths"
+                            ],
+                            "properties": {
+                              "revisionId": {
+                                "type": "string",
+                                "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                                "description": "Opaque revision identifier containing 128 bits of entropy."
+                              },
+                              "revisionNumber": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "originalFileName": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 255
+                              },
+                              "mediaType": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 255
+                              },
+                              "contentHash": {
+                                "type": "string",
+                                "pattern": "^sha256:[a-f0-9]{64}$"
+                              },
+                              "byteCount": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              },
+                              "provenance": {
+                                "type": "object",
+                                "required": ["classification", "observed"],
+                                "properties": {
+                                  "classification": {
+                                    "type": "string",
+                                    "enum": ["direct-publish"]
+                                  },
+                                  "observed": {
+                                    "type": "object",
+                                    "required": ["actorId", "operation"],
+                                    "properties": {
+                                      "actorId": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128
+                                      },
+                                      "operation": {
+                                        "type": "string",
+                                        "enum": ["file.publish"]
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "publisherMetadata": {
+                                "type": "object",
+                                "maxProperties": 32,
+                                "additionalProperties": {
+                                  "type": "string",
+                                  "maxLength": 2048
+                                }
+                              },
+                              "paths": {
+                                "type": "object",
+                                "required": ["revision", "content"],
+                                "properties": {
+                                  "revision": {
+                                    "type": "string",
+                                    "pattern": "^/api/v1/revisions/[^/]+$"
+                                  },
+                                  "content": {
+                                    "type": "string",
+                                    "pattern": "^/api/v1/revisions/[^/]+/content$"
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false,
+                            "title": "ArtifactRevision"
+                          },
+                          "paths": {
+                            "type": "object",
+                            "required": ["artifact", "revisions"],
+                            "properties": {
+                              "artifact": {
+                                "type": "string",
+                                "pattern": "^/api/v1/artifacts/[^/]+$"
+                              },
+                              "revisions": {
+                                "type": "string",
+                                "pattern": "^/api/v1/artifacts/[^/]+/revisions$"
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "Artifact"
+                      },
+                      "maxItems": 100
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2048
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/revisions": {
+      "post": {
+        "operationId": "publishArtifactRevisionV1",
+        "summary": "Publish another immutable revision to one artifact",
+        "tags": ["artifacts"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "publisherMetadata": {
+                    "type": "string",
+                    "description": "JSON object of string values. Must precede the file part."
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "isFile": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "workspaceId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^art_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true,
+            "description": "Opaque artifact identifier containing 128 bits of entropy."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-0"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/artifacts/{artifactId}": {
+      "get": {
+        "operationId": "getArtifactV1",
+        "summary": "Get one artifact and its latest revision",
+        "tags": ["artifacts"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^art_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true,
+            "description": "Opaque artifact identifier containing 128 bits of entropy."
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "workspaceId",
+                    "artifactId",
+                    "createdAt",
+                    "updatedAt",
+                    "latestRevision",
+                    "paths"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "type": "string",
+                      "enum": ["v1"]
+                    },
+                    "workspaceId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "artifactId": {
+                      "type": "string",
+                      "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                      "description": "Opaque artifact identifier containing 128 bits of entropy."
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                    },
+                    "latestRevision": {
+                      "type": "object",
+                      "required": [
+                        "revisionId",
+                        "revisionNumber",
+                        "originalFileName",
+                        "mediaType",
+                        "contentHash",
+                        "byteCount",
+                        "createdAt",
+                        "provenance",
+                        "publisherMetadata",
+                        "paths"
+                      ],
+                      "properties": {
+                        "revisionId": {
+                          "type": "string",
+                          "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                          "description": "Opaque revision identifier containing 128 bits of entropy."
+                        },
+                        "revisionNumber": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "originalFileName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        },
+                        "mediaType": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        },
+                        "contentHash": {
+                          "type": "string",
+                          "pattern": "^sha256:[a-f0-9]{64}$"
+                        },
+                        "byteCount": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                        },
+                        "provenance": {
+                          "type": "object",
+                          "required": ["classification", "observed"],
+                          "properties": {
+                            "classification": {
+                              "type": "string",
+                              "enum": ["direct-publish"]
+                            },
+                            "observed": {
+                              "type": "object",
+                              "required": ["actorId", "operation"],
+                              "properties": {
+                                "actorId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                },
+                                "operation": {
+                                  "type": "string",
+                                  "enum": ["file.publish"]
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "publisherMetadata": {
+                          "type": "object",
+                          "maxProperties": 32,
+                          "additionalProperties": {
+                            "type": "string",
+                            "maxLength": 2048
+                          }
+                        },
+                        "paths": {
+                          "type": "object",
+                          "required": ["revision", "content"],
+                          "properties": {
+                            "revision": {
+                              "type": "string",
+                              "pattern": "^/api/v1/revisions/[^/]+$"
+                            },
+                            "content": {
+                              "type": "string",
+                              "pattern": "^/api/v1/revisions/[^/]+/content$"
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "paths": {
+                      "type": "object",
+                      "required": ["artifact", "revisions"],
+                      "properties": {
+                        "artifact": {
+                          "type": "string",
+                          "pattern": "^/api/v1/artifacts/[^/]+$"
+                        },
+                        "revisions": {
+                          "type": "string",
+                          "pattern": "^/api/v1/artifacts/[^/]+/revisions$"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/artifacts/{artifactId}/revisions": {
+      "get": {
+        "operationId": "listArtifactRevisionsV1",
+        "summary": "List one artifact revision history newest first",
+        "tags": ["artifacts"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^art_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true,
+            "description": "Opaque artifact identifier containing 128 bits of entropy."
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["apiVersion", "artifactId", "workspaceId", "items", "nextCursor"],
+                  "properties": {
+                    "apiVersion": {
+                      "type": "string",
+                      "enum": ["v1"]
+                    },
+                    "artifactId": {
+                      "type": "string",
+                      "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                      "description": "Opaque artifact identifier containing 128 bits of entropy."
+                    },
+                    "workspaceId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "revisionId",
+                          "revisionNumber",
+                          "originalFileName",
+                          "mediaType",
+                          "contentHash",
+                          "byteCount",
+                          "createdAt",
+                          "provenance",
+                          "publisherMetadata",
+                          "paths"
+                        ],
+                        "properties": {
+                          "revisionId": {
+                            "type": "string",
+                            "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                            "description": "Opaque revision identifier containing 128 bits of entropy."
+                          },
+                          "revisionNumber": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "originalFileName": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255
+                          },
+                          "mediaType": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255
+                          },
+                          "contentHash": {
+                            "type": "string",
+                            "pattern": "^sha256:[a-f0-9]{64}$"
+                          },
+                          "byteCount": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                          },
+                          "provenance": {
+                            "type": "object",
+                            "required": ["classification", "observed"],
+                            "properties": {
+                              "classification": {
+                                "type": "string",
+                                "enum": ["direct-publish"]
+                              },
+                              "observed": {
+                                "type": "object",
+                                "required": ["actorId", "operation"],
+                                "properties": {
+                                  "actorId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  },
+                                  "operation": {
+                                    "type": "string",
+                                    "enum": ["file.publish"]
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "publisherMetadata": {
+                            "type": "object",
+                            "maxProperties": 32,
+                            "additionalProperties": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
+                          },
+                          "paths": {
+                            "type": "object",
+                            "required": ["revision", "content"],
+                            "properties": {
+                              "revision": {
+                                "type": "string",
+                                "pattern": "^/api/v1/revisions/[^/]+$"
+                              },
+                              "content": {
+                                "type": "string",
+                                "pattern": "^/api/v1/revisions/[^/]+/content$"
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "maxItems": 100
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2048
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-1"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "Default Response",
             "content": {
               "application/json": {

@@ -28,6 +28,27 @@ describe('OpenAPI v1', () => {
       ['paths', '/api/v1/workspaces/{workspaceId}/artifacts', 'post', 'operationId'],
       'publishFileV1',
     );
+    expect(document).toHaveProperty(
+      [
+        'paths',
+        '/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/revisions',
+        'post',
+        'operationId',
+      ],
+      'publishArtifactRevisionV1',
+    );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/workspaces/{workspaceId}/artifacts', 'get', 'operationId'],
+      'listArtifactsV1',
+    );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/artifacts/{artifactId}', 'get', 'operationId'],
+      'getArtifactV1',
+    );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/artifacts/{artifactId}/revisions', 'get', 'operationId'],
+      'listArtifactRevisionsV1',
+    );
     expect(serialized).toContain('multipart/form-data');
     expect(serialized).toContain('PublishResult');
     expect(serialized).toContain('ErrorEnvelope');

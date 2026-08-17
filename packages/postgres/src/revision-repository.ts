@@ -1,9 +1,12 @@
 import type {
+  ArtifactCatalogRepository,
   CommitPublishInput,
   CommitPublishOutcome,
   IdempotencyNamespace,
   IdempotencyRecord,
   RevisionRepository,
+  StoredArtifact,
+  StoredArtifactRevision,
   StoredPublish,
 } from '@shelf/core';
 import { sql, type Transaction } from 'kysely';
@@ -29,6 +32,45 @@ function parseByteCount(value: string): number {
     throw new Error('Stored content byte count is invalid.');
   }
   return parsed;
+}
+
+function parseRevisionNumber(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error('Stored revision number is invalid.');
+  }
+  return parsed;
+}
+
+function storedArtifactRevision(row: RevisionRow): StoredArtifactRevision {
+  const publish = storedPublish(row);
+  return {
+    revisionId: publish.revisionId,
+    revisionNumber: parseRevisionNumber(row.revision_number),
+    originalFileName: publish.originalFileName,
+    mediaType: publish.mediaType,
+    contentHash: publish.content.contentHash,
+    byteCount: publish.content.byteCount,
+    createdAt: row.created_at.toISOString(),
+    provenance: publish.provenance,
+    publisherMetadata: publish.publisherMetadata,
+  };
+}
+
+type ArtifactWithLatestRow = RevisionRow & {
+  artifact_created_at: Date;
+  artifact_updated_at: Date;
+};
+
+function storedArtifact(row: ArtifactWithLatestRow): StoredArtifact {
+  return {
+    installationId: row.installation_id,
+    workspaceId: row.workspace_id,
+    artifactId: row.artifact_id,
+    createdAt: row.artifact_created_at.toISOString(),
+    updatedAt: row.artifact_updated_at.toISOString(),
+    latestRevision: storedArtifactRevision(row),
+  };
 }
 
 function storedPublish(row: RevisionRow): StoredPublish {
@@ -185,7 +227,7 @@ async function commitNewPublish(
   return { status: 'committed', result: input.result };
 }
 
-export class PostgresRevisionRepository implements RevisionRepository {
+export class PostgresRevisionRepository implements RevisionRepository, ArtifactCatalogRepository {
   readonly #database: ShelfPostgresDatabase;
 
   constructor(database: ShelfPostgresDatabase) {
@@ -194,6 +236,117 @@ export class PostgresRevisionRepository implements RevisionRepository {
 
   findIdempotency(namespace: IdempotencyNamespace): Promise<IdempotencyRecord | undefined> {
     return findIdempotency(this.#database, namespace);
+  }
+
+  async findArtifactIdentity(artifactId: string) {
+    const artifact = await this.#database
+      .selectFrom('shelf_artifacts')
+      .select(['artifact_id', 'installation_id', 'workspace_id'])
+      .where('artifact_id', '=', artifactId)
+      .executeTakeFirst();
+    return artifact === undefined
+      ? undefined
+      : {
+          artifactId: artifact.artifact_id,
+          installationId: artifact.installation_id,
+          workspaceId: artifact.workspace_id,
+        };
+  }
+
+  async findArtifact(artifactId: string): Promise<StoredArtifact | undefined> {
+    const row = await this.#database
+      .selectFrom('shelf_artifacts as artifact')
+      .innerJoin('shelf_revisions as revision', (join) =>
+        join
+          .onRef('revision.revision_id', '=', 'artifact.latest_revision_id')
+          .onRef('revision.installation_id', '=', 'artifact.installation_id')
+          .onRef('revision.workspace_id', '=', 'artifact.workspace_id'),
+      )
+      .selectAll('revision')
+      .select([
+        'artifact.created_at as artifact_created_at',
+        'artifact.updated_at as artifact_updated_at',
+      ])
+      .where('artifact.artifact_id', '=', artifactId)
+      .executeTakeFirst();
+    return row === undefined ? undefined : storedArtifact(row);
+  }
+
+  async listArtifacts(request: {
+    installationId: string;
+    workspaceId: string;
+    limit: number;
+    after?: { updatedAt: string; artifactId: string };
+  }) {
+    let query = this.#database
+      .selectFrom('shelf_artifacts as artifact')
+      .innerJoin('shelf_revisions as revision', (join) =>
+        join
+          .onRef('revision.revision_id', '=', 'artifact.latest_revision_id')
+          .onRef('revision.installation_id', '=', 'artifact.installation_id')
+          .onRef('revision.workspace_id', '=', 'artifact.workspace_id'),
+      )
+      .selectAll('revision')
+      .select([
+        'artifact.created_at as artifact_created_at',
+        'artifact.updated_at as artifact_updated_at',
+      ])
+      .where('artifact.installation_id', '=', request.installationId)
+      .where('artifact.workspace_id', '=', request.workspaceId);
+    if (request.after !== undefined) {
+      const after = request.after;
+      const updatedAt = new Date(after.updatedAt);
+      query = query.where((expressions) =>
+        expressions.or([
+          expressions('artifact.updated_at', '<', updatedAt),
+          expressions.and([
+            expressions('artifact.updated_at', '=', updatedAt),
+            expressions('artifact.artifact_id', '>', after.artifactId),
+          ]),
+        ]),
+      );
+    }
+    const rows = await query
+      .orderBy('artifact.updated_at', 'desc')
+      .orderBy('artifact.artifact_id', 'asc')
+      .limit(request.limit + 1)
+      .execute();
+    const hasMore = rows.length > request.limit;
+    const items = rows.slice(0, request.limit).map(storedArtifact);
+    const last = items.at(-1);
+    return {
+      items,
+      ...(hasMore && last !== undefined
+        ? { next: { updatedAt: last.updatedAt, artifactId: last.artifactId } }
+        : {}),
+    };
+  }
+
+  async listArtifactRevisions(request: {
+    installationId: string;
+    artifactId: string;
+    limit: number;
+    beforeRevisionNumber?: number;
+  }) {
+    let query = this.#database
+      .selectFrom('shelf_revisions')
+      .selectAll()
+      .where('installation_id', '=', request.installationId)
+      .where('artifact_id', '=', request.artifactId);
+    if (request.beforeRevisionNumber !== undefined) {
+      query = query.where('revision_number', '<', String(request.beforeRevisionNumber));
+    }
+    const rows = await query
+      .orderBy('revision_number', 'desc')
+      .limit(request.limit + 1)
+      .execute();
+    const hasMore = rows.length > request.limit;
+    const items = rows.slice(0, request.limit).map(storedArtifactRevision);
+    const last = items.at(-1);
+    return {
+      items,
+      ...(hasMore && last !== undefined ? { nextRevisionNumber: last.revisionNumber } : {}),
+    };
   }
 
   commitPublish(input: CommitPublishInput): Promise<CommitPublishOutcome> {

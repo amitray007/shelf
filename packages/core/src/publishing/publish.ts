@@ -13,6 +13,8 @@ import {
 import { boundaryFailure, ShelfCoreError } from '../errors.js';
 
 import type {
+  ArtifactIdentity,
+  ArtifactIdentityRepository,
   Authorizer,
   CommitPublishOutcome,
   ContentStore,
@@ -29,6 +31,7 @@ const MAX_IDENTITY_LENGTH = 128;
 const MAX_FILE_NAME_LENGTH = 255;
 const MAX_MEDIA_TYPE_LENGTH = 255;
 const MEDIA_TYPE_PATTERN = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/;
+const OPAQUE_ARTIFACT_ID_PATTERN = /^art_[A-Za-z0-9_-]{22}$/u;
 const RESERVED_PROVENANCE_KEY_SET = new Set<string>(RESERVED_PROVENANCE_KEYS);
 
 export interface PublishFileRequest {
@@ -37,6 +40,7 @@ export interface PublishFileRequest {
   actorId: string;
   requestId: string;
   idempotencyKey: string;
+  artifactId?: string;
   originalFileName: string;
   mediaType: string;
   publisherMetadata: PublisherMetadata;
@@ -46,6 +50,7 @@ export interface PublishFileRequest {
 
 export interface PublishServiceDependencies {
   authorizer: Authorizer;
+  artifactRepository: ArtifactIdentityRepository;
   contentStore: ContentStore;
   revisionRepository: RevisionRepository;
   generateId?: OpaqueIdGenerator;
@@ -80,6 +85,13 @@ export class IdempotencyConflictError extends ShelfCoreError {
   }
 }
 
+export class ArtifactNotFoundError extends ShelfCoreError {
+  constructor() {
+    super('ARTIFACT_NOT_FOUND', 'The requested artifact was not found.', { retryable: false });
+    this.name = 'ArtifactNotFoundError';
+  }
+}
+
 export class PublishCancelledError extends ShelfCoreError {
   constructor(cause?: unknown) {
     super('REQUEST_CANCELLED', 'The publish request was cancelled.', {
@@ -101,6 +113,7 @@ function canonicalizeMetadata(metadata: PublisherMetadata): PublisherMetadata {
 }
 
 export function createPublishFingerprint(input: {
+  artifactId?: string;
   contentHash: string;
   originalFileName: string;
   mediaType: string;
@@ -108,6 +121,7 @@ export function createPublishFingerprint(input: {
 }): string {
   const canonicalRequest = JSON.stringify({
     version: 1,
+    ...(input.artifactId === undefined ? {} : { artifactId: input.artifactId }),
     contentHash: input.contentHash,
     originalFileName: input.originalFileName,
     mediaType: input.mediaType,
@@ -129,6 +143,9 @@ function validateRequest(request: PublishFileRequest): PublisherMetadata {
   validateIdentity('actorId', request.actorId, details);
   validateIdentity('requestId', request.requestId, details);
   validateIdentity('idempotencyKey', request.idempotencyKey, details);
+  if (request.artifactId !== undefined && !OPAQUE_ARTIFACT_ID_PATTERN.test(request.artifactId)) {
+    details.push({ field: 'artifactId', reason: 'must be a valid opaque artifact ID' });
+  }
 
   if (
     request.originalFileName.length === 0 ||
@@ -247,6 +264,23 @@ export function createPublishService(dependencies: PublishServiceDependencies) {
     );
     throwIfCancelled(request.signal);
 
+    if (request.artifactId !== undefined) {
+      let artifact: ArtifactIdentity | undefined;
+      try {
+        artifact = await dependencies.artifactRepository.findArtifactIdentity(request.artifactId);
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Artifact lookup failed.', error);
+      }
+      if (
+        artifact === undefined ||
+        artifact.installationId !== request.installationId ||
+        artifact.workspaceId !== request.workspaceId
+      ) {
+        throw new ArtifactNotFoundError();
+      }
+      throwIfCancelled(request.signal);
+    }
+
     const hash = createHash('sha256');
     let byteCount = 0;
     const hashingContent = (async function* hashContent() {
@@ -279,6 +313,7 @@ export function createPublishService(dependencies: PublishServiceDependencies) {
       throw new InvalidPublishRequestError([{ field: 'content', reason: 'must not be empty' }]);
     }
     const fingerprint = createPublishFingerprint({
+      ...(request.artifactId === undefined ? {} : { artifactId: request.artifactId }),
       contentHash,
       originalFileName: request.originalFileName,
       mediaType: request.mediaType,
@@ -313,7 +348,7 @@ export function createPublishService(dependencies: PublishServiceDependencies) {
     // Cancellation after sealing is authoritative and intentionally leaves an unreachable orphan.
     throwIfCancelled(request.signal);
 
-    const artifactId = generateId('art');
+    const artifactId = request.artifactId ?? generateId('art');
     const revisionId = generateId('rev');
     const stored: StoredPublish = Object.freeze({
       apiVersion: PUBLISH_CONTRACT_VERSION,

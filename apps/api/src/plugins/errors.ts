@@ -18,6 +18,7 @@ function statusFor(code: ErrorCode): number {
       return 400;
     case 'IDEMPOTENCY_CONFLICT':
       return 409;
+    case 'ARTIFACT_NOT_FOUND':
     case 'REVISION_NOT_FOUND':
       return 404;
     case 'RANGE_NOT_SATISFIABLE':

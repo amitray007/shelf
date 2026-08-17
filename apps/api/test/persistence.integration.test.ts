@@ -40,15 +40,15 @@ afterAll(async () => {
   }
 });
 
-function multipart() {
+function multipart(value = 'persistent shelf', filename = 'README.md') {
   const boundary = 'shelf-persistence-boundary';
   return {
     headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
     payload: [
       `--${boundary}\r\n`,
-      'Content-Disposition: form-data; name="file"; filename="README.md"\r\n',
+      `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n`,
       'Content-Type: text/markdown\r\n\r\n',
-      'persistent shelf',
+      value,
       `\r\n--${boundary}--\r\n`,
     ].join(''),
   };
@@ -77,6 +77,7 @@ describePostgres('PostgreSQL with local content storage', () => {
       ...firstPersistence,
     });
     const body = multipart();
+    let firstArtifactId: string;
     let firstRevisionId: string;
     try {
       const first = await firstApp.inject({
@@ -91,6 +92,7 @@ describePostgres('PostgreSQL with local content storage', () => {
       });
       expect(first.statusCode).toBe(201);
       expect(first.json()).toMatchObject({ replayed: false, byteCount: 16 });
+      firstArtifactId = first.json().artifactId;
       firstRevisionId = first.json().revisionId;
     } finally {
       await closeDataPlane(firstApp, firstPersistence);
@@ -119,6 +121,57 @@ describePostgres('PostgreSQL with local content storage', () => {
       });
       expect(replay.statusCode).toBe(201);
       expect(replay.json()).toMatchObject({ revisionId: firstRevisionId, replayed: true });
+
+      const updateBody = multipart('persistent version two', 'CHANGELOG.md');
+      const update = await restartedApp.inject({
+        method: 'POST',
+        url: `/api/v1/workspaces/workspace-main/artifacts/${firstArtifactId}/revisions`,
+        headers: {
+          ...updateBody.headers,
+          authorization: 'Bearer test',
+          'idempotency-key': 'persistent-update',
+        },
+        payload: updateBody.payload,
+      });
+      expect(update.statusCode).toBe(201);
+      expect(update.json()).toMatchObject({ artifactId: firstArtifactId, replayed: false });
+
+      const artifact = await restartedApp.inject({
+        method: 'GET',
+        url: `/api/v1/artifacts/${firstArtifactId}`,
+        headers: { authorization: 'Bearer test' },
+      });
+      const history = await restartedApp.inject({
+        method: 'GET',
+        url: `/api/v1/artifacts/${firstArtifactId}/revisions`,
+        headers: { authorization: 'Bearer test' },
+      });
+      expect(artifact.statusCode).toBe(200);
+      expect(artifact.json()).toMatchObject({
+        artifactId: firstArtifactId,
+        latestRevision: { revisionId: update.json().revisionId, revisionNumber: 2 },
+      });
+      expect(history.statusCode).toBe(200);
+      expect(history.json().items).toMatchObject([
+        { revisionId: update.json().revisionId, revisionNumber: 2 },
+        { revisionId: firstRevisionId, revisionNumber: 1 },
+      ]);
+
+      const catalog = await restartedApp.inject({
+        method: 'GET',
+        url: '/api/v1/workspaces/workspace-main/artifacts',
+        headers: { authorization: 'Bearer test' },
+      });
+      expect(catalog.statusCode).toBe(200);
+      expect(catalog.json()).toMatchObject({
+        items: [
+          {
+            artifactId: firstArtifactId,
+            latestRevision: { revisionId: update.json().revisionId, revisionNumber: 2 },
+          },
+        ],
+        nextCursor: null,
+      });
 
       const download = await restartedApp.inject({
         method: 'GET',

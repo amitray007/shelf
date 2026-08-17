@@ -98,6 +98,16 @@ export interface CommitPublishInput {
   result: StoredPublish;
 }
 
+export interface ArtifactIdentity {
+  installationId: string;
+  workspaceId: string;
+  artifactId: string;
+}
+
+export interface ArtifactIdentityRepository {
+  findArtifactIdentity(artifactId: string): Promise<ArtifactIdentity | undefined>;
+}
+
 export type CommitPublishOutcome =
   | { status: 'committed'; result: StoredPublish }
   | { status: 'replayed'; result: StoredPublish }

@@ -23,6 +23,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",
+    "shelf": "node apps/cli/dist/index.js",
     "test": "vitest run --passWithNoTests",
     "test:runtime-e2e": "pnpm build && vitest run apps/api/test/runtime.e2e.test.ts",
     "test:streaming-memory": "pnpm --filter @shelf/api test:streaming-memory",

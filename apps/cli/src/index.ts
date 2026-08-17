@@ -3,15 +3,19 @@
 import { pathToFileURL } from 'node:url';
 import { CLI_EXIT_CODES } from '@shelf/contracts';
 import { Command, CommanderError } from 'commander';
+import {
+  type ArtifactHistoryCommandOptions,
+  executeArtifactHistory,
+  executeListArtifacts,
+  executeShowArtifact,
+  type ListArtifactsCommandOptions,
+  type ShowArtifactCommandOptions,
+} from './commands/artifacts.js';
 import { executePublish, type PublishCommandOptions } from './commands/publish.js';
 import { CliFailure, failure, jsonLine, redactEnvelope, usageFailure } from './output.js';
+import type { CliRuntime } from './runtime.js';
 
-export interface CliRuntime {
-  env: Readonly<Record<string, string | undefined>>;
-  stdout: (chunk: string) => void;
-  stderr: (chunk: string) => void;
-  fetch?: typeof globalThis.fetch;
-}
+export type { CliRuntime } from './runtime.js';
 
 function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
@@ -42,6 +46,7 @@ export async function runCli(
     .requiredOption('--workspace <workspace>')
     .requiredOption('--file <path>')
     .requiredOption('--idempotency-key <key>')
+    .option('--artifact <artifact-id>', 'publish another revision to this artifact')
     .option('--metadata <key=value>', 'publisher metadata; repeatable', collect, [])
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: PublishCommandOptions) => {
@@ -50,6 +55,36 @@ export async function runCli(
         runtime.env,
         runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
       );
+    });
+
+  const artifacts = program.command('artifacts').description('Inspect versioned artifacts');
+  artifacts
+    .command('list')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .option('--limit <count>')
+    .option('--cursor <cursor>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: ListArtifactsCommandOptions) => {
+      result = await executeListArtifacts(options, runtime);
+    });
+  artifacts
+    .command('show')
+    .requiredOption('--url <url>')
+    .requiredOption('--artifact <artifact-id>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: ShowArtifactCommandOptions) => {
+      result = await executeShowArtifact(options, runtime);
+    });
+  artifacts
+    .command('history')
+    .requiredOption('--url <url>')
+    .requiredOption('--artifact <artifact-id>')
+    .option('--limit <count>')
+    .option('--cursor <cursor>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: ArtifactHistoryCommandOptions) => {
+      result = await executeArtifactHistory(options, runtime);
     });
 
   try {

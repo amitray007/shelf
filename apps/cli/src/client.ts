@@ -1,6 +1,12 @@
 import { openAsBlob } from 'node:fs';
 import { basename } from 'node:path';
 import {
+  type Artifact,
+  type ArtifactPage,
+  type ArtifactRevisionPage,
+  isArtifact,
+  isArtifactPage,
+  isArtifactRevisionPage,
   isErrorEnvelope,
   isPublishResult,
   type PublisherMetadata,
@@ -13,6 +19,7 @@ export interface PublishFileOptions {
   workspaceId: string;
   filePath: string;
   idempotencyKey: string;
+  artifactId?: string;
   token: string;
   publisherMetadata: PublisherMetadata;
   allowInsecureLoopback?: boolean;
@@ -27,6 +34,27 @@ const defaultDependencies: ShelfClientDependencies = {
   fetch: globalThis.fetch,
   openFileBlob: (path) => openAsBlob(path),
 };
+
+export interface ListArtifactsOptions {
+  installationUrl: string;
+  workspaceId: string;
+  limit: number;
+  cursor?: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface GetArtifactOptions {
+  installationUrl: string;
+  artifactId: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface ListArtifactRevisionsOptions extends GetArtifactOptions {
+  limit: number;
+  cursor?: string;
+}
 
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -103,8 +131,110 @@ async function cancelResponseBody(response: Response): Promise<void> {
   await response.body?.cancel().catch(() => undefined);
 }
 
-function publishUrl(origin: URL, workspaceId: string): URL {
-  return new URL(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts`, origin);
+async function catalogJson<T>(
+  url: URL,
+  options: { token: string; allowInsecureLoopback: boolean },
+  dependencies: Pick<ShelfClientDependencies, 'fetch'>,
+  validate: (value: unknown) => value is T,
+): Promise<T> {
+  for (let redirects = 0; redirects <= 5; redirects += 1) {
+    let response: Response;
+    try {
+      response = await dependencies.fetch(url, {
+        method: 'GET',
+        redirect: 'manual',
+        headers: { accept: 'application/json', authorization: `Bearer ${options.token}` },
+      });
+    } catch {
+      throw failure('SERVICE_UNAVAILABLE', 'Shelf could not be reached.', { retryable: true });
+    }
+    if (redirectStatuses.has(response.status)) {
+      await cancelResponseBody(response);
+      const location = response.headers.get('location');
+      if (location === null) throw failure('INTERNAL_ERROR', 'Shelf returned an invalid redirect.');
+      if (redirects === 5) throw failure('INTERNAL_ERROR', 'Shelf returned too many redirects.');
+      const redirected = new URL(location, url);
+      installationOrigin(redirected.origin, options.allowInsecureLoopback);
+      if (redirected.origin !== url.origin) {
+        throw failure('INTERNAL_ERROR', 'Shelf refused a cross-origin credential redirect.');
+      }
+      url = redirected;
+      continue;
+    }
+    const payload = await responseJson(response);
+    if (response.status === 200) {
+      if (!validate(payload)) throw failure('INTERNAL_ERROR', 'Shelf returned an invalid result.');
+      return payload;
+    }
+    if (isErrorEnvelope(payload)) throw remoteFailure(payload);
+    throw failure('INTERNAL_ERROR', 'Shelf returned an invalid error response.');
+  }
+  throw failure('INTERNAL_ERROR', 'Shelf returned too many redirects.');
+}
+
+export async function listArtifacts(
+  options: ListArtifactsOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<ArtifactPage> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/artifacts`,
+    origin,
+  );
+  url.searchParams.set('limit', String(options.limit));
+  if (options.cursor !== undefined) url.searchParams.set('cursor', options.cursor);
+  return catalogJson(
+    url,
+    { token: options.token, allowInsecureLoopback },
+    dependencies,
+    isArtifactPage,
+  );
+}
+
+export async function getArtifact(
+  options: GetArtifactOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<Artifact> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(`/api/v1/artifacts/${encodeURIComponent(options.artifactId)}`, origin);
+  return catalogJson(
+    url,
+    { token: options.token, allowInsecureLoopback },
+    dependencies,
+    isArtifact,
+  );
+}
+
+export async function listArtifactRevisions(
+  options: ListArtifactRevisionsOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<ArtifactRevisionPage> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/artifacts/${encodeURIComponent(options.artifactId)}/revisions`,
+    origin,
+  );
+  url.searchParams.set('limit', String(options.limit));
+  if (options.cursor !== undefined) url.searchParams.set('cursor', options.cursor);
+  return catalogJson(
+    url,
+    { token: options.token, allowInsecureLoopback },
+    dependencies,
+    isArtifactRevisionPage,
+  );
+}
+
+function publishUrl(origin: URL, workspaceId: string, artifactId?: string): URL {
+  const workspacePath = `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts`;
+  return new URL(
+    artifactId === undefined
+      ? workspacePath
+      : `${workspacePath}/${encodeURIComponent(artifactId)}/revisions`,
+    origin,
+  );
 }
 
 async function requestBody(options: PublishFileOptions, dependencies: ShelfClientDependencies) {
@@ -130,7 +260,7 @@ export async function publishFile(
     options.installationUrl,
     options.allowInsecureLoopback ?? false,
   );
-  let url = publishUrl(origin, options.workspaceId);
+  let url = publishUrl(origin, options.workspaceId, options.artifactId);
 
   for (let redirects = 0; redirects <= 5; redirects += 1) {
     const body = await requestBody(options, dependencies);

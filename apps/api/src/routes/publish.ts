@@ -1,17 +1,19 @@
 import type { Multipart, MultipartFile } from '@fastify/multipart';
-import type { PublisherMetadata } from '@shelf/contracts';
+import { OpaqueArtifactIdSchema, type PublisherMetadata } from '@shelf/contracts';
 import {
   createPublishService,
   InvalidPublishRequestError,
   type PublishFileRequest,
 } from '@shelf/core';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Type } from 'typebox';
 import type { ShelfAppDependencies, ShelfMultipartLimits } from '../app.js';
 import { authenticate } from '../authenticate.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
 
 export const PUBLISH_ROUTE_URL = '/api/v1/workspaces/:workspaceId/artifacts';
+export const PUBLISH_REVISION_ROUTE_URL =
+  '/api/v1/workspaces/:workspaceId/artifacts/:artifactId/revisions';
 
 export const PublishMultipartOpenApiSchema = Type.Object(
   {
@@ -23,8 +25,16 @@ export const PublishMultipartOpenApiSchema = Type.Object(
   { additionalProperties: false, required: ['file'] },
 );
 
-const ParamsSchema = Type.Object(
+const CreateParamsSchema = Type.Object(
   { workspaceId: Type.String({ minLength: 1, maxLength: 128 }) },
+  { additionalProperties: false },
+);
+
+const UpdateParamsSchema = Type.Object(
+  {
+    workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
+    artifactId: OpaqueArtifactIdSchema,
+  },
   { additionalProperties: false },
 );
 
@@ -94,38 +104,22 @@ export async function registerPublishRoute(
   dependencies: ShelfAppDependencies,
   limits: ShelfMultipartLimits,
 ): Promise<void> {
-  const publish = createPublishService(dependencies);
+  const publish = createPublishService({
+    ...dependencies,
+    artifactRepository: dependencies.revisionRepository,
+  });
 
-  app.post(
-    PUBLISH_ROUTE_URL,
-    {
-      config: { shelfMultipartBody: true, multipartOptions: { limits } },
-      schema: {
-        operationId: 'publishFileV1',
-        summary: 'Publish one immutable file revision',
-        consumes: ['multipart/form-data'],
-        security: [{ bearerAuth: [] }],
-        tags: ['artifacts'],
-        params: ParamsSchema,
-        headers: HeadersSchema,
-        response: {
-          201: Type.Ref('PublishResult'),
-          400: Type.Ref('ErrorEnvelope'),
-          401: Type.Ref('ErrorEnvelope'),
-          403: Type.Ref('ErrorEnvelope'),
-          409: Type.Ref('ErrorEnvelope'),
-          499: Type.Ref('ErrorEnvelope'),
-          500: Type.Ref('ErrorEnvelope'),
-          503: Type.Ref('ErrorEnvelope'),
-        },
-      },
-    },
-    async (request, reply) => {
+  const handler =
+    (targetsExistingArtifact: boolean) => async (request: FastifyRequest, reply: FastifyReply) => {
       const signal = requestCancellationSignal(request, reply);
       const identity = await authenticate(request, dependencies.authenticator);
       if (!request.isMultipart()) throw invalid('content-type', 'must be multipart/form-data');
 
-      const params = request.params as { workspaceId: string };
+      const params = request.params as { workspaceId: string; artifactId?: string };
+      const artifactId = targetsExistingArtifact ? params.artifactId : undefined;
+      if (targetsExistingArtifact && artifactId === undefined) {
+        throw invalid('artifactId', 'is required');
+      }
       const headers = request.headers as { 'idempotency-key': string };
       const parts = request.parts({ limits });
       let publisherMetadata: PublisherMetadata = {};
@@ -158,6 +152,7 @@ export async function registerPublishRoute(
         actorId: identity.actorId,
         requestId: request.id,
         idempotencyKey: headers['idempotency-key'],
+        ...(artifactId === undefined ? {} : { artifactId }),
         originalFileName: file.filename,
         mediaType: file.mimetype,
         publisherMetadata,
@@ -166,6 +161,60 @@ export async function registerPublishRoute(
       };
       const result = await publish(input);
       return reply.status(201).send(result);
+    };
+
+  app.post(
+    PUBLISH_ROUTE_URL,
+    {
+      config: { shelfMultipartBody: true, multipartOptions: { limits } },
+      schema: {
+        operationId: 'publishFileV1',
+        summary: 'Publish one immutable file revision',
+        consumes: ['multipart/form-data'],
+        security: [{ bearerAuth: [] }],
+        tags: ['artifacts'],
+        params: CreateParamsSchema,
+        headers: HeadersSchema,
+        response: {
+          201: Type.Ref('PublishResult'),
+          400: Type.Ref('ErrorEnvelope'),
+          401: Type.Ref('ErrorEnvelope'),
+          403: Type.Ref('ErrorEnvelope'),
+          409: Type.Ref('ErrorEnvelope'),
+          499: Type.Ref('ErrorEnvelope'),
+          500: Type.Ref('ErrorEnvelope'),
+          503: Type.Ref('ErrorEnvelope'),
+        },
+      },
     },
+    handler(false),
+  );
+
+  app.post(
+    PUBLISH_REVISION_ROUTE_URL,
+    {
+      config: { shelfMultipartBody: true, multipartOptions: { limits } },
+      schema: {
+        operationId: 'publishArtifactRevisionV1',
+        summary: 'Publish another immutable revision to one artifact',
+        consumes: ['multipart/form-data'],
+        security: [{ bearerAuth: [] }],
+        tags: ['artifacts'],
+        params: UpdateParamsSchema,
+        headers: HeadersSchema,
+        response: {
+          201: Type.Ref('PublishResult'),
+          400: Type.Ref('ErrorEnvelope'),
+          401: Type.Ref('ErrorEnvelope'),
+          403: Type.Ref('ErrorEnvelope'),
+          404: Type.Ref('ErrorEnvelope'),
+          409: Type.Ref('ErrorEnvelope'),
+          499: Type.Ref('ErrorEnvelope'),
+          500: Type.Ref('ErrorEnvelope'),
+          503: Type.Ref('ErrorEnvelope'),
+        },
+      },
+    },
+    handler(true),
   );
 }

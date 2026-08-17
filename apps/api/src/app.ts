@@ -4,7 +4,14 @@ import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import type { HumanAuth } from '@shelf/auth';
 import { ErrorEnvelopeSchema, PublishResultSchema } from '@shelf/contracts';
-import type { Authorizer, ContentReader, ContentStore, RevisionRepository } from '@shelf/core';
+import type {
+  ArtifactCatalogRepository,
+  ArtifactIdentityRepository,
+  Authorizer,
+  ContentReader,
+  ContentStore,
+  RevisionRepository,
+} from '@shelf/core';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import { MemoryRevisionRepository } from './adapters/memory-revision-repository.js';
@@ -13,6 +20,7 @@ import { registerHumanAuthRoutes } from './auth/runtime.js';
 import type { Authenticator } from './authenticate.js';
 import { type ReadinessState, registerHealthRoutes } from './health.js';
 import { registerErrorHandler } from './plugins/errors.js';
+import { registerArtifactRoutes } from './routes/artifacts.js';
 import { PublishMultipartOpenApiSchema, registerPublishRoute } from './routes/publish.js';
 import { registerRevisionRoutes } from './routes/revisions.js';
 
@@ -49,7 +57,7 @@ export interface ShelfAppDependencies {
   authorizer: Authorizer;
   contentStore: ContentStore;
   contentReader: ContentReader;
-  revisionRepository: RevisionRepository;
+  revisionRepository: RevisionRepository & ArtifactIdentityRepository & ArtifactCatalogRepository;
 }
 
 export interface CreateShelfAppOptions {
@@ -58,7 +66,7 @@ export interface CreateShelfAppOptions {
   authorizer: Authorizer;
   contentStore?: ContentStore;
   contentReader?: ContentReader;
-  revisionRepository?: RevisionRepository;
+  revisionRepository?: RevisionRepository & ArtifactIdentityRepository & ArtifactCatalogRepository;
   multipartLimits?: Partial<ShelfMultipartLimits>;
   logger?: boolean;
   humanAuth?: HumanAuth;
@@ -115,6 +123,7 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   app.addSchema(ErrorEnvelopeSchema);
   registerErrorHandler(app);
   await registerPublishRoute(app, dependencies, limits);
+  await registerArtifactRoutes(app, dependencies);
   await registerRevisionRoutes(app, dependencies);
   await app.ready();
   return app;

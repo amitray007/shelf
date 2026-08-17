@@ -7,7 +7,7 @@ The [Product Contract](../plans/2026-08-17-0030-feat-shelf-product-plan.md) owns
 
 | ID | Decision | Contract authority |
 |---|---|---|
-| D1 | The product is named Shelf. | R1 and Key Decisions |
+| D1 | The product is named Shelf and its portable user-facing CLI is named exactly `shelf`; host-local administration remains the separate `shelf-admin` executable. | R1 and Key Decisions |
 | D2 | Shelf is a durable publishing workspace rather than an expiry-first file drop. | R2-R7 and R14-R17 |
 | D3 | Files and complete folders are publishing units. | R2-R7 |
 | D4 | Revision history, comparison, and restore are core behavior. | R3-R6 |

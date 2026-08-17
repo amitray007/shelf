@@ -135,6 +135,25 @@ describe('shelf publish', () => {
     expect(JSON.stringify([...form.entries()])).not.toMatch(/share|visibility/);
   });
 
+  it('publishes another revision through the shelf command and stable artifact URL', async () => {
+    const file = await fileFixture('version two');
+    const stdout = capture();
+    const fetch = vi.fn(async () => Response.json(publishResult, { status: 201 }));
+
+    const exitCode = await runCli(argv(file, '--artifact', 'art_0123456789abcdefghijkl'), {
+      env: { SHELF_TOKEN: 'secret-token' },
+      stdout: stdout.write,
+      stderr() {},
+      fetch,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout.value())).toEqual(publishResult);
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      'https://shelf.example/api/v1/workspaces/workspace-main/artifacts/art_0123456789abcdefghijkl/revisions',
+    );
+  });
+
   it('does not accept credentials as an argument or infer a token', async () => {
     const file = await fileFixture();
     const fetch = vi.fn();

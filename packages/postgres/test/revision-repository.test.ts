@@ -145,6 +145,49 @@ describePostgres('PostgresRevisionRepository', () => {
     await database.destroy();
   });
 
+  it('linearizes concurrent revisions to one artifact and exposes ordered history', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const repository = new PostgresRevisionRepository(database);
+    const artifactId = 'art_versioned_AAAAAAAAAAAAA';
+    const first = stored('rev_versioned_000000000000001', artifactId);
+    await repository.commitPublish(commitInput(first, 'versioned-create'));
+
+    const updates = Array.from({ length: 8 }, (_, index) =>
+      stored(`rev_versioned_${String(index + 2).padStart(15, '0')}`, artifactId),
+    );
+    const outcomes = await Promise.all(
+      updates.map((revision, index) =>
+        repository.commitPublish(commitInput(revision, `versioned-update-${index}`)),
+      ),
+    );
+
+    expect(outcomes.every((outcome) => outcome.status === 'committed')).toBe(true);
+    await expect(repository.findArtifact(artifactId)).resolves.toMatchObject({
+      artifactId,
+      latestRevision: { revisionNumber: 9 },
+    });
+    await expect(
+      repository.listArtifactRevisions({
+        installationId: first.installationId,
+        artifactId,
+        limit: 20,
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        { revisionNumber: 9 },
+        { revisionNumber: 8 },
+        { revisionNumber: 7 },
+        { revisionNumber: 6 },
+        { revisionNumber: 5 },
+        { revisionNumber: 4 },
+        { revisionNumber: 3 },
+        { revisionNumber: 2 },
+        { revisionNumber: 1 },
+      ],
+    });
+    await database.destroy();
+  });
+
   it('rolls back an idempotency claim when revision insertion fails', async () => {
     const database = createPostgresDatabase({ connectionString });
     const repository = new PostgresRevisionRepository(database);

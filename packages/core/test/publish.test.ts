@@ -91,6 +91,10 @@ class TestContentStore implements ContentStore {
 }
 
 class TestRevisionRepository implements RevisionRepository {
+  readonly artifacts = new Map<
+    string,
+    { artifactId: string; installationId: string; workspaceId: string }
+  >();
   readonly revisions = new Map<string, StoredPublish>();
   readonly records = new Map<string, { fingerprint: string; result: StoredPublish }>();
   failBeforeCommit = false;
@@ -99,6 +103,10 @@ class TestRevisionRepository implements RevisionRepository {
 
   async findIdempotency(namespace: IdempotencyNamespace) {
     return this.records.get(namespaceKey(namespace));
+  }
+
+  async findArtifactIdentity(artifactId: string) {
+    return this.artifacts.get(artifactId);
   }
 
   async commitPublish(input: CommitPublishInput): Promise<CommitPublishOutcome> {
@@ -112,6 +120,11 @@ class TestRevisionRepository implements RevisionRepository {
     }
     this.records.set(key, { fingerprint: input.fingerprint, result: input.result });
     this.revisions.set(input.result.revisionId, input.result);
+    this.artifacts.set(input.result.artifactId, {
+      artifactId: input.result.artifactId,
+      installationId: input.result.installationId,
+      workspaceId: input.result.workspaceId,
+    });
     this.afterCommit?.();
     if (this.failAfterCommit) throw new Error('response lost after commit');
     return { status: 'committed', result: input.result };
@@ -148,6 +161,7 @@ function service(contentStore: ContentStore, revisionRepository: RevisionReposit
   let nextId = 0;
   return createPublishService({
     authorizer: allowAll,
+    artifactRepository: revisionRepository as TestRevisionRepository,
     contentStore,
     revisionRepository,
     generateId(kind) {
@@ -158,6 +172,66 @@ function service(contentStore: ContentStore, revisionRepository: RevisionReposit
 }
 
 describe('publish service', () => {
+  it('publishes another immutable revision to the same stable artifact', async () => {
+    const contentStore = new TestContentStore();
+    const revisionRepository = new TestRevisionRepository();
+    const publish = service(contentStore, revisionRepository);
+
+    const first = await publish(request('version one', { idempotencyKey: 'create-artifact' }));
+    const second = await publish(
+      request('version two', {
+        artifactId: first.artifactId,
+        idempotencyKey: 'revise-artifact',
+        originalFileName: 'CHANGELOG.md',
+      }),
+    );
+
+    expect(second.artifactId).toBe(first.artifactId);
+    expect(second.revisionId).not.toBe(first.revisionId);
+    expect(revisionRepository.revisions.size).toBe(2);
+  });
+
+  it('includes the target artifact in revision-publish idempotency semantics', async () => {
+    const contentStore = new TestContentStore();
+    const revisionRepository = new TestRevisionRepository();
+    const publish = service(contentStore, revisionRepository);
+    const first = await publish(request('first', { idempotencyKey: 'create-first' }));
+    const second = await publish(request('second', { idempotencyKey: 'create-second' }));
+    await publish(
+      request('same bytes', {
+        artifactId: first.artifactId,
+        idempotencyKey: 'target-sensitive-key',
+      }),
+    );
+
+    await expect(
+      publish(
+        request('same bytes', {
+          artifactId: second.artifactId,
+          idempotencyKey: 'target-sensitive-key',
+        }),
+      ),
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+  });
+
+  it('rejects an unknown revision target before consuming content', async () => {
+    const contentStore = new TestContentStore();
+    const revisionRepository = new TestRevisionRepository();
+    const publish = service(contentStore, revisionRepository);
+
+    await expect(
+      publish(
+        request('version two', {
+          artifactId: 'art_BBBBBBBBBBBBBBBBBBBBBB',
+          idempotencyKey: 'missing-artifact',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'ARTIFACT_NOT_FOUND' });
+    expect(contentStore.staged.size).toBe(0);
+    expect(contentStore.sealed.size).toBe(0);
+    expect(revisionRepository.revisions.size).toBe(0);
+  });
+
   it('commits once, replays an identical scoped request, and conflicts on changed input', async () => {
     const contentStore = new TestContentStore();
     const revisionRepository = new TestRevisionRepository();
@@ -280,6 +354,7 @@ describe('publish service', () => {
           throw new AuthorizationDeniedError();
         },
       },
+      artifactRepository: revisionRepository,
       contentStore,
       revisionRepository,
     });
@@ -297,6 +372,7 @@ describe('publish service', () => {
   });
 
   it.each([
+    ['artifact ID', { artifactId: 'art_not-valid' }],
     ['reserved provenance', { publisherMetadata: { actorId: 'forged' } }],
     [
       'metadata key count',

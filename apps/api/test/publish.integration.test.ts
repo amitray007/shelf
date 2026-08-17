@@ -72,6 +72,20 @@ async function publish(app: FastifyInstance, body = validBody(), key = 'publish-
   });
 }
 
+async function publishRevision(
+  app: FastifyInstance,
+  artifactId: string,
+  body = validBody('version two', 'CHANGELOG.md'),
+  key = 'revise-readme',
+) {
+  return app.inject({
+    method: 'POST',
+    url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/revisions`,
+    headers: { ...body.headers, authorization: 'Bearer test', 'idempotency-key': key },
+    payload: body.payload,
+  });
+}
+
 async function filesBelow(root: string): Promise<string[]> {
   const entries = await readdir(root, { recursive: true, withFileTypes: true }).catch(() => []);
   return entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
@@ -86,6 +100,31 @@ async function waitFor(assertion: () => Promise<boolean>, timeoutMs = 2_000): Pr
 }
 
 describe('POST /api/v1/workspaces/:workspaceId/artifacts', () => {
+  it('publishes another revision to the same stable artifact', async () => {
+    const { app } = await fixture();
+    const first = await publish(app, validBody('version one'), 'create-versioned-artifact');
+    const second = await publishRevision(app, first.json().artifactId);
+
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(201);
+    expect(second.json()).toMatchObject({
+      artifactId: first.json().artifactId,
+      workspaceId: 'workspace-main',
+      replayed: false,
+    });
+    expect(second.json().revisionId).not.toBe(first.json().revisionId);
+  });
+
+  it('rejects an unknown revision target before staging bytes', async () => {
+    const { app, root } = await fixture();
+    const response = await publishRevision(app, 'art_BBBBBBBBBBBBBBBBBBBBBB');
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ error: { code: 'ARTIFACT_NOT_FOUND' } });
+    expect(await filesBelow(join(root, 'staging'))).toEqual([]);
+    expect(await filesBelow(join(root, 'sealed'))).toEqual([]);
+  });
+
   it('refuses to construct an app without an explicit authenticator', async () => {
     const root = await mkdtemp(join(tmpdir(), 'shelf-api-test-'));
     roots.push(root);

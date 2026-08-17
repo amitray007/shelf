@@ -12,6 +12,7 @@ export interface PublishCommandOptions {
   workspace: string;
   file: string;
   idempotencyKey: string;
+  artifact?: string;
   metadata: readonly string[];
   allowInsecureLoopback?: boolean;
 }
@@ -51,12 +52,16 @@ export async function executePublish(
   if (token === undefined || token.length === 0) {
     throw usageFailure('SHELF_TOKEN is required.');
   }
+  if (options.artifact !== undefined && !/^art_[A-Za-z0-9_-]{22}$/u.test(options.artifact)) {
+    throw usageFailure('The artifact ID is invalid.');
+  }
   return publishFile(
     {
       installationUrl: options.url,
       workspaceId: options.workspace,
       filePath: options.file,
       idempotencyKey: options.idempotencyKey,
+      ...(options.artifact === undefined ? {} : { artifactId: options.artifact }),
       token,
       publisherMetadata: publisherMetadata(options.metadata),
       ...(options.allowInsecureLoopback === undefined

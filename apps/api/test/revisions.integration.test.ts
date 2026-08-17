@@ -71,7 +71,12 @@ async function fixture(options: { authenticator?: Authenticator } = {}) {
     originalFileName = 'numbers.txt',
     mediaType = 'text/plain',
   ) {
-    const publish = createPublishService({ authorizer, contentStore, revisionRepository });
+    const publish = createPublishService({
+      authorizer,
+      artifactRepository: revisionRepository,
+      contentStore,
+      revisionRepository,
+    });
     return publish({
       installationId: 'install-local',
       workspaceId: 'workspace-main',

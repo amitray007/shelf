@@ -57,6 +57,7 @@ describe('the versioned machine contract', () => {
     expect(isErrorEnvelope(envelope)).toBe(true);
     expect(isErrorEnvelope({ error: { ...envelope.error, code: 'NOT_CANONICAL' } })).toBe(false);
     expect(exitCodeForError('IDEMPOTENCY_CONFLICT')).toBe(CLI_EXIT_CODES.validation);
+    expect(exitCodeForError('ARTIFACT_NOT_FOUND')).toBe(CLI_EXIT_CODES.validation);
     expect(exitCodeForError('REVISION_NOT_FOUND')).toBe(CLI_EXIT_CODES.validation);
     expect(exitCodeForError('RANGE_NOT_SATISFIABLE')).toBe(CLI_EXIT_CODES.validation);
     expect(exitCodeForError('MULTI_RANGE_UNSUPPORTED')).toBe(CLI_EXIT_CODES.validation);

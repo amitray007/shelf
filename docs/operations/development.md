@@ -114,17 +114,44 @@ node --env-file=.env.dev apps/api/dist/operator/cli.js credential issue \
   --grant workspace-main:revision.read
 ```
 
-Copy the one-time token from the JSON response into the shell, then publish a file:
+Copy the one-time token from the JSON response into the shell, then use the portable `shelf` CLI.
+Within the repository, `pnpm shelf ...` runs that exact CLI identity without installing a global
+package:
 
 ```sh
 export SHELF_TOKEN='shf_v1...'
-node apps/cli/dist/index.js publish \
+pnpm shelf publish \
   --url http://127.0.0.1:3000 \
   --workspace workspace-main \
   --file README.md \
   --idempotency-key local-readme-1 \
   --allow-insecure-loopback
+```
+
+The JSON result contains the stable artifact ID. Publish another immutable revision, then inspect
+the latest descriptor and history:
+
+```sh
+pnpm shelf publish \
+  --url http://127.0.0.1:3000 \
+  --workspace workspace-main \
+  --artifact art_... \
+  --file README.md \
+  --idempotency-key local-readme-2 \
+  --allow-insecure-loopback
+pnpm shelf artifacts list \
+  --url http://127.0.0.1:3000 \
+  --workspace workspace-main \
+  --allow-insecure-loopback
+pnpm shelf artifacts show \
+  --url http://127.0.0.1:3000 \
+  --artifact art_... \
+  --allow-insecure-loopback
+pnpm shelf artifacts history \
+  --url http://127.0.0.1:3000 \
+  --artifact art_... \
+  --allow-insecure-loopback
 unset SHELF_TOKEN
 ```
 
-Use a new idempotency key after changing the file or semantic metadata.
+Use a new idempotency key after changing the file, target artifact, or semantic metadata.

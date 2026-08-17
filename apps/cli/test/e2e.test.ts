@@ -13,13 +13,30 @@ describe('CLI wire contract', () => {
         content: { 'multipart/form-data': { schema: { required: ['file'] } } },
       },
     });
+    expect(
+      document.paths['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/revisions'].post,
+    ).toMatchObject({ operationId: 'publishArtifactRevisionV1', security: [{ bearerAuth: [] }] });
+    expect(document.paths['/api/v1/workspaces/{workspaceId}/artifacts'].get).toMatchObject({
+      operationId: 'listArtifactsV1',
+      security: [{ bearerAuth: [] }],
+    });
+    expect(document.paths['/api/v1/artifacts/{artifactId}'].get).toMatchObject({
+      operationId: 'getArtifactV1',
+    });
+    expect(document.paths['/api/v1/artifacts/{artifactId}/revisions'].get).toMatchObject({
+      operationId: 'listArtifactRevisionsV1',
+    });
   });
 
   it('does not couple the CLI to core or API server modules', async () => {
     const sources = await Promise.all(
-      ['../src/index.ts', '../src/client.ts', '../src/output.ts', '../src/commands/publish.ts'].map(
-        (path) => readFile(new URL(path, import.meta.url), 'utf8'),
-      ),
+      [
+        '../src/index.ts',
+        '../src/client.ts',
+        '../src/output.ts',
+        '../src/commands/publish.ts',
+        '../src/commands/artifacts.ts',
+      ].map((path) => readFile(new URL(path, import.meta.url), 'utf8')),
     );
     expect(sources.join('\n')).not.toMatch(/@shelf\/core|apps\/api|\.\.\/\.\.\/api/);
   });

@@ -6,6 +6,7 @@ export const ERROR_CODES = [
   'AUTHORIZATION_DENIED',
   'INVALID_REQUEST',
   'IDEMPOTENCY_CONFLICT',
+  'ARTIFACT_NOT_FOUND',
   'REVISION_NOT_FOUND',
   'RANGE_NOT_SATISFIABLE',
   'MULTI_RANGE_UNSUPPORTED',
@@ -74,6 +75,7 @@ export function exitCodeForError(code: ErrorCode): CliExitCode {
       return CLI_EXIT_CODES.authorization;
     case 'INVALID_REQUEST':
     case 'IDEMPOTENCY_CONFLICT':
+    case 'ARTIFACT_NOT_FOUND':
     case 'REVISION_NOT_FOUND':
     case 'RANGE_NOT_SATISFIABLE':
     case 'MULTI_RANGE_UNSUPPORTED':
