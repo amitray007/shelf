@@ -4,6 +4,7 @@ import {
   migratePostgresToLatest,
   PostgresAuthRepository,
   type PostgresDatabaseOptions,
+  PostgresInstallationInventory,
   PostgresReferencedContentInventory,
   PostgresRevisionRepository,
 } from '@shelf/postgres';
@@ -22,6 +23,7 @@ export interface ShelfPersistence {
   contentStore: ContentStorage;
   contentReader: ContentStorage;
   contentInventory: ContentStorage;
+  installationInventory: PostgresInstallationInventory;
   revisionRepository: PostgresRevisionRepository;
   referencedContentInventory: PostgresReferencedContentInventory;
   authRepository: PostgresAuthRepository;
@@ -48,6 +50,7 @@ export function createShelfPersistence(config: ShelfPersistenceConfig): ShelfPer
     contentStore: contentStorage,
     contentReader: contentStorage,
     contentInventory: contentStorage,
+    installationInventory: new PostgresInstallationInventory(database),
     revisionRepository: new PostgresRevisionRepository(database),
     referencedContentInventory: new PostgresReferencedContentInventory(database),
     authRepository: new PostgresAuthRepository(database),

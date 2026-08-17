@@ -71,6 +71,24 @@ node --env-file=.env.dev apps/api/dist/operator/cli.js reconcile scan
 
 The command reports age-gated candidates as JSON and never deletes local development content.
 
+## Back up local development state
+
+The host-native recovery flow uses `.env.dev` automatically. Stop `pnpm dev`, ensure PostgreSQL
+client tools and `tar` are on `PATH`, then create a new ignored backup directory:
+
+```sh
+mkdir -p backups
+pnpm build
+pnpm backup:create:dev \
+  --output backups/installation-dev-manual \
+  --confirm-offline installation-dev
+```
+
+Restore is intentionally limited to a new empty database and a content root that does not exist
+under an already-existing parent directory; it never overwrites the active development state. See
+[Offline Local File backup and restore](persistence.md#offline-local-file-backup-and-restore) for
+the recovery command, manifest, safety checks, and post-restore verification.
+
 ## Bootstrap and publish
 
 Shelf never invents a development actor or authentication bypass. Bootstrap the owner once:

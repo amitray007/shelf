@@ -9,6 +9,10 @@
     "pnpm": ">=10 <11"
   },
   "scripts": {
+    "backup:create": "node apps/api/dist/operator/cli.js backup create",
+    "backup:create:dev": "node --env-file=.env.dev apps/api/dist/operator/cli.js backup create",
+    "backup:restore": "node apps/api/dist/operator/cli.js backup restore",
+    "backup:restore:dev": "node --env-file=.env.dev apps/api/dist/operator/cli.js backup restore",
     "build": "tsc -b packages/contracts packages/core packages/auth packages/postgres packages/storage apps/api apps/cli",
     "check": "biome check .",
     "dev": "node apps/api/scripts/dev-runner.mjs",

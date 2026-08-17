@@ -80,15 +80,71 @@ The reported orphan and staging entries are candidates, not proof that deletion 
 destructive command must perform a fresh reference check, retain an independently configurable age
 gate, and remain separately disableable. No such command exists in this slice.
 
+## Offline Local File backup and restore
+
+The first recovery workflow targets a host-native PostgreSQL plus Local File installation. It
+requires `pg_dump`, `pg_restore`, `psql`, and `tar` on `PATH`. Use a PostgreSQL client major version
+that can dump the configured server. The workflow does not support R2 and does not yet orchestrate
+the named volumes in the Docker Compose reference profile.
+
+Stop every Shelf process and any other writer first. The confirmation value must exactly match
+`SHELF_INSTALLATION_ID`. Run the command from a shell that already provides the normal Shelf
+environment; the generic pnpm command does not choose an environment file implicitly:
+
+```sh
+mkdir -p backups
+pnpm build
+pnpm backup:create \
+  --output backups/installation-dev-2026-08-17 \
+  --confirm-offline installation-dev
+```
+
+Creation refuses an existing or overlapping output directory, a database containing another Shelf
+installation, and unrecognized Local File entries such as symlinked object paths. It independently
+reads and hashes every PostgreSQL-referenced object, creates `metadata.dump` in PostgreSQL custom
+format and a complete `content.tar`, checks the installation/reference sets again, then writes
+`manifest.json` last. The v1
+manifest records the installation, offline consistency assertion, referenced content IDs,
+SHA-256 hashes, byte counts, revision counts, and archive checksums. The directory and all three
+files are protected for the current user. `backups/` is ignored by Git.
+
+Treat the complete directory as sensitive: it contains owned content plus database state such as
+password and credential hashes plus active session records. Copy it to durable storage with access
+controls before relying on it as a recovery point. A backup is not the portable artifact export
+promised by R24.
+
+Restore only while Shelf remains stopped. Point the environment at an already-created **empty**
+PostgreSQL database and a Local File root that does **not** exist beneath an existing parent
+directory, then run:
+
+```sh
+DATABASE_URL=postgresql:///shelf_restore \
+SHELF_STORAGE_LOCAL_ROOT=./data/restored-content \
+pnpm backup:restore \
+  --from backups/installation-dev-2026-08-17 \
+  --confirm-offline installation-dev
+```
+
+Restore verifies the manifest and both archive checksums before touching the target. It refuses a
+database containing user-defined database objects, refuses an existing content root, extracts
+content into a new root, restores PostgreSQL in one transaction, verifies current migrations, and
+streams every referenced object to confirm its byte count and SHA-256 hash. It never clears or replaces an
+existing database or content directory. Keep Shelf stopped if any step fails; repair or choose new
+empty targets before retrying.
+
+After success, run `reconcile scan`, start Shelf, and verify an important pinned revision before
+retiring the original data. The automated integration drill performs this recovery into disposable
+PostgreSQL and Local File targets.
+
 ## Current qualification boundary
 
-The automated suite covers local cancellation cleanup, immutable sealing, exact range reads, S3 single-part and bounded multipart upload, upload-failure cleanup, provider inventory, PostgreSQL migration/restart behavior, concurrent idempotency, rollback, read-only reconciliation, and a PostgreSQL-plus-local restart flow.
+The automated suite covers local cancellation cleanup, immutable sealing, exact range reads, S3 single-part and bounded multipart upload, upload-failure cleanup, provider inventory, PostgreSQL migration/restart behavior, concurrent idempotency, rollback, read-only reconciliation, a PostgreSQL-plus-local restart flow, and offline Local File backup/restore into clean targets.
 
-A live private R2 bucket has not been exercised in this repository. Before calling the R2 profile production-qualified, run the same behavioral suite with real scoped credentials and verify multipart completion/abort, full and ranged reads, pagination, retries, inventory, and cleanup. Backup manifests, destructive age-gated cleanup, and restore drills remain deployment work under T5.
+A live private R2 bucket has not been exercised in this repository. Before calling the R2 profile production-qualified, run the same behavioral suite with real scoped credentials and verify multipart completion/abort, full and ranged reads, pagination, retries, inventory, and cleanup. R2 recovery, Docker Compose named-volume orchestration, online snapshots/PITR, destructive age-gated cleanup, and scheduled retention remain deployment work under T5.
 
 ## Adding another provider
 
-1. Keep publishing, read, and reconciliation application modules dependent only on the core storage interfaces.
+1. Keep publishing, read, reconciliation, and backup verification modules dependent only on the core storage interfaces.
 2. Reuse `S3ContentStorage` only when the provider passes the S3 behavioral suite; do not infer behavior from an “S3-compatible” label.
 3. Implement a separate adapter for a native protocol such as Google Cloud Storage when that protocol provides a better operational fit.
 4. Add provider configuration only to application assembly and environment parsing.

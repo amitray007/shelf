@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   createPostgresDatabase,
   migratePostgresToLatest,
+  PostgresInstallationInventory,
   PostgresReferencedContentInventory,
   PostgresRevisionRepository,
 } from '../src/index.js';
@@ -218,6 +219,17 @@ describePostgres('PostgresRevisionRepository', () => {
     await expect(
       inventory.listReferencedContent('installation-inventory-conflict'),
     ).rejects.toThrow('conflicting descriptors');
+    await database.destroy();
+  });
+
+  it('lists every installation represented in Shelf-owned metadata', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const installationIds = await new PostgresInstallationInventory(database).listInstallationIds();
+
+    expect(installationIds).toEqual([...installationIds].sort());
+    expect(installationIds).toEqual(
+      expect.arrayContaining(['installation-main', 'installation-inventory', 'installation-other']),
+    );
     await database.destroy();
   });
 });

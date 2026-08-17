@@ -93,4 +93,10 @@ explicit `--minimum-age-seconds` override.
 
 ## Current limits
 
-This reference runs exactly one Shelf process when local storage is selected. Backup/restore drills, destructive orphan cleanup, administrative password recovery, TLS/reverse-proxy qualification, rolling upgrades, and a live R2 conformance run remain roadmap work. Do not scale the local-storage service horizontally.
+This reference runs exactly one Shelf process when local storage is selected. Shelf now has a
+verified host-native PostgreSQL/Local File recovery workflow, but the current runtime image does
+not include PostgreSQL client tools and the command does not yet orchestrate Compose named volumes.
+Compose-volume recovery, R2 recovery, destructive orphan cleanup, administrative password
+recovery, TLS/reverse-proxy qualification, rolling upgrades, and a live R2 conformance run remain
+roadmap work. Do not scale the local-storage service horizontally or represent this Compose profile
+as backup-qualified yet.

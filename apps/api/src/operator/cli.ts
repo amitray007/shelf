@@ -13,6 +13,7 @@ import { installationIdFromEnvironment, requiredEnvironmentValue } from '../envi
 import { createShelfPersistence } from '../persistence.js';
 import { shelfPersistenceConfigFromEnv } from '../persistence-env.js';
 import { loadShelfServerConfig, type ShelfServerEnvironment } from '../server-config.js';
+import { createLocalBackup, restoreLocalBackup, runBackupCommand } from './backup.js';
 import { createOperatorService, type OperatorGrant } from './service.js';
 
 export interface ShelfAdminRuntime {
@@ -188,6 +189,58 @@ export async function runShelfAdmin(
     .requiredOption('--credential-id <id>')
     .action(async (options: { credentialId: string }) => {
       result = await withOperator(runtime.env, (service) => service.revoke(options.credentialId));
+    });
+
+  const backup = program.command('backup');
+  backup
+    .command('create')
+    .requiredOption('--output <directory>')
+    .requiredOption('--confirm-offline <installation-id>')
+    .action(async (options: { output: string; confirmOffline: string }) => {
+      if (options.confirmOffline !== installationIdFromEnvironment(runtime.env)) {
+        throw new Error('The offline confirmation does not match this installation.');
+      }
+      const persistence = createShelfPersistence(shelfPersistenceConfigFromEnv(runtime.env));
+      try {
+        await persistence.assertMetadataCurrent();
+        result = await createLocalBackup({
+          environment: runtime.env,
+          outputDirectory: options.output,
+          offlineConfirmation: options.confirmOffline,
+          installations: persistence.installationInventory,
+          references: persistence.referencedContentInventory,
+          content: persistence.contentReader,
+          inventory: persistence.contentInventory,
+          runCommand: runBackupCommand,
+        });
+      } finally {
+        await persistence.close();
+      }
+    });
+  backup
+    .command('restore')
+    .requiredOption('--from <directory>')
+    .requiredOption('--confirm-offline <installation-id>')
+    .action(async (options: { from: string; confirmOffline: string }) => {
+      if (options.confirmOffline !== installationIdFromEnvironment(runtime.env)) {
+        throw new Error('The offline confirmation does not match this installation.');
+      }
+      const persistence = createShelfPersistence(shelfPersistenceConfigFromEnv(runtime.env));
+      try {
+        result = await restoreLocalBackup({
+          environment: runtime.env,
+          inputDirectory: options.from,
+          offlineConfirmation: options.confirmOffline,
+          installations: persistence.installationInventory,
+          references: persistence.referencedContentInventory,
+          content: persistence.contentReader,
+          inventory: persistence.contentInventory,
+          assertMetadataCurrent: () => persistence.assertMetadataCurrent(),
+          runCommand: runBackupCommand,
+        });
+      } finally {
+        await persistence.close();
+      }
     });
 
   const reconciliation = program.command('reconcile');
