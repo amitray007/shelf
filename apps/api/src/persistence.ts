@@ -4,6 +4,7 @@ import {
   migratePostgresToLatest,
   PostgresAuthRepository,
   type PostgresDatabaseOptions,
+  PostgresReferencedContentInventory,
   PostgresRevisionRepository,
 } from '@shelf/postgres';
 import {
@@ -20,9 +21,12 @@ export interface ShelfPersistenceConfig {
 export interface ShelfPersistence {
   contentStore: ContentStorage;
   contentReader: ContentStorage;
+  contentInventory: ContentStorage;
   revisionRepository: PostgresRevisionRepository;
+  referencedContentInventory: PostgresReferencedContentInventory;
   authRepository: PostgresAuthRepository;
   migrate(): Promise<void>;
+  assertMetadataCurrent(): Promise<void>;
   ready(): Promise<void>;
   close(): Promise<void>;
 }
@@ -43,10 +47,15 @@ export function createShelfPersistence(config: ShelfPersistenceConfig): ShelfPer
   return {
     contentStore: contentStorage,
     contentReader: contentStorage,
+    contentInventory: contentStorage,
     revisionRepository: new PostgresRevisionRepository(database),
+    referencedContentInventory: new PostgresReferencedContentInventory(database),
     authRepository: new PostgresAuthRepository(database),
     async migrate(): Promise<void> {
       await migratePostgresToLatest(database);
+    },
+    async assertMetadataCurrent(): Promise<void> {
+      await assertPostgresMigrationsCurrent(database);
     },
     async ready(): Promise<void> {
       await Promise.all([assertPostgresMigrationsCurrent(database), contentStorage.ready()]);

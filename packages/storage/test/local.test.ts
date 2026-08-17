@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -37,6 +37,20 @@ function descriptor(value: string) {
 }
 
 describe('LocalContentStorage', () => {
+  it('inventories an uninitialized root as empty without creating it', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'shelf-local-empty-'));
+    const root = join(parent, 'content');
+    roots.push(parent);
+    const storage = new LocalContentStorage({ root });
+
+    await expect(storage.inventory()).resolves.toEqual({
+      staging: [],
+      sealed: [],
+      unrecognizedEntries: 0,
+    });
+    await expect(readdir(parent)).resolves.toEqual([]);
+  });
+
   it('initializes and verifies a writable durable root without leaving probe content', async () => {
     const { root, storage } = await fixture();
     await storage.ready();
@@ -81,5 +95,28 @@ describe('LocalContentStorage', () => {
     );
     await storage.discard(staged);
     await expect(readdir(join(root, 'objects'))).resolves.toEqual([]);
+  });
+
+  it('inventories staging and sealed objects without modifying storage', async () => {
+    const { root, storage } = await fixture();
+    const staged = await storage.stage(chunks('stage'), {});
+    const toSeal = await storage.stage(chunks('sealed'), {});
+    const sealed = await storage.seal(toSeal, descriptor('sealed'));
+    const modifiedAt = new Date('2026-08-16T10:00:00.000Z');
+    await Promise.all([
+      utimes(join(root, 'staging', `${staged.stageId}.stage`), modifiedAt, modifiedAt),
+      utimes(join(root, 'objects', sealed.contentId), modifiedAt, modifiedAt),
+      writeFile(join(root, 'objects', 'unexpected-entry'), 'unknown'),
+    ]);
+
+    await expect(storage.inventory()).resolves.toEqual({
+      staging: [{ stageId: staged.stageId, modifiedAt }],
+      sealed: [{ contentId: sealed.contentId, byteCount: 6, modifiedAt }],
+      unrecognizedEntries: 1,
+    });
+    await expect(readdir(join(root, 'staging'))).resolves.toEqual([`${staged.stageId}.stage`]);
+    await expect(readdir(join(root, 'objects'))).resolves.toEqual(
+      expect.arrayContaining([sealed.contentId, 'unexpected-entry']),
+    );
   });
 });

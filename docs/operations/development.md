@@ -63,6 +63,14 @@ curl --fail http://127.0.0.1:3000/health/ready
 
 `pnpm dev:check` performs a non-running preflight when diagnosing an incomplete setup.
 
+Run a read-only metadata/storage reconciliation from another terminal when needed:
+
+```sh
+node --env-file=.env.dev apps/api/dist/operator/cli.js reconcile scan
+```
+
+The command reports age-gated candidates as JSON and never deletes local development content.
+
 ## Bootstrap and publish
 
 Shelf never invents a development actor or authentication bypass. Bootstrap the owner once:

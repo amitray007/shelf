@@ -116,6 +116,19 @@ describePostgres('compiled migrate-to-restart workflow', () => {
       await expect(read(endpoint, credential.token, first.revisionId)).resolves.toBe(
         'durable shelf',
       );
+      const reconciliation = await runAdmin(['reconcile', 'scan'], environment);
+      expect(reconciliation.code).toBe(0);
+      expect(JSON.parse(reconciliation.stdout)).toMatchObject({
+        apiVersion: 'v1',
+        mode: 'dry-run',
+        summary: {
+          referencedContent: 1,
+          healthyReferenced: 1,
+          missingReferenced: 0,
+          sealedOrphanCandidates: 0,
+          staleStagingCandidates: 0,
+        },
+      });
 
       await expect(
         runAdmin(['credential', 'revoke', '--credential-id', credential.credentialId], environment),

@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 
 import { type CredentialAction, createAccessCredentialService, createHumanAuth } from '@shelf/auth';
 import { PUBLISH_OPERATION, READ_REVISION_OPERATION } from '@shelf/contracts';
+import { createReconciliationService } from '@shelf/core';
 import { createPostgresDatabase, migratePostgresToLatest } from '@shelf/postgres';
 import { Command } from 'commander';
 
@@ -22,11 +23,20 @@ export interface ShelfAdminRuntime {
 }
 
 const MAX_PASSWORD_BYTES = 4096;
+const DEFAULT_RECONCILIATION_MINIMUM_AGE_SECONDS = 86_400;
 const CREDENTIAL_ACTIONS = [PUBLISH_OPERATION, READ_REVISION_OPERATION] as const;
 
 function collect(value: string, previous: string[]): string[] {
   previous.push(value);
   return previous;
+}
+
+function minimumAgeSeconds(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 60) {
+    throw new Error('The reconciliation minimum age must be an integer of at least 60 seconds.');
+  }
+  return parsed;
 }
 
 function grants(values: string[]): OperatorGrant[] {
@@ -178,6 +188,30 @@ export async function runShelfAdmin(
     .requiredOption('--credential-id <id>')
     .action(async (options: { credentialId: string }) => {
       result = await withOperator(runtime.env, (service) => service.revoke(options.credentialId));
+    });
+
+  const reconciliation = program.command('reconcile');
+  reconciliation
+    .command('scan')
+    .option(
+      '--minimum-age-seconds <seconds>',
+      'minimum object age before reporting a cleanup candidate',
+      String(DEFAULT_RECONCILIATION_MINIMUM_AGE_SECONDS),
+    )
+    .action(async (options: { minimumAgeSeconds: string }) => {
+      const persistence = createShelfPersistence(shelfPersistenceConfigFromEnv(runtime.env));
+      try {
+        await persistence.assertMetadataCurrent();
+        result = await createReconciliationService({
+          references: persistence.referencedContentInventory,
+          content: persistence.contentInventory,
+        })({
+          installationId: installationIdFromEnvironment(runtime.env),
+          minimumAgeSeconds: minimumAgeSeconds(options.minimumAgeSeconds),
+        });
+      } finally {
+        await persistence.close();
+      }
     });
 
   try {

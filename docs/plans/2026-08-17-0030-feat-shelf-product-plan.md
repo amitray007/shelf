@@ -16,8 +16,8 @@ execution: code
 
 - **Objective:** Establish Shelf's implementation foundation, prove one streamed and idempotent versioned publishing path, and make that path runnable through a narrow single-host self-hosted profile without pre-deciding the remaining product architecture.
 - **Product authority:** This Product Contract owns the current user-facing behavior and scope. Technical planning may refine implementation details but must not silently change these product commitments.
-- **Current implementation scope:** A TypeScript/Fastify API foundation, canonical HTTP/OpenAPI contracts, streamed single-file publishing, an agent-safe CLI client, safe pinned byte-range delivery, durable PostgreSQL metadata, interchangeable local/R2 content storage, self-hosted human sessions, scoped CLI/agent credentials, and a runnable single-host reference profile.
-- **Open blockers:** None for the implemented foundation, persistence, and authentication slices. The single-host runnable-alpha slice is active. Folder transport, complete T5 backup/recovery work, live R2 qualification, dashboard implementation, renderers, diffs, and entries T4 and T6-T8 remain open until their implementation slices begin.
+- **Current implementation scope:** A TypeScript/Fastify API foundation, canonical HTTP/OpenAPI contracts, streamed single-file publishing, an agent-safe CLI client, safe pinned byte-range delivery, durable PostgreSQL metadata, interchangeable local/R2 content storage, self-hosted human sessions, scoped CLI/agent credentials, a runnable single-host reference profile, and provider-neutral read-only reconciliation.
+- **Open blockers:** None for the implemented foundation, persistence, authentication, runnable-alpha, and read-only reconciliation slices. Folder transport, complete T5 backup/recovery and destructive-cleanup work, live R2 qualification, dashboard implementation, renderers, diffs, and entries T4 and T6-T8 remain open until their implementation slices begin.
 
 ---
 
@@ -281,7 +281,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 
 **Product Contract preservation:** Changed R22-R25 and added AE10 to make the user-approved single-host operational slice explicit; existing artifact behavior is unchanged.
 
-**Technical decision status:** T1-T3 and the narrow T5a reference profile are accepted. T4 CLI packaging, the remainder of T5 deployment, T6 renderers and diffs, T7 bulk formats, and T8 candidate interface components remain open in the [decision register](../decisions/README.md).
+**Technical decision status:** T1-T3 and the narrow T5a-T5b reference and reconciliation profiles are accepted. T4 CLI packaging, the remainder of T5 deployment, T6 renderers and diffs, T7 bulk formats, and T8 candidate interface components remain open in the [decision register](../decisions/README.md).
 
 ### Key Technical Decisions
 
@@ -294,6 +294,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 - KTD7. **Use PostgreSQL metadata with provider-neutral content storage.** (session-settled: user-approved — chosen after comparing PostgreSQL/SQLite, Kysely/Drizzle/Prisma, local files, Google Drive, generic S3, and Cloudflare R2.) Kysely and `pg` implement the PostgreSQL repository and reviewed migrations. A production local-filesystem adapter supports the single-host self-hosted profile, while one generic S3-protocol adapter is configured first for R2. Revisions persist opaque content IDs, hashes, and byte counts rather than provider paths or ETags. AWS S3 may reuse the adapter after conformance testing; a native GCP or other provider may implement the same core ports. R2 remains optional, so core product behavior has no mandatory proprietary dependency. Governs R3, R16, R22-R24 and implements accepted T2.
 - KTD8. **Separate human sessions from Shelf authorization and agent credentials.** (session-settled: user-approved — chosen after comparing Better Auth, Clerk, Auth.js, Stack Auth/Hexclave, ZITADEL, Keycloak, and Ory.) Better Auth core owns the local human identity, password, cookie, and revocable PostgreSQL session mechanics behind the Fastify authentication seam. Shelf owns stable human/service actors, high-entropy opaque access credentials, relational workspace/action grants, rotation, revocation, last-use state, and authentication audit events. Raw access secrets are revealed once and never stored; browser sessions never become CLI bearer credentials. Better Auth Organizations and machine-token plugins remain disabled because Shelf workspaces, provenance actors, and credential grants are product-domain state. Generated Better Auth SQL is pinned and reviewed through explicit migrations, never applied implicitly during API startup. Governs R8, R14-R17, R20, and R22-R24 and implements accepted T3.
 - KTD9. **Make the proven path runnable before expanding product breadth.** (session-settled: user-approved — chosen over building folders or the dashboard next: the existing single-file path should be installable and operable before more product surfaces depend on it.) Ship Docker Compose as the first reference profile with one production Fastify process, PostgreSQL, and a durable local-content volume. Keep migrations, owner bootstrap, and access-credential administration as explicit host-local commands; keep the portable `shelf` CLI a remote `/api/v1` client. This implements accepted T5a without claiming complete T5 production readiness. Governs R15-R16 and R22-R25.
+- KTD10. **Separate reconciliation observation from destructive cleanup.** (session-settled: user-approved — chosen before backup and broader artifact behavior: operators need to see metadata/storage drift without granting the first tool permission to delete.) Add provider-neutral referenced-content and storage-inventory ports, classify missing or size-mismatched references immediately, and age-gate unreferenced sealed objects plus staging before reporting them as candidates. Expose only a host-local JSON dry run under T5b. Any later deletion command must perform a fresh metadata check, retain an independent age gate, and remain separately disableable. Governs R22-R25 and KTD4/KTD7.
 
 ### High-Level Technical Design
 
@@ -301,6 +302,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 flowchart TB
   CLI[Shelf CLI] -->|versioned HTTP| API[Fastify API]
   ADMIN[Shelf operator CLI] -->|host-local administration| AUTHPG
+  ADMIN --> RECON[Dry-run reconciliation service]
   COMPOSE[Compose reference profile] --> API
   COMPOSE --> PG
   COMPOSE --> LOCAL
@@ -311,14 +313,19 @@ flowchart TB
   APP --> CONTENT[Content store port]
   READ --> META
   READ --> CONTENT
+  RECON --> REFS[Referenced-content inventory port]
+  RECON --> INVENTORY[Storage inventory port]
   API --> SPEC[Generated OpenAPI document]
   API --> HUMAN[Better Auth human sessions]
   API --> ACCESS[Shelf actor and credential module]
   HUMAN --> AUTHPG[PostgreSQL auth schema]
   ACCESS --> AUTHPG
   META --> PG[PostgreSQL adapter]
+  REFS --> PG
   CONTENT --> LOCAL[Local filesystem adapter]
   CONTENT --> S3[S3 protocol adapter]
+  INVENTORY --> LOCAL
+  INVENTORY --> S3
   S3 --> R2[Cloudflare R2]
   READ --> DOWNLOAD[Pinned download response]
 ```
@@ -376,7 +383,7 @@ Build the contracts and core service before transport adapters. Add the Fastify 
 ### Product Delivery Roadmap
 
 1. **Runnable single-host alpha:** Production assembly, explicit configuration and migrations, health probes, graceful shutdown, owner/credential operator commands, a non-root image, Docker Compose with durable PostgreSQL/local-content volumes, and a real restart smoke path.
-2. **Operational durability:** Backup manifest, dry-run staging/orphan reconciliation, upgrade contract, restore drill, administrative password recovery, reverse-proxy/TLS qualification, and live R2 conformance. Completing these closes the remainder of T5.
+2. **Operational durability:** Read-only staging/orphan reconciliation is implemented first; backup manifest, destructive cleanup policy, upgrade contract, restore drill, administrative password recovery, reverse-proxy/TLS qualification, and live R2 conformance complete the remainder of T5.
 3. **Artifact lifecycle breadth:** Atomic folder snapshots with portable path rules, artifact browsing and rename, version comparison, restore-as-latest, and the first size/file-count limits.
 4. **Human workspace:** Dashboard sign-in, workspace and artifact browsing, publish/history/restore controls, and credential administration through product APIs without weakening CLI parity.
 5. **Sharing and safe presentation:** Latest and pinned shares, visibility and expiry controls, collections, renderer isolation, supported formats, and diff adapters.
@@ -613,6 +620,24 @@ Build the contracts and core service before transport adapters. Add the Fastify 
   - Scan process and command output for password, bearer-token, database-URL, cookie, and storage-path canaries while preserving the one explicitly authorized token issuance output.
 - **Verification:** One environment-gated black-box suite proves the compiled migrate-to-restart lifecycle. Full repository, PostgreSQL, OpenAPI, CLI redaction, streaming-memory, and container gates remain green.
 
+### U12. Add read-only storage reconciliation
+
+- **Goal:** Give operators a safe, provider-neutral view of drift between PostgreSQL revision references and the configured content backend without adding deletion behavior.
+- **Requirement slices advanced:** R22-R25, accepted T5b, and KTD4/KTD7/KTD10.
+- **Dependencies:** U6 and U9.
+- **Files:** `packages/core/src/reconciliation/ports.ts`, `packages/core/src/reconciliation/reconcile.ts`, `packages/storage/src/local.ts`, `packages/storage/src/s3.ts`, `packages/postgres/src/content-inventory.ts`, `apps/api/src/operator/cli.ts`, their focused tests, the decision register, and persistence/self-hosting documentation.
+- **Approach:** Keep inventory separate from publish/read ports and expose no deletion operation to the reconciliation service. PostgreSQL groups referenced content within `SHELF_INSTALLATION_ID`; local storage inventories sealed files and staging without following unknown entries; the S3 adapter inventories completed objects and incomplete multipart uploads under its configured prefix. Classify missing and byte-count-mismatched references immediately. Apply a configurable minimum age, defaulting to 24 hours and never below 60 seconds, before reporting unreferenced sealed objects or staging as candidates. Return one stable `v1` JSON document from `shelf-admin reconcile scan`.
+- **Execution note:** Build the classifier test-first, then add local, S3-protocol, PostgreSQL, and compiled operator seams. Candidate does not mean safe to delete; destructive cleanup remains outside this unit.
+- **Patterns to follow:** KTD4, KTD7, the provider-neutral `ContentStore`/`ContentReader` boundaries, operator JSON conventions, and T5 crash-recovery research.
+- **Test scenarios:**
+  - Count healthy referenced content and report referenced content missing from storage without exposing provider paths.
+  - Report a byte-count mismatch separately from missing content and never treat that object as an orphan.
+  - Age-gate sealed orphans and staging, report recent entries as deferred, sort candidate output deterministically, and count unrecognized provider entries.
+  - Inventory local files plus S3 completed objects/incomplete multipart uploads without modifying either backend.
+  - Scope PostgreSQL references to one installation and combine repeated revision references to the same immutable content descriptor.
+  - Run the host-local command against disposable PostgreSQL and local storage twice; return one JSON report each time and leave healthy, orphaned, and staged bytes unchanged.
+- **Verification:** Focused core/storage/PostgreSQL/operator suites prove classification and non-deletion. Full repository, type, build, format, OpenAPI, restart, and streaming-memory gates remain green; live R2 remains explicitly unqualified.
+
 ---
 
 ## Verification Contract
@@ -625,7 +650,7 @@ Build the contracts and core service before transport adapters. Add the Fastify 
 | `pnpm build` | All workspaces | Package exports and executable entry points compile without undeclared workspace coupling. |
 | `SHELF_TEST_POSTGRES_URL=... pnpm exec vitest run packages/postgres/test/revision-repository.test.ts apps/api/test/persistence.integration.test.ts` | PostgreSQL and assembled data plane | Migrations, restart persistence, concurrent replay/conflict, rollback, and PostgreSQL-plus-local restart behavior pass against a disposable real database. |
 | `SHELF_TEST_POSTGRES_URL=... pnpm exec vitest run packages/postgres/test/auth-repository.test.ts apps/api/test/auth.integration.test.ts` | PostgreSQL authentication | Better Auth sessions, actor mapping, credential grants, restart persistence, rotation, and revocation pass against a disposable real database. |
-| `SHELF_TEST_POSTGRES_URL=... pnpm exec vitest run apps/api/test/operator-cli.integration.test.ts apps/api/test/runtime.e2e.test.ts` | Built operator/runtime workflow | Explicit migration, owner bootstrap, credential administration, readiness, CLI publish, graceful stop, restart recovery, pinned retrieval, and revoke denial pass against disposable PostgreSQL and local storage. |
+| `SHELF_TEST_POSTGRES_URL=... pnpm exec vitest run apps/api/test/operator-cli.integration.test.ts apps/api/test/runtime.e2e.test.ts` | Built operator/runtime workflow | Explicit migration, owner bootstrap, credential administration, read-only reconciliation, readiness, CLI publish, graceful stop, restart recovery, pinned retrieval, and revoke denial pass against disposable PostgreSQL and local storage. |
 | OpenAPI drift check | `/api/v1` | The generated specification matches the checked contract artifact and includes publish plus pinned revision delivery. |
 | Container and Compose smoke | T5a reference profile | Compose configuration validates, the image runs non-root, PostgreSQL health and migration completion gate API startup, local storage is writable, and state survives a stop/start without volume deletion. |
 | `pnpm test:streaming-memory` | Publish route | After one 64 MiB warm-up, a 64 MiB upload to an API child process completes in three runs with each run's sampled peak RSS growth below 32 MiB; handled interruptions leave no visible revision or request-owned staging residue. |
@@ -638,8 +663,8 @@ No release, live R2, backup/restore, browser, TLS/reverse-proxy, or active-rende
 
 ## Definition of Done
 
-- T1-T3 and T5a are recorded in the decision register and synchronized with the README and operational documentation.
-- U1-U11 satisfy their applicable test scenarios and verification outcomes.
+- T1-T3 and T5a-T5b are recorded in the decision register and synchronized with the README and operational documentation.
+- U1-U12 satisfy their applicable test scenarios and verification outcomes.
 - The CLI and API expose the same canonical success and error semantics through `/api/v1`.
 - Publishing through PostgreSQL is idempotent across application restarts and concurrent API processes; changed semantic input conflicts without a partial metadata commit.
 - Handled failures and cancellations before metadata commit leave no visible revision or request-owned staging content; cancellation or response loss after commit preserves the revision and remains recoverable through replay.
@@ -650,5 +675,6 @@ No release, live R2, backup/restore, browser, TLS/reverse-proxy, or active-rende
 - No product route serves without explicit authentication and workspace/action authorization. Only the non-secret health probes are unauthenticated, and the test authenticator cannot be enabled by production startup.
 - The built server starts only after explicit migration with a stable installation identity and production adapters, becomes unready before graceful shutdown, and recovers committed metadata and local content after restart.
 - Host-local administration reads owner passwords from a protected file or standard input, reveals new access tokens only once, and never adds database/auth dependencies to the portable `shelf` client.
+- Host-local reconciliation compares installation-scoped metadata with provider inventory, reports stable age-gated JSON, and has no capability to delete or rewrite content.
 - Abandoned experiments, unused dependencies, generated scratch output, and dead code are absent from the final change set.
 - All repository verification gates pass, and any environment-dependent test limitation is reported without being presented as success.

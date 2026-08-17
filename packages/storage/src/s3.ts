@@ -4,12 +4,20 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListMultipartUploadsCommand,
+  ListObjectsV2Command,
   type S3Client,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
-import type { ContentByteRange, SealedContent, StagedContent } from '@shelf/core';
+import type {
+  ContentByteRange,
+  ContentInventorySnapshot,
+  SealedContent,
+  StagedContent,
+} from '@shelf/core';
 
 import {
+  assertContentId,
   assertDescriptor,
   assertSealedContent,
   assertStagedContent,
@@ -114,6 +122,18 @@ export class S3ContentStorage implements ContentStorage {
     return `${this.#prefix}/objects/${contentId}`;
   }
 
+  #contentId(key: string | undefined): string | undefined {
+    const objectPrefix = `${this.#prefix}/objects/`;
+    if (key === undefined || !key.startsWith(objectPrefix)) return undefined;
+    const contentId = key.slice(objectPrefix.length);
+    try {
+      assertContentId(contentId);
+      return contentId;
+    } catch {
+      return undefined;
+    }
+  }
+
   async #delete(contentId: string): Promise<void> {
     await this.#client.send(
       new DeleteObjectCommand({ Bucket: this.#bucket, Key: this.#key(contentId) }),
@@ -172,6 +192,78 @@ export class S3ContentStorage implements ContentStorage {
       throw new Error('Staged content size mismatch.');
     }
     return Object.freeze({ contentId: staged.stageId, ...descriptor });
+  }
+
+  async inventory(): Promise<ContentInventorySnapshot> {
+    const sealed = [];
+    const staging = [];
+    let unrecognizedEntries = 0;
+    let continuationToken: string | undefined;
+
+    do {
+      const result = await this.#client.send(
+        new ListObjectsV2Command({
+          Bucket: this.#bucket,
+          Prefix: `${this.#prefix}/objects/`,
+          ...(continuationToken === undefined ? {} : { ContinuationToken: continuationToken }),
+        }),
+      );
+      for (const object of result.Contents ?? []) {
+        const contentId = this.#contentId(object.Key);
+        if (
+          contentId === undefined ||
+          object.LastModified === undefined ||
+          object.Size === undefined ||
+          !Number.isSafeInteger(object.Size) ||
+          object.Size < 0
+        ) {
+          unrecognizedEntries += 1;
+          continue;
+        }
+        sealed.push({
+          contentId,
+          byteCount: object.Size,
+          modifiedAt: object.LastModified,
+        });
+      }
+      if (result.IsTruncated === true && result.NextContinuationToken === undefined) {
+        throw new Error('S3 object inventory pagination is incomplete.');
+      }
+      continuationToken = result.IsTruncated === true ? result.NextContinuationToken : undefined;
+    } while (continuationToken !== undefined);
+
+    let keyMarker: string | undefined;
+    let uploadIdMarker: string | undefined;
+    do {
+      const result = await this.#client.send(
+        new ListMultipartUploadsCommand({
+          Bucket: this.#bucket,
+          Prefix: `${this.#prefix}/objects/`,
+          ...(keyMarker === undefined ? {} : { KeyMarker: keyMarker }),
+          ...(uploadIdMarker === undefined ? {} : { UploadIdMarker: uploadIdMarker }),
+        }),
+      );
+      for (const upload of result.Uploads ?? []) {
+        const stageId = this.#contentId(upload.Key);
+        if (stageId === undefined || upload.Initiated === undefined) {
+          unrecognizedEntries += 1;
+          continue;
+        }
+        staging.push({ stageId, modifiedAt: upload.Initiated });
+      }
+      if (
+        result.IsTruncated === true &&
+        (result.NextKeyMarker === undefined || result.NextUploadIdMarker === undefined)
+      ) {
+        throw new Error('S3 multipart inventory pagination is incomplete.');
+      }
+      keyMarker = result.IsTruncated === true ? result.NextKeyMarker : undefined;
+      uploadIdMarker = result.IsTruncated === true ? result.NextUploadIdMarker : undefined;
+    } while (keyMarker !== undefined && uploadIdMarker !== undefined);
+
+    sealed.sort((left, right) => left.contentId.localeCompare(right.contentId));
+    staging.sort((left, right) => left.stageId.localeCompare(right.stageId));
+    return { sealed, staging, unrecognizedEntries };
   }
 
   async read(

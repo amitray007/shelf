@@ -51,15 +51,44 @@ DATABASE_URL=postgresql://shelf:...@postgres:5432/shelf \
 
 Migrations are not run automatically during API construction. Kysely serializes concurrent PostgreSQL migration runners with an advisory lock, but deployment should still use one deliberate migration job.
 
+## Read-only reconciliation
+
+The host-local operator can compare installation-scoped PostgreSQL references with the configured
+content backend:
+
+```sh
+node --env-file=.env.dev apps/api/dist/operator/cli.js reconcile scan
+```
+
+The command emits one versioned JSON report and does not delete or modify storage. It reports
+healthy references, referenced content that is missing or has the wrong byte count, sealed objects
+without metadata, stale staging, recently created objects deferred by the age gate, and a count of
+unrecognized provider entries. The default candidate age is 86,400 seconds (24 hours); an operator
+may select another value of at least 60 seconds:
+
+```sh
+node --env-file=.env.dev apps/api/dist/operator/cli.js reconcile scan \
+  --minimum-age-seconds 3600
+```
+
+Local inventory reads the `staging/` and `objects/` directories without following unknown entries.
+The S3-protocol inventory lists completed objects plus incomplete multipart uploads beneath the
+configured Shelf prefix. Database references remain scoped by `SHELF_INSTALLATION_ID`; independent
+installations must still use independent local roots or object prefixes.
+
+The reported orphan and staging entries are candidates, not proof that deletion is safe. A later
+destructive command must perform a fresh reference check, retain an independently configurable age
+gate, and remain separately disableable. No such command exists in this slice.
+
 ## Current qualification boundary
 
-The automated suite covers local cancellation cleanup, immutable sealing, exact range reads, S3 single-part and bounded multipart upload, upload-failure cleanup, PostgreSQL migration/restart behavior, concurrent idempotency, rollback, and a PostgreSQL-plus-local restart flow.
+The automated suite covers local cancellation cleanup, immutable sealing, exact range reads, S3 single-part and bounded multipart upload, upload-failure cleanup, provider inventory, PostgreSQL migration/restart behavior, concurrent idempotency, rollback, read-only reconciliation, and a PostgreSQL-plus-local restart flow.
 
-A live private R2 bucket has not been exercised in this repository. Before calling the R2 profile production-qualified, run the same behavioral suite with real scoped credentials and verify multipart completion/abort, full and ranged reads, retries, and cleanup. Backup manifests, age-gated staging/orphan reconciliation, retention deletion, and restore drills remain deployment work under T5.
+A live private R2 bucket has not been exercised in this repository. Before calling the R2 profile production-qualified, run the same behavioral suite with real scoped credentials and verify multipart completion/abort, full and ranged reads, pagination, retries, inventory, and cleanup. Backup manifests, destructive age-gated cleanup, and restore drills remain deployment work under T5.
 
 ## Adding another provider
 
-1. Keep publishing and read application modules dependent only on the core storage interfaces.
+1. Keep publishing, read, and reconciliation application modules dependent only on the core storage interfaces.
 2. Reuse `S3ContentStorage` only when the provider passes the S3 behavioral suite; do not infer behavior from an “S3-compatible” label.
 3. Implement a separate adapter for a native protocol such as Google Cloud Storage when that protocol provides a better operational fit.
 4. Add provider configuration only to application assembly and environment parsing.

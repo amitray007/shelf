@@ -81,6 +81,16 @@ curl --fail http://127.0.0.1:3000/health/ready
 
 PostgreSQL metadata lives in `postgres-data`; sealed and staged content lives in `shelf-content`. `docker compose down` preserves them. `docker compose down --volumes` deletes both and is destructive.
 
+Run a read-only storage reconciliation scan while PostgreSQL is available:
+
+```sh
+docker compose run --rm --no-deps shelf node dist/operator/cli.js reconcile scan
+```
+
+The JSON report uses a 24-hour candidate age by default and never deletes content. See the
+[persistence operation](persistence.md#read-only-reconciliation) for classifications and the
+explicit `--minimum-age-seconds` override.
+
 ## Current limits
 
-This reference runs exactly one Shelf process when local storage is selected. Backup/restore drills, orphan reconciliation, administrative password recovery, TLS/reverse-proxy qualification, rolling upgrades, and a live R2 conformance run remain roadmap work. Do not scale the local-storage service horizontally.
+This reference runs exactly one Shelf process when local storage is selected. Backup/restore drills, destructive orphan cleanup, administrative password recovery, TLS/reverse-proxy qualification, rolling upgrades, and a live R2 conformance run remain roadmap work. Do not scale the local-storage service horizontally.

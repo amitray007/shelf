@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   createPostgresDatabase,
   migratePostgresToLatest,
+  PostgresReferencedContentInventory,
   PostgresRevisionRepository,
 } from '../src/index.js';
 
@@ -25,6 +26,9 @@ beforeAll(async () => {
   } finally {
     await admin.end();
   }
+  const database = createPostgresDatabase({ connectionString });
+  await migratePostgresToLatest(database);
+  await database.destroy();
 });
 
 afterAll(async () => {
@@ -152,6 +156,68 @@ describePostgres('PostgresRevisionRepository', () => {
 
     await expect(repository.commitPublish(input)).rejects.toThrow();
     await expect(repository.findIdempotency(input.namespace)).resolves.toBeUndefined();
+    await database.destroy();
+  });
+
+  it('inventories unique referenced content within one installation', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const repository = new PostgresRevisionRepository(database);
+    const inventory = new PostgresReferencedContentInventory(database);
+    const shared = {
+      contentId: 'cnt_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      contentHash: `sha256:${'f'.repeat(64)}`,
+      byteCount: 42,
+    };
+    const first = {
+      ...stored('rev_inventory_AAAAAAAAAAAAA', 'art_inventory_AAAAAAAAAAAAA'),
+      installationId: 'installation-inventory',
+      content: shared,
+    };
+    const second = {
+      ...stored('rev_inventory_BBBBBBBBBBBBB', 'art_inventory_BBBBBBBBBBBBB'),
+      installationId: 'installation-inventory',
+      content: shared,
+    };
+    const other = {
+      ...stored('rev_inventory_CCCCCCCCCCCCC', 'art_inventory_CCCCCCCCCCCCC'),
+      installationId: 'installation-other',
+      content: {
+        contentId: 'cnt_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        contentHash: `sha256:${'e'.repeat(64)}`,
+        byteCount: 9,
+      },
+    };
+    await repository.commitPublish(commitInput(first, 'inventory-first'));
+    await repository.commitPublish(commitInput(second, 'inventory-second'));
+    await repository.commitPublish(commitInput(other, 'inventory-other'));
+
+    await expect(inventory.listReferencedContent('installation-inventory')).resolves.toEqual([
+      { ...shared, revisionCount: 2 },
+    ]);
+    await database.destroy();
+  });
+
+  it('fails inventory when one content identity has conflicting descriptors', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const repository = new PostgresRevisionRepository(database);
+    const inventory = new PostgresReferencedContentInventory(database);
+    const contentId = 'cnt_cccccccccccccccccccccccccccccccc';
+    const first = {
+      ...stored('rev_inventory_conflict_AAA', 'art_inventory_conflict_AAA'),
+      installationId: 'installation-inventory-conflict',
+      content: { contentId, contentHash: `sha256:${'1'.repeat(64)}`, byteCount: 10 },
+    };
+    const second = {
+      ...stored('rev_inventory_conflict_BBB', 'art_inventory_conflict_BBB'),
+      installationId: 'installation-inventory-conflict',
+      content: { contentId, contentHash: `sha256:${'2'.repeat(64)}`, byteCount: 11 },
+    };
+    await repository.commitPublish(commitInput(first, 'inventory-conflict-first'));
+    await repository.commitPublish(commitInput(second, 'inventory-conflict-second'));
+
+    await expect(
+      inventory.listReferencedContent('installation-inventory-conflict'),
+    ).rejects.toThrow('conflicting descriptors');
     await database.destroy();
   });
 });

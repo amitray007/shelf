@@ -1,8 +1,13 @@
-import { constants } from 'node:fs';
-import { access, link, mkdir, open, unlink } from 'node:fs/promises';
+import { constants, type Dirent } from 'node:fs';
+import { access, link, lstat, mkdir, open, readdir, unlink } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 
-import type { ContentByteRange, SealedContent, StagedContent } from '@shelf/core';
+import type {
+  ContentByteRange,
+  ContentInventorySnapshot,
+  SealedContent,
+  StagedContent,
+} from '@shelf/core';
 
 import {
   assertContentId,
@@ -22,6 +27,15 @@ function childPath(root: string, leaf: string): string {
   const candidate = resolve(root, leaf);
   if (!candidate.startsWith(`${root}${sep}`)) throw new Error('Unsafe storage path.');
   return candidate;
+}
+
+async function existingDirectoryEntries(root: string): Promise<Dirent[]> {
+  try {
+    return await readdir(root, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
 }
 
 /**
@@ -154,6 +168,53 @@ export class LocalContentStorage implements ContentStorage {
     await link(stagedPath, this.#objectPath(staged.stageId));
     await unlink(stagedPath);
     return Object.freeze({ contentId: staged.stageId, ...descriptor });
+  }
+
+  async inventory(): Promise<ContentInventorySnapshot> {
+    const [stagingEntries, sealedEntries] = await Promise.all([
+      existingDirectoryEntries(this.#stagingRoot),
+      existingDirectoryEntries(this.#objectsRoot),
+    ]);
+    const staging = [];
+    const sealed = [];
+    let unrecognizedEntries = 0;
+
+    for (const entry of stagingEntries) {
+      const match = /^(cnt_[a-f0-9]{32})\.stage$/u.exec(entry.name);
+      if (!entry.isFile() || match === null) {
+        unrecognizedEntries += 1;
+        continue;
+      }
+      const stats = await lstat(childPath(this.#stagingRoot, entry.name));
+      if (!stats.isFile()) {
+        unrecognizedEntries += 1;
+        continue;
+      }
+      staging.push({ stageId: match[1] as string, modifiedAt: stats.mtime });
+    }
+
+    for (const entry of sealedEntries) {
+      try {
+        assertContentId(entry.name);
+      } catch {
+        unrecognizedEntries += 1;
+        continue;
+      }
+      if (!entry.isFile()) {
+        unrecognizedEntries += 1;
+        continue;
+      }
+      const stats = await lstat(childPath(this.#objectsRoot, entry.name));
+      if (!stats.isFile()) {
+        unrecognizedEntries += 1;
+        continue;
+      }
+      sealed.push({ contentId: entry.name, byteCount: stats.size, modifiedAt: stats.mtime });
+    }
+
+    staging.sort((left, right) => left.stageId.localeCompare(right.stageId));
+    sealed.sort((left, right) => left.contentId.localeCompare(right.contentId));
+    return { staging, sealed, unrecognizedEntries };
   }
 
   async read(
