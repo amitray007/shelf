@@ -17,7 +17,7 @@ execution: code
 - **Objective:** Make Shelf the fastest safe path from a local or agent-generated artifact to a durable, browsable link, while preserving immutable history and a self-hosted operating model.
 - **Product authority:** This Product Contract owns the current user-facing behavior and scope. Technical planning may refine implementation details but must not silently change these product commitments.
 - **Current implementation scope:** A TypeScript/Fastify API foundation, canonical HTTP/OpenAPI contracts, streamed single-file creation and stable artifact updates, mutable artifact naming, source-linked restore-as-latest, authorized artifact list/detail/history, atomic folder snapshots with portable paths and tree browsing, provider-neutral file/folder revision comparison, the agent-safe `shelf` CLI client, safe pinned byte-range delivery, durable PostgreSQL metadata, interchangeable local/R2 content storage, self-hosted human sessions, scoped CLI/agent credentials, a runnable single-host reference profile, provider-neutral read-only reconciliation, and offline host-native PostgreSQL/Local File backup with verified empty-target restore.
-- **Open blockers:** None for the implemented foundation, file and folder snapshot lifecycle through descriptor-level comparison, persistence, authentication, runnable-alpha, reconciliation, and host-native recovery slices. The next product-critical work is share creation/resolution, a content-first shared viewer, and CLI profiles that collapse the common publish-and-share path. Compose-volume and R2 recovery, destructive-cleanup policy, online/PITR policy, live R2 qualification, dashboard implementation, content-aware renderers/diffs, remaining resource policies, and entries T4 and T6-T8 remain open until their implementation slices begin.
+- **Open blockers:** None for the implemented foundation, file and folder snapshot lifecycle through descriptor-level comparison, persistence, authentication, runnable-alpha, reconciliation, and host-native recovery slices. The active product-critical work is share creation/resolution, the dark content-first shared viewer, CLI profiles that collapse the common publish-and-share path, and the lightweight authenticated utility. Compose-volume and R2 recovery, destructive-cleanup policy, online/PITR policy, live R2 qualification, content-aware diff adapters, remaining resource policies, and entries T4-T5 and T7 remain open until their implementation slices begin.
 
 ---
 
@@ -252,8 +252,8 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 - The first useful release targets one owner with multiple isolated workspaces; team accounts remain deferred.
 - Folder publishes use whole-folder snapshots so a revision always represents a real publishable state.
 - Shelf has no collection abstraction; related artifacts are shared independently.
-- Known safe formats may render in the browser; unsupported or disallowed formats remain downloadable.
-- UI libraries such as `@pierre/trees` and `@pierre/diffs` are candidates for technical evaluation, not product requirements.
+- The first renderer allowlist and interface foundation are accepted under T6 and T8; unsupported or disallowed formats remain downloadable.
+- Shelf-owned web surfaces have one dark theme. An isolated authored HTML artifact retains its own presentation rather than being rewritten by Shelf.
 
 ### Outstanding Questions
 
@@ -261,7 +261,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 
 - CLI packaging and distribution channels.
 - Deployment targets beyond the single-host reference profile and the minimum backup contract.
-- Initial renderers, diff adapters, resource limits, and content-security defaults.
+- Content-aware diff adapters and resource limits beyond the first renderer envelope.
 - Password-protected share behavior and its relationship to authenticated access.
 
 ### Sources
@@ -280,7 +280,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 
 **Product Contract preservation:** Requirements retain stable IDs. R9 is explicitly retired rather than reused after collections were removed; R10, R14-R15, R19, and R24 are narrowed accordingly. R26 records the CLI-first publish-and-share target without representing it as implemented. Earlier R22-R25 and AE10 operational changes remain intact.
 
-**Technical decision status:** T1-T3 and the narrow T5a-T5c reference, reconciliation, and host-native recovery profiles are accepted. T4 CLI packaging, the remainder of T5 deployment, T6 renderers and diffs, T7 bulk formats, and T8 candidate interface components remain open in the [decision register](../decisions/README.md).
+**Technical decision status:** T1-T3, T6, T8, and the narrow T5a-T5c reference, reconciliation, and host-native recovery profiles are accepted. T4 CLI packaging, the remainder of T5 deployment, T7 bulk formats, and content-aware diff adapters under P1 remain open in the [decision register](../decisions/README.md).
 
 ### Key Technical Decisions
 
@@ -299,6 +299,8 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 - KTD13. **Keep mutable artifact presentation separate from immutable revision truth.** (session-settled: user-approved — chosen for U15 after stable history: rename and restore should complete the first file lifecycle without changing identifiers, old descriptors, or stored bytes.) Give each artifact a mutable display name initialized from its first revision filename; later revision filenames remain immutable and never rename the artifact implicitly. Rename updates only artifact presentation and ordering state. Restore creates a new revision that reuses the verified source revision's immutable content descriptor, filename, media type, and publisher metadata while recording server-observed `revision.restore` provenance and its source revision. PostgreSQL locks the artifact and atomically assigns the next number, advances latest, and records operation-scoped idempotency without writing content again. Restore requires both `file.publish` and `revision.read`; rename uses `file.publish`. Defer finer-grained lifecycle grants, rename audit events, comparisons, folders, shares, and dashboard behavior. Governs R2-R5, R14-R16, R20, F2, AE2, and AE9.
 - KTD14. **Represent a folder revision as a canonical manifest over independently sealed entries.** (session-settled: user-approved — chosen for U16 after the file lifecycle: archive-only storage would make tree reads, restore, reconciliation, backup, and later comparison depend on repeatedly unpacking one opaque blob.) A `shelf-folder-manifest/v1` object lists every directory and regular file in deterministic UTF-8 byte order. File entries carry a server-computed immutable content descriptor; empty directories remain explicit. The manifest itself is canonically encoded, hashed, and sealed, while PostgreSQL atomically commits the revision, its complete entry set, the latest pointer, and idempotency result. Folder paths are NFC-normalized relative POSIX paths. Reject absolute paths, empty/dot/parent segments, backslashes, controls, segments over 255 UTF-8 bytes, paths over 1,024 UTF-8 bytes or 64 segments, Windows-reserved characters/names or trailing dots/spaces, normalization/case-insensitive collisions, symlinks, and special files. The first bounded defaults are 1,000 files, 2,000 total entries, 10 MiB per file, 100 MiB aggregate file bytes, and a 2 MiB transport manifest; future operator configuration may lower them but cannot bypass canonical-path validation. Restoring a folder copies its immutable manifest and entry references without writing content. Descriptor comparison is governed by KTD15; broader revision/bandwidth policy remains open. Governs R2-R7, R15-R16, R20, R23-R24, F1-F2, and AE4.
 - KTD15. **Compare immutable descriptors before choosing content diff adapters.** (session-settled: user-approved — chosen for U17 after folder snapshots: structural comparison must behave identically on Local File, R2, and future providers and should not force renderer architecture.) Compare only two revisions of the same artifact and kind. File results expose exact content-hash/byte-count, media-type, and original-name changes. Folder results compare complete entry sets, return a full summary plus at most 100 deterministic changed entries per cursor-bound page, and identify a move only when one removed file and one added file uniquely share the same content hash and byte count. Ambiguous duplicate identities remain additions/removals rather than inferred moves. Comparison authorizes immutable metadata reads and never opens content storage. Defer content-aware line/image/binary diffs, dashboard side-by-side presentation, renderer isolation, and interface component selection to P1 and T6/T8. Governs R6, R15-R16, R22-R24, and AE4 and implements accepted T10.
+- KTD16. **Keep share capabilities out of request URLs and raw storage.** (session-settled: user-approved — chosen for U18 over a single opaque path token: share links must survive idempotent response replay without entering access logs, referrers, or plaintext metadata.) Give a share a stable opaque public ID and derive its verifier through an injected capability codec backed in production by a dedicated installation secret. Canonical links use `/s/<share-id>#<verifier>`; the fragment is exchanged through fixed anonymous POST routes and scrubbed from the visible location after tab-scoped recovery state is established. Create is idempotent over actor, workspace, client key, artifact, target policy, pinned revision, and expiry, so replay returns the same URL without storing the verifier. Invalid, revoked, expired, malformed, and cross-scope capabilities collapse to one public not-found result. Management responses other than authorized create/replay do not expose the verifier. Governs R10-R12, R15-R17, R21, R26, F3, AE1, AE3, and AE5.
+- KTD17. **Build one dark web client and a separate active-content renderer.** (session-settled: user-directed — chosen over a themeable dashboard and same-origin preview: Shelf should stay minimal and dark while authored active content cannot share the authenticated trust context.) Use React Router Data Mode, Tailwind CSS 4 semantic tokens, direct Base UI primitives, Geist Sans/Mono, and CSS-first reduced motion in `apps/web`; do not add Motion, a shared UI package, shadcn blocks, beUI components, or specialized tree/diff libraries without a demonstrated need. The first passive allowlist is escaped UTF-8 text/source/JSON, sanitized Markdown without raw HTML, raster images, and folder trees. Self-contained HTML runs only through `apps/renderer` on a separately configured origin, with no Shelf credentials, external network, same-origin, form, popup, download, or top-navigation privileges. SVG, PDF, other active media, and unknown binaries remain downloads. Governs R7, R14-R15, R21, AE5, and implements accepted T6/T8.
 
 ### High-Level Technical Design
 
@@ -311,7 +313,8 @@ flowchart TB
   COMPOSE[Compose reference profile] --> API
   COMPOSE --> PG
   COMPOSE --> LOCAL
-  FUTURE[Future dashboard] -.->|same OpenAPI contract| API
+  WEB[Dark viewer and dashboard utility] -->|same OpenAPI contract| API
+  WEB -->|sandboxed iframe| RENDERER[Isolated renderer origin]
   API --> APP[File and folder publishing modules]
   API --> READ[Pinned revision read service]
   APP --> META[Revision repository port]
@@ -372,7 +375,7 @@ docs/
   research/
 ```
 
-The dashboard workspace is part of T1 but remains absent until a dashboard behavior enters the active implementation scope.
+The web workspace enters scope with U18's anonymous viewer. Authenticated dashboard routes remain sequenced after U19 so the CLI publish-to-link path stays primary.
 
 ### Assumptions
 
@@ -745,7 +748,7 @@ Build the contracts and core service before transport adapters. Add the Fastify 
 - **Goal:** Let a publisher create an unlisted latest or pinned share and let a recipient open the artifact without encountering the management dashboard.
 - **Requirement slices advanced:** R7, R10-R12, R14-R16, R21, R26, F3, AE1, AE3, and AE5.
 - **Dependencies:** U14-U17 and a deliberately narrow first decision under P1/T6 for safe presentation.
-- **Approach:** Add provider-neutral share contracts, a core share lifecycle, PostgreSQL persistence, authenticated create/list/revoke operations, anonymous resolution, and portable `shelf shares` commands. Shares target one artifact's latest revision or one exact revision and never group artifacts. Keep new artifacts private and make share creation an explicit action. Render the recipient view as a minimal trust boundary around the artifact: a slim title bar, target state, an explicit user-generated-content warning, and content occupying the remaining viewport. Active content must run on the isolated renderer origin; unsupported content remains a safe download.
+- **Approach:** Add provider-neutral share contracts, a core share lifecycle, PostgreSQL persistence, authenticated idempotent create/list/revoke operations, fixed anonymous POST resolution/content operations, and portable `shelf shares` commands. Use the KTD16 fragment capability so a response-loss replay returns the same URL without putting the verifier in request paths or plaintext metadata. Shares target one artifact's latest revision or one exact revision and never group artifacts. Keep new artifacts private and make share creation an explicit action. Build the first `apps/web` route as a minimal dark trust boundary around the artifact: a slim title rail, target state, an explicit user-generated-content warning, and content occupying the remaining viewport. Apply KTD17's passive allowlist; self-contained HTML runs only through the isolated renderer origin and unsupported content remains a safe download.
 - **Execution note:** Share URLs may contain capability-bearing secrets and must not enter request logs, error details, referrers, or browser history unintentionally. A share changes access, not artifact retention or visibility history. This unit does not add CLI profiles, implicit sharing, collections, a dashboard application, password protection, analytics, or public discovery.
 - **Test scenarios:**
   - Create one latest and one pinned unlisted share, publish another revision, and prove latest advances while pinned remains exact.
@@ -770,6 +773,23 @@ Build the contracts and core service before transport adapters. Add the Fastify 
   - Fail after revision commit but before share creation and return an unambiguous machine result containing the committed identifiers and no false share success.
 - **Verification:** CLI contract/e2e tests exercise installed-profile resolution, file/folder dispatch, explicit share composition, response-loss replay, redaction, and partial failure against the public API only.
 
+### U20. Add the lightweight authenticated dashboard utility
+
+- **Goal:** Give the owner a compact dark utility for sign-in, artifact browsing, history, restore, comparison, shares, and credential administration without introducing another publishing-first workflow.
+- **Requirement slices advanced:** R6, R8, R14-R15, R20, F2-F3, AE1-AE2, and AE9.
+- **Dependencies:** U18-U19 and the accepted T8 interface foundation.
+- **Approach:** Extend `apps/web` with Better Auth sign-in and authenticated routes backed only by `/api/v1`. Add the minimum public contracts and authorized APIs needed to discover the current actor's workspaces and administer its scoped credentials. Keep navigation limited to Artifacts and Access; artifact detail owns history, structural comparison, restore, rename, and share management. Reuse the U18 artifact stage and trust language. Do not add dashboard publishing, analytics, activity feeds, collections, settings shells without behavior, or routes that merely reproduce mockup chrome.
+- **Execution note:** Shelf-owned UI is dark-only, responsive, keyboard-operable, and usable at 200% zoom. Frequent navigation is instant; only occasional overlays transition, with strong ease-out curves under 250 ms and reduced-motion fallbacks. The dashboard consumes contracts but never imports core, Fastify, PostgreSQL, storage, or the CLI client.
+- **Test scenarios:**
+  - Sign in through the configured Better Auth owner session and deny dashboard data to an anonymous or cross-installation actor.
+  - Discover only authorized workspace IDs and browse deterministic artifact/history pages without exposing another workspace.
+  - Rename and restore through the public API, then show the new immutable latest revision while preserving older history.
+  - Compare two file or folder revisions through the descriptor comparison contract.
+  - Create, copy, list, and revoke latest or pinned shares without exposing a capability in list/error/log output.
+  - Issue and revoke a scoped access credential from a human session, reveal the token once, and never put it in browser storage or logs.
+  - Preserve the artifact-first desktop layout at 1440 px and a single-column 320-390 px layout without horizontal overflow; pass keyboard, visible-focus, reduced-motion, zoom, contrast, and axe checks.
+- **Verification:** Focused contracts/auth/API/web suites, generated OpenAPI drift, production web build, and Playwright Chromium/WebKit/Firefox smoke coverage pass. Browser security assertions prove the active renderer cannot read application cookies/storage, call authenticated APIs, navigate the top frame, open an unsandboxed popup, or load external network resources.
+
 ---
 
 ## Verification Contract
@@ -778,7 +798,7 @@ Build the contracts and core service before transport adapters. Add the Fastify 
 |---|---|---|
 | `pnpm format:check` | Repository | Biome reports no formatting or lint violations. |
 | `pnpm typecheck` | All workspaces | TypeScript reports no errors under strict settings. |
-| `pnpm test` | Contracts, core, auth, storage, API, and CLI | Unit, protocol-adapter, integration, socket cancellation, range, auth, and CLI parity tests pass; PostgreSQL suites skip unless explicitly configured. |
+| `pnpm test` | Contracts, core, auth, storage, API, CLI, web, and renderer | Unit, protocol-adapter, integration, socket cancellation, range, auth, share, profile, viewer, dashboard, and CLI parity tests pass; PostgreSQL suites skip unless explicitly configured. |
 | `pnpm build` | All workspaces | Package exports and executable entry points compile without undeclared workspace coupling. |
 | `SHELF_TEST_POSTGRES_URL=... pnpm exec vitest run packages/postgres/test/artifact-lifecycle-migration.test.ts packages/postgres/test/folder-snapshot-migration.test.ts packages/postgres/test/revision-repository.test.ts apps/api/test/persistence.integration.test.ts` | PostgreSQL and assembled data plane | Existing artifact names/kinds migrate safely; restart persistence, atomic folder entry sets, concurrent publish/restore, operation-scoped replay/conflict, strictly increasing revisions, latest-pointer/catalog/tree reads, rollback, and PostgreSQL-plus-local behavior pass against disposable real databases. |
 | `SHELF_TEST_POSTGRES_URL=... pnpm exec vitest run packages/postgres/test/auth-repository.test.ts apps/api/test/auth.integration.test.ts` | PostgreSQL authentication | Better Auth sessions, actor mapping, credential grants, restart persistence, rotation, and revocation pass against a disposable real database. |
@@ -789,15 +809,16 @@ Build the contracts and core service before transport adapters. Add the Fastify 
 | `pnpm test:streaming-memory` | Publish route | After one 64 MiB warm-up, a 64 MiB upload to an API child process completes in three runs with each run's sampled peak RSS growth below 32 MiB; handled interruptions leave no visible revision or request-owned staging residue. |
 | Failure-point evidence | Publish lifecycle | Failpoints around sealing and metadata commit prove that visible revisions always have readable immutable content and committed idempotency results. |
 | Authenticator startup guard | API process startup | Production-mode startup without an explicit authenticator refuses to listen and exits non-zero; the test authenticator cannot be selected outside tests. |
+| Browser and renderer boundary | U18-U20 web surfaces | Playwright desktop/mobile, keyboard, reduced-motion, zoom, axe, and renderer-escape scenarios pass with no capability leakage, console errors, or horizontal overflow. |
 
-No release, live R2 or Compose-volume recovery, browser, TLS/reverse-proxy, or active-renderer verification applies to this slice. The Docker Compose profile is a local single-host alpha reference, not production qualification; U13 qualifies only the host-native PostgreSQL/Local File workflow.
+No release, live R2 or Compose-volume recovery, or TLS/reverse-proxy qualification applies to this roadmap. Browser and active-renderer verification first apply to U18-U20. The Docker Compose profile remains a local single-host alpha reference, not production qualification; U13 qualifies only the host-native PostgreSQL/Local File workflow.
 
 ---
 
 ## Definition of Done
 
 - T1-T3 and T5a-T5c are recorded in the decision register and synchronized with the README and operational documentation.
-- U1-U17 satisfy their applicable test scenarios and verification outcomes.
+- U1-U20 satisfy their applicable test scenarios and verification outcomes.
 - The portable product CLI binary is exactly `shelf`; the separate `shelf-admin` binary is limited to host-local installation operation.
 - The CLI and API expose the same canonical success and error semantics through `/api/v1`.
 - Publishing through PostgreSQL is idempotent across application restarts and concurrent API processes; changed semantic input conflicts without a partial metadata commit.
