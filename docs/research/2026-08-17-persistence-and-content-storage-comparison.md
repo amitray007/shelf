@@ -19,7 +19,7 @@ The coherent profiles are therefore:
 | Appliance, later | SQLite | Local filesystem | **Defer.** Attractive operationally, but commits Shelf to a second dialect and a host-bound write topology. |
 | Mismatched | SQLite | S3-compatible | **Do not prioritize.** It pays for remote object storage while metadata still anchors the service to one host and one concurrent writer. |
 
-This is a Shelf-specific recommendation, not a claim that PostgreSQL or S3 is universally better. SQLite plus files is excellent for a genuinely local appliance. Shelf's planned workspaces, scoped credentials, share links, collection updates, retention jobs, and agent concurrency make that constraint likely to arrive sooner than the saved database service is worth.
+This is a Shelf-specific recommendation, not a claim that PostgreSQL or S3 is universally better. SQLite plus files is excellent for a genuinely local appliance. Shelf's planned workspaces, scoped credentials, share links, retention jobs, and agent concurrency make that constraint likely to arrive sooner than the saved database service is worth. Collections were part of the product model when this comparison began and have since been removed; that removal does not change the concurrency or durability conclusion.
 
 ## Verified database facts
 

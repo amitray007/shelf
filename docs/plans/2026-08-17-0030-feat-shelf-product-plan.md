@@ -14,10 +14,10 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** Establish Shelf's implementation foundation, prove one streamed and idempotent versioned publishing path, and make that path runnable through a narrow single-host self-hosted profile without pre-deciding the remaining product architecture.
+- **Objective:** Make Shelf the fastest safe path from a local or agent-generated artifact to a durable, browsable link, while preserving immutable history and a self-hosted operating model.
 - **Product authority:** This Product Contract owns the current user-facing behavior and scope. Technical planning may refine implementation details but must not silently change these product commitments.
 - **Current implementation scope:** A TypeScript/Fastify API foundation, canonical HTTP/OpenAPI contracts, streamed single-file creation and stable artifact updates, mutable artifact naming, source-linked restore-as-latest, authorized artifact list/detail/history, atomic folder snapshots with portable paths and tree browsing, provider-neutral file/folder revision comparison, the agent-safe `shelf` CLI client, safe pinned byte-range delivery, durable PostgreSQL metadata, interchangeable local/R2 content storage, self-hosted human sessions, scoped CLI/agent credentials, a runnable single-host reference profile, provider-neutral read-only reconciliation, and offline host-native PostgreSQL/Local File backup with verified empty-target restore.
-- **Open blockers:** None for the implemented foundation, file and folder snapshot lifecycle through descriptor-level comparison, persistence, authentication, runnable-alpha, reconciliation, and host-native recovery slices. Compose-volume and R2 recovery, destructive-cleanup policy, online/PITR policy, live R2 qualification, dashboard implementation, content-aware renderers/diffs, remaining resource policies, and entries T4 and T6-T8 remain open until their implementation slices begin.
+- **Open blockers:** None for the implemented foundation, file and folder snapshot lifecycle through descriptor-level comparison, persistence, authentication, runnable-alpha, reconciliation, and host-native recovery slices. The next product-critical work is share creation/resolution, a content-first shared viewer, and CLI profiles that collapse the common publish-and-share path. Compose-volume and R2 recovery, destructive-cleanup policy, online/PITR policy, live R2 qualification, dashboard implementation, content-aware renderers/diffs, remaining resource policies, and entries T4 and T6-T8 remain open until their implementation slices begin.
 
 ---
 
@@ -25,8 +25,8 @@ execution: code
 
 ### Summary
 
-Shelf will provide a durable home for versioned artifacts, with a dashboard and agent-safe CLI for publishing and management.
-Artifacts may be files or folders, may belong to shareable collections, and may be shared through stable links targeting the latest state or an exact revision.
+Shelf will provide a durable home for versioned artifacts, centered on an agent-safe CLI that can publish a file or folder and return a browsable link quickly.
+Artifacts may be files or folders and may be shared through stable links targeting the latest state or an exact revision. The dashboard is a lightweight utility for viewing and occasional management, not the primary creation workflow.
 
 ### Problem Frame
 
@@ -34,14 +34,15 @@ Artifacts produced by people and coding agents are often left in temporary direc
 Updating the artifact commonly destroys the previous state, while preserving it usually requires manually naming copies or creating a repository that recipients cannot easily browse.
 
 The missing workflow is not collaborative editing or general cloud storage.
-It is a predictable way to publish an output, receive a readable link, update it without losing history, and later inspect exactly what changed and who published it.
+It is a predictable way to publish an output, immediately receive a readable or shareable link, update it without losing history, and later inspect exactly what changed and who published it.
 
 ### Key Decisions
 
 - **The product is named Shelf** (session-settled: user-approved — chosen over Blankstage and Exhibit A: Shelf is short, easy to pronounce, and describes a place that both stores and displays artifacts). Governs R1.
 - **Shelf is a publishing workspace, not a temporary file drop** (session-settled: user-approved — chosen over expiry-first sharing: durable management, history, and organization are core). Governs R2-R7, R14-R17.
 - **Shelf is open source and self-hostable** (session-settled: user-directed — chosen over a required proprietary service: anyone should be able to run and own an installation). Governs R22-R25.
-- **The dashboard and CLI are first-class product surfaces** (session-settled: user-directed — chosen over dashboard-only operation: agents must be able to use the product safely). Governs R14-R19.
+- **The CLI is the primary product workflow and the dashboard is a supporting utility** (session-settled: user-directed — chosen after reviewing a Claude Artifact share: agents and people should be able to publish and share without navigating a management UI, while the dashboard remains available for browsing and occasional lifecycle work). Governs R14-R19 and R26.
+- **Shelf has no collections** (session-settled: user-directed — grouping adds management breadth without helping the core publish-to-link job). A share targets one artifact's latest revision or one exact revision. Governs R9-R13 and R19.
 - **Storage lifetime and sharing lifetime are independent.** A share may expire or be revoked without deleting the underlying artifact. Governs R10-R13.
 - **Folder publishes are atomic snapshots.** A revision represents a complete directory state that actually existed, while comparisons can drill into changed files. Governs R3-R6.
 - **Restore preserves history.** Restoring an earlier state creates a new latest revision rather than rewriting or deleting later revisions. Governs R5.
@@ -51,28 +52,23 @@ It is a predictable way to publish an output, receive a readable link, update it
 ```mermaid
 flowchart TB
   I[Installation] --> W[Workspace]
-  W --> C[Collection]
   W --> A[Artifact]
-  C --> AR[Artifact reference]
-  AR --> A
   A --> R[Immutable revision]
   S[Share] --> L[Latest target]
   S --> P[Pinned target]
   L --> A
-  L --> C
   P --> R
 ```
 
 An installation contains isolated workspaces such as personal and work.
-A workspace owns artifacts and collections.
-An artifact owns immutable revisions, while a share is a revocable pointer to the latest state or a pinned state.
+A workspace owns artifacts. An artifact owns immutable revisions, while a share is a revocable pointer to that artifact's latest revision or to one exact revision.
 
 ### Actors
 
 - A1. **Owner:** Configures an installation, its workspaces, policies, and credentials.
-- A2. **Publisher:** Uses the dashboard or CLI to create and update artifacts and collections.
+- A2. **Publisher:** Primarily uses the CLI to create, update, and share artifacts; may use the dashboard for occasional management.
 - A3. **Agent:** Publishes and manages artifacts non-interactively under scoped credentials.
-- A4. **Viewer:** Opens a shared file, folder, revision, or collection through a readable link.
+- A4. **Viewer:** Opens a shared file, folder, or exact revision through a readable link.
 - A5. **Operator:** Installs, upgrades, backs up, restores, and monitors a self-hosted deployment.
 
 One person may act as the owner, publisher, viewer, and operator of a personal installation.
@@ -92,23 +88,24 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 **Organization and identity**
 
 - R8. An installation must support separate workspaces for contexts such as personal and work, with independent settings and artifact namespaces.
-- R9. Collections must be live groups of artifact references, remain shareable, and allow each reference to follow latest or pin an exact revision; membership changes affect subsequent loads without requiring real-time updates to an already-open view.
+- R9. **Retired:** Shelf intentionally has no collection abstraction.
 
 **Sharing and lifecycle**
 
-- R10. Artifacts and collections must support private, unlisted, and public visibility; new artifacts are private by default, new shares are unlisted by default, and public search indexing is a separate opt-in setting.
+- R10. Artifacts must support private, unlisted, and public visibility; new artifacts are private by default, new shares are unlisted by default, and public search indexing is a separate opt-in setting.
 - R11. A share must expose a stable URL, target either the latest state or an exact revision, and retain that targeting behavior for its lifetime.
 - R12. Share expiry and revocation must stop access without deleting an otherwise retained artifact or revision.
 - R13. Artifact retention, revision retention, and share-link retention must be configurable independently, with retained artifacts and revisions defaulting to no automatic expiry, pinned revisions protected from automated cleanup, and explicit deletion recoverable for 30 days before purge.
 
 **Dashboard and automation**
 
-- R14. The dashboard must let an owner find and manage workspaces, artifacts, revisions, collections, shares, retention, visibility, and deletion state.
-- R15. Every dashboard operation required for publishing and lifecycle management must have a documented non-interactive CLI equivalent unless explicitly classified as installation administration.
+- R14. The dashboard must remain a lightweight utility that lets an owner find and view workspaces, artifacts, revisions, and shares and perform occasional lifecycle management; it must not become a prerequisite for publishing or sharing.
+- R15. Every non-administrative publishing and lifecycle operation must have a documented non-interactive CLI path. The dashboard may expose a useful subset and must consume the same public API.
 - R16. The CLI must provide structured output, predictable exit behavior, scoped authentication, and idempotent publishing suitable for coding agents and automation.
 - R17. CLI profiles must select an installation, credential, and default workspace without mixing personal and work environments.
 - R18. Bulk import must create artifacts and links from a machine-readable manifest and report partial failures without hiding successful items.
-- R19. Export must support one revision, one complete artifact history, a collection, or an installation-owned portable archive as permitted by the caller's scope.
+- R19. Export must support one revision, one complete artifact history, or an installation-owned portable archive as permitted by the caller's scope.
+- R26. After a profile selects the installation, credential, and default workspace, the common CLI workflow must accept a file or folder path, optionally request an unlisted share explicitly, and return canonical artifact, revision, and share URLs without prompting. Publishing without an explicit share request must remain private.
 
 **Metadata and safety**
 
@@ -119,7 +116,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 
 - R22. A self-hosted installation must provide a documented path for installation, upgrade, backup, restore, and administrative recovery.
 - R23. Core publishing, browsing, versioning, sharing, import, and export must not require a proprietary hosted dependency.
-- R24. A complete export must be sufficient to move owned artifacts, revisions, metadata, and collection relationships to another compatible installation.
+- R24. A complete export must be sufficient to move owned artifacts, revisions, and metadata to another compatible installation.
 - R25. A self-hosted process must expose minimal unauthenticated liveness and readiness probes outside `/api/v1`. Liveness reports only that the process is serving; readiness reports whether startup completed and required PostgreSQL and storage dependencies are usable, without exposing configuration, paths, credentials, cookies, or exception details.
 
 ### Key Flows
@@ -128,8 +125,8 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
   - **Trigger:** A publisher or agent selects a file or folder and a workspace.
   - **Actors:** A2 or A3
   - **Steps:** Shelf validates the input and policy, captures provenance, creates the artifact and first immutable revision, and returns its identifiers and links.
-  - **Outcome:** The artifact appears in the dashboard and is addressable through the CLI.
-  - **Covered by:** R2-R4, R7, R15-R17, R20-R21.
+  - **Outcome:** Shelf returns durable artifact and revision URLs; when explicitly requested, it also returns an unlisted share URL. The artifact is available to the dashboard but publishing does not depend on it.
+  - **Covered by:** R2-R4, R7, R15-R17, R20-R21, R26.
 
 - F2. Update, compare, and restore
   - **Trigger:** A publisher republishes an existing artifact or selects an earlier revision.
@@ -139,11 +136,11 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
   - **Covered by:** R3-R6, R14-R16, R20.
 
 - F3. Share and revoke
-  - **Trigger:** A publisher creates a share for an artifact, revision, or collection.
+  - **Trigger:** A publisher creates a share for an artifact or exact revision, either directly or as an explicit publish option.
   - **Actors:** A2 or A3, followed by A4
   - **Steps:** The publisher selects visibility, target behavior, and optional expiry; Shelf returns a link; the viewer opens it; the publisher may later revoke it.
   - **Outcome:** Access follows the share policy while the underlying retained content remains independent.
-  - **Covered by:** R9-R13, R15-R17, R21.
+  - **Covered by:** R10-R12, R15-R17, R21, R26.
 
 - F4. Move content in or out
   - **Trigger:** An owner or publisher imports a manifest or requests an export.
@@ -201,13 +198,13 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
   - **Covers R19, R24.**
   - **Given:** An owner exports an artifact with multiple revisions and imports it into a compatible installation.
   - **When:** The import completes.
-  - **Then:** The destination preserves revision order, hashes, provenance, metadata, and collection relationships supported by the export contract.
+  - **Then:** The destination preserves revision order, hashes, provenance, and metadata.
 
-- AE8. Live collection without real-time scope
+- AE8. Collections remain absent
   - **Covers R9.**
-  - **Given:** A viewer has opened a shared collection and the owner later adds an artifact.
-  - **When:** The viewer reloads or opens the collection again.
-  - **Then:** The new artifact appears, while the already-open view is not required to update in real time.
+  - **Given:** A publisher wants to share several related outputs.
+  - **When:** The publisher uses Shelf.
+  - **Then:** Each artifact is published and shared independently; Shelf does not create a collection or group-level lifecycle.
 
 - AE9. Rename without broken links
   - **Covers R2-R3, R11.**
@@ -225,6 +222,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 
 - A human can publish a folder, receive a readable link, publish an update, compare it with the previous revision, and restore the earlier state without leaving the documented workflow.
 - An agent can perform the same lifecycle non-interactively and parse every success and failure without scraping human-formatted output.
+- With a configured profile, a human or agent can run the equivalent of `shelf publish ./idea.html --share` and receive canonical artifact, revision, and unlisted share URLs; omitting `--share` never exposes the artifact.
 - A recipient can tell whether a link follows latest or is pinned and can browse a folder without downloading it first.
 - Expiring or revoking a share never silently deletes retained content.
 - An operator can back up and restore an installation and can export owned content without depending on the original deployment remaining available.
@@ -253,7 +251,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 
 - The first useful release targets one owner with multiple isolated workspaces; team accounts remain deferred.
 - Folder publishes use whole-folder snapshots so a revision always represents a real publishable state.
-- Collections are live groups of artifact references, and each reference may follow latest or pin a revision.
+- Shelf has no collection abstraction; related artifacts are shared independently.
 - Known safe formats may render in the browser; unsupported or disallowed formats remain downloadable.
 - UI libraries such as `@pierre/trees` and `@pierre/diffs` are candidates for technical evaluation, not product requirements.
 
@@ -272,6 +270,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 - [TypeScript server framework comparison](../research/2026-08-17-typescript-server-framework-comparison.md) compares the current server-framework field against Shelf's upload and API constraints.
 - [Persistence and content-storage comparison](../research/2026-08-17-persistence-and-content-storage-comparison.md) compares the metadata, query-builder, and content-provider choices behind T2.
 - [Authentication stack comparison](../research/2026-08-17-authentication-stack-comparison.md) compares self-hosted human identity and machine-credential approaches behind T3.
+- [Claude Artifact reference](https://claude.ai/code/artifact/5af6218c-feb3-4979-b280-d48c3af13c9a?via=auto_preview) demonstrates the content-first shared-view pattern: minimal product chrome, an explicit user-generated-content trust label, and lifecycle actions outside the artifact canvas.
 - [Docker Compose startup-order guidance](https://docs.docker.com/compose/how-tos/startup-order/) defines health-gated dependencies and one-shot prerequisite completion for the reference profile.
 - [Fastify server lifecycle](https://fastify.dev/docs/latest/Reference/Server/) defines listen, connection draining, and close behavior used by the production process.
 
@@ -279,7 +278,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 
 ## Planning Contract
 
-**Product Contract preservation:** Changed R22-R25 and added AE10 to make the user-approved single-host operational slice explicit; existing artifact behavior is unchanged.
+**Product Contract preservation:** Requirements retain stable IDs. R9 is explicitly retired rather than reused after collections were removed; R10, R14-R15, R19, and R24 are narrowed accordingly. R26 records the CLI-first publish-and-share target without representing it as implemented. Earlier R22-R25 and AE10 operational changes remain intact.
 
 **Technical decision status:** T1-T3 and the narrow T5a-T5c reference, reconciliation, and host-native recovery profiles are accepted. T4 CLI packaging, the remainder of T5 deployment, T6 renderers and diffs, T7 bulk formats, and T8 candidate interface components remain open in the [decision register](../decisions/README.md).
 
@@ -387,16 +386,17 @@ The dashboard workspace is part of T1 but remains absent until a dashboard behav
 
 ### Sequencing
 
-Build the contracts and core service before transport adapters. Add the Fastify route after the application boundary is testable. Add pinned delivery after staged content can be addressed immutably. Keep the portable CLI a client of the public API. After persistence and authentication are proven, add a production composition root, host-local administration, and the single-host reference profile before widening artifact or dashboard behavior.
+Build the contracts and core service before transport adapters. Add the Fastify route after the application boundary is testable. Add pinned delivery after staged content can be addressed immutably. Keep the portable CLI a client of the public API. After persistence and authentication are proven, add a production composition root, host-local administration, and the single-host reference profile. With U17 complete, prioritize share primitives and the short CLI publish-to-link flow before building the dashboard application.
 
 ### Product Delivery Roadmap
 
 1. **Runnable single-host alpha:** Production assembly, explicit configuration and migrations, health probes, graceful shutdown, owner/credential operator commands, a non-root image, Docker Compose with durable PostgreSQL/local-content volumes, and a real restart smoke path.
 2. **Operational durability:** Read-only staging/orphan reconciliation and host-native PostgreSQL/Local File backup/restore are implemented first; Compose-volume and R2 recovery, online/PITR policy, destructive cleanup policy, upgrade contract, administrative password recovery, reverse-proxy/TLS qualification, and live R2 conformance complete the remainder of T5.
 3. **Artifact lifecycle breadth:** Stable file updates, artifact list/detail/history, mutable naming, restore-as-latest, atomic folder snapshots, portable path rules, the first folder limits, and provider-neutral structural revision comparison are implemented.
-4. **Human workspace:** Dashboard sign-in, workspace and artifact browsing, publish/history/restore controls, and credential administration through product APIs without weakening CLI parity.
-5. **Sharing and safe presentation:** Latest and pinned shares, visibility and expiry controls, collections, renderer isolation, supported formats, and diff adapters.
-6. **Portability and distribution:** Bulk import/export, CLI profiles and packaging, backup-compatible complete export, deployment templates, and additional qualified content providers.
+4. **Share primitives and content-first viewing:** Latest and pinned share creation, revocation and expiry, explicit trust labeling, renderer isolation, supported formats, and a viewer where artifact content occupies the page.
+5. **Fast CLI path:** Profile-backed installation/workspace selection, portable CLI packaging, and an explicit `shelf publish ./path --share` workflow that returns machine-safe artifact, revision, and share URLs while keeping ordinary publishes private.
+6. **Dashboard utility:** Sign-in, workspace and artifact browsing, history/restore controls, shares, and credential administration through product APIs without making the dashboard part of the common publish path.
+7. **Portability and operations:** Bulk import/export, backup-compatible complete export, deployment templates, remaining recovery work, and additional qualified content providers.
 
 ### System-Wide Impact
 
@@ -739,6 +739,36 @@ Build the contracts and core service before transport adapters. Add the Fastify 
   - Reject missing, cross-installation, cross-workspace, other-artifact, and cross-kind comparisons without tree or content disclosure.
   - Expose generated OpenAPI and canonical `shelf revisions compare` JSON without importing core, Fastify, PostgreSQL, or storage adapters into the portable CLI.
 - **Verification:** Focused contract/core/API/CLI suites and the environment-gated real PostgreSQL repository suite prove file/folder descriptor lookup and comparison parity. Full type, test, build, format, lint, OpenAPI drift, runtime, and streaming-memory gates remain green.
+
+### U18. Add revocable share links and the content-first viewer
+
+- **Goal:** Let a publisher create an unlisted latest or pinned share and let a recipient open the artifact without encountering the management dashboard.
+- **Requirement slices advanced:** R7, R10-R12, R14-R16, R21, R26, F3, AE1, AE3, and AE5.
+- **Dependencies:** U14-U17 and a deliberately narrow first decision under P1/T6 for safe presentation.
+- **Approach:** Add provider-neutral share contracts, a core share lifecycle, PostgreSQL persistence, authenticated create/list/revoke operations, anonymous resolution, and portable `shelf shares` commands. Shares target one artifact's latest revision or one exact revision and never group artifacts. Keep new artifacts private and make share creation an explicit action. Render the recipient view as a minimal trust boundary around the artifact: a slim title bar, target state, an explicit user-generated-content warning, and content occupying the remaining viewport. Active content must run on the isolated renderer origin; unsupported content remains a safe download.
+- **Execution note:** Share URLs may contain capability-bearing secrets and must not enter request logs, error details, referrers, or browser history unintentionally. A share changes access, not artifact retention or visibility history. This unit does not add CLI profiles, implicit sharing, collections, a dashboard application, password protection, analytics, or public discovery.
+- **Test scenarios:**
+  - Create one latest and one pinned unlisted share, publish another revision, and prove latest advances while pinned remains exact.
+  - Revoke or expire a share and deny subsequent anonymous resolution without deleting the artifact or revision.
+  - Resolve a valid file or folder share without a Shelf session and never expose owner controls, workspace data, credentials, or another artifact.
+  - Prove active content cannot access the authenticated application origin and unsupported content is download-safe.
+  - Return canonical share URLs only in explicitly authorized API/CLI results and redact capability material elsewhere.
+- **Verification:** Focused contracts/core/API/CLI/PostgreSQL suites, generated OpenAPI drift checks, and browser verification of the anonymous viewer and isolation boundary pass before the slice is complete.
+
+### U19. Add CLI profiles and the short publish-to-link workflow
+
+- **Goal:** Make the common installed workflow `shelf publish ./path --share` after one explicit profile setup, while retaining canonical JSON and safe retry behavior for agents.
+- **Requirement slices advanced:** R15-R17, R26, F1, F3, and AE6.
+- **Dependencies:** U18 and the smallest accepted T4 decision needed for portable configuration and secret storage.
+- **Approach:** Add named profiles that select one installation, credential, and default workspace without mixing contexts. Accept a positional file or folder path and dispatch to the existing separate transports. Keep `--share` an explicit opt-in that creates an unlisted latest share and returns artifact, revision, and share URLs; without it, publish remains private. Preserve explicit flags as overrides for automation and backwards compatibility. Define replay and partial-failure semantics before implementation so a committed artifact is never reported as absent when later share creation fails.
+- **Execution note:** Do not prompt in the machine-default path, infer public visibility, print credentials, or turn a profile name into hidden ambient authority. Human-friendly output may remain an explicit later opt-in; JSON is still the default contract.
+- **Test scenarios:**
+  - Configure personal and work profiles, select either explicitly, and prove installation, credential, and workspace never bleed between them.
+  - Publish a file and a folder with only a path and receive canonical private artifact/revision URLs.
+  - Publish with `--share` and receive one unlisted share URL; omit the option and create no share.
+  - Lose a response and retry without creating a duplicate revision or share.
+  - Fail after revision commit but before share creation and return an unambiguous machine result containing the committed identifiers and no false share success.
+- **Verification:** CLI contract/e2e tests exercise installed-profile resolution, file/folder dispatch, explicit share composition, response-loss replay, redaction, and partial failure against the public API only.
 
 ---
 

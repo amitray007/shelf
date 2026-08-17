@@ -3,7 +3,7 @@
 Shelf is an open-source, self-hostable home for publishing versioned artifacts.
 It accepts individual files or complete folders, preserves their revision history, and produces links that can follow the latest revision or remain pinned to an exact one.
 
-Shelf is designed for both people and agents: the dashboard and CLI are first-class ways to publish, compare, restore, organize, share, import, and export artifacts.
+Shelf is designed first around a fast, agent-safe CLI workflow: publish an artifact, receive a link, and optionally create a revocable share without losing the underlying revision history. The dashboard is a lightweight companion for browsing, viewing, and occasional lifecycle management rather than the center of the product.
 
 ## Project status
 
@@ -13,6 +13,8 @@ PostgreSQL with Kysely is the authoritative metadata path. Content can use a har
 The persistence slice proves durable idempotent file publishing and complete folder snapshots, stable artifact updates and history, mutable artifact names, restore-as-latest with source provenance, restart recovery, multipart object upload, portable folder-tree reads, provider-neutral revision comparison, and byte-range file delivery. File comparisons use immutable content descriptors; folder comparisons page deterministic added, removed, changed, and exact unambiguous moved entries without reading content storage. Folder manifests and their independently sealed file entries participate in reconciliation and backup verification. The authentication foundation uses Better Auth for closed-registration owner sessions and Shelf-owned, workspace-scoped agent credentials with rotation, revocation, and audit history. A production server and host-local operator CLI now make that path runnable through the single-host Docker Compose alpha. The operator can perform an age-gated, read-only reconciliation scan across PostgreSQL and either content adapter, plus an offline PostgreSQL/Local File backup and verified empty-target restore on a host with PostgreSQL client tools. Compose-volume orchestration, R2 backup/recovery, destructive cleanup policy, administrative password recovery, live R2 conformance, content-aware diff adapters, and the dashboard remain intentionally incomplete.
 
 React with Vite and React Router remains the accepted dashboard stack, but the dashboard is intentionally absent until a dashboard behavior enters the active implementation scope.
+
+The intended installed workflow is deliberately short: `shelf publish ./idea.html --share`. CLI profiles and share creation are not implemented yet, so the alpha commands below still require explicit installation, workspace, and idempotency arguments.
 
 ## Development
 
@@ -79,8 +81,9 @@ SHELF_TEST_POSTGRES_URL=postgresql:///postgres pnpm exec vitest run \
 
 - Keep artifacts durable while allowing shares to expire or be revoked independently.
 - Make every revision immutable and explain where it came from.
-- Treat files, folders, and collections as useful publishing units.
-- Give humans and agents predictable, equivalent capabilities.
+- Treat files and complete folders as useful publishing units; Shelf has no collection abstraction.
+- Make publishing and sharing quick from the CLI, with explicit defaults that remain safe for agents.
+- Keep the dashboard useful and polished, but secondary to the publish-to-link workflow.
 - Remain portable between self-hosted installations.
 - Render active content safely and preserve a clear trust boundary for viewers.
 

@@ -12,9 +12,9 @@ The [Product Contract](../plans/2026-08-17-0030-feat-shelf-product-plan.md) owns
 | D3 | Files and complete folders are publishing units. | R2-R7 |
 | D4 | Revision history, comparison, and source-linked restore-as-latest are core behavior; restore never rewrites earlier revisions. | R3-R6 |
 | D5 | Visibility and latest-versus-pinned share targets are core behavior. | R10-R13 |
-| D6 | Dashboard and agent-safe CLI access are both first-class. | R14-R19 |
+| D6 | The agent-safe CLI is Shelf's primary publishing and lifecycle surface. The dashboard is a polished but deliberately lightweight utility for browsing, viewing, and occasional management. | R14-R19 and R26 |
 | D7 | Provenance and metadata are part of every revision. | R3 and R20 |
-| D8 | Collections are shareable groups of artifact references. | R9 |
+| D8 | Shelf has no collection abstraction; shares target one artifact or one exact revision. | R9-R13 |
 | D9 | Import, export, and portable ownership are core behavior. | R18-R19 and R22-R24 |
 | D10 | Shelf is open source and self-hostable without a mandatory proprietary dependency. | R22-R25 |
 
@@ -40,7 +40,7 @@ These defaults make the current Product Contract coherent, but they may be revis
 | W1 | The first release has one owner and multiple isolated workspaces. | R8 and Dependencies and Assumptions |
 | W2 | A folder revision is an atomic snapshot of the complete directory. | R3-R6 |
 | W3 | Artifact, revision, and share lifetimes are independent. | R12-R13 |
-| W4 | A collection is live, while each artifact reference may follow latest or pin a revision. | R9 and Dependencies and Assumptions |
+| W4 | A share targets one artifact's latest revision or one exact revision; grouping multiple artifacts is outside Shelf's product model. | R9-R11 and Dependencies and Assumptions |
 | W5 | Restore creates a new revision and never rewrites history. | R5 and AE2 |
 | W6 | Rendered active content is isolated from Shelf's authenticated application. | R21 and AE5 |
 | W7 | Artifacts start private, shares start unlisted, and public indexing is separately enabled. | R10 |
