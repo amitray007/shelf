@@ -43,6 +43,10 @@ export async function createShelfServer(config: ShelfServerConfig): Promise<Shel
       shareCapabilityCodec: createHmacShareCapabilityCodec(config.share.signingKey),
       health: readiness,
       logger: true,
+      ...(config.rendererPublicOrigin === undefined
+        ? {}
+        : { rendererPublicOrigin: config.rendererPublicOrigin }),
+      ...(config.webRoot === undefined ? {} : { webRoot: config.webRoot }),
     });
     app = shelfApp;
 

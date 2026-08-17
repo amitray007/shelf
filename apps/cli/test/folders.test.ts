@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
+import { prepareLocalFolder } from '../src/commands/folders.js';
 import { runCli } from '../src/index.js';
 
 const roots: string[] = [];
@@ -51,6 +51,15 @@ const result = {
 };
 
 describe('shelf folders', () => {
+  it('fingerprints exact folder bytes rather than only paths or sizes', async () => {
+    const directory = await folderFixture();
+    const first = await prepareLocalFolder(directory);
+    await writeFile(join(directory, 'README.md'), '# Other\n');
+    const second = await prepareLocalFolder(directory);
+
+    expect(first.contentFingerprint).not.toBe(second.contentFingerprint);
+  });
+
   it('publishes a deterministic manifest before ordered file parts', async () => {
     const directory = await folderFixture();
     const stdout = capture();
@@ -97,6 +106,10 @@ describe('shelf folders', () => {
     expect(await Promise.all(form.getAll('file').map((file) => (file as Blob).text()))).toEqual([
       '# Shelf\n',
       'export {};\n',
+    ]);
+    expect(form.getAll('file').map((file) => (file as Blob).type)).toEqual([
+      'text/markdown',
+      'text/typescript',
     ]);
   });
 

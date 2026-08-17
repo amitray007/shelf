@@ -18,6 +18,7 @@ const CURSOR_PATTERN = /^[A-Za-z0-9_-]{1,2048}$/u;
 export interface PublicSharedFile {
   revisionId: string;
   originalFileName: string;
+  mediaType: string;
   byteCount: number;
   read(): Promise<AsyncIterable<Uint8Array>>;
 }
@@ -146,6 +147,7 @@ export function createShareAccessService(dependencies: {
       return Object.freeze({
         revisionId: stored.revisionId,
         originalFileName: stored.originalFileName,
+        mediaType: stored.mediaType,
         byteCount: stored.content.byteCount,
         async read(): Promise<AsyncIterable<Uint8Array>> {
           let source: AsyncIterable<Uint8Array>;

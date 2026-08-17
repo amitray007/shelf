@@ -7,3 +7,4 @@ export * from './persistence.js';
 export * from './persistence-env.js';
 export * from './server.js';
 export * from './server-config.js';
+export * from './share-capability.js';

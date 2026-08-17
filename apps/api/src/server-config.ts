@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { isIP } from 'node:net';
+import { validatedAppOrigin } from '@shelf/renderer';
 import {
   installationIdFromEnvironment,
   requiredEnvironmentValue,
@@ -16,6 +17,8 @@ export interface ShelfServerConfig {
   installationId: string;
   auth: { baseUrl: string; secret: string };
   share: { signingKey: string };
+  rendererPublicOrigin?: string;
+  webRoot?: string;
   persistence: ShelfPersistenceConfig;
 }
 
@@ -29,7 +32,7 @@ function isLoopback(hostname: string): boolean {
   );
 }
 
-async function loadSecret(
+export async function loadSecret(
   environment: ShelfServerEnvironment,
   options: { inlineName: string; fileName: string; label: string },
 ): Promise<string> {
@@ -48,6 +51,14 @@ async function loadSecret(
     throw new Error(`The configured ${options.label} is invalid.`);
   }
   return secret;
+}
+
+export function loadShareSigningKey(environment: ShelfServerEnvironment): Promise<string> {
+  return loadSecret(environment, {
+    inlineName: 'SHELF_SHARE_SIGNING_KEY',
+    fileName: 'SHELF_SHARE_SIGNING_KEY_FILE',
+    label: 'share signing key',
+  });
 }
 
 export async function loadShelfServerConfig(
@@ -89,6 +100,21 @@ export async function loadShelfServerConfig(
     throw new Error('SHELF_HOST is invalid.');
   }
 
+  const webRoot = environment.SHELF_WEB_ROOT;
+  if (
+    webRoot !== undefined &&
+    (webRoot.length === 0 ||
+      webRoot.includes('\u0000') ||
+      webRoot.includes('\r') ||
+      webRoot.includes('\n'))
+  ) {
+    throw new Error('SHELF_WEB_ROOT is invalid.');
+  }
+  const rendererPublicOrigin =
+    environment.SHELF_RENDERER_PUBLIC_ORIGIN === undefined
+      ? undefined
+      : validatedAppOrigin(environment.SHELF_RENDERER_PUBLIC_ORIGIN);
+
   return {
     host,
     port,
@@ -102,12 +128,10 @@ export async function loadShelfServerConfig(
       }),
     },
     share: {
-      signingKey: await loadSecret(environment, {
-        inlineName: 'SHELF_SHARE_SIGNING_KEY',
-        fileName: 'SHELF_SHARE_SIGNING_KEY_FILE',
-        label: 'share signing key',
-      }),
+      signingKey: await loadShareSigningKey(environment),
     },
+    ...(rendererPublicOrigin === undefined ? {} : { rendererPublicOrigin }),
+    ...(webRoot === undefined ? {} : { webRoot }),
     persistence: shelfPersistenceConfigFromEnv(environment),
   };
 }

@@ -153,6 +153,10 @@ describe('OpenAPI v1', () => {
       ['paths', '/api/v1/workspaces/{workspaceId}/shares/{shareId}', 'delete', 'operationId'],
       'revokeShareV1',
     );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/public/config', 'get', 'operationId'],
+      'getPublicClientConfigV1',
+    );
     for (const [path, operationId] of [
       ['/api/v1/public/shares/{shareId}/resolve', 'resolvePublicShareV1'],
       ['/api/v1/public/shares/{shareId}/content', 'downloadPublicShareContentV1'],
@@ -164,6 +168,9 @@ describe('OpenAPI v1', () => {
       expect(JSON.stringify(operation?.parameters ?? [])).not.toContain('secret');
       expect(JSON.stringify(operation?.requestBody ?? {})).toContain('secret');
     }
+    expect(
+      document.paths?.['/api/v1/public/shares/{shareId}/content']?.post?.requestBody?.content,
+    ).toHaveProperty('application/x-www-form-urlencoded');
   });
 
   it('matches the checked generated contract', async () => {

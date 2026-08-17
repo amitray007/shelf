@@ -6168,6 +6168,19 @@
                 },
                 "additionalProperties": false
               }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": ["secret"],
+                "properties": {
+                  "secret": {
+                    "type": "string",
+                    "maxLength": 512
+                  }
+                },
+                "additionalProperties": false
+              }
             }
           }
         },
@@ -6393,6 +6406,44 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/config": {
+      "get": {
+        "operationId": "getPublicClientConfigV1",
+        "summary": "Get non-secret browser runtime configuration",
+        "tags": ["public configuration"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["apiVersion", "rendererOrigin"],
+                  "properties": {
+                    "apiVersion": {
+                      "type": "string",
+                      "enum": ["v1"]
+                    },
+                    "rendererOrigin": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
                 }
               }
             }

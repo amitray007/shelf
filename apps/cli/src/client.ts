@@ -27,6 +27,7 @@ import {
   type SharePage,
   type ShareTarget,
 } from '@shelf/contracts';
+import { mediaTypeForPath } from './media-type.js';
 import { failure, remoteFailure, usageFailure } from './output.js';
 
 export interface PublishFileOptions {
@@ -47,7 +48,7 @@ export interface ShelfClientDependencies {
 
 const defaultDependencies: ShelfClientDependencies = {
   fetch: globalThis.fetch,
-  openFileBlob: (path) => openAsBlob(path),
+  openFileBlob: (path) => openAsBlob(path, { type: mediaTypeForPath(path) }),
 };
 
 export interface ListArtifactsOptions {

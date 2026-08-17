@@ -36,6 +36,8 @@ services:
       SHELF_STORAGE_LOCAL_ROOT: /var/lib/shelf/content
       SHELF_HOST: 0.0.0.0
       SHELF_PORT: 3000
+      SHELF_WEB_ROOT: /opt/shelf/web
+      SHELF_RENDERER_PUBLIC_ORIGIN: ${SHELF_RENDERER_PUBLIC_ORIGIN:?set SHELF_RENDERER_PUBLIC_ORIGIN}
       SHELF_AUTH_BASE_URL: ${SHELF_AUTH_BASE_URL:?set SHELF_AUTH_BASE_URL}
       SHELF_AUTH_SECRET_FILE: /run/secrets/shelf_auth_secret
       SHELF_SHARE_SIGNING_KEY_FILE: /run/secrets/shelf_share_signing_key
@@ -51,6 +53,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      renderer:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -58,6 +62,42 @@ services:
           "node",
           "-e",
           "fetch('http://127.0.0.1:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  renderer:
+    build: .
+    restart: unless-stopped
+    command: ["node", "dist/renderer-cli.js"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      SHELF_INSTALLATION_ID: ${SHELF_INSTALLATION_ID:?set SHELF_INSTALLATION_ID}
+      SHELF_STORAGE_DRIVER: local
+      SHELF_STORAGE_LOCAL_ROOT: /var/lib/shelf/content
+      SHELF_SHARE_SIGNING_KEY_FILE: /run/secrets/shelf_share_signing_key
+      SHELF_RENDERER_APP_ORIGIN: ${SHELF_AUTH_BASE_URL:?set SHELF_AUTH_BASE_URL}
+      SHELF_RENDERER_HOST: 0.0.0.0
+      SHELF_RENDERER_PORT: 3001
+    secrets:
+      - shelf_share_signing_key
+    ports:
+      - "3001:3001"
+    volumes:
+      - shelf-content:/var/lib/shelf/content
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s

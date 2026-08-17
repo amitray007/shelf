@@ -23,6 +23,10 @@ import {
 } from './commands/folders.js';
 import { executePublish, type PublishCommandOptions } from './commands/publish.js';
 import {
+  executePublishWorkflow,
+  type PublishWorkflowOptions,
+} from './commands/publish-workflow.js';
+import {
   type CompareRevisionsCommandOptions,
   executeCompareRevisions,
 } from './commands/revisions.js';
@@ -34,10 +38,27 @@ import {
   type ListSharesCommandOptions,
   type RevokeShareCommandOptions,
 } from './commands/shares.js';
-import { CliFailure, failure, jsonLine, redactEnvelope, usageFailure } from './output.js';
+import {
+  CliFailure,
+  CliPartialFailure,
+  failure,
+  jsonLine,
+  redactEnvelope,
+  redactValue,
+  usageFailure,
+} from './output.js';
+import {
+  executeListProfiles,
+  executeRemoveProfile,
+  executeSetProfile,
+  executeShowProfile,
+  type SetProfileOptions,
+} from './profiles.js';
 import type { CliRuntime } from './runtime.js';
 
 export type { CliRuntime } from './runtime.js';
+
+type PublishCliOptions = Partial<PublishCommandOptions> & Omit<PublishWorkflowOptions, 'path'>;
 
 function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
@@ -60,20 +81,49 @@ export async function runCli(
     .allowExcessArguments(false);
 
   let result: unknown;
+  let finalizeResult: (() => Promise<void>) | undefined;
 
   program
     .command('publish')
-    .description('Publish one immutable file revision')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
-    .requiredOption('--file <path>')
-    .requiredOption('--idempotency-key <key>')
+    .description('Publish one immutable file or folder revision')
+    .argument('[path]')
+    .option('--profile <name>', 'use one configured profile')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
+    .option('--file <path>')
+    .option('--idempotency-key <key>')
     .option('--artifact <artifact-id>', 'publish another revision to this artifact')
     .option('--metadata <key=value>', 'publisher metadata; repeatable', collect, [])
+    .option('--share', 'create one unlisted latest share after publishing')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
-    .action(async (options: PublishCommandOptions) => {
+    .action(async (path: string | undefined, options: PublishCliOptions) => {
+      if (path !== undefined) {
+        if (
+          options.file !== undefined ||
+          options.url !== undefined ||
+          options.workspace !== undefined ||
+          options.allowInsecureLoopback !== undefined
+        ) {
+          throw usageFailure('Profile-backed publishing cannot mix legacy context flags.');
+        }
+        const execution = await executePublishWorkflow({ ...options, path }, runtime);
+        result = execution.output;
+        finalizeResult = execution.finalize;
+        return;
+      }
+      if (
+        options.url === undefined ||
+        options.workspace === undefined ||
+        options.file === undefined ||
+        options.idempotencyKey === undefined
+      ) {
+        throw usageFailure('A publish path or complete legacy publish context is required.');
+      }
+      if (options.profile !== undefined || options.share) {
+        throw usageFailure('Legacy publishing cannot mix profile or share options.');
+      }
       result = await executePublish(
-        options,
+        options as PublishCommandOptions,
         runtime.env,
         runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
       );
@@ -202,12 +252,48 @@ export async function runCli(
       result = await executeRevokeShare(options, runtime);
     });
 
+  const profiles = program.command('profiles').description('Configure isolated CLI contexts');
+  profiles
+    .command('set')
+    .argument('<name>')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .option('--credential-env <variable>')
+    .option('--store-token-from-env <variable>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (name: string, options: Omit<SetProfileOptions, 'name'>) => {
+      result = await executeSetProfile({ name, ...options }, runtime);
+    });
+  profiles.command('list').action(async () => {
+    result = await executeListProfiles(runtime.env);
+  });
+  profiles
+    .command('show')
+    .argument('<name>')
+    .action(async (name: string) => {
+      result = await executeShowProfile(name, runtime.env);
+    });
+  profiles
+    .command('remove')
+    .argument('<name>')
+    .option('--yes', 'confirm removal without prompting')
+    .action(async (name: string, options: { yes?: boolean }) => {
+      result = await executeRemoveProfile(name, options.yes, runtime);
+    });
+
   try {
     await program.parseAsync([...argv]);
     if (result === undefined) throw usageFailure('A command is required.');
+    await finalizeResult?.();
     runtime.stdout(jsonLine(result));
     return CLI_EXIT_CODES.success;
   } catch (error) {
+    if (error instanceof CliPartialFailure) {
+      runtime.stderr(
+        jsonLine(redactValue(error.payload, [...error.secrets, runtime.env.SHELF_TOKEN])),
+      );
+      return error.exitCode;
+    }
     const token = runtime.env.SHELF_TOKEN;
     const cliFailure =
       error instanceof CliFailure

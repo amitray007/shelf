@@ -217,6 +217,38 @@ describe('share HTTP boundary', () => {
     }
   });
 
+  it('accepts one bounded form capability for browser-initiated attachment downloads', async () => {
+    const app = await fixture();
+    const published = await publishFile(app, 'browser download', 'publish-browser-download');
+    const created = await createShare(
+      app,
+      published.json().artifactId as string,
+      'share-browser-download',
+    );
+    const shareId = created.json().shareId as string;
+    const secret = (created.json().url as string).split('#')[1] as string;
+
+    const downloaded = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/content`,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({ secret }).toString(),
+    });
+    const polluted = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/content`,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: `secret=${encodeURIComponent(secret)}&secret=${encodeURIComponent(secret)}`,
+    });
+
+    expect(downloaded.statusCode).toBe(200);
+    expect(downloaded.body).toBe('browser download');
+    expect(downloaded.headers['content-disposition']).toMatch(/^attachment;/u);
+    expect(polluted.statusCode).toBe(400);
+    publicHeaders(downloaded);
+    publicHeaders(polluted);
+  });
+
   it('collapses wrong, missing, revoked, and expired shares to one public miss without echoing secrets', async () => {
     let now = new Date('2026-08-17T12:00:00.000Z');
     const app = await fixture({ shareClock: () => now });

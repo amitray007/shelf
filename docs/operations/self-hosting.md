@@ -1,6 +1,10 @@
 # Self-hosting the single-host alpha
 
-Shelf's first runnable reference profile is deliberately small: one Shelf API process, one PostgreSQL database, and one durable local-content volume. It proves explicit initialization and durable restart behavior; it is not yet a high-availability or production-hardening guide.
+Shelf's first runnable reference profile is deliberately small: one Shelf application/API process,
+one isolated active-HTML renderer process, one PostgreSQL database, and one durable local-content
+volume. The application process serves the built dark web client. It proves explicit
+initialization, generated share URLs, and durable restart behavior; it is not yet a
+high-availability or production-hardening guide.
 
 ## Prerequisites
 
@@ -18,7 +22,12 @@ openssl rand -base64 48 > secrets/share-signing-key.txt
 chmod 600 secrets/auth-secret.txt secrets/share-signing-key.txt
 ```
 
-Replace `POSTGRES_PASSWORD` in `.env` with a URL-safe random value and set `SHELF_AUTH_BASE_URL` to the URL users will actually open. The authentication and share-signing secrets must remain independent; rotating the latter invalidates existing share links. `.env` and `secrets/` are ignored by Git. The example uses loopback HTTP only for local operation.
+Replace `POSTGRES_PASSWORD` in `.env` with a URL-safe random value. Set `SHELF_AUTH_BASE_URL` to
+the application origin users will open and `SHELF_RENDERER_PUBLIC_ORIGIN` to the separately
+reachable renderer origin. The renderer receives the share-signing key and persistence settings,
+but not the authentication secret. The authentication and share-signing secrets must remain
+independent; rotating the latter invalidates existing share links. `.env` and `secrets/` are
+ignored by Git. The example uses ports 3000 and 3001 on loopback only for local operation.
 
 ## Start and inspect
 
@@ -27,9 +36,15 @@ docker compose up --build -d
 docker compose ps
 curl --fail http://127.0.0.1:3000/health/live
 curl --fail http://127.0.0.1:3000/health/ready
+curl --fail http://127.0.0.1:3001/
 ```
 
-Compose waits for PostgreSQL health, runs `shelf-admin migrate` as a successful one-shot prerequisite, then starts Shelf. API startup itself never mutates the schema. `/health/live` reports only that the process is serving; `/health/ready` checks current migrations, PostgreSQL, and adapter readiness without returning dependency details. Local storage performs its write-and-fsync probe once at startup rather than on every health poll.
+Compose waits for PostgreSQL health, runs `shelf-admin migrate` as a successful one-shot
+prerequisite, starts the isolated renderer, and then starts Shelf. API and renderer startup never
+mutate the schema. `/health/live` reports only that the application process is serving;
+`/health/ready` checks current migrations, PostgreSQL, and adapter readiness without returning
+dependency details. Local storage performs its write-and-fsync probe once per process at startup
+rather than on every health poll.
 
 ## Bootstrap the owner
 
@@ -94,10 +109,12 @@ explicit `--minimum-age-seconds` override.
 
 ## Current limits
 
-This reference runs exactly one Shelf process when local storage is selected. Shelf now has a
+This reference runs exactly one writing Shelf application process when local storage is selected,
+plus one separately configured renderer process that resolves shared content. Shelf now has a
 verified host-native PostgreSQL/Local File recovery workflow, but the current runtime image does
 not include PostgreSQL client tools and the command does not yet orchestrate Compose named volumes.
 Compose-volume recovery, R2 recovery, destructive orphan cleanup, administrative password
 recovery, TLS/reverse-proxy qualification, rolling upgrades, and a live R2 conformance run remain
-roadmap work. Do not scale the local-storage service horizontally or represent this Compose profile
-as backup-qualified yet.
+roadmap work. Least-privilege read-only database/storage credentials for the renderer are also
+still open. Do not scale the local-storage writer horizontally or represent this Compose profile as
+backup-qualified yet.

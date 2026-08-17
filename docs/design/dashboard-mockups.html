@@ -2677,19 +2677,31 @@
           state.workspaceOpen = !state.workspaceOpen;
           renderApp();
         });
-        document.querySelectorAll('[data-nav-screen]').forEach((button) => button.addEventListener('click', () => setScreen(button.dataset.navScreen)));
-        document.querySelectorAll('[data-artifact-kind]').forEach((button) => button.addEventListener('click', () => setScreen(button.dataset.artifactKind === 'folder' ? 'folder' : 'file')));
-        document.querySelectorAll('[data-revision]').forEach((button) => button.addEventListener('click', () => {
-          state.selectedRevision = button.dataset.revision;
-          renderApp();
-        }));
-        document.querySelectorAll('[data-action="compare"]').forEach((button) => button.addEventListener('click', () => setScreen('compare')));
-        document.querySelectorAll('[data-action="shared"]').forEach((button) => button.addEventListener('click', () => setScreen('shared')));
-        document.querySelectorAll('[data-action="restore"]').forEach((button) => button.addEventListener('click', () => {
-          state.dialogOpen = true;
-          renderApp();
-          requestAnimationFrame(() => document.getElementById('cancel-restore')?.focus());
-        }));
+        document.querySelectorAll('[data-nav-screen]').forEach((button) => {
+          button.addEventListener('click', () => setScreen(button.dataset.navScreen));
+        });
+        document.querySelectorAll('[data-artifact-kind]').forEach((button) => {
+          button.addEventListener('click', () => setScreen(button.dataset.artifactKind === 'folder' ? 'folder' : 'file'));
+        });
+        document.querySelectorAll('[data-revision]').forEach((button) => {
+          button.addEventListener('click', () => {
+            state.selectedRevision = button.dataset.revision;
+            renderApp();
+          });
+        });
+        document.querySelectorAll('[data-action="compare"]').forEach((button) => {
+          button.addEventListener('click', () => setScreen('compare'));
+        });
+        document.querySelectorAll('[data-action="shared"]').forEach((button) => {
+          button.addEventListener('click', () => setScreen('shared'));
+        });
+        document.querySelectorAll('[data-action="restore"]').forEach((button) => {
+          button.addEventListener('click', () => {
+            state.dialogOpen = true;
+            renderApp();
+            requestAnimationFrame(() => document.getElementById('cancel-restore')?.focus());
+          });
+        });
         document.getElementById('cancel-restore')?.addEventListener('click', closeDialog);
         document.getElementById('dialog-backdrop')?.addEventListener('click', (event) => {
           if (event.target.id === 'dialog-backdrop') closeDialog();
@@ -2722,14 +2734,20 @@
       function renderControls() {
         document.getElementById('screen-controls').innerHTML = screens.map((screen) => `<button class="screen-control" type="button" data-screen="${screen.id}" aria-pressed="${state.screen === screen.id}">${screen.label}<small>${screen.note}</small></button>`).join('');
         document.getElementById('preset-controls').innerHTML = Object.entries(presets).map(([id, preset]) => `<button class="preset-control" type="button" data-preset="${id}" aria-pressed="${state.preset === id}">${preset.label}</button>`).join('');
-        document.querySelectorAll('[data-screen]').forEach((button) => button.addEventListener('click', () => setScreen(button.dataset.screen)));
-        document.querySelectorAll('[data-preset]').forEach((button) => button.addEventListener('click', () => {
-          state.preset = button.dataset.preset;
-          applyDesignState();
-          renderControls();
-          updatePrompt();
-        }));
-        document.querySelectorAll('[data-viewport]').forEach((button) => button.setAttribute('aria-pressed', String(state.viewport === button.dataset.viewport)));
+        document.querySelectorAll('[data-screen]').forEach((button) => {
+          button.addEventListener('click', () => setScreen(button.dataset.screen));
+        });
+        document.querySelectorAll('[data-preset]').forEach((button) => {
+          button.addEventListener('click', () => {
+            state.preset = button.dataset.preset;
+            applyDesignState();
+            renderControls();
+            updatePrompt();
+          });
+        });
+        document.querySelectorAll('[data-viewport]').forEach((button) => {
+          button.setAttribute('aria-pressed', String(state.viewport === button.dataset.viewport));
+        });
       }
 
       function applyDesignState() {
@@ -2765,11 +2783,13 @@
         applyDesignState();
       }
 
-      document.querySelectorAll('[data-viewport]').forEach((button) => button.addEventListener('click', () => {
-        state.viewport = button.dataset.viewport;
-        renderControls();
-        updatePrompt();
-      }));
+      document.querySelectorAll('[data-viewport]').forEach((button) => {
+        button.addEventListener('click', () => {
+          state.viewport = button.dataset.viewport;
+          renderControls();
+          updatePrompt();
+        });
+      });
 
       document.getElementById('density').addEventListener('input', (event) => {
         state.density = Number(event.target.value);

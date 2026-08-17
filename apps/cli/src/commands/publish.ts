@@ -5,6 +5,7 @@ import {
   RESERVED_PROVENANCE_KEYS,
 } from '@shelf/contracts';
 import { publishFile, type ShelfClientDependencies } from '../client.js';
+import { mediaTypeForPath } from '../media-type.js';
 import { usageFailure } from '../output.js';
 
 export interface PublishCommandOptions {
@@ -76,7 +77,7 @@ export async function executePublish(
             dependencies.openFileBlob ??
             (async (path) => {
               const { openAsBlob } = await import('node:fs');
-              return openAsBlob(path);
+              return openAsBlob(path, { type: mediaTypeForPath(path) });
             }),
         },
   );

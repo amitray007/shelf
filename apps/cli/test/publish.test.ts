@@ -133,6 +133,7 @@ describe('shelf publish', () => {
     const form = body as FormData;
     expect([...form.keys()]).toEqual(['publisherMetadata', 'file']);
     expect(form.get('publisherMetadata')).toBe('{"source":"cli"}');
+    expect((form.get('file') as Blob).type).toBe('text/plain');
     expect(await (form.get('file') as Blob).text()).toBe('hello shelf');
     expect(JSON.stringify([...form.entries()])).not.toMatch(/share|visibility/);
   });

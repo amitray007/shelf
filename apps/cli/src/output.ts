@@ -20,6 +20,38 @@ export class CliFailure extends Error {
   }
 }
 
+export class CliPartialFailure extends CliFailure {
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly secrets: readonly string[];
+
+  constructor(
+    payload: Readonly<Record<string, unknown>>,
+    cause: CliFailure,
+    secrets: readonly string[],
+  ) {
+    super(cause.envelope, cause.exitCode);
+    this.name = 'CliPartialFailure';
+    this.payload = payload;
+    this.secrets = secrets;
+  }
+}
+
+export function redactValue(value: unknown, secrets: readonly (string | undefined)[]): unknown {
+  const present = secrets.filter(
+    (secret): secret is string => secret !== undefined && secret.length > 0,
+  );
+  if (typeof value === 'string') {
+    return present.reduce((text, secret) => text.replaceAll(secret, '[REDACTED]'), value);
+  }
+  if (Array.isArray(value)) return value.map((item) => redactValue(item, present));
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactValue(item, present)]),
+    );
+  }
+  return value;
+}
+
 export function failure(
   code: ErrorCode,
   message: string,

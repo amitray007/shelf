@@ -12,6 +12,7 @@
     { "path": "../../packages/contracts" },
     { "path": "../../packages/core" },
     { "path": "../../packages/postgres" },
+    { "path": "../renderer" },
     { "path": "../../packages/storage" }
   ]
 }

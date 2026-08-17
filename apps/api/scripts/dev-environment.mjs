@@ -18,6 +18,10 @@ const environment = [
   `SHELF_SHARE_SIGNING_KEY=${shareSigningKey}`,
   'SHELF_HOST=127.0.0.1',
   'SHELF_PORT=3000',
+  'SHELF_RENDERER_APP_ORIGIN=http://127.0.0.1:5173',
+  'SHELF_RENDERER_HOST=127.0.0.1',
+  'SHELF_RENDERER_PORT=3001',
+  'SHELF_RENDERER_PUBLIC_ORIGIN=http://127.0.0.1:3001',
   '',
 ].join('\n');
 
@@ -39,14 +43,25 @@ try {
     const existing = await readFile(environmentPath, 'utf8');
     const parsed = parseEnv(existing);
     activeContentRoot = parsed.SHELF_STORAGE_LOCAL_ROOT;
+    const additions = [];
     if (
       parsed.SHELF_SHARE_SIGNING_KEY === undefined &&
       parsed.SHELF_SHARE_SIGNING_KEY_FILE === undefined
-    ) {
+    )
+      additions.push(`SHELF_SHARE_SIGNING_KEY=${shareSigningKey}`);
+    for (const [name, value] of [
+      ['SHELF_RENDERER_APP_ORIGIN', 'http://127.0.0.1:5173'],
+      ['SHELF_RENDERER_HOST', '127.0.0.1'],
+      ['SHELF_RENDERER_PORT', '3001'],
+      ['SHELF_RENDERER_PUBLIC_ORIGIN', 'http://127.0.0.1:3001'],
+    ]) {
+      if (parsed[name] === undefined) additions.push(`${name}=${value}`);
+    }
+    if (additions.length > 0) {
       const handle = await open(environmentPath, 'a', 0o600);
       try {
         const separator = existing.length === 0 || existing.endsWith('\n') ? '' : '\n';
-        await handle.writeFile(`${separator}SHELF_SHARE_SIGNING_KEY=${shareSigningKey}\n`, 'utf8');
+        await handle.writeFile(`${separator}${additions.join('\n')}\n`, 'utf8');
       } finally {
         await handle.close();
       }

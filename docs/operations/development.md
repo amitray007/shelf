@@ -42,6 +42,10 @@ SHELF_AUTH_SECRET=<generated locally>
 SHELF_SHARE_SIGNING_KEY=<generated independently>
 SHELF_HOST=127.0.0.1
 SHELF_PORT=3000
+SHELF_RENDERER_APP_ORIGIN=http://127.0.0.1:5173
+SHELF_RENDERER_HOST=127.0.0.1
+SHELF_RENDERER_PORT=3001
+SHELF_RENDERER_PUBLIC_ORIGIN=http://127.0.0.1:3001
 ```
 
 Edit `DATABASE_URL` before rerunning `pnpm dev:setup` when the local PostgreSQL installation needs
@@ -54,8 +58,10 @@ still build and migrate it but will not attempt administrative database creation
 pnpm dev
 ```
 
-The command runs the TypeScript build in watch mode and restarts the compiled Shelf server when
-source output changes. Stop both processes with `Ctrl-C`. Confirm the server is ready:
+The command runs the TypeScript build in watch mode, restarts the compiled API and isolated HTML
+renderer, and starts the Vite web client. Stop the process group with `Ctrl-C`. Open the web client
+at `http://127.0.0.1:5173`; the API remains at `http://127.0.0.1:3000` and the renderer at
+`http://127.0.0.1:3001`. Confirm the API is ready:
 
 ```sh
 curl --fail http://127.0.0.1:3000/health/live

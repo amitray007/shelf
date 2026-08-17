@@ -10,6 +10,7 @@ COPY apps ./apps
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
 RUN pnpm --filter @shelf/api deploy --prod --legacy /opt/shelf
+RUN mkdir -p /opt/shelf/web && cp -R apps/web/dist/. /opt/shelf/web/
 
 FROM node:24-bookworm-slim AS runtime
 

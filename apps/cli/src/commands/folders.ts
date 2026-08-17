@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
 import type { Stats } from 'node:fs';
+import { createReadStream } from 'node:fs';
 import { lstat, readdir } from 'node:fs/promises';
-import { basename, extname, join, relative, sep } from 'node:path';
+import { basename, join, relative, sep } from 'node:path';
 
 import {
   FOLDER_LIMITS,
@@ -11,6 +13,7 @@ import {
 } from '@shelf/contracts';
 
 import { getFolderTree, publishFolder, type ShelfClientDependencies } from '../client.js';
+import { mediaTypeForPath } from '../media-type.js';
 import { usageFailure } from '../output.js';
 import type { CliRuntime } from '../runtime.js';
 import { publisherMetadata } from './publish.js';
@@ -36,6 +39,14 @@ export interface FolderTreeCommandOptions {
 interface LocalFolderFile {
   absolutePath: string;
   path: string;
+  byteCount: number;
+  modifiedAtMs: number;
+}
+
+export interface PreparedLocalFolder {
+  readonly manifest: FolderManifestInput;
+  readonly files: readonly LocalFolderFile[];
+  readonly contentFingerprint: string;
 }
 
 const WINDOWS_RESERVED_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu;
@@ -62,52 +73,6 @@ function positiveLimit(value: string | undefined): number {
     throw usageFailure(`The limit must be an integer from 1 to ${FOLDER_LIMITS.treePageSize}.`);
   }
   return parsed;
-}
-
-function mediaType(path: string): string {
-  switch (extname(path).toLowerCase()) {
-    case '.css':
-      return 'text/css';
-    case '.csv':
-      return 'text/csv';
-    case '.gif':
-      return 'image/gif';
-    case '.htm':
-    case '.html':
-      return 'text/html';
-    case '.jpeg':
-    case '.jpg':
-      return 'image/jpeg';
-    case '.js':
-    case '.mjs':
-      return 'text/javascript';
-    case '.json':
-      return 'application/json';
-    case '.md':
-      return 'text/markdown';
-    case '.pdf':
-      return 'application/pdf';
-    case '.png':
-      return 'image/png';
-    case '.svg':
-      return 'image/svg+xml';
-    case '.ts':
-    case '.tsx':
-      return 'text/typescript';
-    case '.txt':
-      return 'text/plain';
-    case '.wasm':
-      return 'application/wasm';
-    case '.webp':
-      return 'image/webp';
-    case '.xml':
-      return 'application/xml';
-    case '.yaml':
-    case '.yml':
-      return 'application/yaml';
-    default:
-      return 'application/octet-stream';
-  }
 }
 
 function portablePath(path: string): string {
@@ -140,10 +105,7 @@ function comparePath(left: string, right: string): number {
   return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
 }
 
-async function localFolder(directory: string): Promise<{
-  manifest: FolderManifestInput;
-  files: LocalFolderFile[];
-}> {
+export async function prepareLocalFolder(directory: string): Promise<PreparedLocalFolder> {
   let root: Stats;
   try {
     root = await lstat(directory);
@@ -200,8 +162,8 @@ async function localFolder(directory: string): Promise<{
         if (totalBytes > FOLDER_LIMITS.maxTotalBytes) {
           throw usageFailure(`The folder exceeds the ${FOLDER_LIMITS.maxTotalBytes}-byte limit.`);
         }
-        entries.push({ path, kind: 'file', mediaType: mediaType(path) });
-        files.push({ path, absolutePath });
+        entries.push({ path, kind: 'file', mediaType: mediaTypeForPath(path) });
+        files.push({ path, absolutePath, byteCount: stat.size, modifiedAtMs: stat.mtimeMs });
       }
       if (entries.length > FOLDER_LIMITS.maxEntries || files.length > FOLDER_LIMITS.maxFiles) {
         throw usageFailure('The directory exceeds the supported folder entry limits.');
@@ -226,10 +188,28 @@ async function localFolder(directory: string): Promise<{
       `The folder manifest exceeds the ${FOLDER_LIMITS.maxManifestBytes}-byte limit.`,
     );
   }
-  return {
-    manifest,
-    files,
-  };
+  const fingerprint = createHash('sha256');
+  const manifestJson = JSON.stringify(manifest);
+  fingerprint.update(`${Buffer.byteLength(manifestJson, 'utf8')}:`);
+  fingerprint.update(manifestJson);
+  for (const file of files) {
+    fingerprint.update(`\n${Buffer.byteLength(file.path, 'utf8')}:${file.path}:${file.byteCount}:`);
+    try {
+      for await (const chunk of createReadStream(file.absolutePath)) fingerprint.update(chunk);
+      const current = await lstat(file.absolutePath);
+      if (
+        !current.isFile() ||
+        current.isSymbolicLink() ||
+        current.size !== file.byteCount ||
+        current.mtimeMs !== file.modifiedAtMs
+      ) {
+        throw new Error('changed');
+      }
+    } catch {
+      throw usageFailure('The directory tree changed while it was being inspected.');
+    }
+  }
+  return { manifest, files, contentFingerprint: fingerprint.digest('hex') };
 }
 
 export async function executePublishFolder(
@@ -237,7 +217,17 @@ export async function executePublishFolder(
   runtime: CliRuntime,
   dependencies?: Partial<ShelfClientDependencies>,
 ): Promise<FolderPublishResult> {
-  const folder = await localFolder(options.directory);
+  return executePublishFolderWithToken(options, runtime, token(runtime), dependencies);
+}
+
+export async function executePublishFolderWithToken(
+  options: PublishFolderCommandOptions,
+  runtime: CliRuntime,
+  authenticationToken: string,
+  dependencies?: Partial<ShelfClientDependencies>,
+  prepared?: PreparedLocalFolder,
+): Promise<FolderPublishResult> {
+  const folder = prepared ?? (await prepareLocalFolder(options.directory));
   return publishFolder(
     {
       installationUrl: options.url,
@@ -247,7 +237,7 @@ export async function executePublishFolder(
       ...(options.artifact === undefined
         ? {}
         : { artifactId: opaqueId(options.artifact, 'artifact') }),
-      token: token(runtime),
+      token: authenticationToken,
       publisherMetadata: publisherMetadata(options.metadata),
       manifest: folder.manifest,
       files: folder.files,
@@ -261,7 +251,7 @@ export async function executePublishFolder(
         dependencies?.openFileBlob ??
         (async (path) => {
           const { openAsBlob } = await import('node:fs');
-          return openAsBlob(path);
+          return openAsBlob(path, { type: mediaTypeForPath(path) });
         }),
     },
   );

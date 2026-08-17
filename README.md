@@ -10,11 +10,11 @@ Shelf is designed first around a fast, agent-safe CLI workflow: publish an artif
 Shelf now has a validated TypeScript service-first foundation: Fastify for the API, Commander for the CLI, framework-independent publishing and read services, and a generated OpenAPI contract.
 PostgreSQL with Kysely is the authoritative metadata path. Content can use a hardened single-host local-filesystem adapter or Cloudflare R2 through a provider-neutral S3-protocol adapter; AWS S3 and native providers can be added behind the same core interfaces.
 
-The persistence slice proves durable idempotent file publishing and complete folder snapshots, stable artifact updates and history, mutable artifact names, restore-as-latest with source provenance, restart recovery, multipart object upload, portable folder-tree reads, provider-neutral revision comparison, and byte-range file delivery. File comparisons use immutable content descriptors; folder comparisons page deterministic added, removed, changed, and exact unambiguous moved entries without reading content storage. Folder manifests and their independently sealed file entries participate in reconciliation and backup verification. The authentication foundation uses Better Auth for closed-registration owner sessions and Shelf-owned, workspace-scoped agent credentials with rotation, revocation, and audit history. A production server and host-local operator CLI now make that path runnable through the single-host Docker Compose alpha. The operator can perform an age-gated, read-only reconciliation scan across PostgreSQL and either content adapter, plus an offline PostgreSQL/Local File backup and verified empty-target restore on a host with PostgreSQL client tools. Compose-volume orchestration, R2 backup/recovery, destructive cleanup policy, administrative password recovery, live R2 conformance, content-aware diff adapters, and the dashboard remain intentionally incomplete.
+The persistence slice proves durable idempotent file publishing and complete folder snapshots, stable artifact updates and history, mutable artifact names, restore-as-latest with source provenance, restart recovery, multipart object upload, portable folder-tree reads, provider-neutral revision comparison, and byte-range file delivery. File comparisons use immutable content descriptors; folder comparisons page deterministic added, removed, changed, and exact unambiguous moved entries without reading content storage. Folder manifests and their independently sealed file entries participate in reconciliation and backup verification. The authentication foundation uses Better Auth for closed-registration owner sessions and Shelf-owned, workspace-scoped agent credentials with rotation, revocation, and audit history. Revocable latest and pinned shares now use fragment capabilities, a content-first dark viewer, and a separate active-HTML renderer process. A production server and host-local operator CLI make that path runnable through the single-host Docker Compose alpha. The operator can perform an age-gated, read-only reconciliation scan across PostgreSQL and either content adapter, plus an offline PostgreSQL/Local File backup and verified empty-target restore on a host with PostgreSQL client tools. Compose-volume orchestration, R2 backup/recovery, destructive cleanup policy, administrative password recovery, live R2 conformance, content-aware diff adapters, and the authenticated dashboard remain intentionally incomplete.
 
-React with Vite and React Router remains the accepted dashboard stack, but the dashboard is intentionally absent until a dashboard behavior enters the active implementation scope.
+React, Vite, React Router, and Tailwind CSS power the dark public viewer. Authenticated dashboard behavior remains the next deliberately bounded web slice.
 
-The intended installed workflow is deliberately short: `shelf publish ./idea.html --share`. CLI profiles and share creation are not implemented yet, so the alpha commands below still require explicit installation, workspace, and idempotency arguments.
+The common installed workflow is deliberately short: configure one explicit profile, then run `shelf publish ./idea.html --share`. Profiles keep installation, workspace, insecure-loopback policy, and credential reference together without storing a plaintext token or mixing personal and work authority.
 
 ## Development
 
@@ -40,13 +40,23 @@ pnpm dev
 The first command creates a private ignored `.env.dev`, an ignored local-content directory, the
 `shelf_dev` database when using local PostgreSQL, and applies all migrations. It is safe to rerun:
 an existing environment or database is preserved. The second command watches the TypeScript
-workspace and restarts the API at `http://127.0.0.1:3000`. See the
+workspace and runs the API at `http://127.0.0.1:3000`, the isolated renderer at
+`http://127.0.0.1:3001`, and the web client at `http://127.0.0.1:5173`. See the
 [host-local development guide](docs/operations/development.md) for configuration, owner bootstrap,
 and publishing a test file.
 
 The API remains injectable for tests and also ships explicit `shelf-server` and `shelf-admin` process boundaries. There is no default credential or automatic owner bootstrap. The portable product CLI is named exactly `shelf`; `shelf-admin` is a separate host-local operator tool. It uses only the public `/api/v1` contract and emits one JSON document on success or failure. During repository development, run the built CLI with `pnpm shelf ...`:
 
 ```sh
+export SHELF_PERSONAL_TOKEN='shf_v1...'
+pnpm shelf profiles set default --url https://shelf.example \
+  --workspace workspace-main --credential-env SHELF_PERSONAL_TOKEN
+pnpm shelf publish ./idea.html --share
+pnpm shelf profiles set work --url https://work.shelf.example \
+  --workspace workspace-work --credential-env SHELF_WORK_TOKEN
+pnpm shelf publish ./project --profile work
+
+# The complete explicit legacy context remains available for automation.
 pnpm shelf publish --url https://shelf.example --workspace workspace-main \
   --file README.md --idempotency-key readme-1
 pnpm shelf artifacts list --url https://shelf.example --workspace workspace-main
@@ -60,9 +70,13 @@ pnpm shelf folders publish --url https://shelf.example --workspace workspace-mai
 pnpm shelf folders tree --url https://shelf.example --revision rev_...
 pnpm shelf revisions compare --url https://shelf.example \
   --base rev_... --target rev_...
+pnpm shelf shares create --url https://shelf.example --workspace workspace-main \
+  --artifact art_... --idempotency-key share-1
+pnpm shelf shares list --url https://shelf.example --workspace workspace-main
+pnpm shelf shares revoke --url https://shelf.example --workspace workspace-main --share shr_...
 ```
 
-Set `SHELF_TOKEN` before these commands. Publish another immutable file revision or complete folder snapshot with the same stable artifact identity by adding `--artifact art_...` and using a new idempotency key. Folder publishing includes regular files and empty directories, rejects symlinks and special files, and never uploads an absolute host path. Rename changes only artifact presentation. Restore creates a new latest revision and leaves the selected source plus all later history unchanged. Comparison accepts two revisions of the same artifact; folder change pages use `--limit` and `--cursor` and never download stored file bytes.
+Profile credentials may reference an explicitly named environment variable or the native keyring via `--store-token-from-env`; keyring failure never falls back to plaintext. Set `SHELF_TOKEN` for the legacy commands. Publish another immutable file revision or complete folder snapshot with the same stable artifact identity by adding `--artifact art_...` and using a new idempotency key. Folder publishing includes regular files and empty directories, rejects symlinks and special files, and never uploads an absolute host path. Rename changes only artifact presentation. Restore creates a new latest revision and leaves the selected source plus all later history unchanged. Comparison accepts two revisions of the same artifact; folder change pages use `--limit` and `--cursor` and never download stored file bytes.
 
 For the runnable local profile, follow the [single-host self-hosting guide](docs/operations/self-hosting.md). The delivery roadmap is maintained in the [product contract](docs/plans/2026-08-17-0030-feat-shelf-product-plan.md#product-delivery-roadmap).
 

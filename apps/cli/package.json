@@ -22,5 +22,8 @@
   "dependencies": {
     "@shelf/contracts": "workspace:*",
     "commander": "15.0.0"
+  },
+  "optionalDependencies": {
+    "@napi-rs/keyring": "1.3.0"
   }
 }

@@ -40,10 +40,12 @@ import { type ReadinessState, registerHealthRoutes } from './health.js';
 import { registerErrorHandler } from './plugins/errors.js';
 import { registerArtifactRoutes } from './routes/artifacts.js';
 import { FolderMultipartOpenApiSchema, registerFolderRoutes } from './routes/folders.js';
+import { registerPublicConfigRoute } from './routes/public-config.js';
 import { PublishMultipartOpenApiSchema, registerPublishRoute } from './routes/publish.js';
 import { registerRevisionRoutes } from './routes/revisions.js';
 import { registerShareRoutes } from './routes/shares.js';
 import { createHmacShareCapabilityCodec } from './share-capability.js';
+import { registerWebApp } from './web-app.js';
 
 declare module 'fastify' {
   interface FastifyContextConfig {
@@ -121,6 +123,8 @@ export interface CreateShelfAppOptions {
   logger?: boolean;
   humanAuth?: HumanAuth;
   health?: ReadinessState;
+  rendererPublicOrigin?: string;
+  webRoot?: string;
 }
 
 export async function createShelfApp(options: CreateShelfAppOptions): Promise<FastifyInstance> {
@@ -195,6 +199,15 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   await registerArtifactRoutes(app, dependencies);
   await registerRevisionRoutes(app, dependencies);
   await registerShareRoutes(app, dependencies);
+  registerPublicConfigRoute(app, options.rendererPublicOrigin);
+  if (options.webRoot !== undefined) {
+    await registerWebApp(app, {
+      root: options.webRoot,
+      ...(options.rendererPublicOrigin === undefined
+        ? {}
+        : { rendererOrigin: options.rendererPublicOrigin }),
+    });
+  }
   await app.ready();
   return app;
 }

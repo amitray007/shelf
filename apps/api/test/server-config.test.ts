@@ -40,6 +40,20 @@ describe('loadShelfServerConfig', () => {
     });
   });
 
+  it('loads a validated runtime web root and renderer public origin', async () => {
+    await expect(
+      loadShelfServerConfig(
+        environment({
+          SHELF_WEB_ROOT: '/opt/shelf/web',
+          SHELF_RENDERER_PUBLIC_ORIGIN: 'https://renderer.shelf.example.test',
+        }),
+      ),
+    ).resolves.toMatchObject({
+      webRoot: '/opt/shelf/web',
+      rendererPublicOrigin: 'https://renderer.shelf.example.test',
+    });
+  });
+
   it('reads the auth secret from a file and trims only its trailing newline', async () => {
     const root = await mkdtemp(join(tmpdir(), 'shelf-config-'));
     temporaryRoots.push(root);
@@ -112,6 +126,8 @@ describe('loadShelfServerConfig', () => {
     ['public plain HTTP auth URL', { SHELF_AUTH_BASE_URL: 'http://shelf.example.test' }],
     ['empty host', { SHELF_HOST: '' }],
     ['auth URL path', { SHELF_AUTH_BASE_URL: 'https://shelf.example.test/unsafe' }],
+    ['renderer URL path', { SHELF_RENDERER_PUBLIC_ORIGIN: 'https://renderer.example/path' }],
+    ['empty web root', { SHELF_WEB_ROOT: '' }],
   ])('rejects %s', async (_label, overrides) => {
     await expect(loadShelfServerConfig(environment(overrides))).rejects.toBeInstanceOf(Error);
   });

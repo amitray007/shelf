@@ -19,6 +19,8 @@ import { authenticate } from '../authenticate.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
 
 const PUBLIC_SHARE_PREFIX = '/api/v1/public/shares/';
+const FORM_CAPABILITY_CONTENT_TYPE = 'application/x-www-form-urlencoded';
+const MAX_FORM_CAPABILITY_BYTES = 1_024;
 
 const WorkspaceArtifactParamsSchema = Type.Object(
   {
@@ -165,6 +167,21 @@ export async function registerShareRoutes(
   app: FastifyInstance,
   dependencies: ShelfAppDependencies,
 ): Promise<void> {
+  app.addContentTypeParser(
+    FORM_CAPABILITY_CONTENT_TYPE,
+    { parseAs: 'string', bodyLimit: MAX_FORM_CAPABILITY_BYTES },
+    (_request, body, done) => {
+      const parameters = new URLSearchParams(
+        typeof body === 'string' ? body : body.toString('utf8'),
+      );
+      const secrets = parameters.getAll('secret');
+      if (secrets.length !== 1 || Array.from(parameters.keys()).some((key) => key !== 'secret')) {
+        done(null, {});
+        return;
+      }
+      done(null, { secret: secrets[0] });
+    },
+  );
   const lifecycle = createShareLifecycleService({
     authorizer: dependencies.authorizer,
     shares: dependencies.shareRepository,
@@ -311,6 +328,7 @@ export async function registerShareRoutes(
       schema: {
         operationId: 'downloadPublicShareContentV1',
         summary: 'Download exact shared file bytes as an attachment',
+        consumes: ['application/json', FORM_CAPABILITY_CONTENT_TYPE],
         produces: ['application/octet-stream'],
         tags: ['public shares'],
         params: PublicShareParamsSchema,

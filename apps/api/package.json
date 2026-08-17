@@ -5,6 +5,7 @@
   "type": "module",
   "bin": {
     "shelf-admin": "dist/operator/cli.js",
+    "shelf-renderer": "dist/renderer-cli.js",
     "shelf-server": "dist/server-cli.js"
   },
   "exports": {
@@ -24,12 +25,14 @@
   },
   "dependencies": {
     "@fastify/multipart": "10.1.1",
+    "@fastify/static": "10.1.2",
     "@fastify/swagger": "9.8.1",
     "@fastify/type-provider-typebox": "6.1.0",
     "@shelf/auth": "workspace:*",
     "@shelf/contracts": "workspace:*",
     "@shelf/core": "workspace:*",
     "@shelf/postgres": "workspace:*",
+    "@shelf/renderer": "workspace:*",
     "@shelf/storage": "workspace:*",
     "fastify": "5.12.0",
     "commander": "15.0.0",
