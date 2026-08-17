@@ -7,6 +7,7 @@ import {
   PostgresInstallationInventory,
   PostgresReferencedContentInventory,
   PostgresRevisionRepository,
+  PostgresShareRepository,
 } from '@shelf/postgres';
 import {
   type ContentStorage,
@@ -25,6 +26,7 @@ export interface ShelfPersistence {
   contentInventory: ContentStorage;
   installationInventory: PostgresInstallationInventory;
   revisionRepository: PostgresRevisionRepository;
+  shareRepository: PostgresShareRepository;
   referencedContentInventory: PostgresReferencedContentInventory;
   authRepository: PostgresAuthRepository;
   migrate(): Promise<void>;
@@ -52,6 +54,7 @@ export function createShelfPersistence(config: ShelfPersistenceConfig): ShelfPer
     contentInventory: contentStorage,
     installationInventory: new PostgresInstallationInventory(database),
     revisionRepository: new PostgresRevisionRepository(database),
+    shareRepository: new PostgresShareRepository(database),
     referencedContentInventory: new PostgresReferencedContentInventory(database),
     authRepository: new PostgresAuthRepository(database),
     async migrate(): Promise<void> {

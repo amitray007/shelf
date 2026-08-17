@@ -6,6 +6,7 @@ import { createHybridAuthenticator, createShelfAuthorizer } from './auth/runtime
 import { createReadinessState, type ReadinessState } from './health.js';
 import { createShelfPersistence, type ShelfPersistence } from './persistence.js';
 import type { ShelfServerConfig } from './server-config.js';
+import { createHmacShareCapabilityCodec } from './share-capability.js';
 
 export interface ShelfServer {
   readonly app: FastifyInstance;
@@ -38,6 +39,8 @@ export async function createShelfServer(config: ShelfServerConfig): Promise<Shel
       contentStore: persistence.contentStore,
       contentReader: persistence.contentReader,
       revisionRepository: persistence.revisionRepository,
+      shareRepository: persistence.shareRepository,
+      shareCapabilityCodec: createHmacShareCapabilityCodec(config.share.signingKey),
       health: readiness,
       logger: true,
     });

@@ -57,6 +57,7 @@ function operatorEnvironment() {
     SHELF_INSTALLATION_ID: 'installation-main',
     SHELF_AUTH_BASE_URL: 'http://127.0.0.1:3000',
     SHELF_AUTH_SECRET: 'operator-integration-auth-secret-at-least-32-chars',
+    SHELF_SHARE_SIGNING_KEY: 'operator-share-signing-key-at-least-32-chars',
   };
 }
 

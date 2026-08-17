@@ -38,8 +38,10 @@ services:
       SHELF_PORT: 3000
       SHELF_AUTH_BASE_URL: ${SHELF_AUTH_BASE_URL:?set SHELF_AUTH_BASE_URL}
       SHELF_AUTH_SECRET_FILE: /run/secrets/shelf_auth_secret
+      SHELF_SHARE_SIGNING_KEY_FILE: /run/secrets/shelf_share_signing_key
     secrets:
       - shelf_auth_secret
+      - shelf_share_signing_key
     ports:
       - "3000:3000"
     volumes:
@@ -64,6 +66,8 @@ services:
 secrets:
   shelf_auth_secret:
     file: ${SHELF_AUTH_SECRET_FILE:-./secrets/auth-secret.txt}
+  shelf_share_signing_key:
+    file: ${SHELF_SHARE_SIGNING_KEY_FILE:-./secrets/share-signing-key.txt}
 
 volumes:
   postgres-data:

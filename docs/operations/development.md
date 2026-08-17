@@ -18,8 +18,8 @@ pnpm dev:setup
 
 `dev:setup` performs four idempotent steps:
 
-1. Create `.env.dev` with a freshly generated authentication secret and mode `0600`, unless the
-   file already exists.
+1. Create `.env.dev` with freshly generated, independent authentication and share-signing secrets
+   and mode `0600`. An existing file is preserved; setup only appends a missing share-signing key.
 2. Create the configured local-content directory beneath the ignored `data/` directory.
 3. Create the local PostgreSQL database if it is missing. Existing databases are never dropped,
    emptied, or recreated. Database creation is skipped for non-loopback PostgreSQL hosts.
@@ -39,6 +39,7 @@ SHELF_STORAGE_LOCAL_ROOT=./data/dev-content
 SHELF_INSTALLATION_ID=installation-dev
 SHELF_AUTH_BASE_URL=http://127.0.0.1:3000
 SHELF_AUTH_SECRET=<generated locally>
+SHELF_SHARE_SIGNING_KEY=<generated independently>
 SHELF_HOST=127.0.0.1
 SHELF_PORT=3000
 ```

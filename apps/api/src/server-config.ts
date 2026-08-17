@@ -15,6 +15,7 @@ export interface ShelfServerConfig {
   port: number;
   installationId: string;
   auth: { baseUrl: string; secret: string };
+  share: { signingKey: string };
   persistence: ShelfPersistenceConfig;
 }
 
@@ -28,11 +29,14 @@ function isLoopback(hostname: string): boolean {
   );
 }
 
-async function loadAuthSecret(environment: ShelfServerEnvironment): Promise<string> {
-  const inline = environment.SHELF_AUTH_SECRET;
-  const file = environment.SHELF_AUTH_SECRET_FILE;
+async function loadSecret(
+  environment: ShelfServerEnvironment,
+  options: { inlineName: string; fileName: string; label: string },
+): Promise<string> {
+  const inline = environment[options.inlineName];
+  const file = environment[options.fileName];
   if ((inline === undefined) === (file === undefined)) {
-    throw new Error('Configure exactly one of SHELF_AUTH_SECRET or SHELF_AUTH_SECRET_FILE.');
+    throw new Error(`Configure exactly one of ${options.inlineName} or ${options.fileName}.`);
   }
   const secret = inline ?? (await readFile(file as string, 'utf8')).replace(/\r?\n$/u, '');
   if (
@@ -41,7 +45,7 @@ async function loadAuthSecret(environment: ShelfServerEnvironment): Promise<stri
     secret.includes('\r') ||
     secret.includes('\n')
   ) {
-    throw new Error('The configured authentication secret is invalid.');
+    throw new Error(`The configured ${options.label} is invalid.`);
   }
   return secret;
 }
@@ -91,7 +95,18 @@ export async function loadShelfServerConfig(
     installationId,
     auth: {
       baseUrl: baseUrl.toString().replace(/\/$/u, ''),
-      secret: await loadAuthSecret(environment),
+      secret: await loadSecret(environment, {
+        inlineName: 'SHELF_AUTH_SECRET',
+        fileName: 'SHELF_AUTH_SECRET_FILE',
+        label: 'authentication secret',
+      }),
+    },
+    share: {
+      signingKey: await loadSecret(environment, {
+        inlineName: 'SHELF_SHARE_SIGNING_KEY',
+        fileName: 'SHELF_SHARE_SIGNING_KEY_FILE',
+        label: 'share signing key',
+      }),
     },
     persistence: shelfPersistenceConfigFromEnv(environment),
   };

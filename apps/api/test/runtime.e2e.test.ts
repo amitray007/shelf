@@ -51,6 +51,7 @@ describePostgres('compiled migrate-to-restart workflow', () => {
     const port = await availablePort();
     const password = 'runtime-owner-password-canary';
     const authSecret = 'runtime-auth-secret-canary-at-least-32-characters';
+    const shareSigningKey = 'runtime-share-signing-key-at-least-32-characters';
     const environment = {
       ...process.env,
       DATABASE_URL: connectionString,
@@ -59,6 +60,7 @@ describePostgres('compiled migrate-to-restart workflow', () => {
       SHELF_INSTALLATION_ID: 'installation-main',
       SHELF_AUTH_BASE_URL: `http://127.0.0.1:${port}`,
       SHELF_AUTH_SECRET: authSecret,
+      SHELF_SHARE_SIGNING_KEY: shareSigningKey,
       SHELF_HOST: '127.0.0.1',
       SHELF_PORT: String(port),
     };
@@ -108,6 +110,14 @@ describePostgres('compiled migrate-to-restart workflow', () => {
       await expect(read(endpoint, credential.token, first.revisionId)).resolves.toBe(
         'durable shelf',
       );
+      const firstShare = await createShare(
+        endpoint,
+        credential.token,
+        first.artifactId,
+        'runtime-share-idempotency',
+        environment,
+      );
+      await expect(readShare(endpoint, firstShare.url)).resolves.toBe('durable shelf');
 
       await stopServer(server);
       server = await startServer(environment);
@@ -116,6 +126,15 @@ describePostgres('compiled migrate-to-restart workflow', () => {
       await expect(read(endpoint, credential.token, first.revisionId)).resolves.toBe(
         'durable shelf',
       );
+      const replayedShare = await createShare(
+        endpoint,
+        credential.token,
+        first.artifactId,
+        'runtime-share-idempotency',
+        environment,
+      );
+      expect(replayedShare).toMatchObject({ url: firstShare.url, replayed: true });
+      await expect(readShare(endpoint, replayedShare.url)).resolves.toBe('durable shelf');
       const reconciliation = await runAdmin(['reconcile', 'scan'], environment);
       expect(reconciliation.code).toBe(0);
       expect(JSON.parse(reconciliation.stdout)).toMatchObject({
@@ -131,6 +150,11 @@ describePostgres('compiled migrate-to-restart workflow', () => {
       });
 
       await expect(
+        revokeShare(endpoint, credential.token, firstShare.shareId, environment),
+      ).resolves.toMatchObject({ shareId: firstShare.shareId, revokedAt: expect.any(String) });
+      await expect(readShare(endpoint, firstShare.url)).rejects.toThrow('404');
+
+      await expect(
         runAdmin(['credential', 'revoke', '--credential-id', credential.credentialId], environment),
       ).resolves.toMatchObject({ code: 0 });
       await expect(
@@ -144,6 +168,8 @@ describePostgres('compiled migrate-to-restart workflow', () => {
         connectionString,
         contentRoot,
         authSecret,
+        shareSigningKey,
+        firstShare.url,
       ]) {
         expect(logs).not.toContain(canary);
       }
@@ -267,7 +293,82 @@ async function publish(
     { ...environment, SHELF_TOKEN: token },
   );
   if (result.code !== 0) throw new Error(result.stderr);
-  return JSON.parse(result.stdout) as { revisionId: string; replayed: boolean };
+  return JSON.parse(result.stdout) as {
+    artifactId: string;
+    revisionId: string;
+    replayed: boolean;
+  };
+}
+
+async function createShare(
+  endpoint: string,
+  token: string,
+  artifactId: string,
+  idempotencyKey: string,
+  environment: NodeJS.ProcessEnv,
+) {
+  const result = await runProcess(
+    'apps/cli/dist/index.js',
+    [
+      'shares',
+      'create',
+      '--url',
+      endpoint,
+      '--workspace',
+      'workspace-main',
+      '--artifact',
+      artifactId,
+      '--idempotency-key',
+      idempotencyKey,
+      '--allow-insecure-loopback',
+    ],
+    { ...environment, SHELF_TOKEN: token },
+  );
+  if (result.code !== 0) throw new Error(result.stderr);
+  return JSON.parse(result.stdout) as {
+    shareId: string;
+    url: string;
+    replayed: boolean;
+  };
+}
+
+async function revokeShare(
+  endpoint: string,
+  token: string,
+  shareId: string,
+  environment: NodeJS.ProcessEnv,
+) {
+  const result = await runProcess(
+    'apps/cli/dist/index.js',
+    [
+      'shares',
+      'revoke',
+      '--url',
+      endpoint,
+      '--workspace',
+      'workspace-main',
+      '--share',
+      shareId,
+      '--allow-insecure-loopback',
+    ],
+    { ...environment, SHELF_TOKEN: token },
+  );
+  if (result.code !== 0) throw new Error(result.stderr);
+  return JSON.parse(result.stdout) as { shareId: string; revokedAt: string | null };
+}
+
+async function readShare(endpoint: string, shareUrl: string): Promise<string> {
+  const parsed = new URL(shareUrl, endpoint);
+  const segments = parsed.pathname.split('/');
+  const shareId = segments.at(-1);
+  const secret = parsed.hash.slice(1);
+  const response = await fetch(`${endpoint}/api/v1/public/shares/${shareId}/content`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ secret }),
+  });
+  if (!response.ok) throw new Error(`Share read returned ${response.status}.`);
+  return response.text();
 }
 
 async function read(endpoint: string, token: string, revisionId: string): Promise<string> {

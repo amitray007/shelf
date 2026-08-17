@@ -46,6 +46,7 @@ test('development setup creates a private local environment and content director
   expect(environment).toMatch(/^SHELF_INSTALLATION_ID=installation-dev$/mu);
   expect(environment).toMatch(/^SHELF_AUTH_BASE_URL=http:\/\/127\.0\.0\.1:3000$/mu);
   expect(environment).toMatch(/^SHELF_AUTH_SECRET=[A-Za-z0-9_-]{43}$/mu);
+  expect(environment).toMatch(/^SHELF_SHARE_SIGNING_KEY=[A-Za-z0-9_-]{43}$/mu);
   expect(environment).toMatch(/^SHELF_HOST=127\.0\.0\.1$/mu);
   expect(environment).toMatch(/^SHELF_PORT=3000$/mu);
 
@@ -53,7 +54,7 @@ test('development setup creates a private local environment and content director
   expect((await stat(`${root}/data/dev-content`)).isDirectory()).toBe(true);
 });
 
-test('development setup preserves an existing local environment', async () => {
+test('development setup preserves existing values while adding a missing share signing key', async () => {
   const root = await temporaryRoot();
   const existing = [
     'DATABASE_URL=postgresql:///my_existing_database',
@@ -67,8 +68,10 @@ test('development setup preserves an existing local environment', async () => {
   });
 
   expect(stderr).toBe('');
-  expect(JSON.parse(stdout)).toEqual({ status: 'exists', path: '.env.dev' });
-  expect(await readFile(`${root}/.env.dev`, 'utf8')).toBe(existing);
+  expect(JSON.parse(stdout)).toEqual({ status: 'updated', path: '.env.dev' });
+  const updated = await readFile(`${root}/.env.dev`, 'utf8');
+  expect(updated.startsWith(existing)).toBe(true);
+  expect(updated).toMatch(/^SHELF_SHARE_SIGNING_KEY=[A-Za-z0-9_-]{43}$/mu);
   expect((await stat(`${root}/custom-content`)).isDirectory()).toBe(true);
   await expect(stat(`${root}/data/dev-content`)).rejects.toMatchObject({ code: 'ENOENT' });
 });

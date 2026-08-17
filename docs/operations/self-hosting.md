@@ -5,7 +5,7 @@ Shelf's first runnable reference profile is deliberately small: one Shelf API pr
 ## Prerequisites
 
 - Docker Engine with Docker Compose
-- A host directory where an ignored `.env` file and protected auth-secret file can live
+- A host directory where an ignored `.env` file and protected secret files can live
 - HTTPS at the externally visible `SHELF_AUTH_BASE_URL` unless the installation is loopback-only
 
 Create local configuration without committing it:
@@ -14,10 +14,11 @@ Create local configuration without committing it:
 cp .env.example .env
 mkdir -p secrets
 openssl rand -base64 48 > secrets/auth-secret.txt
-chmod 600 secrets/auth-secret.txt
+openssl rand -base64 48 > secrets/share-signing-key.txt
+chmod 600 secrets/auth-secret.txt secrets/share-signing-key.txt
 ```
 
-Replace `POSTGRES_PASSWORD` in `.env` with a URL-safe random value and set `SHELF_AUTH_BASE_URL` to the URL users will actually open. `.env` and `secrets/` are ignored by Git. The example uses loopback HTTP only for local operation.
+Replace `POSTGRES_PASSWORD` in `.env` with a URL-safe random value and set `SHELF_AUTH_BASE_URL` to the URL users will actually open. The authentication and share-signing secrets must remain independent; rotating the latter invalidates existing share links. `.env` and `secrets/` are ignored by Git. The example uses loopback HTTP only for local operation.
 
 ## Start and inspect
 

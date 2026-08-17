@@ -52,6 +52,7 @@ describePostgres('production server assembly', () => {
         baseUrl: 'http://127.0.0.1:3000',
         secret: 'server-integration-secret-at-least-32-characters',
       },
+      share: { signingKey: 'server-share-signing-key-at-least-32-characters' },
       persistence: {
         postgres: { connectionString },
         content: { driver: 'local', root: contentRoot },

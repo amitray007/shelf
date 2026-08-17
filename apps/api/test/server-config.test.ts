@@ -20,6 +20,7 @@ function environment(overrides: Record<string, string | undefined> = {}) {
     SHELF_INSTALLATION_ID: 'installation-main',
     SHELF_AUTH_BASE_URL: 'https://shelf.example.test',
     SHELF_AUTH_SECRET: 'a'.repeat(32),
+    SHELF_SHARE_SIGNING_KEY: 's'.repeat(32),
     ...overrides,
   };
 }
@@ -31,6 +32,7 @@ describe('loadShelfServerConfig', () => {
       port: 3000,
       installationId: 'installation-main',
       auth: { baseUrl: 'https://shelf.example.test', secret: 'a'.repeat(32) },
+      share: { signingKey: 's'.repeat(32) },
       persistence: {
         postgres: { connectionString: 'postgresql://shelf@postgres/shelf' },
         content: { driver: 'local', root: '/var/lib/shelf/content' },
@@ -48,6 +50,22 @@ describe('loadShelfServerConfig', () => {
       environment({ SHELF_AUTH_SECRET: undefined, SHELF_AUTH_SECRET_FILE: secretFile }),
     );
     expect(config.auth.secret).toBe('b'.repeat(32));
+  });
+
+  it('loads the share signing key independently from a protected file', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'shelf-config-'));
+    temporaryRoots.push(root);
+    const keyFile = join(root, 'share-signing-key');
+    await writeFile(keyFile, `${'k'.repeat(32)}\n`, { mode: 0o600 });
+
+    const config = await loadShelfServerConfig(
+      environment({
+        SHELF_SHARE_SIGNING_KEY: undefined,
+        SHELF_SHARE_SIGNING_KEY_FILE: keyFile,
+      }),
+    );
+    expect(config.share.signingKey).toBe('k'.repeat(32));
+    expect(config.share.signingKey).not.toBe(config.auth.secret);
   });
 
   it('accepts loopback HTTP on IPv6', async () => {
@@ -70,6 +88,21 @@ describe('loadShelfServerConfig', () => {
       );
     } catch (error) {
       expect(String(error)).not.toContain(secret);
+    }
+  });
+
+  it('requires exactly one independent share signing key source without echoing it', async () => {
+    const key = 'share-key-canary-that-must-never-be-printed';
+    const invalidEnvironment = environment({
+      SHELF_SHARE_SIGNING_KEY: key,
+      SHELF_SHARE_SIGNING_KEY_FILE: key,
+    });
+
+    await expect(loadShelfServerConfig(invalidEnvironment)).rejects.toThrow('exactly one');
+    try {
+      await loadShelfServerConfig(invalidEnvironment);
+    } catch (error) {
+      expect(String(error)).not.toContain(key);
     }
   });
 
