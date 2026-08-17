@@ -26,6 +26,14 @@ import {
   type CompareRevisionsCommandOptions,
   executeCompareRevisions,
 } from './commands/revisions.js';
+import {
+  type CreateShareCommandOptions,
+  executeCreateShare,
+  executeListShares,
+  executeRevokeShare,
+  type ListSharesCommandOptions,
+  type RevokeShareCommandOptions,
+} from './commands/shares.js';
 import { CliFailure, failure, jsonLine, redactEnvelope, usageFailure } from './output.js';
 import type { CliRuntime } from './runtime.js';
 
@@ -159,6 +167,39 @@ export async function runCli(
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: RestoreArtifactCommandOptions) => {
       result = await executeRestoreArtifact(options, runtime);
+    });
+
+  const shares = program.command('shares').description('Create and manage share links');
+  shares
+    .command('create')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .requiredOption('--artifact <artifact-id>')
+    .requiredOption('--idempotency-key <key>')
+    .option('--revision <revision-id>', 'pin the share to one immutable revision')
+    .option('--expires-at <instant>', 'expire the share at an ISO instant')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: CreateShareCommandOptions) => {
+      result = await executeCreateShare(options, runtime);
+    });
+  shares
+    .command('list')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .option('--limit <count>')
+    .option('--cursor <cursor>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: ListSharesCommandOptions) => {
+      result = await executeListShares(options, runtime);
+    });
+  shares
+    .command('revoke')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .requiredOption('--share <share-id>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: RevokeShareCommandOptions) => {
+      result = await executeRevokeShare(options, runtime);
     });
 
   try {

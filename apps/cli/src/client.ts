@@ -16,10 +16,16 @@ import {
   isPublishResult,
   isRestoreResult,
   isRevisionComparison,
+  isShareCreateResult,
+  isSharePage,
   type PublisherMetadata,
   type PublishResult,
   type RestoreResult,
   type RevisionComparison,
+  type ShareCreateResult,
+  type ShareManagementSummary,
+  type SharePage,
+  type ShareTarget,
 } from '@shelf/contracts';
 import { failure, remoteFailure, usageFailure } from './output.js';
 
@@ -107,6 +113,34 @@ export interface CompareRevisionsOptions {
   allowInsecureLoopback?: boolean;
 }
 
+export interface CreateShareOptions {
+  installationUrl: string;
+  workspaceId: string;
+  artifactId: string;
+  target: ShareTarget;
+  expiresAt: string | null;
+  idempotencyKey: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface ListSharesOptions {
+  installationUrl: string;
+  workspaceId: string;
+  limit: number;
+  cursor?: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface RevokeShareOptions {
+  installationUrl: string;
+  workspaceId: string;
+  shareId: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 
@@ -187,10 +221,11 @@ async function requestApiJson<T>(
   options: {
     token: string;
     allowInsecureLoopback: boolean;
-    method?: 'GET' | 'PATCH' | 'POST';
+    method?: 'DELETE' | 'GET' | 'PATCH' | 'POST';
     body?: string;
     expectedStatus?: number;
     idempotencyKey?: string;
+    redactShareCapabilities?: boolean;
   },
   dependencies: Pick<ShelfClientDependencies, 'fetch'>,
   validate: (value: unknown) => value is T,
@@ -232,7 +267,30 @@ async function requestApiJson<T>(
       if (!validate(payload)) throw failure('INTERNAL_ERROR', 'Shelf returned an invalid result.');
       return payload;
     }
-    if (isErrorEnvelope(payload)) throw remoteFailure(payload);
+    if (isErrorEnvelope(payload)) {
+      if (options.redactShareCapabilities) {
+        const redact = (value: string) =>
+          value.replaceAll(
+            /\/s\/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}/gu,
+            '[REDACTED_SHARE_URL]',
+          );
+        throw remoteFailure({
+          error: {
+            ...payload.error,
+            message: redact(payload.error.message),
+            ...(payload.error.details === undefined
+              ? {}
+              : {
+                  details: payload.error.details.map((detail) => ({
+                    ...detail,
+                    reason: redact(detail.reason),
+                  })),
+                }),
+          },
+        });
+      }
+      throw remoteFailure(payload);
+    }
     throw failure('INTERNAL_ERROR', 'Shelf returned an invalid error response.');
   }
   throw failure('INTERNAL_ERROR', 'Shelf returned too many redirects.');
@@ -372,6 +430,101 @@ export async function compareRevisions(
     { token: options.token, allowInsecureLoopback },
     dependencies,
     isRevisionComparison,
+  );
+}
+
+function isShareManagementSummary(value: unknown): value is ShareManagementSummary {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const workspaceId = (value as Record<string, unknown>).workspaceId;
+  if (typeof workspaceId !== 'string') return false;
+  return isSharePage({ apiVersion: 'v1', workspaceId, items: [value], nextCursor: null });
+}
+
+function isCanonicalShareCreateResult(
+  value: unknown,
+  expected: { workspaceId: string; artifactId: string },
+): value is ShareCreateResult {
+  return (
+    isShareCreateResult(value) &&
+    value.workspaceId === expected.workspaceId &&
+    value.artifactId === expected.artifactId &&
+    value.url.startsWith(`/s/${value.shareId}#`)
+  );
+}
+
+export async function createShare(
+  options: CreateShareOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<ShareCreateResult> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/artifacts/${encodeURIComponent(options.artifactId)}/shares`,
+    origin,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'POST',
+      body: JSON.stringify({ target: options.target, expiresAt: options.expiresAt }),
+      expectedStatus: 201,
+      idempotencyKey: options.idempotencyKey,
+      redactShareCapabilities: true,
+    },
+    dependencies,
+    (value): value is ShareCreateResult =>
+      isCanonicalShareCreateResult(value, {
+        workspaceId: options.workspaceId,
+        artifactId: options.artifactId,
+      }),
+  );
+}
+
+export async function listShares(
+  options: ListSharesOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<SharePage> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/shares`,
+    origin,
+  );
+  url.searchParams.set('limit', String(options.limit));
+  if (options.cursor !== undefined) url.searchParams.set('cursor', options.cursor);
+  return requestApiJson(
+    url,
+    { token: options.token, allowInsecureLoopback, redactShareCapabilities: true },
+    dependencies,
+    (value): value is SharePage => isSharePage(value) && value.workspaceId === options.workspaceId,
+  );
+}
+
+export async function revokeShare(
+  options: RevokeShareOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<ShareManagementSummary> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/shares/${encodeURIComponent(options.shareId)}`,
+    origin,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'DELETE',
+      redactShareCapabilities: true,
+    },
+    dependencies,
+    (value): value is ShareManagementSummary =>
+      isShareManagementSummary(value) &&
+      value.workspaceId === options.workspaceId &&
+      value.shareId === options.shareId,
   );
 }
 
