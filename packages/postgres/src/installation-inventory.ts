@@ -25,6 +25,8 @@ export class PostgresInstallationInventory implements InstallationInventory {
         union all select installation_id from shelf_actor_grants
         union all select installation_id from shelf_access_credentials
         union all select installation_id from shelf_auth_events
+        union all select installation_id from shelf_shares
+        union all select installation_id from shelf_share_idempotency
       ) installations
       order by installation_id
     `.execute(this.#database);

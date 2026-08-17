@@ -4,3 +4,4 @@ export * from './database.js';
 export * from './installation-inventory.js';
 export * from './migrations.js';
 export * from './revision-repository.js';
+export * from './share-repository.js';

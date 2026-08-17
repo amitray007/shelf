@@ -6,6 +6,7 @@ import { humanAuthMigration } from './migrations/0002_human_auth.js';
 import { accessCredentialsMigration } from './migrations/0003_access_credentials.js';
 import { artifactLifecycleMigration } from './migrations/0004_artifact_lifecycle.js';
 import { folderSnapshotsMigration } from './migrations/0005_folder_snapshots.js';
+import { sharesMigration } from './migrations/0006_shares.js';
 
 const migrations = Object.freeze<Record<string, Migration>>({
   '0001_initial': initialMigration,
@@ -13,6 +14,7 @@ const migrations = Object.freeze<Record<string, Migration>>({
   '0003_access_credentials': accessCredentialsMigration,
   '0004_artifact_lifecycle': artifactLifecycleMigration,
   '0005_folder_snapshots': folderSnapshotsMigration,
+  '0006_shares': sharesMigration,
 });
 
 const provider: MigrationProvider = {

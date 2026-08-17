@@ -58,6 +58,32 @@ export interface IdempotencyTable {
   created_at: Date;
 }
 
+export interface ShareTable {
+  share_id: string;
+  installation_id: string;
+  workspace_id: string;
+  artifact_id: string;
+  visibility: 'unlisted';
+  target_mode: 'latest' | 'pinned';
+  target_revision_id: string | null;
+  created_by_actor_id: string;
+  created_at: Date;
+  expires_at: Date | null;
+  revoked_at: Date | null;
+  revoked_by_actor_id: string | null;
+}
+
+export interface ShareIdempotencyTable {
+  installation_id: string;
+  workspace_id: string;
+  actor_id: string;
+  operation: 'share.create';
+  client_key: string;
+  fingerprint: string;
+  share_id: string;
+  created_at: Date;
+}
+
 export interface ActorTable {
   actor_id: string;
   installation_id: string;
@@ -114,6 +140,8 @@ export interface ShelfPostgresSchema {
   shelf_revisions: RevisionTable;
   shelf_revision_entries: RevisionEntryTable;
   shelf_idempotency: IdempotencyTable;
+  shelf_shares: ShareTable;
+  shelf_share_idempotency: ShareIdempotencyTable;
 }
 
 export type ShelfPostgresDatabase = Kysely<ShelfPostgresSchema>;
