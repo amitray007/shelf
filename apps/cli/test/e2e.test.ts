@@ -26,6 +26,16 @@ describe('CLI wire contract', () => {
     expect(document.paths['/api/v1/artifacts/{artifactId}/revisions'].get).toMatchObject({
       operationId: 'listArtifactRevisionsV1',
     });
+    expect(document.paths['/api/v1/artifacts/{artifactId}'].patch).toMatchObject({
+      operationId: 'renameArtifactV1',
+      security: [{ bearerAuth: [] }],
+    });
+    expect(
+      document.paths['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/restores'].post,
+    ).toMatchObject({
+      operationId: 'restoreArtifactRevisionV1',
+      security: [{ bearerAuth: [] }],
+    });
   });
 
   it('does not couple the CLI to core or API server modules', async () => {

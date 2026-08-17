@@ -151,7 +151,22 @@ pnpm shelf artifacts history \
   --url http://127.0.0.1:3000 \
   --artifact art_... \
   --allow-insecure-loopback
+pnpm shelf artifacts rename \
+  --url http://127.0.0.1:3000 \
+  --artifact art_... \
+  --name "Project notes" \
+  --allow-insecure-loopback
+pnpm shelf artifacts restore \
+  --url http://127.0.0.1:3000 \
+  --workspace workspace-main \
+  --artifact art_... \
+  --revision rev_... \
+  --idempotency-key local-readme-restore-1 \
+  --allow-insecure-loopback
 unset SHELF_TOKEN
 ```
 
-Use a new idempotency key after changing the file, target artifact, or semantic metadata.
+Use a new idempotency key after changing the file, target artifact, semantic metadata, or restore
+source. Rename changes only the artifact's display name. Restore creates a new immutable latest
+revision whose provenance names the selected source; it does not rewrite or duplicate stored
+content bytes.

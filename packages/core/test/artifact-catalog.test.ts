@@ -21,6 +21,7 @@ const storedArtifact = {
   installationId: 'installation-main',
   workspaceId: 'workspace-main',
   artifactId: 'art_AAAAAAAAAAAAAAAAAAAAAA',
+  name: 'Release notes',
   createdAt: '2026-08-17T12:00:00.000Z',
   updatedAt: '2026-08-17T12:01:00.000Z',
   latestRevision: storedRevision,
@@ -62,6 +63,7 @@ describe('artifact catalog service', () => {
       apiVersion: 'v1',
       workspaceId: 'workspace-main',
       artifactId: storedArtifact.artifactId,
+      name: 'Release notes',
       createdAt: '2026-08-17T12:00:00.000Z',
       updatedAt: '2026-08-17T12:01:00.000Z',
       latestRevision: {

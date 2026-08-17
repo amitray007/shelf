@@ -1,10 +1,13 @@
 import {
+  ArtifactNameSchema,
   ArtifactPageSchema,
   ArtifactRevisionPageSchema,
   ArtifactSchema,
   OpaqueArtifactIdSchema,
+  OpaqueRevisionIdSchema,
+  RestoreResultSchema,
 } from '@shelf/contracts';
-import { createArtifactCatalogService } from '@shelf/core';
+import { createArtifactCatalogService, createArtifactLifecycleService } from '@shelf/core';
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
 
@@ -20,6 +23,32 @@ const ArtifactParamsSchema = Type.Object(
 const WorkspaceParamsSchema = Type.Object(
   { workspaceId: Type.String({ minLength: 1, maxLength: 128 }) },
   { additionalProperties: false },
+);
+
+const WorkspaceArtifactParamsSchema = Type.Object(
+  {
+    workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
+    artifactId: OpaqueArtifactIdSchema,
+  },
+  { additionalProperties: false },
+);
+
+const RenameArtifactBodySchema = Type.Object(
+  { name: ArtifactNameSchema },
+  { additionalProperties: false },
+);
+
+const RestoreArtifactBodySchema = Type.Object(
+  { sourceRevisionId: OpaqueRevisionIdSchema },
+  { additionalProperties: false },
+);
+
+const IdempotencyHeadersSchema = Type.Object(
+  {
+    authorization: Type.Optional(Type.String()),
+    'idempotency-key': Type.String({ minLength: 1, maxLength: 128 }),
+  },
+  { additionalProperties: true },
 );
 
 const PageQuerySchema = Type.Object(
@@ -44,6 +73,10 @@ export async function registerArtifactRoutes(
   dependencies: ShelfAppDependencies,
 ): Promise<void> {
   const catalog = createArtifactCatalogService({
+    authorizer: dependencies.authorizer,
+    artifacts: dependencies.revisionRepository,
+  });
+  const lifecycle = createArtifactLifecycleService({
     authorizer: dependencies.authorizer,
     artifacts: dependencies.revisionRepository,
   });
@@ -125,6 +158,66 @@ export async function registerArtifactRoutes(
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         signal: requestCancellationSignal(request, reply),
       });
+    },
+  );
+
+  app.patch(
+    '/api/v1/artifacts/:artifactId',
+    {
+      schema: {
+        operationId: 'renameArtifactV1',
+        summary: 'Rename artifact presentation without changing immutable revisions',
+        security: [{ bearerAuth: [] }],
+        tags: ['artifacts'],
+        params: ArtifactParamsSchema,
+        body: RenameArtifactBodySchema,
+        response: { 200: ArtifactSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { artifactId: string };
+      const body = request.body as { name: string };
+      return lifecycle.renameArtifact({
+        installationId: identity.installationId,
+        actorId: identity.actorId,
+        artifactId: params.artifactId,
+        name: body.name,
+        signal: requestCancellationSignal(request, reply),
+      });
+    },
+  );
+
+  app.post(
+    '/api/v1/workspaces/:workspaceId/artifacts/:artifactId/restores',
+    {
+      schema: {
+        operationId: 'restoreArtifactRevisionV1',
+        summary: 'Restore an immutable revision as a new latest revision',
+        security: [{ bearerAuth: [] }],
+        tags: ['artifacts'],
+        params: WorkspaceArtifactParamsSchema,
+        headers: IdempotencyHeadersSchema,
+        body: RestoreArtifactBodySchema,
+        response: { 201: RestoreResultSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { workspaceId: string; artifactId: string };
+      const headers = request.headers as { 'idempotency-key': string };
+      const body = request.body as { sourceRevisionId: string };
+      const result = await lifecycle.restoreArtifact({
+        installationId: identity.installationId,
+        workspaceId: params.workspaceId,
+        actorId: identity.actorId,
+        artifactId: params.artifactId,
+        sourceRevisionId: body.sourceRevisionId,
+        idempotencyKey: headers['idempotency-key'],
+        requestId: request.id,
+        signal: requestCancellationSignal(request, reply),
+      });
+      return reply.status(201).send(result);
     },
   );
 }

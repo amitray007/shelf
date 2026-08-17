@@ -5,6 +5,7 @@ export interface ArtifactTable {
   artifact_id: string;
   installation_id: string;
   workspace_id: string;
+  name: string;
   latest_revision_id: string | null;
   created_at: Date;
   updated_at: Date;
@@ -25,6 +26,7 @@ export interface RevisionTable {
   actor_id: string;
   operation: string;
   publisher_metadata: unknown;
+  source_revision_id: string | null;
   created_at: Date;
 }
 

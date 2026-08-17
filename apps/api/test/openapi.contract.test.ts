@@ -49,9 +49,23 @@ describe('OpenAPI v1', () => {
       ['paths', '/api/v1/artifacts/{artifactId}/revisions', 'get', 'operationId'],
       'listArtifactRevisionsV1',
     );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/artifacts/{artifactId}', 'patch', 'operationId'],
+      'renameArtifactV1',
+    );
+    expect(document).toHaveProperty(
+      [
+        'paths',
+        '/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/restores',
+        'post',
+        'operationId',
+      ],
+      'restoreArtifactRevisionV1',
+    );
     expect(serialized).toContain('multipart/form-data');
     expect(serialized).toContain('PublishResult');
     expect(serialized).toContain('ErrorEnvelope');
+    expect(serialized).toContain('revision.restore');
     expect(document).toHaveProperty(
       ['paths', '/api/v1/revisions/{revisionId}/content', 'get', 'operationId'],
       'downloadRevisionContentV1',

@@ -6,7 +6,7 @@ import type {
   ContentByteRange,
   ContentReader,
   RevisionRepository,
-  StoredPublish,
+  StoredRevision,
 } from '../publishing/ports.js';
 
 export interface ReadRevisionRequest {
@@ -40,7 +40,7 @@ export class RevisionNotFoundError extends ShelfCoreError {
 }
 
 function authorizedRevision(
-  stored: StoredPublish,
+  stored: StoredRevision,
   contentReader: ContentReader,
   signal?: AbortSignal,
 ): AuthorizedRevision {
@@ -79,7 +79,7 @@ function authorizedRevision(
 
 export function createReadRevisionService(dependencies: ReadRevisionServiceDependencies) {
   return async function readRevision(request: ReadRevisionRequest): Promise<AuthorizedRevision> {
-    let stored: StoredPublish | undefined;
+    let stored: StoredRevision | undefined;
     try {
       request.signal?.throwIfAborted();
       stored = await dependencies.revisionRepository.findRevision(request.revisionId);

@@ -4,10 +4,13 @@ import { describe, expect, it } from 'vitest';
 import {
   ArtifactPageSchema,
   ArtifactRevisionPageSchema,
+  ArtifactRevisionSchema,
   ArtifactSchema,
   isArtifact,
   isArtifactPage,
   isArtifactRevisionPage,
+  isRestoreResult,
+  RestoreResultSchema,
 } from '../src/index.js';
 
 const revision = {
@@ -33,6 +36,7 @@ const artifact = {
   apiVersion: 'v1',
   workspaceId: 'workspace-main',
   artifactId: 'art_AAAAAAAAAAAAAAAAAAAAAA',
+  name: 'Release notes',
   createdAt: '2026-08-17T12:00:00.000Z',
   updatedAt: '2026-08-17T12:01:00.000Z',
   latestRevision: revision,
@@ -61,5 +65,55 @@ describe('artifact catalog contracts', () => {
     expect(isArtifactRevisionPage(revisions)).toBe(true);
     expect(isArtifact({ ...artifact, installationId: 'secret-installation' })).toBe(false);
     expect(isArtifactPage({ ...artifacts, nextCursor: '' })).toBe(false);
+  });
+
+  it('accepts restore provenance that names the immutable source revision', () => {
+    const restored = {
+      ...revision,
+      revisionId: 'rev_CCCCCCCCCCCCCCCCCCCCCC',
+      revisionNumber: 4,
+      provenance: {
+        classification: 'restore',
+        observed: { actorId: 'actor_example', operation: 'revision.restore' },
+        source: { revisionId: 'rev_AAAAAAAAAAAAAAAAAAAAAA' },
+      },
+    };
+
+    expect(Check(ArtifactRevisionSchema, restored)).toBe(true);
+    expect(
+      Check(ArtifactRevisionSchema, {
+        ...restored,
+        provenance: { ...restored.provenance, source: { revisionId: artifact.artifactId } },
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts one canonical restore result for CLI replay safety', () => {
+    const result = {
+      apiVersion: 'v1',
+      workspaceId: artifact.workspaceId,
+      artifactId: artifact.artifactId,
+      revisionId: 'rev_CCCCCCCCCCCCCCCCCCCCCC',
+      revisionNumber: 4,
+      sourceRevisionId: 'rev_AAAAAAAAAAAAAAAAAAAAAA',
+      contentHash: `sha256:${'a'.repeat(64)}`,
+      byteCount: 18,
+      provenance: {
+        classification: 'restore',
+        observed: { actorId: 'actor_example', operation: 'revision.restore' },
+        source: { revisionId: 'rev_AAAAAAAAAAAAAAAAAAAAAA' },
+      },
+      requestId: 'request-restore',
+      paths: {
+        artifact: `/api/v1/artifacts/${artifact.artifactId}`,
+        revision: '/api/v1/revisions/rev_CCCCCCCCCCCCCCCCCCCCCC',
+        content: '/api/v1/revisions/rev_CCCCCCCCCCCCCCCCCCCCCC/content',
+      },
+      replayed: false,
+    };
+
+    expect(Check(RestoreResultSchema, result)).toBe(true);
+    expect(isRestoreResult(result)).toBe(true);
+    expect(isRestoreResult({ ...result, sourceRevisionId: artifact.artifactId })).toBe(false);
   });
 });

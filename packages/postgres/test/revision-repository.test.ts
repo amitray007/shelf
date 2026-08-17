@@ -1,6 +1,11 @@
 import { randomBytes } from 'node:crypto';
 
-import type { CommitPublishInput, StoredPublish } from '@shelf/core';
+import type {
+  CommitPublishInput,
+  CommitRestoreInput,
+  StoredPublish,
+  StoredRestore,
+} from '@shelf/core';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -78,6 +83,34 @@ function commitInput(
       workspaceId: result.workspaceId,
       actorId: result.provenance.observed.actorId,
       operation: 'file.publish',
+      key,
+    },
+    fingerprint,
+    result,
+  };
+}
+
+function restoreInput(
+  source: StoredPublish,
+  revisionId = 'rev_restore_DDDDDDDDDDDDDDD',
+  key = 'restore-version-one',
+  fingerprint = `restore-request/v1:sha256:${'f'.repeat(64)}`,
+): CommitRestoreInput {
+  const result: StoredRestore = {
+    ...source,
+    revisionId,
+    provenance: {
+      classification: 'restore',
+      observed: { actorId: 'actor-restorer', operation: 'revision.restore' },
+      source: { revisionId: source.revisionId },
+    },
+  };
+  return {
+    namespace: {
+      installationId: source.installationId,
+      workspaceId: source.workspaceId,
+      actorId: 'actor-restorer',
+      operation: 'revision.restore',
       key,
     },
     fingerprint,
@@ -184,6 +217,152 @@ describePostgres('PostgresRevisionRepository', () => {
         { revisionNumber: 2 },
         { revisionNumber: 1 },
       ],
+    });
+    await database.destroy();
+  });
+
+  it('initializes and renames artifact presentation without changing its revision', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const repository = new PostgresRevisionRepository(database);
+    const first = stored('rev_rename_AAAAAAAAAAAAAAAA', 'art_rename_AAAAAAAAAAAAAAAA');
+    await repository.commitPublish(commitInput(first, 'rename-create'));
+
+    await expect(repository.findArtifact(first.artifactId)).resolves.toMatchObject({
+      artifactId: first.artifactId,
+      name: 'README.md',
+      latestRevision: { revisionId: first.revisionId, originalFileName: 'README.md' },
+    });
+    await expect(
+      repository.renameArtifact({
+        installationId: first.installationId,
+        workspaceId: first.workspaceId,
+        artifactId: first.artifactId,
+        name: 'Project notes',
+      }),
+    ).resolves.toMatchObject({
+      artifactId: first.artifactId,
+      name: 'Project notes',
+      latestRevision: { revisionId: first.revisionId, originalFileName: 'README.md' },
+    });
+    await expect(repository.findRevision(first.revisionId)).resolves.toEqual(first);
+    await database.destroy();
+  });
+
+  it('restores source metadata as a new latest revision and durably replays it', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const repository = new PostgresRevisionRepository(database);
+    const artifactId = 'art_restore_AAAAAAAAAAAAAA';
+    const first = {
+      ...stored('rev_restore_AAAAAAAAAAAAAA', artifactId),
+      content: {
+        contentId: 'cnt_restore_aaaaaaaaaaaaaaaaaaaaa',
+        contentHash: `sha256:${'1'.repeat(64)}`,
+        byteCount: 11,
+      },
+      originalFileName: 'version-one.md',
+      publisherMetadata: { version: 'one' },
+    };
+    await repository.commitPublish(commitInput(first, 'restore-create'));
+    await repository.commitPublish(
+      commitInput(
+        { ...stored('rev_restore_BBBBBBBBBBBBBB', artifactId), originalFileName: 'version-two.md' },
+        'restore-update-two',
+      ),
+    );
+    await repository.commitPublish(
+      commitInput(
+        {
+          ...stored('rev_restore_CCCCCCCCCCCCCC', artifactId),
+          originalFileName: 'version-three.md',
+        },
+        'restore-update-three',
+      ),
+    );
+    const input = restoreInput(first);
+
+    await expect(repository.commitRestore(input)).resolves.toMatchObject({
+      status: 'committed',
+      revisionNumber: 4,
+      result: {
+        revisionId: input.result.revisionId,
+        content: first.content,
+        originalFileName: first.originalFileName,
+        publisherMetadata: first.publisherMetadata,
+        provenance: {
+          classification: 'restore',
+          source: { revisionId: first.revisionId },
+        },
+      },
+    });
+    await expect(repository.commitRestore(input)).resolves.toMatchObject({
+      status: 'replayed',
+      revisionNumber: 4,
+      result: { revisionId: input.result.revisionId },
+    });
+    await expect(
+      repository.commitRestore({
+        ...input,
+        fingerprint: `restore-request/v1:sha256:${'e'.repeat(64)}`,
+      }),
+    ).resolves.toEqual({ status: 'conflict' });
+    await expect(repository.findArtifact(artifactId)).resolves.toMatchObject({
+      name: 'version-one.md',
+      latestRevision: {
+        revisionId: input.result.revisionId,
+        revisionNumber: 4,
+        provenance: { classification: 'restore', source: { revisionId: first.revisionId } },
+      },
+    });
+    await expect(
+      repository.listArtifactRevisions({
+        installationId: first.installationId,
+        artifactId,
+        limit: 10,
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        { revisionNumber: 4, revisionId: input.result.revisionId },
+        { revisionNumber: 3 },
+        { revisionNumber: 2 },
+        { revisionNumber: 1, revisionId: first.revisionId },
+      ],
+    });
+    await database.destroy();
+  });
+
+  it('linearizes concurrent publish and restore revisions to one artifact', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const repository = new PostgresRevisionRepository(database);
+    const artifactId = 'art_mixed_AAAAAAAAAAAAAAAAA';
+    const source = stored('rev_mixed_AAAAAAAAAAAAAAAAA', artifactId);
+    await repository.commitPublish(commitInput(source, 'mixed-create'));
+    const published = stored('rev_mixed_BBBBBBBBBBBBBBBBB', artifactId);
+    const restored = restoreInput(
+      source,
+      'rev_mixed_CCCCCCCCCCCCCCCCC',
+      'mixed-restore',
+      `restore-request/v1:sha256:${'3'.repeat(64)}`,
+    );
+
+    const outcomes = await Promise.all([
+      repository.commitPublish(
+        commitInput(published, 'mixed-publish', `publish-request/v1:sha256:${'4'.repeat(64)}`),
+      ),
+      repository.commitRestore(restored),
+    ]);
+
+    expect(outcomes.every((outcome) => outcome.status === 'committed')).toBe(true);
+    const history = await repository.listArtifactRevisions({
+      installationId: source.installationId,
+      artifactId,
+      limit: 10,
+    });
+    expect(history.items.map((revision) => revision.revisionNumber)).toEqual([3, 2, 1]);
+    expect(new Set(history.items.map((revision) => revision.revisionId))).toEqual(
+      new Set([source.revisionId, published.revisionId, restored.result.revisionId]),
+    );
+    await expect(repository.findArtifact(artifactId)).resolves.toMatchObject({
+      latestRevision: { revisionNumber: 3 },
     });
     await database.destroy();
   });

@@ -136,6 +136,37 @@ describePostgres('PostgreSQL with local content storage', () => {
       expect(update.statusCode).toBe(201);
       expect(update.json()).toMatchObject({ artifactId: firstArtifactId, replayed: false });
 
+      const renamed = await restartedApp.inject({
+        method: 'PATCH',
+        url: `/api/v1/artifacts/${firstArtifactId}`,
+        headers: { authorization: 'Bearer test', 'content-type': 'application/json' },
+        payload: { name: 'Persistent notes' },
+      });
+      expect(renamed.statusCode).toBe(200);
+      expect(renamed.json()).toMatchObject({
+        artifactId: firstArtifactId,
+        name: 'Persistent notes',
+        latestRevision: { originalFileName: 'CHANGELOG.md', revisionNumber: 2 },
+      });
+
+      const restore = await restartedApp.inject({
+        method: 'POST',
+        url: `/api/v1/workspaces/workspace-main/artifacts/${firstArtifactId}/restores`,
+        headers: {
+          authorization: 'Bearer test',
+          'content-type': 'application/json',
+          'idempotency-key': 'persistent-restore',
+        },
+        payload: { sourceRevisionId: firstRevisionId },
+      });
+      expect(restore.statusCode).toBe(201);
+      expect(restore.json()).toMatchObject({
+        artifactId: firstArtifactId,
+        sourceRevisionId: firstRevisionId,
+        revisionNumber: 3,
+        provenance: { classification: 'restore', source: { revisionId: firstRevisionId } },
+      });
+
       const artifact = await restartedApp.inject({
         method: 'GET',
         url: `/api/v1/artifacts/${firstArtifactId}`,
@@ -149,10 +180,12 @@ describePostgres('PostgreSQL with local content storage', () => {
       expect(artifact.statusCode).toBe(200);
       expect(artifact.json()).toMatchObject({
         artifactId: firstArtifactId,
-        latestRevision: { revisionId: update.json().revisionId, revisionNumber: 2 },
+        name: 'Persistent notes',
+        latestRevision: { revisionId: restore.json().revisionId, revisionNumber: 3 },
       });
       expect(history.statusCode).toBe(200);
       expect(history.json().items).toMatchObject([
+        { revisionId: restore.json().revisionId, revisionNumber: 3 },
         { revisionId: update.json().revisionId, revisionNumber: 2 },
         { revisionId: firstRevisionId, revisionNumber: 1 },
       ]);
@@ -167,7 +200,8 @@ describePostgres('PostgreSQL with local content storage', () => {
         items: [
           {
             artifactId: firstArtifactId,
-            latestRevision: { revisionId: update.json().revisionId, revisionNumber: 2 },
+            name: 'Persistent notes',
+            latestRevision: { revisionId: restore.json().revisionId, revisionNumber: 3 },
           },
         ],
         nextCursor: null,
@@ -180,6 +214,13 @@ describePostgres('PostgreSQL with local content storage', () => {
       });
       expect(download.statusCode).toBe(200);
       expect(download.rawPayload.toString()).toBe('persistent shelf');
+      const restoredDownload = await restartedApp.inject({
+        method: 'GET',
+        url: `/api/v1/revisions/${restore.json().revisionId}/content`,
+        headers: { authorization: 'Bearer test' },
+      });
+      expect(restoredDownload.statusCode).toBe(200);
+      expect(restoredDownload.rawPayload.toString()).toBe('persistent shelf');
     } finally {
       await closeDataPlane(restartedApp, restartedPersistence);
     }

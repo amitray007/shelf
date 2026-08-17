@@ -7,8 +7,12 @@ import {
   type ArtifactHistoryCommandOptions,
   executeArtifactHistory,
   executeListArtifacts,
+  executeRenameArtifact,
+  executeRestoreArtifact,
   executeShowArtifact,
   type ListArtifactsCommandOptions,
+  type RenameArtifactCommandOptions,
+  type RestoreArtifactCommandOptions,
   type ShowArtifactCommandOptions,
 } from './commands/artifacts.js';
 import { executePublish, type PublishCommandOptions } from './commands/publish.js';
@@ -85,6 +89,26 @@ export async function runCli(
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: ArtifactHistoryCommandOptions) => {
       result = await executeArtifactHistory(options, runtime);
+    });
+  artifacts
+    .command('rename')
+    .requiredOption('--url <url>')
+    .requiredOption('--artifact <artifact-id>')
+    .requiredOption('--name <name>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: RenameArtifactCommandOptions) => {
+      result = await executeRenameArtifact(options, runtime);
+    });
+  artifacts
+    .command('restore')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .requiredOption('--artifact <artifact-id>')
+    .requiredOption('--revision <revision-id>')
+    .requiredOption('--idempotency-key <key>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: RestoreArtifactCommandOptions) => {
+      result = await executeRestoreArtifact(options, runtime);
     });
 
   try {

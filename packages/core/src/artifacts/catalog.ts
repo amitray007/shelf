@@ -3,7 +3,6 @@ import {
   type ArtifactPage,
   type ArtifactRevision,
   type ArtifactRevisionPage,
-  type PUBLISH_OPERATION,
   type PublisherMetadata,
   READ_REVISION_OPERATION,
 } from '@shelf/contracts';
@@ -23,10 +22,7 @@ export interface StoredArtifactRevision {
   contentHash: string;
   byteCount: number;
   createdAt: string;
-  provenance: {
-    classification: 'direct-publish';
-    observed: { actorId: string; operation: typeof PUBLISH_OPERATION };
-  };
+  provenance: ArtifactRevision['provenance'];
   publisherMetadata: PublisherMetadata;
 }
 
@@ -34,6 +30,7 @@ export interface StoredArtifact {
   installationId: string;
   workspaceId: string;
   artifactId: string;
+  name: string;
   createdAt: string;
   updatedAt: string;
   latestRevision: StoredArtifactRevision;
@@ -120,13 +117,20 @@ function revisionCursor(value: string | undefined): number | undefined {
   return cursor.revisionNumber as number;
 }
 
-function revision(stored: StoredArtifactRevision): ArtifactRevision {
+export function storedRevisionToArtifactRevision(stored: StoredArtifactRevision): ArtifactRevision {
   return {
     ...stored,
-    provenance: {
-      classification: stored.provenance.classification,
-      observed: { ...stored.provenance.observed },
-    },
+    provenance:
+      stored.provenance.classification === 'restore'
+        ? {
+            classification: 'restore',
+            observed: { ...stored.provenance.observed },
+            source: { ...stored.provenance.source },
+          }
+        : {
+            classification: 'direct-publish',
+            observed: { ...stored.provenance.observed },
+          },
     publisherMetadata: { ...stored.publisherMetadata },
     paths: {
       revision: `/api/v1/revisions/${stored.revisionId}`,
@@ -135,14 +139,15 @@ function revision(stored: StoredArtifactRevision): ArtifactRevision {
   };
 }
 
-function artifact(stored: StoredArtifact): Artifact {
+export function storedArtifactToArtifact(stored: StoredArtifact): Artifact {
   return {
     apiVersion: 'v1',
     workspaceId: stored.workspaceId,
     artifactId: stored.artifactId,
+    name: stored.name,
     createdAt: stored.createdAt,
     updatedAt: stored.updatedAt,
-    latestRevision: revision(stored.latestRevision),
+    latestRevision: storedRevisionToArtifactRevision(stored.latestRevision),
     paths: {
       artifact: `/api/v1/artifacts/${stored.artifactId}`,
       revisions: `/api/v1/artifacts/${stored.artifactId}/revisions`,
@@ -194,7 +199,7 @@ export function createArtifactCatalogService(dependencies: {
       artifactId: string;
       signal?: AbortSignal;
     }): Promise<Artifact> {
-      return artifact(await authorizedArtifact(request));
+      return storedArtifactToArtifact(await authorizedArtifact(request));
     },
 
     async listArtifacts(request: {
@@ -246,7 +251,7 @@ export function createArtifactCatalogService(dependencies: {
       }
       return {
         apiVersion: 'v1',
-        items: page.items.map(artifact),
+        items: page.items.map(storedArtifactToArtifact),
         nextCursor:
           page.next === undefined ? null : encodeCursor({ kind: 'artifacts', ...page.next }),
       };
@@ -278,7 +283,7 @@ export function createArtifactCatalogService(dependencies: {
         apiVersion: 'v1',
         artifactId: stored.artifactId,
         workspaceId: stored.workspaceId,
-        items: page.items.map(revision),
+        items: page.items.map(storedRevisionToArtifactRevision),
         nextCursor:
           page.nextRevisionNumber === undefined
             ? null

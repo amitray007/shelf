@@ -2,6 +2,7 @@ import type {
   PUBLISH_OPERATION,
   PublisherMetadata,
   READ_REVISION_OPERATION,
+  RESTORE_OPERATION,
 } from '@shelf/contracts';
 
 export interface AuthorizationRequest {
@@ -87,6 +88,28 @@ export interface StoredPublish {
   publisherMetadata: PublisherMetadata;
 }
 
+export interface StoredRestore {
+  apiVersion: 'v1';
+  installationId: string;
+  workspaceId: string;
+  artifactId: string;
+  revisionId: string;
+  content: SealedContent;
+  originalFileName: string;
+  mediaType: string;
+  provenance: {
+    classification: 'restore';
+    observed: {
+      actorId: string;
+      operation: typeof RESTORE_OPERATION;
+    };
+    source: { revisionId: string };
+  };
+  publisherMetadata: PublisherMetadata;
+}
+
+export type StoredRevision = StoredPublish | StoredRestore;
+
 export interface IdempotencyRecord {
   fingerprint: string;
   result: StoredPublish;
@@ -121,7 +144,7 @@ export interface RevisionRepository {
    * signal: once invoked, its visibility decision must finish.
    */
   commitPublish(input: CommitPublishInput): Promise<CommitPublishOutcome>;
-  findRevision(revisionId: string): Promise<StoredPublish | undefined>;
+  findRevision(revisionId: string): Promise<StoredRevision | undefined>;
 }
 
 export type OpaqueIdKind = 'art' | 'rev';

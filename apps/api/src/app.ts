@@ -7,6 +7,7 @@ import { ErrorEnvelopeSchema, PublishResultSchema } from '@shelf/contracts';
 import type {
   ArtifactCatalogRepository,
   ArtifactIdentityRepository,
+  ArtifactLifecycleRepository,
   Authorizer,
   ContentReader,
   ContentStore,
@@ -57,7 +58,10 @@ export interface ShelfAppDependencies {
   authorizer: Authorizer;
   contentStore: ContentStore;
   contentReader: ContentReader;
-  revisionRepository: RevisionRepository & ArtifactIdentityRepository & ArtifactCatalogRepository;
+  revisionRepository: RevisionRepository &
+    ArtifactIdentityRepository &
+    ArtifactCatalogRepository &
+    ArtifactLifecycleRepository;
 }
 
 export interface CreateShelfAppOptions {
@@ -66,7 +70,10 @@ export interface CreateShelfAppOptions {
   authorizer: Authorizer;
   contentStore?: ContentStore;
   contentReader?: ContentReader;
-  revisionRepository?: RevisionRepository & ArtifactIdentityRepository & ArtifactCatalogRepository;
+  revisionRepository?: RevisionRepository &
+    ArtifactIdentityRepository &
+    ArtifactCatalogRepository &
+    ArtifactLifecycleRepository;
   multipartLimits?: Partial<ShelfMultipartLimits>;
   logger?: boolean;
   humanAuth?: HumanAuth;

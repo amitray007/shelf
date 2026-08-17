@@ -9,8 +9,10 @@ import {
   isArtifactRevisionPage,
   isErrorEnvelope,
   isPublishResult,
+  isRestoreResult,
   type PublisherMetadata,
   type PublishResult,
+  type RestoreResult,
 } from '@shelf/contracts';
 import { failure, remoteFailure, usageFailure } from './output.js';
 
@@ -54,6 +56,16 @@ export interface GetArtifactOptions {
 export interface ListArtifactRevisionsOptions extends GetArtifactOptions {
   limit: number;
   cursor?: string;
+}
+
+export interface RenameArtifactOptions extends GetArtifactOptions {
+  name: string;
+}
+
+export interface RestoreArtifactOptions extends GetArtifactOptions {
+  workspaceId: string;
+  sourceRevisionId: string;
+  idempotencyKey: string;
 }
 
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
@@ -131,9 +143,16 @@ async function cancelResponseBody(response: Response): Promise<void> {
   await response.body?.cancel().catch(() => undefined);
 }
 
-async function catalogJson<T>(
+async function requestApiJson<T>(
   url: URL,
-  options: { token: string; allowInsecureLoopback: boolean },
+  options: {
+    token: string;
+    allowInsecureLoopback: boolean;
+    method?: 'GET' | 'PATCH' | 'POST';
+    body?: string;
+    expectedStatus?: number;
+    idempotencyKey?: string;
+  },
   dependencies: Pick<ShelfClientDependencies, 'fetch'>,
   validate: (value: unknown) => value is T,
 ): Promise<T> {
@@ -141,9 +160,17 @@ async function catalogJson<T>(
     let response: Response;
     try {
       response = await dependencies.fetch(url, {
-        method: 'GET',
+        method: options.method ?? 'GET',
         redirect: 'manual',
-        headers: { accept: 'application/json', authorization: `Bearer ${options.token}` },
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${options.token}`,
+          ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...(options.idempotencyKey === undefined
+            ? {}
+            : { 'idempotency-key': options.idempotencyKey }),
+        },
+        ...(options.body === undefined ? {} : { body: options.body }),
       });
     } catch {
       throw failure('SERVICE_UNAVAILABLE', 'Shelf could not be reached.', { retryable: true });
@@ -162,7 +189,7 @@ async function catalogJson<T>(
       continue;
     }
     const payload = await responseJson(response);
-    if (response.status === 200) {
+    if (response.status === (options.expectedStatus ?? 200)) {
       if (!validate(payload)) throw failure('INTERNAL_ERROR', 'Shelf returned an invalid result.');
       return payload;
     }
@@ -184,7 +211,7 @@ export async function listArtifacts(
   );
   url.searchParams.set('limit', String(options.limit));
   if (options.cursor !== undefined) url.searchParams.set('cursor', options.cursor);
-  return catalogJson(
+  return requestApiJson(
     url,
     { token: options.token, allowInsecureLoopback },
     dependencies,
@@ -199,11 +226,56 @@ export async function getArtifact(
   const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
   const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
   const url = new URL(`/api/v1/artifacts/${encodeURIComponent(options.artifactId)}`, origin);
-  return catalogJson(
+  return requestApiJson(
     url,
     { token: options.token, allowInsecureLoopback },
     dependencies,
     isArtifact,
+  );
+}
+
+export async function renameArtifact(
+  options: RenameArtifactOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<Artifact> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(`/api/v1/artifacts/${encodeURIComponent(options.artifactId)}`, origin);
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'PATCH',
+      body: JSON.stringify({ name: options.name }),
+    },
+    dependencies,
+    isArtifact,
+  );
+}
+
+export async function restoreArtifact(
+  options: RestoreArtifactOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<RestoreResult> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/artifacts/${encodeURIComponent(options.artifactId)}/restores`,
+    origin,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'POST',
+      body: JSON.stringify({ sourceRevisionId: options.sourceRevisionId }),
+      expectedStatus: 201,
+      idempotencyKey: options.idempotencyKey,
+    },
+    dependencies,
+    isRestoreResult,
   );
 }
 
@@ -219,7 +291,7 @@ export async function listArtifactRevisions(
   );
   url.searchParams.set('limit', String(options.limit));
   if (options.cursor !== undefined) url.searchParams.set('cursor', options.cursor);
-  return catalogJson(
+  return requestApiJson(
     url,
     { token: options.token, allowInsecureLoopback },
     dependencies,

@@ -4,11 +4,13 @@ import type { ShelfPostgresDatabase } from './database.js';
 import { initialMigration } from './migrations/0001_initial.js';
 import { humanAuthMigration } from './migrations/0002_human_auth.js';
 import { accessCredentialsMigration } from './migrations/0003_access_credentials.js';
+import { artifactLifecycleMigration } from './migrations/0004_artifact_lifecycle.js';
 
 const migrations = Object.freeze<Record<string, Migration>>({
   '0001_initial': initialMigration,
   '0002_human_auth': humanAuthMigration,
   '0003_access_credentials': accessCredentialsMigration,
+  '0004_artifact_lifecycle': artifactLifecycleMigration,
 });
 
 const provider: MigrationProvider = {
