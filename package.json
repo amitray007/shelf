@@ -11,6 +11,11 @@
   "scripts": {
     "build": "tsc -b packages/contracts packages/core packages/auth packages/postgres packages/storage apps/api apps/cli",
     "check": "biome check .",
+    "dev": "node apps/api/scripts/dev-runner.mjs",
+    "dev:check": "node apps/api/scripts/dev-runner.mjs --check",
+    "dev:database": "node --env-file=.env.dev apps/api/scripts/dev-database.mjs",
+    "dev:environment": "node apps/api/scripts/dev-environment.mjs",
+    "dev:setup": "pnpm dev:environment && pnpm build && pnpm dev:database && node --env-file=.env.dev apps/api/dist/operator/cli.js migrate",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",

@@ -28,6 +28,20 @@ pnpm lint
 pnpm test:streaming-memory
 ```
 
+For host-local development, install and start PostgreSQL, then run:
+
+```sh
+pnpm dev:setup
+pnpm dev
+```
+
+The first command creates a private ignored `.env.dev`, an ignored local-content directory, the
+`shelf_dev` database when using local PostgreSQL, and applies all migrations. It is safe to rerun:
+an existing environment or database is preserved. The second command watches the TypeScript
+workspace and restarts the API at `http://127.0.0.1:3000`. See the
+[host-local development guide](docs/operations/development.md) for configuration, owner bootstrap,
+and publishing a test file.
+
 The API remains injectable for tests and also ships explicit `shelf-server` and `shelf-admin` process boundaries. There is no default credential or automatic owner bootstrap. The portable `shelf publish` CLI uses the public `/api/v1` contract and emits one JSON document on success or failure.
 
 For the runnable local profile, follow the [single-host self-hosting guide](docs/operations/self-hosting.md). The delivery roadmap is maintained in the [product contract](docs/plans/2026-08-17-0030-feat-shelf-product-plan.md#product-delivery-roadmap).
