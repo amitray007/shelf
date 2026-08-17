@@ -19,14 +19,16 @@ pnpm dev:setup
 `dev:setup` performs four idempotent steps:
 
 1. Create `.env.dev` with freshly generated, independent authentication and share-signing secrets
-   and mode `0600`. An existing file is preserved; setup only appends a missing share-signing key.
+   and mode `0600`. For an existing file, setup preserves unrelated values and credentials, appends
+   missing generated fields, and atomically migrates the legacy renderer origin from
+   `http://127.0.0.1:3001` to `http://localhost:3001`.
 2. Create the configured local-content directory beneath the ignored `data/` directory.
 3. Create the local PostgreSQL database if it is missing. Existing databases are never dropped,
    emptied, or recreated. Database creation is skipped for non-loopback PostgreSQL hosts.
 4. Build the workspace and apply reviewed migrations explicitly.
 
-Both `.env.dev` and `data/` are ignored by Git. Setup never replaces an existing `.env.dev`, so
-local changes and credentials survive repeated runs.
+Both `.env.dev` and `data/` are ignored by Git. Setup never regenerates existing credentials or
+overwrites unrelated values, so local changes and credentials survive repeated runs.
 
 ## Configuration
 
@@ -45,7 +47,7 @@ SHELF_PORT=3000
 SHELF_RENDERER_APP_ORIGIN=http://127.0.0.1:5173
 SHELF_RENDERER_HOST=127.0.0.1
 SHELF_RENDERER_PORT=3001
-SHELF_RENDERER_PUBLIC_ORIGIN=http://127.0.0.1:3001
+SHELF_RENDERER_PUBLIC_ORIGIN=http://localhost:3001
 ```
 
 Edit `DATABASE_URL` before rerunning `pnpm dev:setup` when the local PostgreSQL installation needs
@@ -60,8 +62,9 @@ pnpm dev
 
 The command runs the TypeScript build in watch mode, restarts the compiled API and isolated HTML
 renderer, and starts the Vite web client. Stop the process group with `Ctrl-C`. Open the web client
-at `http://127.0.0.1:5173`; the API remains at `http://127.0.0.1:3000` and the renderer at
-`http://127.0.0.1:3001`. Confirm the API is ready:
+at `http://127.0.0.1:5173`; the API remains at `http://127.0.0.1:3000` and the browser-facing
+renderer hostname is `http://localhost:3001`. The distinct hostname keeps Shelf's host-only
+session cookie out of renderer requests. Confirm the API is ready:
 
 The authentication base URL is the browser-facing Vite origin in development. Vite proxies
 `/api` to the API process, so Better Auth can keep exact-origin checks enabled during sign-in.
@@ -87,7 +90,7 @@ pnpm test:browser
 ```
 
 The suite builds and serves the production web client on `127.0.0.1:43873`, starts a fixture-backed
-instance of Shelf's real isolated renderer on `127.0.0.1:43874`, and exercises desktop Chromium,
+instance of Shelf's real isolated renderer at `localhost:43874`, and exercises desktop Chromium,
 Firefox, WebKit, a 320 px Chromium viewport, and a 200% layout-equivalent Chromium viewport. API
 responses are deterministic in-browser fixtures, so this qualification command neither needs
 PostgreSQL nor reads `.env.dev`. It covers dark-only layout, keyboard focus, reduced motion,

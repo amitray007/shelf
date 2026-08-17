@@ -2,7 +2,13 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 import type axe from 'axe-core';
 import type { AxeResults } from 'axe-core';
 
-import { htmlShareId, markdownShareId, shareSecret, workspaceId } from './fixtures.js';
+import {
+  htmlShareId,
+  markdownShareId,
+  rendererOrigin,
+  shareSecret,
+  workspaceId,
+} from './fixtures.js';
 
 declare global {
   interface Window {
@@ -20,6 +26,7 @@ declare global {
         readonly xhrAttempted: boolean;
       };
     };
+    shelfNavigationAttempted?: boolean;
   }
 }
 
@@ -50,11 +57,19 @@ async function expectNoAxeViolations(page: Page): Promise<void> {
   ).toEqual([]);
 }
 
-function trackPageErrors(page: Page): { errors: string[]; assertClean(): void } {
+function trackPageErrors(
+  page: Page,
+  ignoredConsoleErrors: readonly RegExp[] = [],
+): { errors: string[]; assertClean(): void } {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text());
+    if (
+      message.type() === 'error' &&
+      !ignoredConsoleErrors.some((pattern) => pattern.test(message.text()))
+    ) {
+      errors.push(message.text());
+    }
   });
   return {
     errors,
@@ -64,10 +79,10 @@ function trackPageErrors(page: Page): { errors: string[]; assertClean(): void } 
   };
 }
 
-async function focusWithKeyboard(page: Page, target: Locator): Promise<void> {
+async function focusWithKeyboard(page: Page, target: Locator, forwardKey = 'Tab'): Promise<void> {
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   for (let index = 0; index < 30; index += 1) {
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(forwardKey);
     if (await target.evaluate((element) => element === document.activeElement)) return;
   }
   throw new Error('Keyboard navigation did not reach the expected control.');
@@ -112,8 +127,8 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
 
   await page.getByRole('link', { name: 'Access' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Access' })).toBeVisible();
-  const issue = page.getByRole('button', { name: 'Issue credential' });
-  await focusWithKeyboard(page, issue);
+  const issue = page.locator('.page-heading').getByRole('button', { name: 'Issue credential' });
+  await focusWithKeyboard(page, issue, testInfo.project.name === 'webkit' ? 'Alt+Tab' : 'Tab');
   expect(await issue.evaluate((element) => element.matches(':focus-visible'))).toBe(true);
   expect(await issue.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe(
     'none',
@@ -133,8 +148,14 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
 test('anonymous dashboard requests collapse to the owner sign-in surface', async ({
   page,
   context,
-}) => {
-  const diagnostics = trackPageErrors(page);
+}, testInfo) => {
+  const diagnostics = trackPageErrors(page, [
+    /^Failed to load resource: the server responded with a status of 401 \(Unauthorized\)$/u,
+  ]);
+  const unauthorizedResponses: string[] = [];
+  page.on('response', (response) => {
+    if (response.status() === 401) unauthorizedResponses.push(response.url());
+  });
   await context.addCookies([
     { name: 'shelf-browser-anonymous', value: '1', url: 'http://127.0.0.1:43873' },
   ]);
@@ -144,9 +165,15 @@ test('anonymous dashboard requests collapse to the owner sign-in surface', async
   await expect(
     page.getByRole('heading', { level: 1, name: 'Open your artifact shelf' }),
   ).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Email' })).toBeFocused();
+  const email = page.getByRole('textbox', { name: 'Email' });
+  await focusWithKeyboard(page, email, testInfo.project.name === 'webkit' ? 'Alt+Tab' : 'Tab');
+  await expect(email).toBeFocused();
   await expectNoHorizontalOverflow(page);
   await expectNoAxeViolations(page);
+  expect(unauthorizedResponses.length).toBeGreaterThan(0);
+  expect(unauthorizedResponses.every((url) => url.endsWith('/api/v1/dashboard/session'))).toBe(
+    true,
+  );
   diagnostics.assertClean();
 });
 
@@ -157,7 +184,7 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
   const requests: string[] = [];
   page.on('request', (request) => requests.push(request.url()));
 
-  await page.goto('/signin');
+  await page.goto('/__fixture/history-anchor');
   await page.goto(`/s/${markdownShareId}#${shareSecret}`);
   await expect(page).toHaveURL(`/s/${markdownShareId}`);
   await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
@@ -176,7 +203,7 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
   await expectNoAxeViolations(page);
 
   await page.goBack();
-  await expect(page).toHaveURL('/signin');
+  await expect(page).toHaveURL('/__fixture/history-anchor');
   expect(page.url()).not.toContain(shareSecret);
   await page.goForward();
   await expect(page).toHaveURL(`/s/${markdownShareId}`);
@@ -202,7 +229,8 @@ test('reduced motion and the 200 percent layout equivalent preserve utility', as
   await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
   await page.goto('/app/access');
 
-  await page.getByRole('button', { name: 'Issue credential' }).click();
+  const issue = page.locator('.page-heading').getByRole('button', { name: 'Issue credential' });
+  await issue.click();
   const dialog = page.getByRole('dialog', { name: 'Issue access credential' });
   await expect(dialog).toBeVisible();
   const reducedTransition = await dialog.evaluate((element) => {
@@ -213,13 +241,15 @@ test('reduced motion and the 200 percent layout equivalent preserve utility', as
   const reducedSeconds = Number.parseFloat(reducedTransition.duration);
   expect(reducedSeconds).toBeLessThanOrEqual(0.25);
   await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
   await page.emulateMedia({ reducedMotion: 'no-preference', colorScheme: 'dark' });
-  await page.getByRole('button', { name: 'Issue credential' }).click();
+  await issue.click();
   const defaultSeconds = Number.parseFloat(
     await dialog.evaluate((element) => getComputedStyle(element).transitionDuration),
   );
   expect(reducedSeconds).toBeLessThan(defaultSeconds);
   await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
   await expectNoHorizontalOverflow(page, [page.locator('.dashboard-main')]);
 
   if (testInfo.project.name === 'zoom-200-chromium') {
@@ -230,7 +260,10 @@ test('reduced motion and the 200 percent layout equivalent preserve utility', as
   diagnostics.assertClean();
 });
 
-test('the active renderer cannot escape its opaque sandbox', async ({ page, context }) => {
+test('the active renderer cannot escape its opaque sandbox', async ({
+  page,
+  context,
+}, testInfo) => {
   const canaryRequests: Array<{ url: string; headers: Record<string, string> }> = [];
   const appApiRequests: Array<{ url: string; headers: Record<string, string> }> = [];
   const rendererRequests: Array<{ url: string; headers: Record<string, string> }> = [];
@@ -241,9 +274,16 @@ test('the active renderer cannot escape its opaque sandbox', async ({ page, cont
   });
   await context.addCookies([
     {
+      name: 'application-cookie-canary',
+      value: 'present',
+      url: 'http://127.0.0.1:43873',
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
+    {
       name: 'renderer-cookie-canary',
       value: 'present',
-      url: 'http://127.0.0.1:43874/render',
+      url: `${rendererOrigin}/render`,
       httpOnly: true,
       sameSite: 'Lax',
     },
@@ -264,6 +304,12 @@ test('the active renderer cannot escape its opaque sandbox', async ({ page, cont
         event.data.type === 'shelf:test-boundary'
       ) {
         window.shelfBoundaryProbe = { eventOrigin: event.origin, probe: event.data.probe };
+      } else if (
+        typeof event.data === 'object' &&
+        event.data !== null &&
+        event.data.type === 'shelf:test-navigation-attempt'
+      ) {
+        window.shelfNavigationAttempted = true;
       }
     });
   });
@@ -271,10 +317,10 @@ test('the active renderer cannot escape its opaque sandbox', async ({ page, cont
     requestCaptures.push(
       request.allHeaders().then((headers) => {
         const entry = { url: request.url(), headers };
-        if (entry.url === 'http://127.0.0.1:43873/api/v1/renderer-canary') {
+        if (new URL(entry.url).pathname === '/api/v1/renderer-canary') {
           appApiRequests.push(entry);
         }
-        if (entry.url === 'http://127.0.0.1:43874/render') rendererRequests.push(entry);
+        if (entry.url === `${rendererOrigin}/render`) rendererRequests.push(entry);
       }),
     );
   });
@@ -297,6 +343,8 @@ test('the active renderer cannot escape its opaque sandbox', async ({ page, cont
   await page.goto(`/s/${htmlShareId}#${shareSecret}`);
   await expect(page).toHaveURL(`/s/${htmlShareId}`);
   const frame = page.locator('iframe[title="idea.html isolated preview"]');
+  const frameName = await frame.getAttribute('name');
+  expect(frameName).toMatch(/^shelf-renderer-[0-9a-f-]{36}$/u);
   await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
   await expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer');
   await expect(frame).toHaveAttribute('allow', '');
@@ -320,13 +368,29 @@ test('the active renderer cannot escape its opaque sandbox', async ({ page, cont
     .toBeNull();
   await expect.poll(() => page.evaluate(() => localStorage.getItem('renderer-canary'))).toBeNull();
   await expect(page.getByText('Preview unavailable')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.shelfNavigationAttempted ?? false)).toBe(true);
+  await page.waitForTimeout(250);
   await Promise.all(requestCaptures);
 
   const prohibited = canaryRequests.filter(
     (request) => !request.url.startsWith('https://navigation-canary.invalid/'),
   );
   expect(prohibited).toEqual([]);
-  expect(appApiRequests).toEqual([]);
+  const appCanaryHits = await page.evaluate(async (run) => {
+    const response = await fetch(
+      `/__fixture/renderer-canary-hits?run=${encodeURIComponent(run ?? '')}`,
+      { cache: 'no-store' },
+    );
+    return ((await response.json()) as { hits: number }).hits;
+  }, frameName);
+  expect(appCanaryHits).toBe(0);
+  if (testInfo.project.name.includes('chromium')) {
+    expect(appApiRequests.length).toBeGreaterThan(0);
+  }
+  for (const request of appApiRequests) {
+    expect(request.headers.cookie).toBeUndefined();
+    expect(request.headers.referer).toBeFalsy();
+  }
   expect(rendererRequests).toHaveLength(1);
   expect(rendererRequests[0]?.headers.cookie).toBeUndefined();
   expect(popupCount).toBe(0);
@@ -334,7 +398,9 @@ test('the active renderer cannot escape its opaque sandbox', async ({ page, cont
   const navigation = canaryRequests.filter((request) =>
     request.url.startsWith('https://navigation-canary.invalid/'),
   );
-  expect(navigation).toHaveLength(1);
-  expect(navigation[0]?.headers.cookie).toBeUndefined();
-  expect(navigation[0]?.headers.referer).toBeUndefined();
+  expect(navigation.length).toBeLessThanOrEqual(1);
+  for (const request of navigation) {
+    expect(request.headers.cookie).toBeUndefined();
+    expect(request.headers.referer).toBeUndefined();
+  }
 });

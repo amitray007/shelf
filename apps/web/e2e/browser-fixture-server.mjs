@@ -52,6 +52,8 @@ const documentHeaders = {
   'referrer-policy': 'no-referrer',
   'x-content-type-options': 'nosniff',
 };
+const rendererCanaryHits = new Map();
+const rendererFrameName = /^shelf-renderer-[0-9a-f-]{36}$/u;
 
 function json(response, status, value) {
   response.writeHead(status, {
@@ -209,7 +211,25 @@ async function staticFile(request, response, url) {
 const server = createServer((request, response) => {
   void (async () => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1:43873');
-    if (url.pathname === '/__fixture/axe.js') {
+    if (url.pathname === '/api/v1/renderer-canary') {
+      const run = url.searchParams.get('run') ?? '';
+      if (rendererFrameName.test(run)) {
+        rendererCanaryHits.set(run, (rendererCanaryHits.get(run) ?? 0) + 1);
+      }
+      response.writeHead(204, { 'cache-control': 'no-store' });
+      response.end();
+    } else if (url.pathname === '/__fixture/renderer-canary-hits') {
+      const run = url.searchParams.get('run') ?? '';
+      json(response, 200, { hits: rendererCanaryHits.get(run) ?? 0 });
+    } else if (url.pathname === '/__fixture/history-anchor') {
+      response.writeHead(200, {
+        ...documentHeaders,
+        'content-type': 'text/html; charset=utf-8',
+      });
+      response.end(
+        '<!doctype html><html lang="en"><title>History anchor</title><body></body></html>',
+      );
+    } else if (url.pathname === '/__fixture/axe.js') {
       response.writeHead(200, {
         'cache-control': 'no-store',
         'content-type': 'text/javascript; charset=utf-8',

@@ -47,7 +47,7 @@ The first command creates a private ignored `.env.dev`, an ignored local-content
 `shelf_dev` database when using local PostgreSQL, and applies all migrations. It is safe to rerun:
 an existing environment or database is preserved. The second command watches the TypeScript
 workspace and runs the API at `http://127.0.0.1:3000`, the isolated renderer at
-`http://127.0.0.1:3001`, and the web client at `http://127.0.0.1:5173`. See the
+`http://localhost:3001`, and the web client at `http://127.0.0.1:5173`. See the
 [host-local development guide](docs/operations/development.md) for configuration, owner bootstrap,
 sign-in, and publishing a test file.
 

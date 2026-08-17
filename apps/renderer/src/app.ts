@@ -148,6 +148,7 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
     if (
       request.raw.url !== '/render' ||
       request.headers.origin !== 'null' ||
+      request.headers.cookie !== undefined ||
       input.request === undefined
     ) {
       return reply

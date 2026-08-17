@@ -114,6 +114,12 @@ export async function loadShelfServerConfig(
     environment.SHELF_RENDERER_PUBLIC_ORIGIN === undefined
       ? undefined
       : validatedAppOrigin(environment.SHELF_RENDERER_PUBLIC_ORIGIN);
+  if (
+    rendererPublicOrigin !== undefined &&
+    new URL(rendererPublicOrigin).hostname === baseUrl.hostname
+  ) {
+    throw new Error('SHELF_RENDERER_PUBLIC_ORIGIN must use a different hostname from Shelf.');
+  }
 
   return {
     host,

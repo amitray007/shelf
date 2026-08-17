@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
+import { parseEnv, promisify } from 'node:util';
 
 import { Pool } from 'pg';
 import { afterEach, expect, test } from 'vitest';
@@ -48,6 +48,7 @@ test('development setup creates a private local environment and content director
   expect(environment).toMatch(/^SHELF_STORAGE_LOCAL_ROOT=\.\/data\/dev-content$/mu);
   expect(environment).toMatch(/^SHELF_INSTALLATION_ID=installation-dev$/mu);
   expect(environment).toMatch(/^SHELF_AUTH_BASE_URL=http:\/\/127\.0\.0\.1:5173$/mu);
+  expect(environment).toMatch(/^SHELF_RENDERER_PUBLIC_ORIGIN=http:\/\/localhost:3001$/mu);
   expect(environment).toMatch(/^SHELF_AUTH_SECRET=[A-Za-z0-9_-]{43}$/mu);
   expect(environment).toMatch(/^SHELF_SHARE_SIGNING_KEY=[A-Za-z0-9_-]{43}$/mu);
   expect(environment).toMatch(/^SHELF_HOST=127\.0\.0\.1$/mu);
@@ -77,6 +78,67 @@ test('development setup preserves existing values while adding a missing share s
   expect(updated).toMatch(/^SHELF_SHARE_SIGNING_KEY=[A-Za-z0-9_-]{43}$/mu);
   expect((await stat(`${root}/custom-content`)).isDirectory()).toBe(true);
   await expect(stat(`${root}/data/dev-content`)).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+test('development setup migrates the legacy same-host renderer origin atomically', async () => {
+  const root = await temporaryRoot();
+  const existing = [
+    'DATABASE_URL=postgresql:///my_existing_database',
+    'SHELF_STORAGE_LOCAL_ROOT=./custom-content',
+    `SHELF_SHARE_SIGNING_KEY=${'s'.repeat(43)}`,
+    'SHELF_RENDERER_APP_ORIGIN=http://127.0.0.1:5173',
+    'SHELF_RENDERER_HOST=127.0.0.1',
+    'SHELF_RENDERER_PORT=3001',
+    'SHELF_RENDERER_PUBLIC_ORIGIN=http://127.0.0.1:3001',
+    '',
+  ].join('\n');
+  await writeFile(`${root}/.env.dev`, existing, { mode: 0o600 });
+
+  const { stdout, stderr } = await execFileAsync(process.execPath, [devEnvironmentScript], {
+    cwd: root,
+  });
+
+  expect(stderr).toBe('');
+  expect(JSON.parse(stdout)).toEqual({ status: 'updated', path: '.env.dev' });
+  const updated = await readFile(`${root}/.env.dev`, 'utf8');
+  expect(updated).toContain('SHELF_RENDERER_PUBLIC_ORIGIN=http://localhost:3001');
+  expect(updated).not.toContain('SHELF_RENDERER_PUBLIC_ORIGIN=http://127.0.0.1:3001');
+  expect(updated).toContain('DATABASE_URL=postgresql:///my_existing_database');
+  expect((await stat(`${root}/.env.dev`)).mode & 0o777).toBe(0o600);
+});
+
+test('development setup migrates valid formatted and duplicate legacy assignments', async () => {
+  const root = await temporaryRoot();
+  const existing = [
+    'DATABASE_URL=postgresql:///my_existing_database',
+    'SHELF_STORAGE_LOCAL_ROOT=./custom-content',
+    `SHELF_SHARE_SIGNING_KEY=${'s'.repeat(43)}`,
+    'SHELF_RENDERER_APP_ORIGIN=http://127.0.0.1:5173',
+    'SHELF_RENDERER_HOST=127.0.0.1',
+    'SHELF_RENDERER_PORT=3001',
+    'export SHELF_RENDERER_PUBLIC_ORIGIN = "http://127.0.0.1:3001" # generated default',
+    "SHELF_RENDERER_PUBLIC_ORIGIN='http://127.0.0.1:3001' # effective value",
+    '',
+  ].join('\r\n');
+  await writeFile(`${root}/.env.dev`, existing, { mode: 0o640 });
+
+  const { stdout, stderr } = await execFileAsync(process.execPath, [devEnvironmentScript], {
+    cwd: root,
+  });
+
+  expect(stderr).toBe('');
+  expect(JSON.parse(stdout)).toEqual({ status: 'updated', path: '.env.dev' });
+  const updated = await readFile(`${root}/.env.dev`, 'utf8');
+  expect(parseEnv(updated).SHELF_RENDERER_PUBLIC_ORIGIN).toBe('http://localhost:3001');
+  expect(updated).toContain(
+    'export SHELF_RENDERER_PUBLIC_ORIGIN = "http://localhost:3001" # generated default',
+  );
+  expect(updated).toContain(
+    "SHELF_RENDERER_PUBLIC_ORIGIN='http://localhost:3001' # effective value",
+  );
+  expect(updated).not.toContain('http://127.0.0.1:3001');
+  expect(updated).toContain('\r\n');
+  expect((await stat(`${root}/.env.dev`)).mode & 0o777).toBe(0o600);
 });
 
 testPostgres('development setup creates the local database once without resetting it', async () => {
@@ -177,7 +239,7 @@ test('development preflight accepts a share signing key file', async () => {
         'SHELF_STORAGE_DRIVER=local',
         'SHELF_SHARE_SIGNING_KEY_FILE=./share-signing-key',
         'SHELF_RENDERER_APP_ORIGIN=http://127.0.0.1:5173',
-        'SHELF_RENDERER_PUBLIC_ORIGIN=http://127.0.0.1:3001',
+        'SHELF_RENDERER_PUBLIC_ORIGIN=http://localhost:3001',
         '',
       ].join('\n'),
       { mode: 0o600 },

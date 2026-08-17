@@ -14,7 +14,7 @@ export const revisionId = `rev_${'b'.repeat(22)}`;
 export const markdownShareId = `shr_${'c'.repeat(22)}`;
 export const htmlShareId = `shr_${'d'.repeat(22)}`;
 export const shareSecret = 's'.repeat(43);
-export const rendererOrigin = 'http://127.0.0.1:43874';
+export const rendererOrigin = 'http://localhost:43874';
 
 const revision = {
   revisionId,

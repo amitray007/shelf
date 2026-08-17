@@ -9,8 +9,9 @@ parent-owned form POST and never receives Shelf cookies or authentication creden
 - `GET /` is an inert availability document. It does not accept a capability.
 - `POST /render` accepts exactly `shareId`, `secret`, and `nonce` as
   `application/x-www-form-urlencoded` body fields from the iframe's opaque sandbox origin. A
-  sandboxed form navigation reports `Origin: null`; missing, application-origin, and other-origin
-  requests are rejected. The capability is the request authority and no renderer cookie exists.
+  sandboxed form navigation reports `Origin: null`; missing, cookie-bearing, application-origin,
+  and other-origin requests are rejected. The capability is the request authority, and a dedicated
+  renderer hostname keeps Shelf session cookies out of the request.
 - The parent targets a transient form at an iframe with `sandbox="allow-scripts"`, an empty
   Permissions Policy, a no-referrer policy, and a credentialless browsing context. The iframe
   must not grant same-origin, forms, popups, downloads, or top-navigation.

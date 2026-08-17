@@ -204,6 +204,15 @@ describe('isolated HTML renderer', () => {
       {
         headers: {
           'content-type': 'application/x-www-form-urlencoded',
+          cookie: 'shelf-session=must-not-reach-the-renderer',
+          origin: 'null',
+        },
+        payload: validBody,
+        url: '/render',
+      },
+      {
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
           origin: 'null',
         },
         payload: `${validBody}&secret=${secretCanary}`,

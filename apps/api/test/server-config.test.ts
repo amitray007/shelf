@@ -127,6 +127,10 @@ describe('loadShelfServerConfig', () => {
     ['empty host', { SHELF_HOST: '' }],
     ['auth URL path', { SHELF_AUTH_BASE_URL: 'https://shelf.example.test/unsafe' }],
     ['renderer URL path', { SHELF_RENDERER_PUBLIC_ORIGIN: 'https://renderer.example/path' }],
+    [
+      'renderer hostname shared with Shelf',
+      { SHELF_RENDERER_PUBLIC_ORIGIN: 'https://shelf.example.test:3001' },
+    ],
     ['empty web root', { SHELF_WEB_ROOT: '' }],
   ])('rejects %s', async (_label, overrides) => {
     await expect(loadShelfServerConfig(environment(overrides))).rejects.toBeInstanceOf(Error);

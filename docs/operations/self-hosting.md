@@ -23,11 +23,15 @@ chmod 600 secrets/auth-secret.txt secrets/share-signing-key.txt
 ```
 
 Replace `POSTGRES_PASSWORD` in `.env` with a URL-safe random value. Set `SHELF_AUTH_BASE_URL` to
-the application origin users will open and `SHELF_RENDERER_PUBLIC_ORIGIN` to the separately
-reachable renderer origin. The renderer receives the share-signing key and persistence settings,
-but not the authentication secret. The authentication and share-signing secrets must remain
-independent; rotating the latter invalidates existing share links. `.env` and `secrets/` are
-ignored by Git. The example uses ports 3000 and 3001 on loopback only for local operation.
+the application origin users will open and `SHELF_RENDERER_PUBLIC_ORIGIN` to a separately
+reachable renderer origin on a different hostname, not merely another port on the application
+hostname. The renderer receives the share-signing key and persistence settings, but not the
+authentication secret or Shelf session cookie. The authentication and share-signing secrets must
+remain independent; rotating the latter invalidates existing share links. `.env` and `secrets/`
+are ignored by Git. The example uses `127.0.0.1` for Shelf and `localhost` for the renderer during
+loopback-only operation. Shelf's session cookie is host-only. If a custom authentication or proxy
+configuration adds a parent-domain `Domain` attribute, place the renderer on an unrelated
+registrable domain rather than a sibling subdomain; otherwise renderer requests fail closed.
 
 ## Start and inspect
 
