@@ -58,6 +58,8 @@ export interface ListArtifactsOptions {
   installationUrl: string;
   workspaceId: string;
   limit: number;
+  sort: 'created' | 'updated';
+  order: 'asc' | 'desc';
   cursor?: string;
   token: string;
   allowInsecureLoopback?: boolean;
@@ -121,6 +123,20 @@ export interface CompareRevisionsOptions {
   cursor?: string;
   token: string;
   allowInsecureLoopback?: boolean;
+}
+
+export interface DownloadRevisionContentOptions {
+  installationUrl: string;
+  revisionId: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface RevisionContentDownload {
+  body: ReadableStream<Uint8Array>;
+  byteCount: number;
+  mediaType: string;
+  entityTag: string | null;
 }
 
 export interface CreateShareOptions {
@@ -316,6 +332,8 @@ export async function listArtifacts(
     origin,
   );
   url.searchParams.set('limit', String(options.limit));
+  url.searchParams.set('sort', options.sort);
+  url.searchParams.set('order', options.order);
   if (options.cursor !== undefined) url.searchParams.set('cursor', options.cursor);
   return requestApiJson(
     url,
@@ -479,6 +497,68 @@ export async function compareRevisions(
     dependencies,
     isRevisionComparison,
   );
+}
+
+export async function downloadRevisionContent(
+  options: DownloadRevisionContentOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<RevisionContentDownload> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  let url = new URL(`/api/v1/revisions/${encodeURIComponent(options.revisionId)}/content`, origin);
+  for (let redirects = 0; redirects <= 5; redirects += 1) {
+    let response: Response;
+    try {
+      response = await dependencies.fetch(url, {
+        method: 'GET',
+        redirect: 'manual',
+        headers: {
+          accept: 'application/octet-stream',
+          authorization: `Bearer ${options.token}`,
+        },
+      });
+    } catch {
+      throw failure('SERVICE_UNAVAILABLE', 'Shelf could not be reached.', { retryable: true });
+    }
+    if (redirectStatuses.has(response.status)) {
+      await cancelResponseBody(response);
+      const location = response.headers.get('location');
+      if (location === null) throw failure('INTERNAL_ERROR', 'Shelf returned an invalid redirect.');
+      if (redirects === 5) throw failure('INTERNAL_ERROR', 'Shelf returned too many redirects.');
+      const redirected = new URL(location, url);
+      installationOrigin(redirected.origin, allowInsecureLoopback);
+      if (redirected.origin !== url.origin) {
+        throw failure('INTERNAL_ERROR', 'Shelf refused a cross-origin credential redirect.');
+      }
+      url = redirected;
+      continue;
+    }
+    if (response.status !== 200) {
+      const payload = await responseJson(response);
+      if (isErrorEnvelope(payload)) throw remoteFailure(payload);
+      throw failure('INTERNAL_ERROR', 'Shelf returned an invalid error response.');
+    }
+    const declaredLength = response.headers.get('content-length');
+    const byteCount = declaredLength === null ? Number.NaN : Number(declaredLength);
+    const mediaType = response.headers.get('content-type');
+    if (
+      response.body === null ||
+      !Number.isSafeInteger(byteCount) ||
+      byteCount < 0 ||
+      mediaType === null ||
+      mediaType.length === 0
+    ) {
+      await cancelResponseBody(response);
+      throw failure('INTERNAL_ERROR', 'Shelf returned invalid revision content metadata.');
+    }
+    return {
+      body: response.body,
+      byteCount,
+      mediaType,
+      entityTag: response.headers.get('etag'),
+    };
+  }
+  throw failure('INTERNAL_ERROR', 'Shelf returned too many redirects.');
 }
 
 function isShareManagementSummary(value: unknown): value is ShareManagementSummary {

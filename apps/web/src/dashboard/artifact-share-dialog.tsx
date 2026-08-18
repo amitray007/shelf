@@ -35,9 +35,12 @@ export function ArtifactShareDialog({
     if (!open || creating) return;
     const controller = new AbortController();
     setLoading(true);
+    setShare(undefined);
     setError(undefined);
     void loadLatestActiveArtifactShare(artifact.workspaceId, artifact.artifactId, controller.signal)
-      .then((latest) => setShare(latest))
+      .then((latest) => {
+        if (!controller.signal.aborted) setShare(latest);
+      })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
         setError(

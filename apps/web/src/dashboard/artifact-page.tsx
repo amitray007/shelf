@@ -27,7 +27,7 @@ import { DeleteArtifactDialog } from './delete-artifact-dialog.js';
 import { Modal } from './dialogs.js';
 import { ManagedArtifactContent } from './managed-artifact-content.js';
 import type { ArtifactDetailPayload } from './routes.js';
-import { managedStatus, shareSessionUsage } from './status.js';
+import { shareSessionUsage, useShareManagedStatus } from './status.js';
 import './artifact.css';
 
 const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -193,7 +193,7 @@ function ShareRow({ share }: { readonly share: ShareManagementSummary }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const status = managedStatus(share.status);
+  const status = useShareManagedStatus(share.status, share.expiresAt);
   const active = status === 'Active';
   const revocable = status !== 'Revoked';
   const shareUrl = new URL(share.url, window.location.origin).href;

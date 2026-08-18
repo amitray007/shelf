@@ -43,13 +43,15 @@ export interface PublicFolderPayload {
 
 export type PublicSharePayload = PublicFilePayload | PublicFolderPayload;
 
-export class PublicShareUnavailableError extends Error {
-  readonly transportFailure: boolean;
+export type PublicShareFailure = 'terminal' | 'transient';
 
-  constructor(options: { transportFailure?: boolean } = {}) {
+export class PublicShareUnavailableError extends Error {
+  readonly failure: PublicShareFailure;
+
+  constructor(options: { failure?: PublicShareFailure } = {}) {
     super('Public artifact unavailable');
     this.name = 'PublicShareUnavailableError';
-    this.transportFailure = options.transportFailure === true;
+    this.failure = options.failure ?? 'transient';
   }
 }
 
@@ -73,16 +75,24 @@ async function anonymousFetch(input: string, init: RequestInit): Promise<Respons
   try {
     return await fetch(input, init);
   } catch {
-    throw new PublicShareUnavailableError({ transportFailure: true });
+    throw new PublicShareUnavailableError({ failure: 'transient' });
   }
 }
 
+function definitiveClientFailure(status: number): boolean {
+  return status >= 400 && status < 500 && ![408, 425, 429, 499].includes(status);
+}
+
 async function responseJson(response: Response): Promise<unknown> {
-  if (!response.ok) throw new PublicShareUnavailableError();
+  if (!response.ok) {
+    throw new PublicShareUnavailableError({
+      failure: definitiveClientFailure(response.status) ? 'terminal' : 'transient',
+    });
+  }
   try {
     return await response.json();
   } catch {
-    throw new PublicShareUnavailableError();
+    throw new PublicShareUnavailableError({ failure: 'transient' });
   }
 }
 

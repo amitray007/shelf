@@ -1,6 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runCli } from '../src/index.js';
+
+const roots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
 
 const revision = {
   kind: 'file',
@@ -64,6 +73,10 @@ describe('shelf artifacts', () => {
         '10',
         '--cursor',
         'current-page',
+        '--sort',
+        'created',
+        '--order',
+        'asc',
       ],
       {
         env: { SHELF_TOKEN: 'secret-token' },
@@ -77,8 +90,197 @@ describe('shelf artifacts', () => {
     expect(JSON.parse(stdout.value())).toEqual(page);
     expect(stderr.value()).toBe('');
     expect(fetch.mock.calls[0]?.[0].toString()).toBe(
-      'https://shelf.example/api/v1/workspaces/workspace-main/artifacts?limit=10&cursor=current-page',
+      'https://shelf.example/api/v1/workspaces/workspace-main/artifacts?limit=10&sort=created&order=asc&cursor=current-page',
     );
+  });
+
+  it('rejects unsupported artifact sort values before fetching', async () => {
+    const stderr = capture();
+    const fetch = vi.fn();
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'artifacts',
+        'list',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--sort',
+        'name',
+      ],
+      {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout() {},
+        stderr: stderr.write,
+        fetch,
+      },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(JSON.parse(stderr.value())).toMatchObject({ error: { code: 'INVALID_REQUEST' } });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('downloads exact immutable revision bytes to an explicit new path', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'shelf-revision-download-'));
+    roots.push(root);
+    const output = join(root, 'CHANGELOG.md');
+    const bytes = '# Exact revision\n';
+    const stdout = capture();
+    const fetch = vi.fn(
+      async () =>
+        new Response(bytes, {
+          status: 200,
+          headers: {
+            'content-length': String(Buffer.byteLength(bytes)),
+            'content-type': 'text/markdown',
+            etag: `"sha256:${'b'.repeat(64)}"`,
+          },
+        }),
+    );
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'revisions',
+        'download',
+        '--url',
+        'https://shelf.example',
+        '--revision',
+        revision.revisionId,
+        '--output',
+        output,
+      ],
+      {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout: stdout.write,
+        stderr() {},
+        fetch,
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(await readFile(output, 'utf8')).toBe(bytes);
+    expect(JSON.parse(stdout.value())).toEqual({
+      apiVersion: 'v1',
+      operation: 'revision.download',
+      revisionId: revision.revisionId,
+      output,
+      byteCount: Buffer.byteLength(bytes),
+      mediaType: 'text/markdown',
+      entityTag: `"sha256:${'b'.repeat(64)}"`,
+    });
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      `https://shelf.example/api/v1/revisions/${revision.revisionId}/content`,
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'GET',
+      headers: expect.objectContaining({ authorization: 'Bearer secret-token' }),
+    });
+  });
+
+  it('refuses overwrite by default and replaces atomically only with --overwrite', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'shelf-revision-overwrite-'));
+    roots.push(root);
+    const output = join(root, 'artifact.bin');
+    await writeFile(output, 'old bytes');
+    const stderr = capture();
+    const fetch = vi.fn(
+      async () =>
+        new Response('new bytes', {
+          headers: { 'content-length': '9', 'content-type': 'application/octet-stream' },
+        }),
+    );
+    const args = [
+      'node',
+      'shelf',
+      'revisions',
+      'download',
+      '--url',
+      'https://shelf.example',
+      '--revision',
+      revision.revisionId,
+      '--output',
+      output,
+    ];
+
+    expect(
+      await runCli(args, {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout() {},
+        stderr: stderr.write,
+        fetch,
+      }),
+    ).toBe(2);
+    expect(await readFile(output, 'utf8')).toBe('old bytes');
+    expect(fetch).not.toHaveBeenCalled();
+
+    expect(
+      await runCli([...args, '--overwrite'], {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout() {},
+        stderr() {},
+        fetch,
+      }),
+    ).toBe(0);
+    expect(await readFile(output, 'utf8')).toBe('new bytes');
+  });
+
+  it('leaves no output file when streamed bytes do not match the declared length', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'shelf-revision-truncated-'));
+    roots.push(root);
+    const output = join(root, 'artifact.bin');
+    const stderr = capture();
+    const fetch = vi.fn(
+      async () =>
+        new Response('short', {
+          headers: { 'content-length': '9', 'content-type': 'application/octet-stream' },
+        }),
+    );
+
+    expect(
+      await runCli(
+        [
+          'node',
+          'shelf',
+          'revisions',
+          'download',
+          '--url',
+          'https://shelf.example',
+          '--revision',
+          revision.revisionId,
+          '--output',
+          output,
+        ],
+        {
+          env: { SHELF_TOKEN: 'secret-token' },
+          stdout() {},
+          stderr: stderr.write,
+          fetch,
+        },
+      ),
+    ).toBe(1);
+    expect(JSON.parse(stderr.value())).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
+    await expect(readFile(output)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('documents revision download safety and required output path', async () => {
+    const stdout = capture();
+    expect(
+      await runCli(['node', 'shelf', 'revisions', 'download', '--help'], {
+        env: {},
+        stdout: stdout.write,
+        stderr() {},
+      }),
+    ).toBe(0);
+    expect(stdout.value()).toContain('--output <path>');
+    expect(stdout.value()).toContain('--overwrite');
+    expect(stdout.value()).toContain('refuses to replace');
+    expect(stdout.value()).toContain('SHELF_TOKEN');
   });
 
   it('shows one artifact through the shelf command', async () => {

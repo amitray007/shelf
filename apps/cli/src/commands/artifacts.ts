@@ -23,6 +23,8 @@ export interface ListArtifactsCommandOptions {
   workspace: string;
   limit?: string;
   cursor?: string;
+  sort?: string;
+  order?: string;
   allowInsecureLoopback?: boolean;
 }
 
@@ -106,6 +108,18 @@ function artifactHistoryOrder(value: string | undefined): 'newest' | 'oldest' {
   throw usageFailure('The history order must be newest or oldest.');
 }
 
+function artifactSort(value: string | undefined): 'created' | 'updated' {
+  if (value === undefined || value === 'updated') return 'updated';
+  if (value === 'created') return 'created';
+  throw usageFailure('Artifact sort must be created or updated.');
+}
+
+function artifactSortOrder(value: string | undefined): 'asc' | 'desc' {
+  if (value === undefined || value === 'desc') return 'desc';
+  if (value === 'asc') return 'asc';
+  throw usageFailure('Artifact sort order must be asc or desc.');
+}
+
 export function executeListArtifacts(
   options: ListArtifactsCommandOptions,
   runtime: CliRuntime,
@@ -115,6 +129,8 @@ export function executeListArtifacts(
       installationUrl: options.url,
       workspaceId: options.workspace,
       limit: pageLimit(options.limit),
+      sort: artifactSort(options.sort),
+      order: artifactSortOrder(options.order),
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
       token: token(runtime),
       ...(options.allowInsecureLoopback === undefined

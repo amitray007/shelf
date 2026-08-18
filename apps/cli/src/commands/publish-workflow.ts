@@ -131,6 +131,7 @@ export async function executePublishWorkflow(
               metadata: options.metadata,
               ...(options.title === undefined ? {} : { title: options.title }),
               ...(options.description === undefined ? {} : { description: options.description }),
+              ...(options.userBypass === undefined ? {} : { userBypass: options.userBypass }),
               allowInsecureLoopback: profile.allowInsecureLoopback,
             },
             runtime,

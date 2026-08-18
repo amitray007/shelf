@@ -70,6 +70,7 @@ const documentHeaders = {
 };
 const rendererCanaryHits = new Map();
 const rendererFrameName = /^shelf-renderer-[0-9a-f-]{36}$/u;
+const viewerToken = `${'v'.repeat(24)}.${'t'.repeat(43)}`;
 
 function json(response, status, value) {
   response.writeHead(status, {
@@ -258,7 +259,8 @@ async function api(request, response, url) {
       (value.target?.mode === 'pinned' && typeof value.target.revisionId === 'string');
     if (
       request.headers['idempotency-key'] === undefined ||
-      value.expiresAt !== null ||
+      value.accessType !== 'protected' ||
+      value.expiresIn !== 'never' ||
       !validTarget ||
       !artifactsById.has(requestedArtifactId)
     ) {
@@ -275,10 +277,15 @@ async function api(request, response, url) {
       shareId: createdShareId,
       artifactId: requestedArtifactId,
       visibility: 'unlisted',
+      accessType: 'protected',
       target: value.target,
       createdAt: '2026-08-18T10:10:00.000Z',
       expiresAt: null,
       revokedAt: null,
+      status: 'active',
+      maxSessions: null,
+      sessionsUsed: 0,
+      sessionsRemaining: null,
       url: `/s/${createdShareId}#${shareSecret}`,
       replayed: false,
     });
@@ -355,13 +362,39 @@ async function api(request, response, url) {
     json(response, 200, { apiVersion: 'v1', rendererOrigin });
     return;
   }
+  const sessionMatch = /^\/api\/v1\/public\/shares\/(shr_[A-Za-z0-9_-]{22})\/sessions$/u.exec(path);
+  if (request.method === 'POST' && sessionMatch !== null) {
+    const value = JSON.parse(await body(request));
+    const knownShare = [markdownShareId, htmlShareId].includes(sessionMatch[1]);
+    const validSession =
+      typeof value.sessionId === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+        value.sessionId,
+      );
+    const validAuthority =
+      (value.secret === shareSecret && Object.keys(value).length === 2) ||
+      (value.token === viewerToken && Object.keys(value).length === 2);
+    if (!knownShare || !validSession || !validAuthority) {
+      json(response, 404, {});
+      return;
+    }
+    json(response, 200, {
+      apiVersion: 'v1',
+      shareId: sessionMatch[1],
+      sessionId: value.sessionId,
+      token: viewerToken,
+      issuedAt: '2026-08-19T00:00:00.000Z',
+      expiresAt: '2026-08-20T00:00:00.000Z',
+    });
+    return;
+  }
   if (
     request.method === 'POST' &&
     (path === `/api/v1/public/shares/${markdownShareId}/resolve` ||
       path === `/api/v1/public/shares/${htmlShareId}/resolve`)
   ) {
     const value = JSON.parse(await body(request));
-    if (value.secret !== shareSecret || Object.keys(value).length !== 1) {
+    if (value.token !== viewerToken || Object.keys(value).length !== 1) {
       json(response, 404, {});
       return;
     }
@@ -370,7 +403,7 @@ async function api(request, response, url) {
   }
   if (request.method === 'POST' && path === `/api/v1/public/shares/${markdownShareId}/content`) {
     const value = JSON.parse(await body(request));
-    if (value.secret !== shareSecret || Object.keys(value).length !== 1) {
+    if (value.token !== viewerToken || Object.keys(value).length !== 1) {
       json(response, 404, {});
       return;
     }

@@ -82,6 +82,10 @@ describe('shelf folders', () => {
         'folder-one',
         '--metadata',
         'source=cli',
+        '--title',
+        'Project snapshot',
+        '--description',
+        'Complete project tree',
       ],
       { env: { SHELF_TOKEN: 'secret-token' }, stdout: stdout.write, stderr: stderr.write, fetch },
     );
@@ -93,6 +97,9 @@ describe('shelf folders', () => {
     expect(url?.toString()).toBe('https://shelf.example/api/v1/workspaces/workspace-main/folders');
     const form = init?.body as FormData;
     expect([...form.keys()]).toEqual(['publisherMetadata', 'manifest', 'file', 'file']);
+    expect(form.get('publisherMetadata')).toBe(
+      '{"source":"cli","title":"Project snapshot","description":"Complete project tree"}',
+    );
     expect(JSON.parse(String(form.get('manifest')))).toEqual({
       version: 'shelf-folder-manifest/v1',
       rootName: 'project',
@@ -111,6 +118,59 @@ describe('shelf folders', () => {
       'text/markdown',
       'text/typescript',
     ]);
+  });
+
+  it('requires title and description for agent folder publishes and documents the bypass', async () => {
+    const directory = await folderFixture();
+    const stderr = capture();
+    const fetch = vi.fn();
+    const base = [
+      'node',
+      'shelf',
+      'folders',
+      'publish',
+      '--url',
+      'https://shelf.example',
+      '--workspace',
+      'workspace-main',
+      '--directory',
+      directory,
+      '--idempotency-key',
+      'folder-metadata',
+    ];
+
+    expect(
+      await runCli(base, {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout() {},
+        stderr: stderr.write,
+        fetch,
+      }),
+    ).toBe(2);
+    expect(stderr.value()).toContain('--title and --description');
+    expect(fetch).not.toHaveBeenCalled();
+
+    const stdout = capture();
+    expect(
+      await runCli(['node', 'shelf', 'folders', 'publish', '--help'], {
+        env: {},
+        stdout: stdout.write,
+        stderr() {},
+      }),
+    ).toBe(0);
+    expect(stdout.value()).toContain('--user-bypass');
+    expect(stdout.value()).toContain('Agent publishes require');
+
+    fetch.mockResolvedValueOnce(Response.json(result, { status: 201 }));
+    expect(
+      await runCli([...base, '--user-bypass'], {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout() {},
+        stderr() {},
+        fetch,
+      }),
+    ).toBe(0);
+    expect(fetch).toHaveBeenCalledOnce();
   });
 
   it('pages an immutable folder tree', async () => {
@@ -166,6 +226,7 @@ describe('shelf folders', () => {
         directory,
         '--idempotency-key',
         'folder-one',
+        '--user-bypass',
       ],
       { env: { SHELF_TOKEN: 'secret-token' }, stdout() {}, stderr: stderr.write, fetch },
     );

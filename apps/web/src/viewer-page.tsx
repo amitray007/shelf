@@ -95,7 +95,7 @@ export async function viewerLoader({
       if (
         token === null &&
         error instanceof PublicShareUnavailableError &&
-        !error.transportFailure
+        error.failure === 'terminal'
       ) {
         try {
           window.sessionStorage.removeItem(capabilityStorageKey(reference.shareId));

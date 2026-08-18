@@ -119,35 +119,59 @@ export function buildShareCreateInput(
   return { input };
 }
 
-export function managedStatus(status: ShareLifecycleStatus): ManagedStatus {
+export function managedStatus(
+  status: ShareLifecycleStatus,
+  expiresAt: string | null = null,
+  now = Date.now(),
+): ManagedStatus {
+  if (status === 'revoked') return 'Revoked';
+  if (status === 'expired') return 'Expired';
+  if (expiresAt !== null && new Date(expiresAt).valueOf() <= now) return 'Expired';
   switch (status) {
     case 'active':
       return 'Active';
     case 'session-limit-reached':
       return 'Session limit reached';
-    case 'expired':
-      return 'Expired';
-    case 'revoked':
-      return 'Revoked';
+    default:
+      return 'Active';
   }
+}
+
+function useTimedManagedStatus(
+  status: ShareLifecycleStatus,
+  expiresAt: string | null,
+): ManagedStatus {
+  const [, refresh] = useState(0);
+  useEffect(() => {
+    if (status === 'revoked' || status === 'expired' || expiresAt === null) return;
+    let timeout: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const refreshAtDeadline = () => {
+      const remaining = new Date(expiresAt).valueOf() - Date.now();
+      if (remaining <= 0) {
+        refresh((value) => value + 1);
+        return;
+      }
+      timeout = globalThis.setTimeout(refreshAtDeadline, Math.min(remaining + 1, 2_147_483_647));
+    };
+    refreshAtDeadline();
+    return () => {
+      if (timeout !== undefined) globalThis.clearTimeout(timeout);
+    };
+  }, [expiresAt, status]);
+  return managedStatus(status, expiresAt);
+}
+
+export function useShareManagedStatus(
+  status: ShareLifecycleStatus,
+  expiresAt: string | null,
+): ManagedStatus {
+  return useTimedManagedStatus(status, expiresAt);
 }
 
 export function useManagedStatus(
   revokedAt: string | null,
   expiresAt: string | null,
 ): 'Active' | 'Expired' | 'Revoked' {
-  const [, refresh] = useState(0);
-  useEffect(() => {
-    if (revokedAt !== null || expiresAt === null) return;
-    const remaining = new Date(expiresAt).valueOf() - Date.now();
-    if (remaining <= 0) return;
-    const timeout = globalThis.setTimeout(
-      () => refresh((value) => value + 1),
-      Math.min(remaining + 1, 2_147_483_647),
-    );
-    return () => globalThis.clearTimeout(timeout);
-  }, [expiresAt, revokedAt]);
-  if (revokedAt !== null) return 'Revoked';
-  if (expiresAt !== null && new Date(expiresAt).valueOf() <= Date.now()) return 'Expired';
-  return 'Active';
+  const status = useTimedManagedStatus(revokedAt === null ? 'active' : 'revoked', expiresAt);
+  return status === 'Session limit reached' ? 'Active' : status;
 }

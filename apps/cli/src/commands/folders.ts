@@ -16,7 +16,7 @@ import { getFolderTree, publishFolder, type ShelfClientDependencies } from '../c
 import { mediaTypeForPath } from '../media-type.js';
 import { usageFailure } from '../output.js';
 import type { CliRuntime } from '../runtime.js';
-import { publisherMetadata } from './publish.js';
+import { publisherMetadata, requireAgentMetadata } from './publish.js';
 
 export interface PublishFolderCommandOptions {
   url: string;
@@ -27,6 +27,7 @@ export interface PublishFolderCommandOptions {
   metadata: readonly string[];
   title?: string;
   description?: string;
+  userBypass?: boolean;
   allowInsecureLoopback?: boolean;
 }
 
@@ -229,6 +230,8 @@ export async function executePublishFolderWithToken(
   dependencies?: Partial<ShelfClientDependencies>,
   prepared?: PreparedLocalFolder,
 ): Promise<FolderPublishResult> {
+  const metadata = publisherMetadata(options);
+  requireAgentMetadata(metadata, options.userBypass);
   const folder = prepared ?? (await prepareLocalFolder(options.directory));
   return publishFolder(
     {
@@ -240,7 +243,7 @@ export async function executePublishFolderWithToken(
         ? {}
         : { artifactId: opaqueId(options.artifact, 'artifact') }),
       token: authenticationToken,
-      publisherMetadata: publisherMetadata(options),
+      publisherMetadata: metadata,
       manifest: folder.manifest,
       files: folder.files,
       ...(options.allowInsecureLoopback === undefined

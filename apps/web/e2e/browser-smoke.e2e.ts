@@ -254,7 +254,7 @@ test('artifact detail keeps revision and share controls compact and explicit', a
   await expect(page.getByText('Unlisted access', { exact: true })).toHaveCount(0);
   const activeShare = page.locator('.share-row').first();
   await expect(
-    activeShare.locator('.share-row-state[data-active="true"] .status-dot'),
+    activeShare.locator('.share-row-state[data-status="Active"] .status-dot'),
   ).toBeVisible();
   const activeLabel = activeShare.getByText('Active', { exact: true });
   await expect(activeLabel).toBeVisible();
@@ -267,7 +267,7 @@ test('artifact detail keeps revision and share controls compact and explicit', a
 
   await page.getByRole('button', { name: 'Share', exact: true }).click();
   const shareOverview = page.getByRole('dialog', { name: 'Share artifact' });
-  await expect(shareOverview).toContainText('Latest active link');
+  await expect(shareOverview).toContainText('Protected link');
   await shareOverview.getByRole('button', { name: 'Create new link' }).click();
   const shareDialog = page.getByRole('dialog', { name: 'Create share link' });
   await shareDialog.getByRole('radio', { name: /Pinned/u }).click();
@@ -363,13 +363,13 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
 
   await page.getByRole('button', { name: `Share artifact ${longArtifactName}` }).click();
   const shareOverviewDialog = page.getByRole('dialog', { name: 'Share artifact' });
-  await expect(shareOverviewDialog).toContainText('Latest active link');
+  await expect(shareOverviewDialog).toContainText('Protected link');
   await expect(shareOverviewDialog).toContainText(`/s/shr_${'n'.repeat(22)}#${shareSecret}`);
   await expect(shareOverviewDialog.getByRole('button', { name: 'Copy share url' })).toBeVisible();
   await shareOverviewDialog.getByRole('button', { name: 'Create new link' }).click();
   const indexShareDialog = page.getByRole('dialog', { name: 'Create share link' });
-  await expect(indexShareDialog.getByRole('radio', { name: /Latest/u })).toBeChecked();
-  await expect(indexShareDialog.getByLabel('Expires')).toHaveValue('');
+  await expect(indexShareDialog.getByRole('radio', { name: 'Latest revision' })).toBeChecked();
+  await expect(indexShareDialog.getByRole('button', { name: 'Expiry' })).toContainText('Never');
   await indexShareDialog.getByRole('button', { name: 'Create link' }).click();
   await expect(indexShareDialog).toContainText(`/s/${createdShareId}#${shareSecret}`);
   await expect(indexShareDialog.getByRole('button', { name: 'Copy share url' })).toBeVisible();

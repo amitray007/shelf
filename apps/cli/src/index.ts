@@ -32,7 +32,9 @@ import {
 } from './commands/publish-workflow.js';
 import {
   type CompareRevisionsCommandOptions,
+  type DownloadRevisionCommandOptions,
   executeCompareRevisions,
+  executeDownloadRevision,
 } from './commands/revisions.js';
 import {
   type CreateShareCommandOptions,
@@ -211,7 +213,19 @@ Examples:
     .option('--metadata <key=value>', 'publisher metadata; repeatable', collect, [])
     .option('--title <title>', 'human-readable artifact title stored as metadata')
     .option('--description <description>', 'artifact description stored as metadata')
+    .option(
+      '--user-bypass',
+      'allow an intentional human publish without title and description metadata',
+    )
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Metadata:
+  Agent publishes require --title and --description. Add arbitrary strings with repeatable
+  --metadata key=value. Humans may intentionally omit title/description with --user-bypass.
+`,
+    )
     .action(async (options: PublishFolderCommandOptions) => {
       result = await executePublishFolder(options, runtime);
     });
@@ -240,6 +254,30 @@ Examples:
     .action(async (options: CompareRevisionsCommandOptions) => {
       result = await executeCompareRevisions(options, runtime);
     });
+  revisions
+    .command('download')
+    .description('Download one exact immutable file revision')
+    .requiredOption('--url <url>')
+    .requiredOption('--revision <revision-id>')
+    .requiredOption('--output <path>', 'explicit local file path to write')
+    .option('--overwrite', 'atomically replace an existing file; default refuses to replace')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Safety and output:
+  The command streams authenticated exact revision bytes to a temporary file and publishes it
+  atomically at --output. It refuses to replace an existing path unless --overwrite is supplied.
+  Success writes one JSON document to stdout. Authentication uses SHELF_TOKEN.
+
+Examples:
+  shelf revisions download --url https://shelf.example --revision rev_<id> --output ./artifact.bin
+  shelf revisions download --url https://shelf.example --revision rev_<id> --output ./artifact.bin --overwrite
+`,
+    )
+    .action(async (options: DownloadRevisionCommandOptions) => {
+      result = await executeDownloadRevision(options, runtime);
+    });
 
   const artifacts = program.command('artifacts').description('Inspect versioned artifacts');
   artifacts
@@ -249,6 +287,8 @@ Examples:
     .requiredOption('--workspace <workspace>')
     .option('--limit <count>')
     .option('--cursor <cursor>')
+    .option('--sort <created|updated>', 'sort field; defaults to updated')
+    .option('--order <asc|desc>', 'sort direction; defaults to desc')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: ListArtifactsCommandOptions) => {
       result = await executeListArtifacts(options, runtime);

@@ -65,6 +65,10 @@ function argv(file: string, ...extra: string[]) {
     file,
     '--idempotency-key',
     'publish-1',
+    '--title',
+    'Artifact title',
+    '--description',
+    'Artifact description',
     ...extra,
   ];
 }
@@ -167,10 +171,41 @@ describe('shelf publish', () => {
     expect(body).toBeInstanceOf(FormData);
     const form = body as FormData;
     expect([...form.keys()]).toEqual(['publisherMetadata', 'file']);
-    expect(form.get('publisherMetadata')).toBe('{"source":"cli"}');
+    expect(form.get('publisherMetadata')).toBe(
+      '{"source":"cli","title":"Artifact title","description":"Artifact description"}',
+    );
     expect((form.get('file') as Blob).type).toBe('text/plain');
     expect(await (form.get('file') as Blob).text()).toBe('hello shelf');
     expect(JSON.stringify([...form.entries()])).not.toMatch(/share|visibility/);
+  });
+
+  it('requires title and description for legacy agent publishes unless explicitly bypassed', async () => {
+    const file = await fileFixture();
+    const base = argv(file);
+    base.splice(base.indexOf('--title'), 4);
+    const stderr = capture();
+    const fetch = vi.fn(async () => Response.json(publishResult, { status: 201 }));
+
+    expect(
+      await runCli(base, {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout() {},
+        stderr: stderr.write,
+        fetch,
+      }),
+    ).toBe(2);
+    expect(stderr.value()).toContain('--title and --description');
+    expect(fetch).not.toHaveBeenCalled();
+
+    expect(
+      await runCli([...base, '--user-bypass'], {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout() {},
+        stderr() {},
+        fetch,
+      }),
+    ).toBe(0);
+    expect(fetch).toHaveBeenCalledOnce();
   });
 
   it('publishes another revision through the shelf command and stable artifact URL', async () => {

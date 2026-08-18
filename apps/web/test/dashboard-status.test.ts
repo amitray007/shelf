@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildShareCreateInput,
@@ -8,12 +8,30 @@ import {
   shareSessionUsage,
 } from '../src/dashboard/status.js';
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('managed dashboard status', () => {
   it('distinguishes active, expired, and revoked records', () => {
     expect(managedStatus('active')).toBe('Active');
     expect(managedStatus('expired')).toBe('Expired');
     expect(managedStatus('session-limit-reached')).toBe('Session limit reached');
     expect(managedStatus('revoked')).toBe('Revoked');
+  });
+
+  it('moves live and session-limited links to Expired at their deadline', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime('2026-08-19T12:00:00.000Z');
+    const expiresAt = '2026-08-19T12:00:01.000Z';
+
+    expect(managedStatus('active', expiresAt)).toBe('Active');
+    expect(managedStatus('session-limit-reached', expiresAt)).toBe('Session limit reached');
+    vi.advanceTimersByTime(1_001);
+    expect(managedStatus('active', expiresAt)).toBe('Expired');
+    expect(managedStatus('session-limit-reached', expiresAt)).toBe('Expired');
+    expect(managedStatus('revoked', expiresAt)).toBe('Revoked');
+    expect(managedStatus('expired', '2026-08-20T12:00:00.000Z')).toBe('Expired');
   });
 
   it('resolves every preset and validates custom Protected and Public expiry', () => {

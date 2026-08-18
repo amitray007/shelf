@@ -406,7 +406,61 @@ describe('viewer content boundary', () => {
         params: { shareRef: SHARE_ID },
         request: new Request(`https://shelf.test/s/${SHARE_ID}`),
       } as never),
-    ).rejects.toMatchObject({ transportFailure: true });
+    ).rejects.toMatchObject({ failure: 'transient' });
     expect(storage.getItem(capabilityStorageKey(SHARE_ID))).toBe(SECRET);
+  });
+
+  it.each([
+    ['a 503 response', () => new Response('', { status: 503 })],
+    [
+      'an unreadable success body',
+      () => {
+        const response = Response.json({});
+        vi.spyOn(response, 'json').mockRejectedValue(new Error('body interrupted'));
+        return response;
+      },
+    ],
+  ])('retains a captured capability after %s', async (_label, response) => {
+    const storage = memoryStorage();
+    storage.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+    vi.stubGlobal('window', {
+      location: { hash: `#${SECRET}`, pathname: `/s/${SHARE_ID}`, search: '' },
+      history: { state: null, replaceState: vi.fn() },
+      sessionStorage: storage,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof globalThis.fetch>(async () => response()),
+    );
+
+    await expect(
+      viewerLoader({
+        params: { shareRef: SHARE_ID },
+        request: new Request(`https://shelf.test/s/${SHARE_ID}`),
+      } as never),
+    ).rejects.toMatchObject({ failure: 'transient' });
+    expect(storage.getItem(capabilityStorageKey(SHARE_ID))).toBe(SECRET);
+  });
+
+  it('removes a captured capability after a definitive establishment rejection', async () => {
+    const storage = memoryStorage();
+    storage.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+    vi.stubGlobal('window', {
+      location: { hash: `#${SECRET}`, pathname: `/s/${SHARE_ID}`, search: '' },
+      history: { state: null, replaceState: vi.fn() },
+      sessionStorage: storage,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof globalThis.fetch>(async () => new Response('', { status: 404 })),
+    );
+
+    await expect(
+      viewerLoader({
+        params: { shareRef: SHARE_ID },
+        request: new Request(`https://shelf.test/s/${SHARE_ID}`),
+      } as never),
+    ).rejects.toMatchObject({ failure: 'terminal' });
+    expect(storage.getItem(capabilityStorageKey(SHARE_ID))).toBeNull();
   });
 });

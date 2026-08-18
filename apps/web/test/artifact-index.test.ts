@@ -28,4 +28,14 @@ describe('artifact index presentation', () => {
     expect(source).toContain('Delete artifact');
     expect(source).toContain('<ArtifactShareDialog');
   });
+
+  it('guards reusable share modal results against stale requests', async () => {
+    const source = await readFile(
+      path.resolve(import.meta.dirname, '../src/dashboard/artifact-share-dialog.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain('setShare(undefined)');
+    expect(source).toContain('if (!controller.signal.aborted) setShare(latest)');
+  });
 });

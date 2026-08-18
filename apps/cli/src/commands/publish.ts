@@ -18,6 +18,7 @@ export interface PublishCommandOptions {
   metadata: readonly string[];
   title?: string;
   description?: string;
+  userBypass?: boolean;
   allowInsecureLoopback?: boolean;
 }
 
@@ -96,6 +97,8 @@ export async function executePublish(
   if (options.artifact !== undefined && !/^art_[A-Za-z0-9_-]{22}$/u.test(options.artifact)) {
     throw usageFailure('The artifact ID is invalid.');
   }
+  const metadata = publisherMetadata(options);
+  requireAgentMetadata(metadata, options.userBypass);
   return publishFile(
     {
       installationUrl: options.url,
@@ -104,7 +107,7 @@ export async function executePublish(
       idempotencyKey: options.idempotencyKey,
       ...(options.artifact === undefined ? {} : { artifactId: options.artifact }),
       token,
-      publisherMetadata: publisherMetadata(options),
+      publisherMetadata: metadata,
       ...(options.allowInsecureLoopback === undefined
         ? {}
         : { allowInsecureLoopback: options.allowInsecureLoopback }),
