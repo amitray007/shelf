@@ -1,4 +1,11 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable previews must be keyboard reachable.
+
+import { Button } from '@cloudflare/kumo/components/button';
+import { Empty } from '@cloudflare/kumo/components/empty';
+import { DownloadSimpleIcon } from '@phosphor-icons/react/DownloadSimple';
+import { FileIcon } from '@phosphor-icons/react/File';
+import { FileDashedIcon } from '@phosphor-icons/react/FileDashed';
+import { FolderIcon } from '@phosphor-icons/react/Folder';
 import type { FolderEntry, PublicShareResolution } from '@shelf/contracts';
 
 import { publicShareActionUrl } from '../api.js';
@@ -52,9 +59,9 @@ function DownloadAction({
     }
   };
   return (
-    <button className="button button-primary" onClick={download} type="button">
+    <Button icon={DownloadSimpleIcon} onClick={download} type="button" variant="primary">
       Download {resolution.revision.originalFileName}
-    </button>
+    </Button>
   );
 }
 
@@ -66,13 +73,14 @@ function DownloadOnly({
   readonly resolution: Extract<PublicShareResolution, { artifact: { kind: 'file' } }>;
 }) {
   return (
-    <section className="empty-state" aria-labelledby="download-title">
-      <span className="file-glyph" aria-hidden="true" />
-      <p className="eyebrow">{mediaType}</p>
-      <h1 id="download-title">Preview unavailable</h1>
-      <p>This format stays download-only to keep active content outside Shelf.</p>
-      <DownloadAction resolution={resolution} />
-    </section>
+    <Empty
+      className="download-empty"
+      contents={<DownloadAction resolution={resolution} />}
+      description={`This ${mediaType} artifact stays download-only to keep active content outside Shelf.`}
+      icon={<FileDashedIcon aria-hidden="true" size={32} />}
+      size="sm"
+      title="Preview unavailable"
+    />
   );
 }
 
@@ -93,7 +101,11 @@ export function FolderTree({ entries }: { readonly entries: readonly FolderEntry
             style={{ '--tree-depth': depth } as React.CSSProperties}
           >
             <span className="tree-branch" aria-hidden="true" />
-            <span className="tree-icon" aria-hidden="true" />
+            {entry.kind === 'directory' ? (
+              <FolderIcon aria-hidden="true" className="tree-entry-icon" size={16} />
+            ) : (
+              <FileIcon aria-hidden="true" className="tree-entry-icon" size={16} />
+            )}
             <span className="tree-name" title={entry.path}>
               {name}
             </span>
@@ -187,7 +199,7 @@ export function ArtifactContent({
       className="artifact-surface artifact-code"
       tabIndex={0}
     >
-      <pre tabIndex={0}>
+      <pre>
         <code>{renderer.kind === 'json' ? formatJson(text) : text}</code>
       </pre>
     </main>

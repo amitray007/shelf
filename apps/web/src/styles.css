@@ -72,29 +72,16 @@ a {
 }
 
 .rail {
-  position: relative;
   z-index: 2;
   display: flex;
-  min-height: 52px;
-  flex: 0 0 52px;
+  min-height: 48px;
+  flex: 0 0 48px;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
   padding: 0 18px;
   border-bottom: 1px solid var(--rule);
   background: var(--ink);
-}
-
-.rail::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  width: min(22vw, 280px);
-  height: 1px;
-  background: var(--accent);
-  content: "";
-  opacity: 0.72;
 }
 
 .rail-title-group,
@@ -125,11 +112,13 @@ a {
   letter-spacing: -0.025em;
 }
 
-.rail-divider {
-  width: 1px;
-  height: 16px;
+.rail-separator {
   flex: 0 0 auto;
-  background: var(--rule-strong);
+  color: var(--text-muted);
+  font:
+    500 12px / 1 "Geist Mono Variable",
+    ui-monospace,
+    monospace;
 }
 
 .rail-muted,
@@ -148,22 +137,6 @@ a {
   font-weight: 520;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.trust-note {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #b9a27b;
-}
-
-.trust-dot {
-  width: 5px;
-  height: 5px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--trust);
-  box-shadow: 0 0 0 3px #d5a95a14;
 }
 
 .artifact-surface {
@@ -291,6 +264,34 @@ a {
   color: var(--accent-strong);
 }
 
+.markdown-body table {
+  width: 100%;
+  margin: 0 0 1.25em;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+}
+
+.markdown-body th {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.markdown-body .task-list-item {
+  list-style: none;
+}
+
+.markdown-body .task-list-item input {
+  margin: 0 8px 0 -1.45em;
+  accent-color: var(--accent);
+}
+
 .markdown-image-note {
   color: var(--text-muted);
   font:
@@ -348,30 +349,8 @@ a {
   border-left: 1px solid var(--rule-strong);
 }
 
-.tree-icon {
-  position: relative;
-  width: 13px;
-  height: 14px;
-  border: 1px solid #66717d;
-  border-radius: 2px;
-}
-
-.tree-row-directory .tree-icon {
-  height: 10px;
-  border-color: #71889c;
-  background: #24313b;
-}
-
-.tree-row-directory .tree-icon::before {
-  position: absolute;
-  top: -4px;
-  left: -1px;
-  width: 7px;
-  height: 4px;
-  border: 1px solid #71889c;
-  border-bottom: 0;
-  border-radius: 2px 2px 0 0;
-  content: "";
+.tree-entry-icon {
+  color: #71889c;
 }
 
 .tree-name {
@@ -433,57 +412,13 @@ a {
   line-height: 1.55;
 }
 
-.file-glyph,
 .unavailable-mark {
-  position: relative;
-  display: inline-block;
-  width: 26px;
-  height: 32px;
   margin-bottom: 8px;
-  border: 1px solid var(--rule-strong);
-  border-radius: 4px;
+  color: var(--text-muted);
 }
 
-.file-glyph::after,
-.unavailable-mark::after {
-  position: absolute;
-  right: 5px;
-  bottom: 7px;
-  left: 5px;
-  height: 1px;
-  background: var(--rule-strong);
-  content: "";
-}
-
-.unavailable-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-}
-
-.button {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: center;
+.download-empty button {
   margin-top: 22px;
-  padding: 0 14px;
-  border: 1px solid #42647f;
-  border-radius: 5px;
-  color: #dbeaf5;
-  font-size: 12px;
-  font-weight: 580;
-  text-decoration: none;
-  transition: transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.button:hover {
-  border-color: #5c7f9b;
-  background: #18232d;
-}
-
-.button:active {
-  transform: scale(0.97);
 }
 
 .viewer-pending .state-center,
@@ -562,15 +497,14 @@ a {
   background: var(--ink);
 }
 
-.renderer-download .button {
+.renderer-download button {
   min-height: 30px;
   margin: 0;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .tree-row,
-  .markdown-body a,
-  .button {
+  .markdown-body a {
     transition-property: color, background-color, border-color, transform;
     transition-duration: 120ms;
     transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -579,22 +513,14 @@ a {
 
 @media (max-width: 640px) {
   .rail {
-    min-height: 72px;
-    flex: 0 0 auto;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: center;
-    gap: 8px;
-    padding: 10px 14px;
+    min-height: 48px;
+    flex: 0 0 48px;
+    gap: 10px;
+    padding: 0 14px;
   }
 
   .rail-context {
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .rail::after {
-    width: 34vw;
+    margin-left: auto;
   }
 
   .artifact-document {
@@ -621,8 +547,9 @@ a {
     justify-content: stretch;
   }
 
-  .renderer-download .button {
+  .renderer-download button {
     width: 100%;
+    min-height: 44px;
   }
 }
 
@@ -631,6 +558,11 @@ a {
     overflow: hidden;
     max-width: 122px;
     text-overflow: ellipsis;
+  }
+
+  .rail-muted,
+  .rail-title-group .rail-separator:first-of-type {
+    display: none;
   }
 }
 

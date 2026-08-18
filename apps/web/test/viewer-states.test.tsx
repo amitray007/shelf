@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { ArtifactContent } from '../src/components/artifact-content.js';
-import { UnavailableView } from '../src/components/viewer-shell.js';
+import { UnavailableView, ViewerRail } from '../src/components/viewer-shell.js';
 
 const FILE_RESOLUTION = {
   apiVersion: 'v1',
@@ -61,7 +61,9 @@ function renderContent(props: Partial<React.ComponentProps<typeof ArtifactConten
 
 describe('viewer content states', () => {
   it('renders escaped text and formatted JSON', () => {
-    expect(renderContent({ text: '<script>unsafe</script>' })).toContain('&lt;script&gt;');
+    const text = renderContent({ text: '<script>unsafe</script>' });
+    expect(text).toContain('&lt;script&gt;');
+    expect(text.match(/tabindex="0"/gu)).toHaveLength(1);
     expect(renderContent({ renderer: { kind: 'json' }, text: '{"name":"shelf"}' })).toContain(
       '&quot;name&quot;: &quot;shelf&quot;',
     );
@@ -87,6 +89,8 @@ describe('viewer content states', () => {
     const html = renderContent({ entries, resolution: FOLDER_RESOLUTION });
     expect(html).toContain('notes');
     expect(html).toContain('idea.md');
+    expect(html).toContain('<svg');
+    expect(html).not.toContain('tree-icon');
   });
 
   it('gives download-only files a clear quiet state', () => {
@@ -99,5 +103,13 @@ describe('viewer content states', () => {
     const html = renderToStaticMarkup(<UnavailableView />);
     expect(html).toContain('This artifact is unavailable');
     expect(html).not.toMatch(/revoked|expired|secret|permission/i);
+  });
+
+  it('presents a compact artifact map without decorative trust indicators', () => {
+    const html = renderToStaticMarkup(<ViewerRail resolution={FILE_RESOLUTION} />);
+
+    expect(html).toContain('Shared artifact');
+    expect(html).toContain('idea.md');
+    expect(html).not.toContain('trust-dot');
   });
 });
