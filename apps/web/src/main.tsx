@@ -91,6 +91,16 @@ const router = createBrowserRouter([
         },
       },
       {
+        path: 'w/:workspaceId/access',
+        lazy: async () => {
+          const [page, routes] = await Promise.all([
+            import('./dashboard/access-page.js'),
+            import('./dashboard/routes.js'),
+          ]);
+          return { Component: page.AccessPage, loader: routes.accessLoader };
+        },
+      },
+      {
         path: 'access',
         lazy: async () => {
           const [page, routes] = await Promise.all([

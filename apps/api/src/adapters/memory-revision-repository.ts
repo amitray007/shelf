@@ -377,8 +377,13 @@ export class MemoryRevisionRepository
     installationId: string;
     workspaceId: string;
     limit: number;
-    after?: { updatedAt: string; artifactId: string };
+    sort: 'created' | 'updated';
+    order: 'asc' | 'desc';
+    after?: { timestamp: string; artifactId: string };
   }) {
+    const timestamp = (artifact: StoredArtifact) =>
+      request.sort === 'created' ? artifact.createdAt : artifact.updatedAt;
+    const direction = request.order === 'asc' ? 1 : -1;
     const ordered = [...this.#artifacts.values()]
       .filter(
         (artifact) =>
@@ -388,14 +393,17 @@ export class MemoryRevisionRepository
       )
       .sort(
         (left, right) =>
-          right.updatedAt.localeCompare(left.updatedAt) ||
+          direction * timestamp(left).localeCompare(timestamp(right)) ||
           left.artifactId.localeCompare(right.artifactId),
       )
       .filter((artifact) => {
         if (request.after === undefined) return true;
+        const candidateTimestamp = timestamp(artifact);
         return (
-          artifact.updatedAt < request.after.updatedAt ||
-          (artifact.updatedAt === request.after.updatedAt &&
+          (request.order === 'asc'
+            ? candidateTimestamp > request.after.timestamp
+            : candidateTimestamp < request.after.timestamp) ||
+          (candidateTimestamp === request.after.timestamp &&
             artifact.artifactId > request.after.artifactId)
         );
       });
@@ -405,7 +413,7 @@ export class MemoryRevisionRepository
     return {
       items,
       ...(hasMore && last !== undefined
-        ? { next: { updatedAt: last.updatedAt, artifactId: last.artifactId } }
+        ? { next: { timestamp: timestamp(last), artifactId: last.artifactId } }
         : {}),
     };
   }

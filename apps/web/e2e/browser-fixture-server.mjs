@@ -148,11 +148,23 @@ async function api(request, response, url) {
     return;
   }
   if (path === `/api/v1/workspaces/${workspaceId}/artifacts`) {
+    const sort = url.searchParams.get('sort') === 'created' ? 'createdAt' : 'updatedAt';
+    const direction = url.searchParams.get('order') === 'asc' ? 1 : -1;
+    const limit = Number(url.searchParams.get('limit') ?? '10');
+    const cursor = url.searchParams.get('cursor');
+    const offset = cursor?.startsWith('fixture-') ? Number(cursor.slice('fixture-'.length)) : 0;
+    const availableArtifacts = artifactPage.items
+      .filter((artifact) => !deletedArtifacts.has(deletedArtifactKey(request, artifact.artifactId)))
+      .toSorted((left, right) => {
+        const timestamp = left[sort].localeCompare(right[sort]) * direction;
+        return timestamp === 0 ? left.artifactId.localeCompare(right.artifactId) : timestamp;
+      });
+    const items = availableArtifacts.slice(offset, offset + limit);
+    const nextOffset = offset + items.length;
     json(response, 200, {
       ...artifactPage,
-      items: artifactPage.items.filter(
-        (artifact) => !deletedArtifacts.has(deletedArtifactKey(request, artifact.artifactId)),
-      ),
+      items,
+      nextCursor: nextOffset < availableArtifacts.length ? `fixture-${nextOffset}` : null,
     });
     return;
   }
@@ -328,7 +340,15 @@ async function api(request, response, url) {
     return;
   }
   if (request.method === 'GET' && path === '/api/v1/access-credentials') {
-    json(response, 200, credentialPage);
+    const requestedWorkspaceId = url.searchParams.get('workspaceId');
+    json(response, 200, {
+      ...credentialPage,
+      items: credentialPage.items.filter(
+        (credential) =>
+          requestedWorkspaceId === null ||
+          credential.grants.some((grant) => grant.workspaceId === requestedWorkspaceId),
+      ),
+    });
     return;
   }
   if (path === '/api/v1/public/config') {

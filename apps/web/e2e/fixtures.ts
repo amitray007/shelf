@@ -252,6 +252,46 @@ const archiveArtifact = {
   },
 } satisfies Artifact;
 
+const paginationRevisions = (
+  [
+    ['p', 'a'],
+    ['q', 'b'],
+    ['r', 'c'],
+    ['s', 'd'],
+    ['t', 'e'],
+    ['u', 'f'],
+    ['v', '3'],
+  ] as const
+).map(([character, hashCharacter], index) =>
+  fileRevision({
+    id: `rev_${character.toUpperCase().repeat(22)}`,
+    number: 1,
+    createdAt: `2026-08-${String(index + 1).padStart(2, '0')}T07:00:00.000Z`,
+    name: `archive-${index + 1}.txt`,
+    mediaType: 'text/plain',
+    hashCharacter,
+    bytes: 64 + index,
+  }),
+);
+
+const paginationArtifacts = paginationRevisions.map(
+  (paginationRevision, index) =>
+    ({
+      apiVersion: 'v1',
+      workspaceId,
+      artifactId: `art_${String.fromCharCode(112 + index).repeat(22)}`,
+      kind: 'file',
+      name: paginationRevision.originalFileName,
+      createdAt: paginationRevision.createdAt,
+      updatedAt: paginationRevision.createdAt,
+      latestRevision: paginationRevision,
+      paths: {
+        artifact: `/api/v1/artifacts/art_${String.fromCharCode(112 + index).repeat(22)}`,
+        revisions: `/api/v1/artifacts/art_${String.fromCharCode(112 + index).repeat(22)}/revisions`,
+      },
+    }) satisfies Artifact,
+);
+
 export const dashboardSession = {
   apiVersion: 'v1',
   actorId: 'actor-browser-owner',
@@ -265,7 +305,14 @@ export const dashboardSession = {
 
 export const artifactPage = {
   apiVersion: 'v1',
-  items: [artifact, folderArtifact, shortArtifact, jsonArtifact, archiveArtifact],
+  items: [
+    artifact,
+    folderArtifact,
+    shortArtifact,
+    jsonArtifact,
+    archiveArtifact,
+    ...paginationArtifacts,
+  ],
   nextCursor: null,
 } satisfies ArtifactPage;
 
@@ -309,6 +356,18 @@ export const historyPages = [
     items: [archiveRevision],
     nextCursor: null,
   },
+  ...paginationArtifacts.map((paginationArtifact, index) => {
+    const paginationRevision = paginationRevisions[index];
+    if (paginationRevision === undefined)
+      throw new Error('Pagination revision fixture is missing.');
+    return {
+      apiVersion: 'v1' as const,
+      artifactId: paginationArtifact.artifactId,
+      workspaceId,
+      items: [paginationRevision],
+      nextCursor: null,
+    };
+  }),
 ] satisfies ArtifactRevisionPage[];
 
 export const sharePage = {

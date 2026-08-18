@@ -24,6 +24,7 @@ export interface CredentialAdministrationRepository extends WorkspaceAdministrat
     installationId: string;
     limit: number;
     cursor?: string;
+    workspaceId?: string;
   }): Promise<{ items: ManagedAccessCredentialSummary[]; nextCursor?: string }>;
   findInstallationCredential(
     installationId: string,
@@ -102,11 +103,24 @@ export function createDashboardAccessService(options: {
       return { ...issued, actorName: input.actorName, grants: input.grants };
     },
 
-    list(input: { installationId: string; actorId: string; limit: number; cursor?: string }) {
+    async list(input: {
+      installationId: string;
+      actorId: string;
+      limit: number;
+      cursor?: string;
+      workspaceId?: string;
+    }) {
+      if (
+        input.workspaceId !== undefined &&
+        !(await grantsFor(input)).some((grant) => grant.workspaceId === input.workspaceId)
+      ) {
+        throw new DashboardGrantDeniedError();
+      }
       return options.repository.listInstallationCredentialPage({
         installationId: input.installationId,
         limit: input.limit,
         ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+        ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
       });
     },
 

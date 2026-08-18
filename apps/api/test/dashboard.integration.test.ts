@@ -175,7 +175,10 @@ describe('dashboard HTTP API', () => {
       grants: [{ workspaceId: 'workspace-main', action: 'revision.read' }],
     });
 
-    const listed = await app.inject({ method: 'GET', url: '/api/v1/access-credentials?limit=20' });
+    const listed = await app.inject({
+      method: 'GET',
+      url: '/api/v1/access-credentials?limit=20&workspaceId=workspace-main',
+    });
     expect(listed.statusCode).toBe(200);
     expect(listed.json()).toEqual({
       apiVersion: 'v1',
@@ -194,6 +197,12 @@ describe('dashboard HTTP API', () => {
       nextCursor: null,
     });
     expect(JSON.stringify(listed.json())).not.toContain('shf_v1.');
+    expect(dashboardAccess.list).toHaveBeenCalledWith({
+      installationId: 'installation-main',
+      actorId: 'act_owner',
+      limit: 20,
+      workspaceId: 'workspace-main',
+    });
 
     const revoked = await app.inject({
       method: 'DELETE',

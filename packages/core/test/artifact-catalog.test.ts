@@ -140,7 +140,7 @@ describe('artifact catalog service', () => {
         if (request.after !== undefined) return { items: [] };
         return {
           items: [storedArtifact],
-          next: { updatedAt: storedArtifact.updatedAt, artifactId: storedArtifact.artifactId },
+          next: { timestamp: storedArtifact.updatedAt, artifactId: storedArtifact.artifactId },
         };
       },
     };
@@ -167,6 +167,18 @@ describe('artifact catalog service', () => {
         cursor: first.nextCursor as string,
       }),
     ).resolves.toEqual({ apiVersion: 'v1', items: [], nextCursor: null });
+
+    await expect(
+      catalog.listArtifacts({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        actorId: 'actor-reader',
+        limit: 1,
+        sort: 'created',
+        order: 'asc',
+        cursor: first.nextCursor as string,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   });
 
   it('rejects a malformed opaque cursor as a canonical invalid request', async () => {

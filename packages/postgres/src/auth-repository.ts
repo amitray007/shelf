@@ -557,6 +557,7 @@ export class PostgresAuthRepository implements AccessCredentialRepository {
     installationId: string;
     limit: number;
     cursor?: string;
+    workspaceId?: string;
   }): Promise<{ items: InstallationCredentialSummary[]; nextCursor?: string }> {
     if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100) {
       throw new Error('Credential page limit must be between 1 and 100.');
@@ -581,6 +582,18 @@ export class PostgresAuthRepository implements AccessCredentialRepository {
       .orderBy('credential.created_at', 'desc')
       .orderBy('credential.credential_id', 'desc')
       .limit(input.limit + 1);
+    const workspaceId = input.workspaceId;
+    if (workspaceId !== undefined) {
+      query = query.where(({ exists, selectFrom }) =>
+        exists(
+          selectFrom('shelf_actor_grants as scoped_grant')
+            .select('scoped_grant.actor_id')
+            .whereRef('scoped_grant.actor_id', '=', 'credential.actor_id')
+            .whereRef('scoped_grant.installation_id', '=', 'credential.installation_id')
+            .where('scoped_grant.workspace_id', '=', workspaceId),
+        ),
+      );
+    }
     if (cursor !== undefined) {
       query = query.where((expression) =>
         expression.or([

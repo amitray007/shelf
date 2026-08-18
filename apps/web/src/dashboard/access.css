@@ -103,46 +103,74 @@
 }
 
 .grant-list {
-  display: grid;
+  display: flex;
   min-width: 0;
-  gap: 3px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.grant-list span {
+.grant-badge {
+  display: inline-flex;
+  width: fit-content;
   max-width: 100%;
   overflow: hidden;
-  color: var(--text-muted);
+  align-items: center;
+  padding: 3px 7px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-subtle);
   font:
-    470 var(--font-machine) / 1.35 "Geist Mono Variable",
+    520 10px / 1.4 "Geist Mono Variable",
     ui-monospace,
     monospace;
+  letter-spacing: 0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .grant-fieldset {
   display: grid;
-  gap: 9px;
+  gap: 10px;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-.grant-workspace input {
-  margin: 2px 0 0;
-  accent-color: var(--accent);
+.grant-fieldset > p {
+  margin: -4px 0 2px;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+  line-height: 1.5;
 }
 
 .grant-workspace {
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) minmax(180px, 1.5fr);
-  gap: 12px;
-  padding: 10px;
+  gap: 0;
+  overflow: hidden;
   border: 1px solid var(--rule);
-  border-radius: 5px;
+  border-radius: 7px;
+  background: var(--canvas);
 }
 
-.grant-workspace > code {
+.grant-workspace-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.grant-workspace-heading > span {
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+  font-weight: 540;
+}
+
+.grant-workspace-heading > code {
   overflow: hidden;
   color: var(--text-subtle);
   font-size: var(--font-machine);
@@ -150,15 +178,31 @@
   white-space: nowrap;
 }
 
-.grant-workspace > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.grant-actions {
+  display: grid;
+  padding: 4px 13px;
 }
 
-.grant-workspace label {
+.grant-action {
+  display: grid;
+  gap: 3px;
+  padding: 10px 0 11px;
+}
+
+.grant-action + .grant-action {
+  border-top: 1px solid var(--rule);
+}
+
+.grant-action label {
+  color: var(--text-subtle);
+  font-size: var(--font-body);
+}
+
+.grant-action > span {
+  padding-left: 26px;
   color: var(--text-muted);
-  font-size: var(--font-machine);
+  font-size: var(--font-meta);
+  line-height: 1.45;
 }
 
 .credential-details dl {
@@ -192,7 +236,7 @@
   overflow-wrap: anywhere;
 }
 
-.credential-details .grant-list span {
+.credential-details .grant-badge {
   overflow: visible;
   overflow-wrap: anywhere;
   text-overflow: clip;

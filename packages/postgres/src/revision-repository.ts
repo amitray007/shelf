@@ -975,8 +975,14 @@ export class PostgresRevisionRepository
     installationId: string;
     workspaceId: string;
     limit: number;
-    after?: { updatedAt: string; artifactId: string };
+    sort: 'created' | 'updated';
+    order: 'asc' | 'desc';
+    after?: { timestamp: string; artifactId: string };
   }) {
+    const sortColumn =
+      request.sort === 'created'
+        ? ('artifact.created_at' as const)
+        : ('artifact.updated_at' as const);
     let query = this.#database
       .selectFrom('shelf_artifacts as artifact')
       .innerJoin('shelf_revisions as revision', (join) =>
@@ -997,19 +1003,19 @@ export class PostgresRevisionRepository
     query = query.where('artifact.deleted_at', 'is', null);
     if (request.after !== undefined) {
       const after = request.after;
-      const updatedAt = new Date(after.updatedAt);
+      const timestamp = new Date(after.timestamp);
       query = query.where((expressions) =>
         expressions.or([
-          expressions('artifact.updated_at', '<', updatedAt),
+          expressions(sortColumn, request.order === 'asc' ? '>' : '<', timestamp),
           expressions.and([
-            expressions('artifact.updated_at', '=', updatedAt),
+            expressions(sortColumn, '=', timestamp),
             expressions('artifact.artifact_id', '>', after.artifactId),
           ]),
         ]),
       );
     }
     const rows = await query
-      .orderBy('artifact.updated_at', 'desc')
+      .orderBy(sortColumn, request.order)
       .orderBy('artifact.artifact_id', 'asc')
       .limit(request.limit + 1)
       .execute();
@@ -1019,7 +1025,12 @@ export class PostgresRevisionRepository
     return {
       items,
       ...(hasMore && last !== undefined
-        ? { next: { updatedAt: last.updatedAt, artifactId: last.artifactId } }
+        ? {
+            next: {
+              timestamp: request.sort === 'created' ? last.createdAt : last.updatedAt,
+              artifactId: last.artifactId,
+            },
+          }
         : {}),
     };
   }

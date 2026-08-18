@@ -86,20 +86,16 @@
   width: auto;
 }
 
-.artifact-kind-column {
-  width: 84px;
-}
-
 .artifact-revision-column {
-  width: 148px;
+  width: 116px;
 }
 
 .artifact-created-column {
-  width: 120px;
+  width: 156px;
 }
 
 .artifact-updated-column {
-  width: 132px;
+  width: 156px;
 }
 
 .artifact-actions-column {
@@ -164,15 +160,6 @@
   white-space: nowrap;
 }
 
-.artifact-kind-cell {
-  overflow: hidden;
-  color: var(--text-subtle);
-  font-size: var(--font-meta);
-  text-transform: capitalize;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .artifact-revision-cell {
   overflow: hidden;
   color: var(--text-subtle);
@@ -189,6 +176,7 @@
 .artifact-created-cell,
 .artifact-updated-cell {
   overflow: hidden;
+  padding-left: 18px;
   color: var(--text-muted);
   font-size: var(--font-meta);
   font-variant-numeric: tabular-nums;
@@ -197,7 +185,10 @@
   white-space: nowrap;
 }
 
-.artifact-table th.artifact-kind-cell,
+.artifact-updated-cell {
+  padding-right: 16px;
+}
+
 .artifact-table th.artifact-revision-cell,
 .artifact-table th.artifact-created-cell,
 .artifact-table th.artifact-updated-cell {
@@ -205,6 +196,26 @@
   font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   font-size: var(--font-machine);
   font-weight: 520;
+}
+
+.artifact-sort-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.artifact-sort-link svg {
+  flex: 0 0 auto;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .artifact-sort-link:hover {
+    color: var(--text);
+  }
 }
 
 .artifact-actions-cell {
@@ -266,8 +277,6 @@
     align-items: center;
   }
 
-  .artifact-kind-cell,
-  .artifact-kind-column,
   .artifact-created-cell,
   .artifact-created-column {
     display: none;

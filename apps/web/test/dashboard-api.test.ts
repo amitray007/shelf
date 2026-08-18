@@ -8,6 +8,7 @@ import {
   DashboardAuthenticationError,
   deleteArtifact,
   loadArtifacts,
+  loadDashboardCredentials,
   loadDashboardSession,
   loadFolderEntries,
   recoverArtifact,
@@ -109,7 +110,18 @@ describe('dashboard API client', () => {
     globalThis.fetch = fetch;
     await loadArtifacts('workspace/main', 'opaque cursor');
     expect(fetch.mock.calls[0]?.[0]).toBe(
-      '/api/v1/workspaces/workspace%2Fmain/artifacts?limit=50&cursor=opaque+cursor',
+      '/api/v1/workspaces/workspace%2Fmain/artifacts?limit=10&sort=updated&order=desc&cursor=opaque+cursor',
+    );
+  });
+
+  it('loads only credentials granted to the selected workspace', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      json({ apiVersion: 'v1', items: [], nextCursor: null }),
+    );
+    globalThis.fetch = fetch;
+    await loadDashboardCredentials('workspace/main', 'credential cursor');
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      '/api/v1/access-credentials?limit=50&workspaceId=workspace%2Fmain&cursor=credential+cursor',
     );
   });
 

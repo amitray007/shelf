@@ -143,7 +143,7 @@ for (const viewport of densityViewports) {
       (element) => getComputedStyle(element).fontSize,
     );
     const ledger = page.getByRole('table', { name: 'Artifacts' });
-    await expect(ledger.locator('tbody tr')).toHaveCount(5);
+    await expect(ledger.locator('tbody tr')).toHaveCount(10);
     await expect(ledger.getByText('x', { exact: true })).toBeVisible();
     await expect(ledger.getByText(longArtifactName, { exact: true })).toBeVisible();
     await expect(ledger.getByText(longFolderName, { exact: true })).toBeVisible();
@@ -319,6 +319,39 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await expect(page.getByText('shelf publish ./path --share')).toBeVisible();
   await expect(page.getByRole('link', { name: longArtifactName })).toBeVisible();
   await expect(page.getByText('Collections', { exact: true })).toHaveCount(0);
+  const dashboardSections = page.getByRole('navigation', { name: 'Dashboard sections' });
+  await expect(dashboardSections.getByRole('link', { name: 'Artifacts' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(
+    page.locator('.dashboard-bar').getByRole('button', { name: 'Sign out' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: /Workspace menu/u }).click();
+  const workspaceMenu = page.locator('.workspace-menu-content');
+  await expect(workspaceMenu.getByText('Workspaces', { exact: true })).toBeVisible();
+  await expect(workspaceMenu.getByRole('menuitem', { name: 'Access' })).toHaveCount(0);
+  await expect(workspaceMenu.getByRole('menuitem', { name: 'Sign out' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  const artifactTable = page.getByRole('table', { name: 'Artifacts' });
+  await expect(artifactTable.locator('tbody tr')).toHaveCount(10);
+  if ((page.viewportSize()?.width ?? 0) > 520) {
+    await expect(
+      artifactTable.getByRole('columnheader', { name: /Last Updated/u }),
+    ).toHaveAttribute('aria-sort', 'descending');
+    await artifactTable.getByRole('link', { name: /Created on/u }).click();
+    await expect(page).toHaveURL(/sort=created&order=desc/u);
+    await artifactTable.getByRole('link', { name: /Created on/u }).click();
+    await expect(page).toHaveURL(/sort=created&order=asc/u);
+    await page.getByRole('link', { name: 'Next' }).click();
+    await expect(page.getByText('Page 2', { exact: true })).toBeVisible();
+    await expect(artifactTable.locator('tbody tr')).toHaveCount(2);
+    await page.getByRole('link', { name: 'Previous' }).click();
+    await expect(artifactTable.locator('tbody tr')).toHaveCount(10);
+    await artifactTable.getByRole('link', { name: /Last Updated/u }).click();
+    await expect(page).toHaveURL(/sort=updated&order=desc/u);
+  }
   await expectNoHorizontalOverflow(page, [page.locator('.dashboard-main')]);
   await expectNoAxeViolations(page);
 
@@ -398,9 +431,14 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await expect(page.getByRole('button', { name: /Workspace menu, workspace-work/u })).toBeVisible();
   await expect(page.getByText('Nothing here yet')).toBeVisible();
 
-  await page.getByRole('button', { name: /Workspace menu/u }).click();
-  await page.getByRole('menuitem', { name: 'Access' }).click();
+  await dashboardSections.getByRole('link', { name: 'Access' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Access' })).toBeVisible();
+  await expect(page).toHaveURL('/app/w/workspace-work/access');
+  await expect(page.getByText('No access credentials')).toBeVisible();
+  await page.getByRole('button', { name: /Workspace menu/u }).click();
+  await page.getByRole('menuitem', { name: workspaceId }).click();
+  await expect(page).toHaveURL(`/app/w/${workspaceId}/access`);
+  await expect(page.getByText('expired-agent', { exact: true }).first()).toBeVisible();
   const issue = page.locator('.page-heading').getByRole('button', { name: 'Create Credential' });
   await focusWithKeyboard(page, issue, testInfo.project.name === 'webkit' ? 'Alt+Tab' : 'Tab');
   expect(await issue.evaluate((element) => element.matches(':focus-visible'))).toBe(true);
@@ -411,7 +449,8 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   const issueDialog = page.getByRole('dialog', { name: 'Create credential' });
   await expect(issueDialog).toBeVisible();
   await name.fill('browser-agent');
-  await issueDialog.getByRole('checkbox', { name: 'file.publish' }).first().check();
+  await expect(issueDialog.getByText(workspaceId, { exact: true })).toBeVisible();
+  await issueDialog.getByRole('checkbox', { name: 'Publish files' }).check();
   await issueDialog.getByRole('button', { name: 'Create Credential' }).click();
   await expect(issueDialog).toContainText(createdCredentialToken);
   await issueDialog.getByRole('button', { name: 'I saved it' }).click();
@@ -515,7 +554,7 @@ test('reduced motion and the 200 percent layout equivalent preserve utility', as
 }, testInfo) => {
   const diagnostics = trackPageErrors(page);
   await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
-  await page.goto('/app/access');
+  await page.goto(`/app/w/${workspaceId}/access`);
 
   const issue = page.locator('.page-heading').getByRole('button', { name: 'Create Credential' });
   await issue.click();

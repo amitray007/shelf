@@ -56,6 +56,8 @@ const PageQuerySchema = Type.Object(
   {
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
     cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 2048 })),
+    sort: Type.Optional(Type.Union([Type.Literal('created'), Type.Literal('updated')])),
+    order: Type.Optional(Type.Union([Type.Literal('asc'), Type.Literal('desc')])),
   },
   { additionalProperties: false },
 );
@@ -161,12 +163,19 @@ export async function registerArtifactRoutes(
     async (request, reply) => {
       const identity = await authenticate(request, dependencies.authenticator);
       const params = request.params as { workspaceId: string };
-      const query = request.query as { limit?: number; cursor?: string };
+      const query = request.query as {
+        limit?: number;
+        cursor?: string;
+        sort?: 'created' | 'updated';
+        order?: 'asc' | 'desc';
+      };
       return catalog.listArtifacts({
         installationId: identity.installationId,
         workspaceId: params.workspaceId,
         actorId: identity.actorId,
         limit: query.limit ?? 20,
+        sort: query.sort ?? 'updated',
+        order: query.order ?? 'desc',
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         signal: requestCancellationSignal(request, reply),
       });

@@ -18,7 +18,7 @@ describe('dashboard architecture', () => {
     expect(source).toContain("path: '/app'");
     expect(source).toContain("path: 'w/:workspaceId/artifacts'");
     expect(source).toContain("path: 'w/:workspaceId/artifacts/:artifactId'");
-    expect(source).toContain("path: 'access'");
+    expect(source).toContain("path: 'w/:workspaceId/access'");
     expect(source).not.toMatch(/path:\s*['"][^'"]*publish/);
     expect(source).not.toMatch(
       /import \{ (?:AccessPage|ArtifactPage|ArtifactsPage|SignInPage) \}/u,
@@ -124,7 +124,7 @@ describe('dashboard architecture', () => {
     expect(detail).not.toContain('{history.items.length}');
   });
 
-  it('keeps Access and sign-out in the workspace menu without a mobile tab bar', async () => {
+  it('keeps workspace sections and sign-out in the top navigation without a mobile tab bar', async () => {
     const layout = await readFile(path.join(sourceRoot, 'dashboard/layout.tsx'), 'utf8');
     const shell = await readFile(path.join(sourceRoot, 'dashboard/shell.css'), 'utf8');
     const responsive = await readFile(path.join(sourceRoot, 'dashboard/responsive.css'), 'utf8');
@@ -132,6 +132,7 @@ describe('dashboard architecture', () => {
     expect(layout).toContain('New workspace');
     expect(layout).toContain('Access');
     expect(layout).toContain('Sign out');
+    expect(layout).toContain('Dashboard sections');
     expect(layout).not.toContain('dashboard-nav');
     expect(layout).not.toContain('params.artifactId === undefined');
     expect(shell).toMatch(/\.dashboard-bar\s*\{[^}]*height:\s*var\(--bar-size\)/su);

@@ -150,8 +150,10 @@ export async function loadArtifacts(
   workspaceId: string,
   cursor?: string,
   signal?: AbortSignal,
+  sort: 'created' | 'updated' = 'updated',
+  order: 'asc' | 'desc' = 'desc',
 ): Promise<ArtifactPage> {
-  const query = new URLSearchParams({ limit: '50' });
+  const query = new URLSearchParams({ limit: '10', sort, order });
   if (cursor !== undefined) query.set('cursor', cursor);
   const value = await requestJson(
     `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts?${query}`,
@@ -358,10 +360,11 @@ export async function revokeShare(workspaceId: string, shareId: string): Promise
 }
 
 export async function loadDashboardCredentials(
+  workspaceId: string,
   cursor?: string,
   signal?: AbortSignal,
 ): Promise<DashboardCredentialPage> {
-  const query = new URLSearchParams({ limit: '50' });
+  const query = new URLSearchParams({ limit: '50', workspaceId });
   if (cursor !== undefined) query.set('cursor', cursor);
   const value = await requestJson(
     `/api/v1/access-credentials?${query}`,

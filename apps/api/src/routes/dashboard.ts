@@ -22,6 +22,7 @@ const PageQuerySchema = Type.Object(
   {
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
     cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 2048 })),
+    workspaceId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
   },
   { additionalProperties: false },
 );
@@ -177,13 +178,14 @@ export function registerDashboardRoutes(
     async (request, reply) => {
       noStore(reply);
       const identity = await authenticateHumanSession(request, dependencies.authenticator);
-      const query = request.query as { limit?: number; cursor?: string };
+      const query = request.query as { limit?: number; cursor?: string; workspaceId?: string };
       try {
         const page = await dependencies.access.list({
           installationId: identity.installationId,
           actorId: identity.actorId,
           limit: query.limit ?? 20,
           ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+          ...(query.workspaceId === undefined ? {} : { workspaceId: query.workspaceId }),
         });
         return {
           apiVersion: 'v1' as const,

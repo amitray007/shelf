@@ -2,13 +2,23 @@ import { Button } from '@cloudflare/kumo/components/button';
 import { ClipboardText } from '@cloudflare/kumo/components/clipboard-text';
 import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
 import { Table } from '@cloudflare/kumo/components/table';
+import { CaretDownIcon } from '@phosphor-icons/react/CaretDown';
+import { CaretUpIcon } from '@phosphor-icons/react/CaretUp';
+import { CaretUpDownIcon } from '@phosphor-icons/react/CaretUpDown';
 import { DotsThreeIcon } from '@phosphor-icons/react/DotsThree';
 import { ShareNetworkIcon } from '@phosphor-icons/react/ShareNetwork';
 import { TerminalWindowIcon } from '@phosphor-icons/react/TerminalWindow';
 import { TrashIcon } from '@phosphor-icons/react/Trash';
 import type { Artifact, ArtifactDeletionResult, ArtifactPage } from '@shelf/contracts';
 import { useState } from 'react';
-import { Link, useLoaderData, useParams, useRevalidator } from 'react-router';
+import {
+  Link,
+  useLoaderData,
+  useLocation,
+  useParams,
+  useRevalidator,
+  useSearchParams,
+} from 'react-router';
 import { ordinal } from '../components/revision-label.js';
 import { DashboardApiError, loadArtifact, recoverArtifact } from './api.js';
 import { ArtifactIcon } from './artifact-icon.js';
@@ -30,6 +40,8 @@ function dateLabel(value: string): string {
 export function ArtifactsPage() {
   const page = useLoaderData() as ArtifactPage;
   const workspaceId = useParams().workspaceId;
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const revalidator = useRevalidator();
   const [shareArtifact, setShareArtifact] = useState<Artifact>();
   const [deletingArtifact, setDeletingArtifact] = useState<Artifact>();
@@ -44,6 +56,14 @@ export function ArtifactsPage() {
   );
   const [recovering, setRecovering] = useState(false);
   const [recoveryError, setRecoveryError] = useState<string>();
+  const sort = searchParams.get('sort') === 'created' ? 'created' : 'updated';
+  const order = searchParams.get('order') === 'asc' ? 'asc' : 'desc';
+  const paginationState = location.state as { artifactCursorTrail?: unknown } | null;
+  const cursorTrail = Array.isArray(paginationState?.artifactCursorTrail)
+    ? paginationState.artifactCursorTrail.filter(
+        (candidate): candidate is string => typeof candidate === 'string',
+      )
+    : [];
   if (workspaceId === undefined) throw new Error('Artifact workspace is unavailable.');
   const loadedArtifactIds = new Set(page.items.map((artifact) => artifact.artifactId));
   const visibleArtifacts = [
@@ -51,7 +71,36 @@ export function ArtifactsPage() {
       (artifact) => !loadedArtifactIds.has(artifact.artifactId),
     ),
     ...page.items,
-  ].filter((artifact) => !hiddenArtifactIds.has(artifact.artifactId));
+  ]
+    .filter((artifact) => !hiddenArtifactIds.has(artifact.artifactId))
+    .sort((left, right) => {
+      const leftTimestamp = sort === 'created' ? left.createdAt : left.updatedAt;
+      const rightTimestamp = sort === 'created' ? right.createdAt : right.updatedAt;
+      return (
+        (order === 'asc' ? 1 : -1) * leftTimestamp.localeCompare(rightTimestamp) ||
+        left.artifactId.localeCompare(right.artifactId)
+      );
+    })
+    .slice(0, 10);
+  const sortPath = (field: 'created' | 'updated') => {
+    const next = new URLSearchParams();
+    next.set('sort', field);
+    next.set('order', sort === field && order === 'desc' ? 'asc' : 'desc');
+    return `?${next}`;
+  };
+  const sortIcon = (field: 'created' | 'updated') =>
+    sort !== field ? CaretUpDownIcon : order === 'asc' ? CaretUpIcon : CaretDownIcon;
+  const nextPagePath = () => {
+    if (page.nextCursor === null) return undefined;
+    const next = new URLSearchParams(searchParams);
+    next.set('cursor', page.nextCursor);
+    return `?${next}`;
+  };
+  const CreatedSortIcon = sortIcon('created');
+  const UpdatedSortIcon = sortIcon('updated');
+  const nextPath = nextPagePath();
+  const currentPath = `${location.pathname}${location.search}`;
+  const previousPath = cursorTrail.at(-1);
   const showRecoveredArtifact = (artifact: Artifact) => {
     setRecoveredArtifacts((current) => new Map(current).set(artifact.artifactId, artifact));
     setHiddenArtifactIds((current) => {
@@ -92,7 +141,7 @@ export function ArtifactsPage() {
       <header className="page-heading">
         <div>
           <h1>Artifacts</h1>
-          <p>Published files and folders, newest update first.</p>
+          <p>Published files and folders, 10 per page.</p>
         </div>
         <div className="cli-publish-hint">
           <div className="cli-publish-label">
@@ -148,7 +197,6 @@ export function ArtifactsPage() {
           <Table aria-label="Artifacts" className="artifact-table" layout="fixed">
             <colgroup>
               <col className="artifact-name-column" />
-              <col className="artifact-kind-column" />
               <col className="artifact-revision-column" />
               <col className="artifact-created-column" />
               <col className="artifact-updated-column" />
@@ -157,10 +205,29 @@ export function ArtifactsPage() {
             <Table.Header variant="compact">
               <Table.Row>
                 <Table.Head>Artifact</Table.Head>
-                <Table.Head className="artifact-kind-cell">Kind</Table.Head>
                 <Table.Head className="artifact-revision-cell">Revision</Table.Head>
-                <Table.Head className="artifact-created-cell">Created on</Table.Head>
-                <Table.Head className="artifact-updated-cell">Last updated on</Table.Head>
+                <Table.Head
+                  aria-sort={
+                    sort === 'created' ? (order === 'asc' ? 'ascending' : 'descending') : undefined
+                  }
+                  className="artifact-created-cell"
+                >
+                  <Link className="artifact-sort-link" to={sortPath('created')}>
+                    Created on
+                    <CreatedSortIcon aria-hidden="true" size={12} />
+                  </Link>
+                </Table.Head>
+                <Table.Head
+                  aria-sort={
+                    sort === 'updated' ? (order === 'asc' ? 'ascending' : 'descending') : undefined
+                  }
+                  className="artifact-updated-cell"
+                >
+                  <Link className="artifact-sort-link" to={sortPath('updated')}>
+                    Last Updated
+                    <UpdatedSortIcon aria-hidden="true" size={12} />
+                  </Link>
+                </Table.Head>
                 <Table.Head className="artifact-actions-cell">
                   <span className="visually-hidden">Actions</span>
                 </Table.Head>
@@ -190,7 +257,6 @@ export function ArtifactsPage() {
                         </span>
                       </div>
                     </Table.Cell>
-                    <Table.Cell className="artifact-kind-cell">{artifact.kind}</Table.Cell>
                     <Table.Cell className="artifact-revision-cell">
                       {ordinal(artifact.latestRevision.revisionNumber)}
                     </Table.Cell>
@@ -242,11 +308,29 @@ export function ArtifactsPage() {
         </div>
       )}
 
-      {page.nextCursor === null ? null : (
+      {previousPath === undefined && page.nextCursor === null ? null : (
         <footer className="pagination">
-          <Link className="control" to={`?cursor=${encodeURIComponent(page.nextCursor)}`}>
-            Next page
-          </Link>
+          <span>Page {cursorTrail.length + 1}</span>
+          <div>
+            {previousPath === undefined ? null : (
+              <Link
+                className="control"
+                state={{ artifactCursorTrail: cursorTrail.slice(0, -1) }}
+                to={previousPath}
+              >
+                Previous
+              </Link>
+            )}
+            {nextPath === undefined ? null : (
+              <Link
+                className="control"
+                state={{ artifactCursorTrail: [...cursorTrail, currentPath] }}
+                to={nextPath}
+              >
+                Next
+              </Link>
+            )}
+          </div>
         </footer>
       )}
       {shareArtifact === undefined ? null : (

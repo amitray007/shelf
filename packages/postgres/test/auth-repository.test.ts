@@ -206,6 +206,13 @@ describePostgres('PostgresAuthRepository', () => {
     });
     expect(second).toMatchObject({ items: [{ actorName: 'first-agent' }] });
     expect(second.nextCursor).toBeUndefined();
+    await expect(
+      repository.listInstallationCredentialPage({
+        installationId: 'installation-dashboard',
+        limit: 20,
+        workspaceId: 'workspace-a',
+      }),
+    ).resolves.toMatchObject({ items: [{ actorName: 'first-agent' }] });
     expect(JSON.stringify([first, second])).not.toContain('sha256:');
 
     await database.destroy();

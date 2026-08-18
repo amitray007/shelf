@@ -156,6 +156,33 @@ describe('dashboard access service', () => {
     });
   });
 
+  it('scopes credential pages to a workspace held by the human actor', async () => {
+    const list = vi.fn(async () => ({ items: [active] }));
+    const { service } = fixture({ listInstallationCredentialPage: list });
+    await expect(
+      service.list({
+        installationId: 'installation-main',
+        actorId: 'act_owner',
+        limit: 20,
+        workspaceId: 'workspace-main',
+      }),
+    ).resolves.toEqual({ items: [active] });
+    expect(list).toHaveBeenCalledWith({
+      installationId: 'installation-main',
+      limit: 20,
+      workspaceId: 'workspace-main',
+    });
+    await expect(
+      service.list({
+        installationId: 'installation-main',
+        actorId: 'act_owner',
+        limit: 20,
+        workspaceId: 'workspace-other',
+      }),
+    ).rejects.toBeInstanceOf(DashboardGrantDeniedError);
+    expect(list).toHaveBeenCalledTimes(1);
+  });
+
   it('does not reveal or mutate a missing or cross-installation credential', async () => {
     const { service, credentials } = fixture({
       async findInstallationCredential() {

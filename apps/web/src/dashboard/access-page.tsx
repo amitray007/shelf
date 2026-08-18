@@ -14,7 +14,7 @@ import type {
   DashboardSession,
 } from '@shelf/contracts';
 import { type FormEvent, useRef, useState } from 'react';
-import { Link, useLoaderData, useRevalidator, useRouteLoaderData } from 'react-router';
+import { Link, useLoaderData, useParams, useRevalidator, useRouteLoaderData } from 'react-router';
 
 import { createDashboardCredential, DashboardApiError, revokeDashboardCredential } from './api.js';
 import { Modal, SecretReveal } from './dialogs.js';
@@ -37,12 +37,45 @@ function grantKey(workspaceId: string, action: DashboardCredentialAction): Grant
   return `${workspaceId}\u0000${action}`;
 }
 
+const grantCopy: Record<DashboardCredentialAction, { label: string; description: string }> = {
+  'file.publish': {
+    label: 'Publish files',
+    description: 'Create artifacts and publish new revisions.',
+  },
+  'revision.read': {
+    label: 'Read revisions',
+    description: 'Read artifact metadata and immutable content.',
+  },
+};
+
+function CredentialGrantBadges({
+  credential,
+  workspaceId,
+}: {
+  readonly credential: DashboardCredentialSummary;
+  readonly workspaceId: string;
+}) {
+  return (
+    <div className="grant-list">
+      {credential.grants
+        .filter((grant) => grant.workspaceId === workspaceId)
+        .map((grant) => (
+          <span className="grant-badge" key={grant.action} title={grant.action}>
+            {grantCopy[grant.action].label}
+          </span>
+        ))}
+    </div>
+  );
+}
+
 function IssueCredentialDialog({
   session,
+  workspaceId,
   open,
   onOpenChange,
 }: {
   readonly session: DashboardSession;
+  readonly workspaceId: string;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
 }) {
@@ -80,13 +113,12 @@ function IssueCredentialDialog({
   };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const grants = session.workspaces.flatMap((workspace) =>
-      workspace.actions
-        .filter((action) => selected.has(grantKey(workspace.workspaceId, action)))
-        .map((action) => ({ workspaceId: workspace.workspaceId, action })),
-    );
+    const workspace = session.workspaces.find((candidate) => candidate.workspaceId === workspaceId);
+    const grants = (workspace?.actions ?? [])
+      .filter((action) => selected.has(grantKey(workspaceId, action)))
+      .map((action) => ({ workspaceId, action }));
     if (grants.length === 0) {
-      setError('Select at least one workspace action.');
+      setError('Select at least one permission.');
       return;
     }
     setBusy(true);
@@ -129,25 +161,33 @@ function IssueCredentialDialog({
             value={actorName}
           />
           <fieldset className="grant-fieldset">
-            <legend className="field-label">Workspace grants</legend>
-            {session.workspaces.map((workspace) => (
-              <div className="grant-workspace" key={workspace.workspaceId}>
-                <code title={workspace.workspaceId}>{workspace.workspaceId}</code>
-                <div>
-                  {workspace.actions.map((action) => (
-                    <Checkbox
-                      checked={selected.has(grantKey(workspace.workspaceId, action))}
-                      controlFirst
-                      key={action}
-                      label={action}
-                      onCheckedChange={(checked) =>
-                        selectGrant(workspace.workspaceId, action, checked)
-                      }
-                    />
-                  ))}
+            <legend className="field-label">Permissions</legend>
+            <p>Choose what this credential can do in the current workspace.</p>
+            {session.workspaces
+              .filter((workspace) => workspace.workspaceId === workspaceId)
+              .map((workspace) => (
+                <div className="grant-workspace" key={workspace.workspaceId}>
+                  <div className="grant-workspace-heading">
+                    <span>Workspace</span>
+                    <code title={workspace.workspaceId}>{workspace.workspaceId}</code>
+                  </div>
+                  <div className="grant-actions">
+                    {workspace.actions.map((action) => (
+                      <div className="grant-action" key={action}>
+                        <Checkbox
+                          checked={selected.has(grantKey(workspace.workspaceId, action))}
+                          controlFirst
+                          label={grantCopy[action].label}
+                          onCheckedChange={(checked) =>
+                            selectGrant(workspace.workspaceId, action, checked)
+                          }
+                        />
+                        <span>{grantCopy[action].description}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
           </fieldset>
           <Input
             label="Expires (optional)"
@@ -236,9 +276,11 @@ function CredentialActions({
 
 function CredentialDetailsDialog({
   credential,
+  workspaceId,
   onOpenChange,
 }: {
   readonly credential: DashboardCredentialSummary | undefined;
+  readonly workspaceId: string;
   readonly onOpenChange: (open: boolean) => void;
 }) {
   const status = useManagedStatus(credential?.revokedAt ?? null, credential?.expiresAt ?? null);
@@ -281,16 +323,7 @@ function CredentialDetailsDialog({
           </dl>
           <section aria-labelledby="credential-grants-title" className="credential-details-grants">
             <h3 id="credential-grants-title">Workspace grants</h3>
-            <div className="grant-list">
-              {credential.grants.map((grant) => (
-                <span
-                  key={`${grant.workspaceId}:${grant.action}`}
-                  title={`${grant.workspaceId} / ${grant.action}`}
-                >
-                  {grant.workspaceId} / {grant.action}
-                </span>
-              ))}
-            </div>
+            <CredentialGrantBadges credential={credential} workspaceId={workspaceId} />
           </section>
           <div className="dialog-actions">
             <Button onClick={() => onOpenChange(false)} type="button" variant="primary">
@@ -305,10 +338,12 @@ function CredentialDetailsDialog({
 
 function CredentialTableRow({
   credential,
+  workspaceId,
   onDetails,
   onRevoke,
 }: {
   readonly credential: DashboardCredentialSummary;
+  readonly workspaceId: string;
   readonly onDetails: () => void;
   readonly onRevoke: () => void;
 }) {
@@ -322,16 +357,7 @@ function CredentialTableRow({
         </div>
       </Table.Cell>
       <Table.Cell>
-        <div className="grant-list">
-          {credential.grants.map((grant) => (
-            <span
-              key={`${grant.workspaceId}:${grant.action}`}
-              title={`${grant.workspaceId} / ${grant.action}`}
-            >
-              {grant.workspaceId} / {grant.action}
-            </span>
-          ))}
-        </div>
+        <CredentialGrantBadges credential={credential} workspaceId={workspaceId} />
       </Table.Cell>
       <Table.Cell>{dateTime(credential.lastUsedAt)}</Table.Cell>
       <Table.Cell>{dateTime(credential.expiresAt)}</Table.Cell>
@@ -450,6 +476,7 @@ function RevokeCredentialDialog({
 export function AccessPage() {
   const page = useLoaderData() as DashboardCredentialPage;
   const session = useRouteLoaderData('dashboard') as DashboardSession;
+  const { workspaceId = '' } = useParams();
   const [issueOpen, setIssueOpen] = useState(false);
   const [detailsCredential, setDetailsCredential] = useState<DashboardCredentialSummary>();
   const [revokeCredential, setRevokeCredential] = useState<DashboardCredentialSummary>();
@@ -461,7 +488,7 @@ export function AccessPage() {
           <p>Scoped credentials for CLI and non-interactive agent workflows.</p>
         </div>
         <Button
-          disabled={session.workspaces.length === 0}
+          disabled={!session.workspaces.some((workspace) => workspace.workspaceId === workspaceId)}
           onClick={() => setIssueOpen(true)}
           type="button"
           variant="primary"
@@ -514,6 +541,7 @@ export function AccessPage() {
                     key={credential.credentialId}
                     onDetails={() => setDetailsCredential(credential)}
                     onRevoke={() => setRevokeCredential(credential)}
+                    workspaceId={workspaceId}
                   />
                 ))}
               </Table.Body>
@@ -538,12 +566,18 @@ export function AccessPage() {
           </Link>
         </footer>
       )}
-      <IssueCredentialDialog onOpenChange={setIssueOpen} open={issueOpen} session={session} />
+      <IssueCredentialDialog
+        onOpenChange={setIssueOpen}
+        open={issueOpen}
+        session={session}
+        workspaceId={workspaceId}
+      />
       <CredentialDetailsDialog
         credential={detailsCredential}
         onOpenChange={(open) => {
           if (!open) setDetailsCredential(undefined);
         }}
+        workspaceId={workspaceId}
       />
       <RevokeCredentialDialog
         credential={revokeCredential}

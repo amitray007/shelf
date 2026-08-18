@@ -101,13 +101,27 @@ export async function dashboardIndexLoader({ request }: LoaderFunctionArgs) {
 
 export function artifactsLoader({ params, request }: LoaderFunctionArgs): Promise<ArtifactPage> {
   const workspaceId = params.workspaceId ?? '';
-  const cursor = new URL(request.url).searchParams.get('cursor') ?? undefined;
-  return withSessionRedirect(request, () => loadArtifacts(workspaceId, cursor, request.signal));
+  const query = new URL(request.url).searchParams;
+  const cursor = query.get('cursor') ?? undefined;
+  const sort = query.get('sort') === 'created' ? 'created' : 'updated';
+  const order = query.get('order') === 'asc' ? 'asc' : 'desc';
+  return withSessionRedirect(request, () =>
+    loadArtifacts(workspaceId, cursor, request.signal, sort, order),
+  );
 }
 
-export function accessLoader({ request }: LoaderFunctionArgs): Promise<DashboardCredentialPage> {
+export function accessLoader({
+  params,
+  request,
+}: LoaderFunctionArgs): Promise<DashboardCredentialPage> {
+  const workspaceId = params.workspaceId;
   const cursor = new URL(request.url).searchParams.get('cursor') ?? undefined;
-  return withSessionRedirect(request, () => loadDashboardCredentials(cursor, request.signal));
+  if (workspaceId === undefined) {
+    return Promise.resolve({ apiVersion: 'v1', items: [], nextCursor: null });
+  }
+  return withSessionRedirect(request, () =>
+    loadDashboardCredentials(workspaceId, cursor, request.signal),
+  );
 }
 
 export async function artifactLoader({

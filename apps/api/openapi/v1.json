@@ -2321,6 +2321,40 @@
           },
           {
             "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["created"]
+                },
+                {
+                  "type": "string",
+                  "enum": ["updated"]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "sort",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["asc"]
+                },
+                {
+                  "type": "string",
+                  "enum": ["desc"]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "order",
+            "required": false
+          },
+          {
+            "schema": {
               "type": "string",
               "minLength": 1,
               "maxLength": 128
@@ -7752,6 +7786,16 @@
             },
             "in": "query",
             "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "query",
+            "name": "workspaceId",
             "required": false
           }
         ],

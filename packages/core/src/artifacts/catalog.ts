@@ -39,6 +39,8 @@ export interface StoredFolderArtifactRevision extends StoredArtifactRevisionComm
 
 export type StoredArtifactRevision = StoredFileArtifactRevision | StoredFolderArtifactRevision;
 export type ArtifactRevisionOrder = 'newest' | 'oldest';
+export type ArtifactSort = 'created' | 'updated';
+export type ArtifactSortOrder = 'asc' | 'desc';
 
 export interface StoredArtifact {
   installationId: string;
@@ -57,8 +59,10 @@ export interface ArtifactCatalogRepository {
     installationId: string;
     workspaceId: string;
     limit: number;
-    after?: { updatedAt: string; artifactId: string };
-  }): Promise<{ items: StoredArtifact[]; next?: { updatedAt: string; artifactId: string } }>;
+    sort: ArtifactSort;
+    order: ArtifactSortOrder;
+    after?: { timestamp: string; artifactId: string };
+  }): Promise<{ items: StoredArtifact[]; next?: { timestamp: string; artifactId: string } }>;
   listArtifactRevisions(request: {
     installationId: string;
     artifactId: string;
@@ -108,20 +112,30 @@ function limit(value: number): number {
   return value;
 }
 
-function artifactCursor(value: string | undefined) {
+function artifactCursor(value: string | undefined, sort: ArtifactSort, order: ArtifactSortOrder) {
   if (value === undefined) return undefined;
   const cursor = decodeCursor(value, 'artifacts');
-  const timestamp = typeof cursor.updatedAt === 'string' ? Date.parse(cursor.updatedAt) : NaN;
+  const timestamp = typeof cursor.timestamp === 'string' ? Date.parse(cursor.timestamp) : NaN;
   if (
-    typeof cursor.updatedAt !== 'string' ||
+    cursor.sort !== sort ||
+    cursor.order !== order ||
+    typeof cursor.timestamp !== 'string' ||
     !Number.isFinite(timestamp) ||
-    new Date(timestamp).toISOString() !== cursor.updatedAt ||
+    new Date(timestamp).toISOString() !== cursor.timestamp ||
     typeof cursor.artifactId !== 'string' ||
     !OPAQUE_ARTIFACT_ID_PATTERN.test(cursor.artifactId)
   ) {
     throw new InvalidArtifactCatalogRequestError('cursor');
   }
-  return { updatedAt: cursor.updatedAt, artifactId: cursor.artifactId };
+  return { timestamp: cursor.timestamp, artifactId: cursor.artifactId };
+}
+
+function artifactSort(value: ArtifactSort | undefined): ArtifactSort {
+  return value ?? 'updated';
+}
+
+function artifactSortOrder(value: ArtifactSortOrder | undefined): ArtifactSortOrder {
+  return value ?? 'desc';
 }
 
 function revisionCursor(
@@ -250,11 +264,15 @@ export function createArtifactCatalogService(dependencies: {
       workspaceId: string;
       actorId: string;
       limit: number;
+      sort?: ArtifactSort;
+      order?: ArtifactSortOrder;
       cursor?: string;
       signal?: AbortSignal;
     }): Promise<ArtifactPage> {
       const pageLimit = limit(request.limit);
-      const after = artifactCursor(request.cursor);
+      const sort = artifactSort(request.sort);
+      const order = artifactSortOrder(request.order);
+      const after = artifactCursor(request.cursor, sort, order);
       await dependencies.authorizer.authorize(
         {
           installationId: request.installationId,
@@ -267,13 +285,15 @@ export function createArtifactCatalogService(dependencies: {
       request.signal?.throwIfAborted();
       let page: {
         items: StoredArtifact[];
-        next?: { updatedAt: string; artifactId: string };
+        next?: { timestamp: string; artifactId: string };
       };
       try {
         page = await dependencies.artifacts.listArtifacts({
           installationId: request.installationId,
           workspaceId: request.workspaceId,
           limit: pageLimit,
+          sort,
+          order,
           ...(after === undefined ? {} : { after }),
         });
       } catch (error) {
@@ -296,7 +316,9 @@ export function createArtifactCatalogService(dependencies: {
         apiVersion: 'v1',
         items: page.items.map(storedArtifactToArtifact),
         nextCursor:
-          page.next === undefined ? null : encodeCursor({ kind: 'artifacts', ...page.next }),
+          page.next === undefined
+            ? null
+            : encodeCursor({ kind: 'artifacts', sort, order, ...page.next }),
       };
     },
 
