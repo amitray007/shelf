@@ -6,12 +6,11 @@ import { fileURLToPath } from 'node:url';
 import axe from 'axe-core';
 
 import {
-  artifact,
-  artifactId,
   artifactPage,
   credentialPage,
   dashboardSession,
-  historyPage,
+  folderTreePage,
+  historyPages,
   htmlResolution,
   htmlShareId,
   markdownResolution,
@@ -22,6 +21,18 @@ import {
   shareSecret,
   workspaceId,
 } from './fixtures.ts';
+
+const artifactsById = new Map(
+  artifactPage.items.map((artifact) => [artifact.artifactId, artifact]),
+);
+const historiesByArtifactId = new Map(historyPages.map((page) => [page.artifactId, page]));
+const latestFilesByRevisionId = new Map(
+  artifactPage.items.flatMap((artifact) =>
+    artifact.latestRevision.kind === 'file'
+      ? [[artifact.latestRevision.revisionId, artifact.latestRevision]]
+      : [],
+  ),
+);
 
 const fixtureRoot = resolve(fileURLToPath(new URL('../dist/', import.meta.url)));
 const mimeTypes = new Map([
@@ -89,24 +100,45 @@ async function api(request, response, url) {
     json(response, 200, artifactPage);
     return;
   }
-  if (path === `/api/v1/artifacts/${artifactId}`) {
-    json(response, 200, artifact);
-    return;
-  }
-  if (path === `/api/v1/artifacts/${artifactId}/revisions`) {
-    json(response, 200, historyPage);
-    return;
+  const artifactMatch = /^\/api\/v1\/artifacts\/(art_[A-Za-z0-9_-]{22})(\/revisions)?$/u.exec(path);
+  if (artifactMatch !== null) {
+    const requestedArtifactId = artifactMatch[1];
+    const value =
+      artifactMatch[2] === undefined
+        ? artifactsById.get(requestedArtifactId)
+        : historiesByArtifactId.get(requestedArtifactId);
+    if (value !== undefined) {
+      json(response, 200, value);
+      return;
+    }
   }
   if (path === `/api/v1/workspaces/${workspaceId}/shares`) {
     json(response, 200, sharePage);
     return;
   }
-  if (path === `/api/v1/revisions/${revisionId}/content`) {
+  if (path === `/api/v1/revisions/${folderTreePage.revisionId}/tree`) {
+    json(response, 200, folderTreePage);
+    return;
+  }
+  const contentMatch = /^\/api\/v1\/revisions\/(rev_[A-Za-z0-9_-]{22})\/content$/u.exec(path);
+  const fileRevision =
+    contentMatch === null ? undefined : latestFilesByRevisionId.get(contentMatch[1]);
+  if (fileRevision !== undefined) {
+    const contentType =
+      fileRevision.mediaType.startsWith('text/') || fileRevision.mediaType === 'application/json'
+        ? `${fileRevision.mediaType}; charset=utf-8`
+        : fileRevision.mediaType;
     response.writeHead(200, {
       'cache-control': 'no-store',
-      'content-type': 'text/markdown; charset=utf-8',
+      'content-type': contentType,
     });
-    response.end('# One useful idea\n\nA durable artifact should stay quick to share.');
+    response.end(
+      fileRevision.revisionId === revisionId
+        ? '# One useful idea\n\nA durable artifact should stay quick to share.'
+        : fileRevision.mediaType === 'application/json'
+          ? JSON.stringify({ result: 'qualified', scenarios: 184 })
+          : fileRevision.originalFileName,
+    );
     return;
   }
   if (path === '/api/v1/access-credentials') {

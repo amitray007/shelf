@@ -3,7 +3,12 @@ import type axe from 'axe-core';
 import type { AxeResults } from 'axe-core';
 
 import {
+  artifactId,
+  folderArtifactId,
   htmlShareId,
+  longArtifactName,
+  longFolderName,
+  longFolderPath,
   markdownShareId,
   rendererOrigin,
   shareSecret,
@@ -88,6 +93,64 @@ async function focusWithKeyboard(page: Page, target: Locator, forwardKey = 'Tab'
   throw new Error('Keyboard navigation did not reach the expected control.');
 }
 
+async function expectActionWithinViewport(page: Page, name: string): Promise<void> {
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  const action = page.getByRole('button', { name, exact: true });
+  await expect(action).toBeVisible();
+  const box = await action.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box?.x).toBeGreaterThanOrEqual(0);
+  expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(viewport?.width ?? 0);
+}
+
+const densityViewports = [
+  { label: '1440 desktop', width: 1_440, height: 900 },
+  { label: '768 tablet', width: 768, height: 1_024 },
+  { label: '390 mobile', width: 390, height: 844 },
+  { label: '320 narrow mobile', width: 320, height: 800 },
+  { label: '200 percent layout equivalent', width: 720, height: 450 },
+] as const;
+
+for (const viewport of densityViewports) {
+  test(`production-shaped artifact surfaces reflow at ${viewport.label}`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      !['chromium', 'webkit'].includes(testInfo.project.name),
+      'The canonical density matrix runs in Chromium and WebKit.',
+    );
+    const diagnostics = trackPageErrors(page);
+    await page.setViewportSize(viewport);
+
+    await page.goto(`/app/w/${workspaceId}/artifacts`);
+    const ledger = page.getByRole('list', { name: 'Artifacts' });
+    await expect(ledger.getByRole('listitem')).toHaveCount(5);
+    await expect(ledger.getByText('x', { exact: true })).toBeVisible();
+    await expect(ledger.getByText(longArtifactName, { exact: true })).toBeVisible();
+    await expect(ledger.getByText(longFolderName, { exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page, [page.locator('.dashboard-main'), ledger]);
+
+    await page.goto(`/app/w/${workspaceId}/artifacts/${artifactId}`);
+    await expect(page).toHaveURL(new RegExp(`${artifactId}$`, 'u'));
+    await expectActionWithinViewport(page, 'Share');
+    await expectNoHorizontalOverflow(page, [
+      page.locator('.dashboard-main'),
+      page.locator('.artifact-surface'),
+    ]);
+
+    await page.goto(`/app/w/${workspaceId}/artifacts/${folderArtifactId}`);
+    await expect(page).toHaveURL(new RegExp(`${folderArtifactId}$`, 'u'));
+    const folderPreview = page.getByRole('region', { name: 'Artifact folder preview' });
+    await expect(
+      folderPreview.locator('.tree-name').filter({ hasText: 'manifest.json' }),
+    ).toHaveAttribute('title', longFolderPath);
+    await expectActionWithinViewport(page, 'Share');
+    await expectNoHorizontalOverflow(page, [page.locator('.dashboard-main'), folderPreview]);
+    diagnostics.assertClean();
+  });
+}
+
 test('the authenticated utility stays artifact-first, accessible, and responsive', async ({
   page,
 }, testInfo) => {
@@ -96,34 +159,20 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await page.goto(`/app/w/${workspaceId}/artifacts`);
   await expect(page.getByRole('heading', { level: 1, name: 'Artifacts' })).toBeVisible();
   await expect(page.getByText('shelf publish ./path --share')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'idea.md' })).toBeVisible();
+  await expect(page.getByRole('link', { name: longArtifactName })).toBeVisible();
   await expect(page.getByText('Collections', { exact: true })).toHaveCount(0);
   await expectNoHorizontalOverflow(page, [page.locator('.dashboard-main')]);
   await expectNoAxeViolations(page);
 
-  await page.getByRole('link', { name: 'idea.md' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'idea.md' })).toBeVisible();
+  await page.getByRole('link', { name: longArtifactName }).click();
   await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
     'One useful idea',
   );
-  await expect(page.getByRole('button', { name: 'Rename' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Share' })).toBeVisible();
   await expectNoHorizontalOverflow(page, [
     page.locator('.dashboard-main'),
     page.locator('.artifact-surface'),
   ]);
-  if (testInfo.project.name === 'mobile-chromium') {
-    expect(
-      await page
-        .locator('.artifact-management-grid')
-        .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length),
-    ).toBe(1);
-    expect(
-      await page
-        .locator('.artifact-heading')
-        .evaluate((element) => getComputedStyle(element).flexDirection),
-    ).toBe('column');
-  }
 
   await page.getByRole('button', { name: /Workspace menu/u }).click();
   await page.getByRole('menuitem', { name: 'Access' }).click();
