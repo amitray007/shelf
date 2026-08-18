@@ -312,61 +312,98 @@ const PublicShareFields = {
   expiresAt: NullableIsoInstantSchema,
 };
 
-export const PublicFileShareResolutionSchema = Type.Object(
+const ProtectedResolutionFields = {
+  ...PublicShareFields,
+  accessType: Type.Literal('protected'),
+};
+
+const PublicResolutionFields = {
+  ...PublicShareFields,
+  accessType: Type.Literal('public'),
+  publicCode: PublicShareCodeSchema,
+  expiresAt: IsoInstantSchema,
+};
+
+const FileArtifactSchema = Type.Object(
+  { ...PublicArtifactFields, kind: Type.Literal('file') },
+  { additionalProperties: false },
+);
+const FileRevisionSchema = Type.Object(
   {
-    ...PublicShareFields,
-    artifact: Type.Object(
-      { ...PublicArtifactFields, kind: Type.Literal('file') },
-      { additionalProperties: false },
-    ),
-    revision: Type.Object(
-      {
-        ...PublicRevisionFields,
-        kind: Type.Literal('file'),
-        originalFileName: Type.String({ minLength: 1, maxLength: 255 }),
-        mediaType: Type.String({ minLength: 1, maxLength: 255 }),
-        byteCount: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-      },
-      { additionalProperties: false },
-    ),
-    action: Type.Object(
-      {
-        type: Type.Literal('content'),
-        path: Type.String({ pattern: '^/api/v1/public/shares/shr_[A-Za-z0-9_-]{22}/content$' }),
-      },
-      { additionalProperties: false },
-    ),
+    ...PublicRevisionFields,
+    kind: Type.Literal('file'),
+    originalFileName: Type.String({ minLength: 1, maxLength: 255 }),
+    mediaType: Type.String({ minLength: 1, maxLength: 255 }),
+    byteCount: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+  },
+  { additionalProperties: false },
+);
+const FolderArtifactSchema = Type.Object(
+  { ...PublicArtifactFields, kind: Type.Literal('folder') },
+  { additionalProperties: false },
+);
+const FolderRevisionSchema = Type.Object(
+  {
+    ...PublicRevisionFields,
+    kind: Type.Literal('folder'),
+    rootName: Type.String({ minLength: 1, maxLength: 255 }),
+    byteCount: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+    fileCount: Type.Integer({ minimum: 0, maximum: 1_000 }),
   },
   { additionalProperties: false },
 );
 
-export const PublicFolderShareResolutionSchema = Type.Object(
-  {
-    ...PublicShareFields,
-    artifact: Type.Object(
-      { ...PublicArtifactFields, kind: Type.Literal('folder') },
-      { additionalProperties: false },
-    ),
-    revision: Type.Object(
-      {
-        ...PublicRevisionFields,
-        kind: Type.Literal('folder'),
-        rootName: Type.String({ minLength: 1, maxLength: 255 }),
-        byteCount: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
-        fileCount: Type.Integer({ minimum: 0, maximum: 1_000 }),
-      },
-      { additionalProperties: false },
-    ),
-    action: Type.Object(
-      {
-        type: Type.Literal('tree'),
-        path: Type.String({ pattern: '^/api/v1/public/shares/shr_[A-Za-z0-9_-]{22}/tree$' }),
-      },
-      { additionalProperties: false },
-    ),
-  },
-  { additionalProperties: false },
-);
+function resolutionAction(type: 'content' | 'tree', pathPattern: string) {
+  return Type.Object(
+    { type: Type.Literal(type), path: Type.String({ pattern: pathPattern }) },
+    { additionalProperties: false },
+  );
+}
+
+export const PublicFileShareResolutionSchema = Type.Union([
+  Type.Object(
+    {
+      ...ProtectedResolutionFields,
+      artifact: FileArtifactSchema,
+      revision: FileRevisionSchema,
+      action: resolutionAction(
+        'content',
+        '^/api/v1/public/shares/shr_[A-Za-z0-9_-]{22}/content$',
+      ),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...PublicResolutionFields,
+      artifact: FileArtifactSchema,
+      revision: FileRevisionSchema,
+      action: resolutionAction('content', '^/api/v1/public/links/[A-Za-z0-9_-]{12}/content$'),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export const PublicFolderShareResolutionSchema = Type.Union([
+  Type.Object(
+    {
+      ...ProtectedResolutionFields,
+      artifact: FolderArtifactSchema,
+      revision: FolderRevisionSchema,
+      action: resolutionAction('tree', '^/api/v1/public/shares/shr_[A-Za-z0-9_-]{22}/tree$'),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...PublicResolutionFields,
+      artifact: FolderArtifactSchema,
+      revision: FolderRevisionSchema,
+      action: resolutionAction('tree', '^/api/v1/public/links/[A-Za-z0-9_-]{12}/tree$'),
+    },
+    { additionalProperties: false },
+  ),
+]);
 
 export const PublicShareResolutionSchema = Type.Union(
   [PublicFileShareResolutionSchema, PublicFolderShareResolutionSchema],

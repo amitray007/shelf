@@ -248,9 +248,10 @@ describe('share contracts', () => {
     expect(isProtectedSessionAuthority({ ...authority, sessionId: 'not-a-uuid' })).toBe(false);
   });
 
-  it('accepts a sanitized public file projection with a content action', () => {
+  it('accepts a sanitized Protected file projection with a share-ID content action', () => {
     const resolution = {
       apiVersion: 'v1',
+      accessType: 'protected',
       shareId,
       target: { mode: 'latest' },
       artifact: { artifactId, kind: 'file', name: 'Launch notes' },
@@ -283,9 +284,10 @@ describe('share contracts', () => {
     ).toBe(false);
   });
 
-  it('accepts a sanitized public folder projection with a tree action', () => {
+  it('accepts a sanitized Protected folder projection with a share-ID tree action', () => {
     const resolution = {
       apiVersion: 'v1',
+      accessType: 'protected',
       shareId,
       target: { mode: 'pinned', revisionId },
       artifact: { artifactId, kind: 'folder', name: 'Prototype' },
@@ -313,6 +315,41 @@ describe('share contracts', () => {
         action: { ...resolution.action, providerUrl: 'https://storage.example/private' },
       }),
     ).toBe(false);
+  });
+
+  it('accepts a sanitized Public projection with a short-code action path', () => {
+    const resolution = {
+      apiVersion: 'v1',
+      accessType: 'public',
+      shareId,
+      publicCode,
+      target: { mode: 'latest' },
+      artifact: { artifactId, kind: 'file', name: 'Launch notes' },
+      revision: {
+        kind: 'file',
+        revisionId,
+        revisionNumber: 2,
+        createdAt: '2026-08-17T12:03:00.000Z',
+        originalFileName: 'launch.md',
+        mediaType: 'text/markdown',
+        byteCount: 84,
+      },
+      action: {
+        type: 'content',
+        path: `/api/v1/public/links/${publicCode}/content`,
+      },
+      expiresAt: '2026-08-19T12:00:00.000Z',
+    };
+
+    expect(Check(PublicShareResolutionSchema, resolution)).toBe(true);
+    expect(isPublicShareResolution(resolution)).toBe(true);
+    expect(
+      isPublicShareResolution({
+        ...resolution,
+        action: { ...resolution.action, path: `/api/v1/public/shares/${shareId}/content` },
+      }),
+    ).toBe(false);
+    expect(isPublicShareResolution({ ...resolution, publicCode: 'too-short' })).toBe(false);
   });
 
   it('maps non-enumerating share misses to the stable validation exit class', () => {
