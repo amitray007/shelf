@@ -134,6 +134,8 @@ describe('shelf artifacts', () => {
         artifact.artifactId,
         '--limit',
         '5',
+        '--order',
+        'oldest',
       ],
       {
         env: { SHELF_TOKEN: 'secret-token' },
@@ -146,7 +148,7 @@ describe('shelf artifacts', () => {
     expect(exitCode).toBe(0);
     expect(JSON.parse(stdout.value())).toEqual(page);
     expect(fetch.mock.calls[0]?.[0].toString()).toBe(
-      `https://shelf.example/api/v1/artifacts/${artifact.artifactId}/revisions?limit=5`,
+      `https://shelf.example/api/v1/artifacts/${artifact.artifactId}/revisions?limit=5&order=oldest`,
     );
   });
 
@@ -279,5 +281,140 @@ describe('shelf artifacts', () => {
       headers: expect.objectContaining({ 'idempotency-key': 'restore-version-one' }),
       body: JSON.stringify({ sourceRevisionId }),
     });
+  });
+
+  it('soft-deletes an artifact through the shelf command', async () => {
+    const result = {
+      apiVersion: 'v1',
+      workspaceId: artifact.workspaceId,
+      artifactId: artifact.artifactId,
+      deletedAt: '2026-08-18T12:00:00.000Z',
+      recoverableUntil: '2026-09-17T12:00:00.000Z',
+      revokedShareCount: 2,
+    };
+    const stdout = capture();
+    const fetch = vi.fn(async () => Response.json(result));
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'artifacts',
+        'delete',
+        '--url',
+        'https://shelf.example',
+        '--artifact',
+        artifact.artifactId,
+        '--confirm',
+        artifact.artifactId,
+      ],
+      {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout: stdout.write,
+        stderr() {},
+        fetch,
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout.value())).toEqual(result);
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      `https://shelf.example/api/v1/artifacts/${artifact.artifactId}`,
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({ method: 'DELETE' });
+  });
+
+  it('refuses artifact deletion when confirmation does not exactly match without fetching', async () => {
+    const stderr = capture();
+    const fetch = vi.fn();
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'artifacts',
+        'delete',
+        '--url',
+        'https://shelf.example',
+        '--artifact',
+        artifact.artifactId,
+        '--confirm',
+        'art_BBBBBBBBBBBBBBBBBBBBBB',
+      ],
+      {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout() {},
+        stderr: stderr.write,
+        fetch,
+      },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(JSON.parse(stderr.value())).toMatchObject({ error: { code: 'INVALID_REQUEST' } });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('recovers an artifact through the shelf command', async () => {
+    const stdout = capture();
+    const fetch = vi.fn(async () => Response.json(artifact));
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'artifacts',
+        'recover',
+        '--url',
+        'https://shelf.example',
+        '--artifact',
+        artifact.artifactId,
+        '--idempotency-key',
+        'recover-readme',
+      ],
+      {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout: stdout.write,
+        stderr() {},
+        fetch,
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout.value())).toEqual(artifact);
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      `https://shelf.example/api/v1/artifacts/${artifact.artifactId}/recovery`,
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      headers: expect.objectContaining({ 'idempotency-key': 'recover-readme' }),
+    });
+  });
+
+  it('generates one recovery idempotency key when none is supplied', async () => {
+    const fetch = vi.fn(async () => Response.json(artifact));
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'artifacts',
+        'recover',
+        '--url',
+        'https://shelf.example',
+        '--artifact',
+        artifact.artifactId,
+      ],
+      {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout() {},
+        stderr() {},
+        fetch,
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get('idempotency-key')).toMatch(
+      /^artifact-recover-[0-9a-f-]{36}$/u,
+    );
   });
 });

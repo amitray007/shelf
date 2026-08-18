@@ -210,7 +210,7 @@ describe('artifact catalog service', () => {
     ).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   });
 
-  it('pages one artifact history newest first without mutating old revisions', async () => {
+  it('pages one artifact history in either global order with order-bound cursors', async () => {
     const firstRevision = {
       ...storedRevision,
       revisionId: 'rev_AAAAAAAAAAAAAAAAAAAAAA',
@@ -221,7 +221,12 @@ describe('artifact catalog service', () => {
     const artifacts: ArtifactCatalogRepository = {
       ...repository(),
       async listArtifactRevisions(request) {
-        return request.beforeRevisionNumber === undefined
+        if (request.order === 'oldest') {
+          return request.cursorRevisionNumber === undefined
+            ? { items: [firstRevision], nextRevisionNumber: firstRevision.revisionNumber }
+            : { items: [storedRevision] };
+        }
+        return request.cursorRevisionNumber === undefined
           ? { items: [storedRevision], nextRevisionNumber: storedRevision.revisionNumber }
           : { items: [firstRevision] };
       },
@@ -244,9 +249,36 @@ describe('artifact catalog service', () => {
       limit: 1,
       cursor: newest.nextCursor as string,
     });
+    const oldest = await catalog.listArtifactRevisions({
+      installationId: 'installation-main',
+      actorId: 'actor-reader',
+      artifactId: storedArtifact.artifactId,
+      limit: 1,
+      order: 'oldest',
+    });
+    const newer = await catalog.listArtifactRevisions({
+      installationId: 'installation-main',
+      actorId: 'actor-reader',
+      artifactId: storedArtifact.artifactId,
+      limit: 1,
+      order: 'oldest',
+      cursor: oldest.nextCursor as string,
+    });
 
     expect(newest.items.map((item) => item.revisionNumber)).toEqual([2]);
     expect(older.items.map((item) => item.revisionNumber)).toEqual([1]);
     expect(older.nextCursor).toBeNull();
+    expect(oldest.items.map((item) => item.revisionNumber)).toEqual([1]);
+    expect(newer.items.map((item) => item.revisionNumber)).toEqual([2]);
+    await expect(
+      catalog.listArtifactRevisions({
+        installationId: 'installation-main',
+        actorId: 'actor-reader',
+        artifactId: storedArtifact.artifactId,
+        limit: 1,
+        order: 'oldest',
+        cursor: newest.nextCursor as string,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   });
 });

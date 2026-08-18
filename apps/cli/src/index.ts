@@ -5,12 +5,16 @@ import { CLI_EXIT_CODES } from '@shelf/contracts';
 import { Command, CommanderError } from 'commander';
 import {
   type ArtifactHistoryCommandOptions,
+  type DeleteArtifactCommandOptions,
   executeArtifactHistory,
+  executeDeleteArtifact,
   executeListArtifacts,
+  executeRecoverArtifact,
   executeRenameArtifact,
   executeRestoreArtifact,
   executeShowArtifact,
   type ListArtifactsCommandOptions,
+  type RecoverArtifactCommandOptions,
   type RenameArtifactCommandOptions,
   type RestoreArtifactCommandOptions,
   type ShowArtifactCommandOptions,
@@ -193,6 +197,7 @@ export async function runCli(
     .requiredOption('--url <url>')
     .requiredOption('--artifact <artifact-id>')
     .option('--limit <count>')
+    .option('--order <newest|oldest>')
     .option('--cursor <cursor>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: ArtifactHistoryCommandOptions) => {
@@ -217,6 +222,24 @@ export async function runCli(
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: RestoreArtifactCommandOptions) => {
       result = await executeRestoreArtifact(options, runtime);
+    });
+  artifacts
+    .command('delete')
+    .requiredOption('--url <url>')
+    .requiredOption('--artifact <artifact-id>')
+    .requiredOption('--confirm <artifact-id>', 'confirm the exact artifact ID to delete')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: DeleteArtifactCommandOptions) => {
+      result = await executeDeleteArtifact(options, runtime);
+    });
+  artifacts
+    .command('recover')
+    .requiredOption('--url <url>')
+    .requiredOption('--artifact <artifact-id>')
+    .option('--idempotency-key <key>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: RecoverArtifactCommandOptions) => {
+      result = await executeRecoverArtifact(options, runtime);
     });
 
   const shares = program.command('shares').description('Create and manage share links');

@@ -10,6 +10,10 @@ export interface ArtifactTable {
   latest_revision_id: string | null;
   created_at: Date;
   updated_at: Date;
+  deleted_at: Date | null;
+  recoverable_until: Date | null;
+  deleted_by_actor_id: string | null;
+  deleted_share_count: number | null;
 }
 
 export interface RevisionTable {
@@ -84,6 +88,18 @@ export interface ShareIdempotencyTable {
   created_at: Date;
 }
 
+export interface ArtifactRecoveryIdempotencyTable {
+  installation_id: string;
+  workspace_id: string;
+  actor_id: string;
+  operation: 'artifact.recover';
+  client_key: string;
+  fingerprint: string;
+  artifact_id: string;
+  result: unknown;
+  created_at: Date;
+}
+
 export interface ActorTable {
   actor_id: string;
   installation_id: string;
@@ -136,6 +152,7 @@ export interface ShelfPostgresSchema {
   shelf_actor_grants: ActorGrantTable;
   shelf_actors: ActorTable;
   shelf_artifacts: ArtifactTable;
+  shelf_artifact_recovery_idempotency: ArtifactRecoveryIdempotencyTable;
   shelf_auth_events: AuthEventTable;
   shelf_revisions: RevisionTable;
   shelf_revision_entries: RevisionEntryTable;

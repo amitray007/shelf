@@ -4,6 +4,7 @@ import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import type { DashboardAccessService, HumanAuth } from '@shelf/auth';
 import {
+  ArtifactDeletionResultSchema,
   DashboardCredentialIssueSchema,
   DashboardCredentialPageSchema,
   DashboardCredentialRevokeSchema,
@@ -20,6 +21,7 @@ import {
 } from '@shelf/contracts';
 import type {
   ArtifactCatalogRepository,
+  ArtifactDeletionRepository,
   ArtifactIdentityRepository,
   ArtifactLifecycleRepository,
   Authorizer,
@@ -34,7 +36,7 @@ import type {
   ShareRepository,
 } from '@shelf/core';
 import Fastify, { type FastifyInstance } from 'fastify';
-
+import { MemoryArtifactDeletionRepository } from './adapters/memory-artifact-deletion-repository.js';
 import { MemoryRevisionRepository } from './adapters/memory-revision-repository.js';
 import { MemoryShareRepository } from './adapters/memory-share-repository.js';
 import { TemporaryContentStore } from './adapters/temporary-content-store.js';
@@ -103,6 +105,8 @@ export interface ShelfAppDependencies {
     FolderRevisionRepository &
     RevisionComparisonRepository;
   shareRepository: ShareRepository;
+  artifactDeletionRepository: ArtifactDeletionRepository;
+  artifactClock?: () => Date;
   shareCapabilityCodec: ShareCapabilityCodec;
   shareClock?: ShareClock;
   generateShareId?: ShareIdGenerator;
@@ -121,6 +125,8 @@ export interface CreateShelfAppOptions {
     FolderRevisionRepository &
     RevisionComparisonRepository;
   shareRepository?: ShareRepository;
+  artifactDeletionRepository?: ArtifactDeletionRepository;
+  artifactClock?: () => Date;
   shareCapabilityCodec?: ShareCapabilityCodec;
   shareClock?: ShareClock;
   generateShareId?: ShareIdGenerator;
@@ -131,6 +137,15 @@ export interface CreateShelfAppOptions {
   rendererPublicOrigin?: string;
   webRoot?: string;
   dashboardAccess?: DashboardAccessService;
+}
+
+function isArtifactDeletionRepository(value: object): value is ArtifactDeletionRepository {
+  const candidate = value as Partial<Record<keyof ArtifactDeletionRepository, unknown>>;
+  return (
+    typeof candidate.findArtifactForDeletion === 'function' &&
+    typeof candidate.deleteArtifact === 'function' &&
+    typeof candidate.recoverArtifact === 'function'
+  );
 }
 
 export async function createShelfApp(options: CreateShelfAppOptions): Promise<FastifyInstance> {
@@ -156,13 +171,37 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   });
   const limits = { ...DEFAULT_MULTIPART_LIMITS, ...options.multipartLimits };
   const revisionRepository = options.revisionRepository ?? new MemoryRevisionRepository();
+  const shareRepository = options.shareRepository ?? new MemoryShareRepository(revisionRepository);
+  let artifactDeletionRepository = options.artifactDeletionRepository;
+  if (
+    artifactDeletionRepository === undefined &&
+    revisionRepository instanceof MemoryRevisionRepository &&
+    shareRepository instanceof MemoryShareRepository
+  ) {
+    artifactDeletionRepository = new MemoryArtifactDeletionRepository(
+      revisionRepository,
+      shareRepository,
+    );
+  } else if (
+    artifactDeletionRepository === undefined &&
+    isArtifactDeletionRepository(revisionRepository)
+  ) {
+    artifactDeletionRepository = revisionRepository;
+  }
+  if (artifactDeletionRepository === undefined) {
+    throw new Error(
+      'Shelf requires artifactDeletionRepository when the revision repository does not implement artifact deletion.',
+    );
+  }
   const dependencies: ShelfAppDependencies = {
     authenticator: options.authenticator,
     authorizer: options.authorizer,
     contentStore,
     contentReader,
     revisionRepository,
-    shareRepository: options.shareRepository ?? new MemoryShareRepository(revisionRepository),
+    shareRepository,
+    artifactDeletionRepository,
+    ...(options.artifactClock === undefined ? {} : { artifactClock: options.artifactClock }),
     shareCapabilityCodec:
       options.shareCapabilityCodec ?? createHmacShareCapabilityCodec(randomBytes(32)),
     ...(options.shareClock === undefined ? {} : { shareClock: options.shareClock }),
@@ -197,6 +236,7 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   app.addSchema(FolderPublishResultSchema);
   app.addSchema(FolderTreePageSchema);
   app.addSchema(ErrorEnvelopeSchema);
+  app.addSchema(ArtifactDeletionResultSchema);
   app.addSchema(RevisionComparisonSchema);
   app.addSchema(withoutNestedSchemaIds(ShareManagementSummarySchema));
   app.addSchema(withoutNestedSchemaIds(ShareCreateResultSchema));

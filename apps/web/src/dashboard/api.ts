@@ -1,5 +1,6 @@
 import {
   type Artifact,
+  type ArtifactDeletionResult,
   type ArtifactPage,
   type ArtifactRevisionPage,
   type DashboardCredentialIssue,
@@ -9,6 +10,7 @@ import {
   type DashboardSession,
   type FolderEntry,
   isArtifact,
+  isArtifactDeletionResult,
   isArtifactPage,
   isArtifactRevisionPage,
   isDashboardCredentialIssue,
@@ -164,10 +166,11 @@ export async function loadArtifact(artifactId: string, signal?: AbortSignal): Pr
 
 export async function loadArtifactHistory(
   artifactId: string,
+  order: 'newest' | 'oldest',
   cursor?: string,
   signal?: AbortSignal,
 ): Promise<ArtifactRevisionPage> {
-  const query = new URLSearchParams({ limit: '100' });
+  const query = new URLSearchParams({ limit: '100', order });
   if (cursor !== undefined) query.set('cursor', cursor);
   const value = await requestJson(
     `/api/v1/artifacts/${encodeURIComponent(artifactId)}/revisions?${query}`,
@@ -242,6 +245,31 @@ export async function renameArtifact(artifactId: string, name: string): Promise<
   const value = await requestJson(
     `/api/v1/artifacts/${encodeURIComponent(artifactId)}`,
     jsonRequest('PATCH', { name }),
+  );
+  if (!isArtifact(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
+  }
+  return value;
+}
+
+export async function deleteArtifact(artifactId: string): Promise<ArtifactDeletionResult> {
+  const value = await requestJson(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}`,
+    requestOptions({ method: 'DELETE' }),
+  );
+  if (!isArtifactDeletionResult(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
+  }
+  return value;
+}
+
+export async function recoverArtifact(
+  artifactId: string,
+  idempotencyKey: string,
+): Promise<Artifact> {
+  const value = await requestJson(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/recovery`,
+    requestOptions({ method: 'POST', headers: { 'Idempotency-Key': idempotencyKey } }),
   );
   if (!isArtifact(value)) {
     throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');

@@ -48,6 +48,7 @@ export async function createShelfServer(config: ShelfServerConfig): Promise<Shel
       contentStore: persistence.contentStore,
       contentReader: persistence.contentReader,
       revisionRepository: persistence.revisionRepository,
+      artifactDeletionRepository: persistence.artifactDeletionRepository,
       shareRepository: persistence.shareRepository,
       shareCapabilityCodec: createHmacShareCapabilityCodec(config.share.signingKey),
       health: readiness,

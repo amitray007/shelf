@@ -1,5 +1,5 @@
-import type { FastifyRequest } from 'fastify';
 import { AuthorizationDeniedError } from '@shelf/core';
+import type { FastifyRequest } from 'fastify';
 
 import { AuthenticationRequiredError } from './plugins/errors.js';
 

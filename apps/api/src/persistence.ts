@@ -26,6 +26,7 @@ export interface ShelfPersistence {
   contentInventory: ContentStorage;
   installationInventory: PostgresInstallationInventory;
   revisionRepository: PostgresRevisionRepository;
+  artifactDeletionRepository: PostgresRevisionRepository;
   shareRepository: PostgresShareRepository;
   referencedContentInventory: PostgresReferencedContentInventory;
   authRepository: PostgresAuthRepository;
@@ -48,12 +49,14 @@ export function createShelfPersistence(config: ShelfPersistenceConfig): ShelfPer
     contentStorage.close();
     throw error;
   }
+  const revisionRepository = new PostgresRevisionRepository(database);
   return {
     contentStore: contentStorage,
     contentReader: contentStorage,
     contentInventory: contentStorage,
     installationInventory: new PostgresInstallationInventory(database),
-    revisionRepository: new PostgresRevisionRepository(database),
+    revisionRepository,
+    artifactDeletionRepository: revisionRepository,
     shareRepository: new PostgresShareRepository(database),
     referencedContentInventory: new PostgresReferencedContentInventory(database),
     authRepository: new PostgresAuthRepository(database),

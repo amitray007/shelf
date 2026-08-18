@@ -38,6 +38,7 @@ export interface StoredFolderArtifactRevision extends StoredArtifactRevisionComm
 }
 
 export type StoredArtifactRevision = StoredFileArtifactRevision | StoredFolderArtifactRevision;
+export type ArtifactRevisionOrder = 'newest' | 'oldest';
 
 export interface StoredArtifact {
   installationId: string;
@@ -62,7 +63,8 @@ export interface ArtifactCatalogRepository {
     installationId: string;
     artifactId: string;
     limit: number;
-    beforeRevisionNumber?: number;
+    order: ArtifactRevisionOrder;
+    cursorRevisionNumber?: number;
   }): Promise<{ items: StoredArtifactRevision[]; nextRevisionNumber?: number }>;
 }
 
@@ -122,13 +124,24 @@ function artifactCursor(value: string | undefined) {
   return { updatedAt: cursor.updatedAt, artifactId: cursor.artifactId };
 }
 
-function revisionCursor(value: string | undefined): number | undefined {
+function revisionCursor(
+  value: string | undefined,
+  order: ArtifactRevisionOrder,
+): number | undefined {
   if (value === undefined) return undefined;
   const cursor = decodeCursor(value, 'revisions');
-  if (!Number.isSafeInteger(cursor.revisionNumber) || (cursor.revisionNumber as number) < 1) {
+  if (
+    cursor.order !== order ||
+    !Number.isSafeInteger(cursor.revisionNumber) ||
+    (cursor.revisionNumber as number) < 1
+  ) {
     throw new InvalidArtifactCatalogRequestError('cursor');
   }
   return cursor.revisionNumber as number;
+}
+
+function revisionOrder(value: ArtifactRevisionOrder | undefined): ArtifactRevisionOrder {
+  return value ?? 'newest';
 }
 
 export function storedRevisionToArtifactRevision(stored: StoredArtifactRevision): ArtifactRevision {
@@ -292,11 +305,13 @@ export function createArtifactCatalogService(dependencies: {
       actorId: string;
       artifactId: string;
       limit: number;
+      order?: ArtifactRevisionOrder;
       cursor?: string;
       signal?: AbortSignal;
     }): Promise<ArtifactRevisionPage> {
       const pageLimit = limit(request.limit);
-      const beforeRevisionNumber = revisionCursor(request.cursor);
+      const order = revisionOrder(request.order);
+      const cursorRevisionNumber = revisionCursor(request.cursor, order);
       const stored = await authorizedArtifact(request);
       let page: { items: StoredArtifactRevision[]; nextRevisionNumber?: number };
       try {
@@ -304,7 +319,8 @@ export function createArtifactCatalogService(dependencies: {
           installationId: request.installationId,
           artifactId: request.artifactId,
           limit: pageLimit,
-          ...(beforeRevisionNumber === undefined ? {} : { beforeRevisionNumber }),
+          order,
+          ...(cursorRevisionNumber === undefined ? {} : { cursorRevisionNumber }),
         });
       } catch (error) {
         throw boundaryFailure('SERVICE_UNAVAILABLE', 'Artifact history lookup failed.', error);
@@ -319,6 +335,7 @@ export function createArtifactCatalogService(dependencies: {
             ? null
             : encodeCursor({
                 kind: 'revisions',
+                order,
                 revisionNumber: page.nextRevisionNumber,
               }),
       };

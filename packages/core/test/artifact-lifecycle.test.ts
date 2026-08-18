@@ -500,3 +500,249 @@ describe('artifact lifecycle service', () => {
     }
   });
 });
+
+describe('recoverable artifact deletion', () => {
+  const artifact = {
+    installationId: 'installation-main',
+    workspaceId: 'workspace-main',
+    artifactId: 'art_AAAAAAAAAAAAAAAAAAAAAA',
+    kind: 'file' as const,
+    name: 'README.md',
+    createdAt: '2026-08-17T12:00:00.000Z',
+    updatedAt: '2026-08-17T12:00:00.000Z',
+    latestRevision: {
+      kind: 'file' as const,
+      revisionId: 'rev_AAAAAAAAAAAAAAAAAAAAAA',
+      revisionNumber: 1,
+      originalFileName: 'README.md',
+      mediaType: 'text/markdown',
+      contentHash: `sha256:${'a'.repeat(64)}`,
+      byteCount: 12,
+      createdAt: '2026-08-17T12:00:00.000Z',
+      provenance: {
+        classification: 'direct-publish' as const,
+        observed: { actorId: 'actor-publisher', operation: 'file.publish' as const },
+      },
+      publisherMetadata: {},
+    },
+  };
+
+  it('soft-deletes for exactly 30 days and revokes shares after publish authorization', async () => {
+    const authorization: unknown[] = [];
+    const deleteArtifact = vi.fn(async (request) => ({
+      status: 'deleted' as const,
+      deletedAt: request.deletedAt,
+      recoverableUntil: request.recoverableUntil,
+      revokedShareCount: 2,
+    }));
+    const lifecycle = createArtifactLifecycleService({
+      authorizer: {
+        async authorize(request) {
+          authorization.push(request);
+        },
+      },
+      artifacts: {},
+      deletions: {
+        async findArtifactForDeletion() {
+          return { artifact, deletedAt: null, recoverableUntil: null };
+        },
+        deleteArtifact,
+        async recoverArtifact() {
+          return { status: 'not-found' as const };
+        },
+      },
+      clock: () => new Date('2026-08-18T12:00:00.000Z'),
+    });
+
+    await expect(
+      lifecycle.deleteArtifact({
+        installationId: artifact.installationId,
+        actorId: 'actor-publisher',
+        artifactId: artifact.artifactId,
+      }),
+    ).resolves.toEqual({
+      apiVersion: 'v1',
+      workspaceId: artifact.workspaceId,
+      artifactId: artifact.artifactId,
+      deletedAt: '2026-08-18T12:00:00.000Z',
+      recoverableUntil: '2026-09-17T12:00:00.000Z',
+      revokedShareCount: 2,
+    });
+    expect(deleteArtifact).toHaveBeenCalledWith({
+      installationId: artifact.installationId,
+      workspaceId: artifact.workspaceId,
+      artifactId: artifact.artifactId,
+      actorId: 'actor-publisher',
+      deletedAt: '2026-08-18T12:00:00.000Z',
+      recoverableUntil: '2026-09-17T12:00:00.000Z',
+    });
+    expect(authorization).toEqual([
+      {
+        installationId: artifact.installationId,
+        workspaceId: artifact.workspaceId,
+        actorId: 'actor-publisher',
+        action: 'file.publish',
+      },
+    ]);
+  });
+
+  it('returns the original deletion window when deletion is replayed', async () => {
+    const lifecycle = createArtifactLifecycleService({
+      authorizer: { async authorize() {} },
+      artifacts: {},
+      deletions: {
+        async findArtifactForDeletion() {
+          return {
+            artifact,
+            deletedAt: '2026-08-18T12:00:00.000Z',
+            recoverableUntil: '2026-09-17T12:00:00.000Z',
+          };
+        },
+        async deleteArtifact() {
+          return {
+            status: 'already-deleted' as const,
+            deletedAt: '2026-08-18T12:00:00.000Z',
+            recoverableUntil: '2026-09-17T12:00:00.000Z',
+            revokedShareCount: 3,
+          };
+        },
+        async recoverArtifact() {
+          return { status: 'not-found' as const };
+        },
+      },
+      clock: () => new Date('2026-08-20T12:00:00.000Z'),
+    });
+
+    await expect(
+      lifecycle.deleteArtifact({
+        installationId: artifact.installationId,
+        actorId: 'actor-publisher',
+        artifactId: artifact.artifactId,
+      }),
+    ).resolves.toMatchObject({
+      deletedAt: '2026-08-18T12:00:00.000Z',
+      recoverableUntil: '2026-09-17T12:00:00.000Z',
+      revokedShareCount: 3,
+    });
+  });
+
+  it('recovers catalog visibility during the window without restoring shares', async () => {
+    const recoverArtifact = vi.fn(async () => ({ status: 'recovered' as const, artifact }));
+    const lifecycle = createArtifactLifecycleService({
+      authorizer: { async authorize() {} },
+      artifacts: {},
+      deletions: {
+        async findArtifactForDeletion() {
+          return {
+            artifact,
+            deletedAt: '2026-08-18T12:00:00.000Z',
+            recoverableUntil: '2026-09-17T12:00:00.000Z',
+          };
+        },
+        async deleteArtifact() {
+          return { status: 'not-found' as const };
+        },
+        recoverArtifact,
+      },
+      clock: () => new Date('2026-08-19T12:00:00.000Z'),
+    });
+
+    await expect(
+      lifecycle.recoverArtifact({
+        installationId: artifact.installationId,
+        actorId: 'actor-publisher',
+        artifactId: artifact.artifactId,
+        idempotencyKey: 'recover-readme',
+      }),
+    ).resolves.toMatchObject({ artifactId: artifact.artifactId, name: artifact.name });
+    expect(recoverArtifact).toHaveBeenCalledWith({
+      namespace: {
+        installationId: artifact.installationId,
+        workspaceId: artifact.workspaceId,
+        actorId: 'actor-publisher',
+        operation: 'artifact.recover',
+        key: 'recover-readme',
+      },
+      fingerprint: expect.stringMatching(/^artifact-recovery-request\/v1:sha256:[a-f0-9]{64}$/u),
+      artifactId: artifact.artifactId,
+      recoveredAt: '2026-08-19T12:00:00.000Z',
+    });
+  });
+
+  it('replays recovery by semantic key and rejects reuse for another artifact', async () => {
+    const recoverArtifact = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 'recovered' as const, artifact })
+      .mockResolvedValueOnce({ status: 'replayed' as const, artifact })
+      .mockResolvedValueOnce({ status: 'conflict' as const });
+    const lifecycle = createArtifactLifecycleService({
+      authorizer: { async authorize() {} },
+      artifacts: {},
+      deletions: {
+        async findArtifactForDeletion(requestedArtifactId) {
+          return {
+            artifact: { ...artifact, artifactId: requestedArtifactId },
+            deletedAt: '2026-08-18T12:00:00.000Z',
+            recoverableUntil: '2026-09-17T12:00:00.000Z',
+          };
+        },
+        async deleteArtifact() {
+          return { status: 'not-found' as const };
+        },
+        recoverArtifact,
+      },
+      clock: () => new Date('2026-08-19T12:00:00.000Z'),
+    });
+    const request = {
+      installationId: artifact.installationId,
+      actorId: 'actor-publisher',
+      artifactId: artifact.artifactId,
+      idempotencyKey: 'recover-once',
+    };
+
+    await expect(lifecycle.recoverArtifact(request)).resolves.toMatchObject({
+      artifactId: artifact.artifactId,
+    });
+    await expect(lifecycle.recoverArtifact(request)).resolves.toMatchObject({
+      artifactId: artifact.artifactId,
+    });
+    await expect(
+      lifecycle.recoverArtifact({
+        ...request,
+        artifactId: 'art_BBBBBBBBBBBBBBBBBBBBBB',
+      }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+  });
+
+  it('returns a stable expired error without recovery mutation', async () => {
+    const recoverArtifact = vi.fn(async () => ({ status: 'expired' as const }));
+    const lifecycle = createArtifactLifecycleService({
+      authorizer: { async authorize() {} },
+      artifacts: {},
+      deletions: {
+        async findArtifactForDeletion() {
+          return {
+            artifact,
+            deletedAt: '2026-08-18T12:00:00.000Z',
+            recoverableUntil: '2026-09-17T12:00:00.000Z',
+          };
+        },
+        async deleteArtifact() {
+          return { status: 'not-found' as const };
+        },
+        recoverArtifact,
+      },
+      clock: () => new Date('2026-09-17T12:00:00.000Z'),
+    });
+
+    await expect(
+      lifecycle.recoverArtifact({
+        installationId: artifact.installationId,
+        actorId: 'actor-publisher',
+        artifactId: artifact.artifactId,
+        idempotencyKey: 'recover-expired',
+      }),
+    ).rejects.toMatchObject({ code: 'ARTIFACT_RECOVERY_EXPIRED' });
+    expect(recoverArtifact).toHaveBeenCalledTimes(1);
+  });
+});

@@ -12,12 +12,6 @@
   }
 }
 
-@media (max-width: 900px) {
-  .dashboard-bar {
-    padding: 0 14px;
-  }
-}
-
 @media (max-width: 680px) {
   .workspace-menu-trigger {
     min-height: 44px;
@@ -74,6 +68,11 @@
   }
 
   .dashboard-page {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .dashboard-location {
     padding-right: 14px;
     padding-left: 14px;
   }

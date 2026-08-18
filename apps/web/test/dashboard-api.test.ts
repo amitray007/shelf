@@ -5,9 +5,11 @@ import {
   createDashboardCredential,
   DashboardApiError,
   DashboardAuthenticationError,
+  deleteArtifact,
   loadArtifacts,
   loadDashboardSession,
   loadFolderEntries,
+  recoverArtifact,
   renameArtifact,
   restoreArtifact,
 } from '../src/dashboard/api.js';
@@ -166,6 +168,66 @@ describe('dashboard API client', () => {
     for (const call of fetch.mock.calls) {
       expect(call[1]?.headers).toMatchObject({ 'idempotency-key': key });
     }
+  });
+
+  it('uses the recoverable artifact lifecycle endpoints and validates their results', async () => {
+    const artifactId = `art_${'a'.repeat(22)}`;
+    const deleted = {
+      apiVersion: 'v1',
+      workspaceId: 'workspace-main',
+      artifactId,
+      deletedAt: '2026-08-18T12:00:00.000Z',
+      recoverableUntil: '2026-09-17T12:00:00.000Z',
+      revokedShareCount: 1,
+    };
+    const recovered = {
+      apiVersion: 'v1',
+      workspaceId: 'workspace-main',
+      artifactId,
+      kind: 'file',
+      name: 'idea.md',
+      createdAt: '2026-08-18T10:00:00.000Z',
+      updatedAt: '2026-08-18T10:00:00.000Z',
+      latestRevision: {
+        kind: 'file',
+        revisionId: `rev_${'b'.repeat(22)}`,
+        revisionNumber: 1,
+        originalFileName: 'idea.md',
+        mediaType: 'text/markdown',
+        byteCount: 4,
+        fileCount: 1,
+        contentHash: `sha256:${'c'.repeat(64)}`,
+        createdAt: '2026-08-18T10:00:00.000Z',
+        provenance: {
+          classification: 'direct-publish',
+          observed: { actorId: 'act_owner', operation: 'file.publish' },
+        },
+        publisherMetadata: {},
+        paths: {
+          revision: `/api/v1/revisions/rev_${'b'.repeat(22)}`,
+          content: `/api/v1/revisions/rev_${'b'.repeat(22)}/content`,
+        },
+      },
+      paths: {
+        artifact: `/api/v1/artifacts/${artifactId}`,
+        revisions: `/api/v1/artifacts/${artifactId}/revisions`,
+      },
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(json(deleted))
+      .mockResolvedValueOnce(json(recovered));
+    globalThis.fetch = fetch;
+
+    await expect(deleteArtifact(artifactId)).resolves.toEqual(deleted);
+    await expect(recoverArtifact(artifactId, 'recovery-key')).resolves.toEqual(recovered);
+    expect(fetch.mock.calls[0]?.[0]).toBe(`/api/v1/artifacts/${artifactId}`);
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({ method: 'DELETE' });
+    expect(fetch.mock.calls[1]?.[0]).toBe(`/api/v1/artifacts/${artifactId}/recovery`);
+    expect(fetch.mock.calls[1]?.[1]).toMatchObject({
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'recovery-key' },
+    });
   });
 
   it('loads bounded folder pages and rejects repeated or mismatched continuations', async () => {

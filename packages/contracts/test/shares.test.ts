@@ -122,4 +122,8 @@ describe('share contracts', () => {
   it('maps non-enumerating share misses to the stable validation exit class', () => {
     expect(exitCodeForError('SHARE_NOT_FOUND')).toBe(CLI_EXIT_CODES.validation);
   });
+
+  it('maps an expired artifact recovery to the stable validation exit class', () => {
+    expect(exitCodeForError('ARTIFACT_RECOVERY_EXPIRED')).toBe(CLI_EXIT_CODES.validation);
+  });
 });

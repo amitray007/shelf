@@ -1,6 +1,8 @@
 import type {
   ArtifactCatalogRepository,
+  ArtifactDeletionRepository,
   ArtifactLifecycleRepository,
+  ArtifactRecoveryIdempotencyNamespace,
   CommitFolderPublishInput,
   CommitFolderPublishOutcome,
   CommitPublishInput,
@@ -16,6 +18,7 @@ import type {
   RevisionComparisonRepository,
   RevisionRepository,
   StoredArtifact,
+  StoredArtifactDeletionState,
   StoredArtifactRevision,
   StoredFolderEntry,
   StoredFolderPublish,
@@ -31,6 +34,11 @@ import { sql, type Transaction } from 'kysely';
 import type { RevisionRow, ShelfPostgresDatabase, ShelfPostgresSchema } from './database.js';
 
 type DatabaseExecutor = ShelfPostgresDatabase | Transaction<ShelfPostgresSchema>;
+
+interface StoredRecoveryIdempotency {
+  fingerprint: string;
+  artifact: StoredArtifact;
+}
 
 function parsePublisherMetadata(value: unknown): StoredRevision['publisherMetadata'] {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -105,6 +113,11 @@ type ArtifactWithLatestRow = RevisionRow & {
   artifact_updated_at: Date;
 };
 
+type ArtifactDeletionRow = ArtifactWithLatestRow & {
+  artifact_deleted_at: Date | null;
+  artifact_recoverable_until: Date | null;
+};
+
 function storedArtifact(row: ArtifactWithLatestRow): StoredArtifact {
   return {
     installationId: row.installation_id,
@@ -116,6 +129,85 @@ function storedArtifact(row: ArtifactWithLatestRow): StoredArtifact {
     updatedAt: row.artifact_updated_at.toISOString(),
     latestRevision: storedArtifactRevision(row),
   };
+}
+
+async function findArtifactDeletionState(
+  database: DatabaseExecutor,
+  artifactId: string,
+): Promise<StoredArtifactDeletionState | undefined> {
+  const row = await database
+    .selectFrom('shelf_artifacts as artifact')
+    .innerJoin('shelf_revisions as revision', (join) =>
+      join
+        .onRef('revision.revision_id', '=', 'artifact.latest_revision_id')
+        .onRef('revision.installation_id', '=', 'artifact.installation_id')
+        .onRef('revision.workspace_id', '=', 'artifact.workspace_id')
+        .onRef('revision.artifact_id', '=', 'artifact.artifact_id'),
+    )
+    .selectAll('revision')
+    .select([
+      'artifact.name as artifact_name',
+      'artifact.kind as artifact_kind',
+      'artifact.created_at as artifact_created_at',
+      'artifact.updated_at as artifact_updated_at',
+      'artifact.deleted_at as artifact_deleted_at',
+      'artifact.recoverable_until as artifact_recoverable_until',
+    ])
+    .where('artifact.artifact_id', '=', artifactId)
+    .executeTakeFirst();
+  if (row === undefined) return undefined;
+  const value = row as ArtifactDeletionRow;
+  return {
+    artifact: storedArtifact(value),
+    deletedAt: value.artifact_deleted_at?.toISOString() ?? null,
+    recoverableUntil: value.artifact_recoverable_until?.toISOString() ?? null,
+  };
+}
+
+function parseStoredRecoveryArtifact(value: unknown): StoredArtifact {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Stored artifact recovery result is invalid.');
+  }
+  const artifact = value as Partial<StoredArtifact>;
+  if (
+    typeof artifact.installationId !== 'string' ||
+    typeof artifact.workspaceId !== 'string' ||
+    typeof artifact.artifactId !== 'string' ||
+    (artifact.kind !== 'file' && artifact.kind !== 'folder') ||
+    typeof artifact.name !== 'string' ||
+    typeof artifact.createdAt !== 'string' ||
+    typeof artifact.updatedAt !== 'string' ||
+    typeof artifact.latestRevision !== 'object' ||
+    artifact.latestRevision === null
+  ) {
+    throw new Error('Stored artifact recovery result is invalid.');
+  }
+  return structuredClone(artifact as StoredArtifact);
+}
+
+async function findRecoveryIdempotency(
+  database: DatabaseExecutor,
+  namespace: ArtifactRecoveryIdempotencyNamespace,
+): Promise<StoredRecoveryIdempotency | undefined> {
+  const row = await database
+    .selectFrom('shelf_artifact_recovery_idempotency')
+    .select(['fingerprint', 'artifact_id', 'result'])
+    .where('installation_id', '=', namespace.installationId)
+    .where('workspace_id', '=', namespace.workspaceId)
+    .where('actor_id', '=', namespace.actorId)
+    .where('operation', '=', namespace.operation)
+    .where('client_key', '=', namespace.key)
+    .executeTakeFirst();
+  if (row === undefined) return undefined;
+  const artifact = parseStoredRecoveryArtifact(row.result);
+  if (
+    artifact.installationId !== namespace.installationId ||
+    artifact.workspaceId !== namespace.workspaceId ||
+    artifact.artifactId !== row.artifact_id
+  ) {
+    throw new Error('Stored artifact recovery idempotency scope is invalid.');
+  }
+  return { fingerprint: row.fingerprint, artifact };
 }
 
 function storedProvenance(row: RevisionRow): StoredRevision['provenance'] {
@@ -263,9 +355,16 @@ async function findRevision(
   revisionId: string,
 ): Promise<StoredRevision | undefined> {
   const row = await database
-    .selectFrom('shelf_revisions')
-    .selectAll()
-    .where('revision_id', '=', revisionId)
+    .selectFrom('shelf_revisions as revision')
+    .innerJoin('shelf_artifacts as artifact', (join) =>
+      join
+        .onRef('artifact.installation_id', '=', 'revision.installation_id')
+        .onRef('artifact.workspace_id', '=', 'revision.workspace_id')
+        .onRef('artifact.artifact_id', '=', 'revision.artifact_id'),
+    )
+    .selectAll('revision')
+    .where('revision.revision_id', '=', revisionId)
+    .where('artifact.deleted_at', 'is', null)
     .executeTakeFirst();
   return row === undefined ? undefined : storedRevision(row);
 }
@@ -393,20 +492,25 @@ async function commitNewPublish(
       latest_revision_id: null,
       created_at: sql`transaction_timestamp()`,
       updated_at: sql`transaction_timestamp()`,
+      deleted_at: null,
+      recoverable_until: null,
+      deleted_by_actor_id: null,
+      deleted_share_count: null,
     })
     .onConflict((conflict) => conflict.column('artifact_id').doNothing())
     .execute();
 
   const artifact = await transaction
     .selectFrom('shelf_artifacts')
-    .select(['installation_id', 'workspace_id', 'kind'])
+    .select(['installation_id', 'workspace_id', 'kind', 'deleted_at'])
     .where('artifact_id', '=', input.result.artifactId)
     .forUpdate()
     .executeTakeFirstOrThrow();
   if (
     artifact.installation_id !== input.result.installationId ||
     artifact.workspace_id !== input.result.workspaceId ||
-    artifact.kind !== 'file'
+    artifact.kind !== 'file' ||
+    artifact.deleted_at !== null
   ) {
     throw new Error('Artifact identity belongs to another workspace.');
   }
@@ -487,7 +591,7 @@ async function commitNewRestore(
 
   const artifact = await transaction
     .selectFrom('shelf_artifacts')
-    .select(['installation_id', 'workspace_id', 'kind'])
+    .select(['installation_id', 'workspace_id', 'kind', 'deleted_at'])
     .where('artifact_id', '=', input.result.artifactId)
     .forUpdate()
     .executeTakeFirst();
@@ -495,7 +599,8 @@ async function commitNewRestore(
     artifact === undefined ||
     artifact.installation_id !== input.result.installationId ||
     artifact.workspace_id !== input.result.workspaceId ||
-    artifact.kind !== (input.result.kind === 'folder' ? 'folder' : 'file')
+    artifact.kind !== (input.result.kind === 'folder' ? 'folder' : 'file') ||
+    artifact.deleted_at !== null
   ) {
     throw new Error('Restore artifact identity is invalid.');
   }
@@ -648,19 +753,24 @@ async function commitNewFolderPublish(
       latest_revision_id: null,
       created_at: sql`transaction_timestamp()`,
       updated_at: sql`transaction_timestamp()`,
+      deleted_at: null,
+      recoverable_until: null,
+      deleted_by_actor_id: null,
+      deleted_share_count: null,
     })
     .onConflict((conflict) => conflict.column('artifact_id').doNothing())
     .execute();
   const artifact = await transaction
     .selectFrom('shelf_artifacts')
-    .select(['installation_id', 'workspace_id', 'kind'])
+    .select(['installation_id', 'workspace_id', 'kind', 'deleted_at'])
     .where('artifact_id', '=', input.result.artifactId)
     .forUpdate()
     .executeTakeFirstOrThrow();
   if (
     artifact.installation_id !== input.result.installationId ||
     artifact.workspace_id !== input.result.workspaceId ||
-    artifact.kind !== 'folder'
+    artifact.kind !== 'folder' ||
+    artifact.deleted_at !== null
   ) {
     throw new Error('Folder artifact identity is invalid.');
   }
@@ -728,6 +838,7 @@ export class PostgresRevisionRepository
     RevisionRepository,
     ArtifactCatalogRepository,
     ArtifactLifecycleRepository,
+    ArtifactDeletionRepository,
     FolderRevisionRepository,
     RevisionComparisonRepository
 {
@@ -755,19 +866,33 @@ export class PostgresRevisionRepository
 
   async findFolderRevision(revisionId: string): Promise<StoredFolderRevision | undefined> {
     const row = await this.#database
-      .selectFrom('shelf_revisions')
-      .selectAll()
-      .where('revision_id', '=', revisionId)
-      .where('kind', '=', 'folder')
+      .selectFrom('shelf_revisions as revision')
+      .innerJoin('shelf_artifacts as artifact', (join) =>
+        join
+          .onRef('artifact.installation_id', '=', 'revision.installation_id')
+          .onRef('artifact.workspace_id', '=', 'revision.workspace_id')
+          .onRef('artifact.artifact_id', '=', 'revision.artifact_id'),
+      )
+      .selectAll('revision')
+      .where('revision.revision_id', '=', revisionId)
+      .where('revision.kind', '=', 'folder')
+      .where('artifact.deleted_at', 'is', null)
       .executeTakeFirst();
     return row === undefined ? undefined : storedFolderRevision(row);
   }
 
   async findComparableRevision(revisionId: string) {
     const row = await this.#database
-      .selectFrom('shelf_revisions')
-      .selectAll()
-      .where('revision_id', '=', revisionId)
+      .selectFrom('shelf_revisions as revision')
+      .innerJoin('shelf_artifacts as artifact', (join) =>
+        join
+          .onRef('artifact.installation_id', '=', 'revision.installation_id')
+          .onRef('artifact.workspace_id', '=', 'revision.workspace_id')
+          .onRef('artifact.artifact_id', '=', 'revision.artifact_id'),
+      )
+      .selectAll('revision')
+      .where('revision.revision_id', '=', revisionId)
+      .where('artifact.deleted_at', 'is', null)
       .executeTakeFirst();
     if (row === undefined) return undefined;
     return row.kind === 'folder'
@@ -782,13 +907,20 @@ export class PostgresRevisionRepository
     afterPath?: string;
   }) {
     let query = this.#database
-      .selectFrom('shelf_revision_entries')
-      .selectAll()
-      .where('installation_id', '=', request.installationId)
-      .where('revision_id', '=', request.revisionId);
-    if (request.afterPath !== undefined) query = query.where('path', '>', request.afterPath);
+      .selectFrom('shelf_revision_entries as entry')
+      .innerJoin('shelf_artifacts as artifact', (join) =>
+        join
+          .onRef('artifact.installation_id', '=', 'entry.installation_id')
+          .onRef('artifact.workspace_id', '=', 'entry.workspace_id')
+          .onRef('artifact.artifact_id', '=', 'entry.artifact_id'),
+      )
+      .selectAll('entry')
+      .where('entry.installation_id', '=', request.installationId)
+      .where('entry.revision_id', '=', request.revisionId)
+      .where('artifact.deleted_at', 'is', null);
+    if (request.afterPath !== undefined) query = query.where('entry.path', '>', request.afterPath);
     const rows = await query
-      .orderBy('path')
+      .orderBy('entry.path')
       .limit(request.limit + 1)
       .execute();
     const hasMore = rows.length > request.limit;
@@ -805,6 +937,7 @@ export class PostgresRevisionRepository
       .selectFrom('shelf_artifacts')
       .select(['artifact_id', 'installation_id', 'workspace_id', 'kind'])
       .where('artifact_id', '=', artifactId)
+      .where('deleted_at', 'is', null)
       .executeTakeFirst();
     return artifact === undefined
       ? undefined
@@ -833,6 +966,7 @@ export class PostgresRevisionRepository
         'artifact.updated_at as artifact_updated_at',
       ])
       .where('artifact.artifact_id', '=', artifactId)
+      .where('artifact.deleted_at', 'is', null)
       .executeTakeFirst();
     return row === undefined ? undefined : storedArtifact(row);
   }
@@ -860,6 +994,7 @@ export class PostgresRevisionRepository
       ])
       .where('artifact.installation_id', '=', request.installationId)
       .where('artifact.workspace_id', '=', request.workspaceId);
+    query = query.where('artifact.deleted_at', 'is', null);
     if (request.after !== undefined) {
       const after = request.after;
       const updatedAt = new Date(after.updatedAt);
@@ -893,18 +1028,30 @@ export class PostgresRevisionRepository
     installationId: string;
     artifactId: string;
     limit: number;
-    beforeRevisionNumber?: number;
+    order: 'newest' | 'oldest';
+    cursorRevisionNumber?: number;
   }) {
     let query = this.#database
-      .selectFrom('shelf_revisions')
-      .selectAll()
-      .where('installation_id', '=', request.installationId)
-      .where('artifact_id', '=', request.artifactId);
-    if (request.beforeRevisionNumber !== undefined) {
-      query = query.where('revision_number', '<', String(request.beforeRevisionNumber));
+      .selectFrom('shelf_revisions as revision')
+      .innerJoin('shelf_artifacts as artifact', (join) =>
+        join
+          .onRef('artifact.installation_id', '=', 'revision.installation_id')
+          .onRef('artifact.workspace_id', '=', 'revision.workspace_id')
+          .onRef('artifact.artifact_id', '=', 'revision.artifact_id'),
+      )
+      .selectAll('revision')
+      .where('revision.installation_id', '=', request.installationId)
+      .where('revision.artifact_id', '=', request.artifactId)
+      .where('artifact.deleted_at', 'is', null);
+    if (request.cursorRevisionNumber !== undefined) {
+      query = query.where(
+        'revision.revision_number',
+        request.order === 'newest' ? '<' : '>',
+        String(request.cursorRevisionNumber),
+      );
     }
     const rows = await query
-      .orderBy('revision_number', 'desc')
+      .orderBy('revision.revision_number', request.order === 'newest' ? 'desc' : 'asc')
       .limit(request.limit + 1)
       .execute();
     const hasMore = rows.length > request.limit;
@@ -934,6 +1081,7 @@ export class PostgresRevisionRepository
       .where('installation_id', '=', request.installationId)
       .where('workspace_id', '=', request.workspaceId)
       .where('artifact_id', '=', request.artifactId)
+      .where('deleted_at', 'is', null)
       .returning('artifact_id')
       .executeTakeFirst();
     return renamed === undefined ? undefined : this.findArtifact(renamed.artifact_id);
@@ -953,5 +1101,167 @@ export class PostgresRevisionRepository
 
   findRevision(revisionId: string): Promise<StoredRevision | undefined> {
     return findRevision(this.#database, revisionId);
+  }
+
+  findArtifactForDeletion(artifactId: string): Promise<StoredArtifactDeletionState | undefined> {
+    return findArtifactDeletionState(this.#database, artifactId);
+  }
+
+  deleteArtifact(request: {
+    installationId: string;
+    workspaceId: string;
+    artifactId: string;
+    actorId: string;
+    deletedAt: string;
+    recoverableUntil: string;
+  }) {
+    return this.#database.transaction().execute(async (transaction) => {
+      const artifact = await transaction
+        .selectFrom('shelf_artifacts')
+        .select(['deleted_at', 'recoverable_until', 'deleted_share_count'])
+        .where('installation_id', '=', request.installationId)
+        .where('workspace_id', '=', request.workspaceId)
+        .where('artifact_id', '=', request.artifactId)
+        .forUpdate()
+        .executeTakeFirst();
+      if (artifact === undefined) return { status: 'not-found' as const };
+      if (artifact.deleted_at !== null) {
+        if (artifact.recoverable_until === null || artifact.deleted_share_count === null) {
+          throw new Error('Stored artifact deletion state is invalid.');
+        }
+        return {
+          status: 'already-deleted' as const,
+          deletedAt: artifact.deleted_at.toISOString(),
+          recoverableUntil: artifact.recoverable_until.toISOString(),
+          revokedShareCount: artifact.deleted_share_count,
+        };
+      }
+
+      const deletedAt = new Date(request.deletedAt);
+      const recoverableUntil = new Date(request.recoverableUntil);
+      const revoked = await transaction
+        .updateTable('shelf_shares')
+        .set({ revoked_at: deletedAt, revoked_by_actor_id: request.actorId })
+        .where('installation_id', '=', request.installationId)
+        .where('workspace_id', '=', request.workspaceId)
+        .where('artifact_id', '=', request.artifactId)
+        .where('revoked_at', 'is', null)
+        .where((expressions) =>
+          expressions.or([
+            expressions('expires_at', 'is', null),
+            expressions('expires_at', '>', deletedAt),
+          ]),
+        )
+        .executeTakeFirst();
+      const revokedShareCount = Number(revoked.numUpdatedRows);
+      if (!Number.isSafeInteger(revokedShareCount) || revokedShareCount < 0) {
+        throw new Error('Revoked share count is outside the supported integer range.');
+      }
+      await transaction
+        .updateTable('shelf_artifacts')
+        .set({
+          deleted_at: deletedAt,
+          recoverable_until: recoverableUntil,
+          deleted_by_actor_id: request.actorId,
+          deleted_share_count: revokedShareCount,
+        })
+        .where('installation_id', '=', request.installationId)
+        .where('workspace_id', '=', request.workspaceId)
+        .where('artifact_id', '=', request.artifactId)
+        .executeTakeFirstOrThrow();
+      return {
+        status: 'deleted' as const,
+        deletedAt: request.deletedAt,
+        recoverableUntil: request.recoverableUntil,
+        revokedShareCount,
+      };
+    });
+  }
+
+  recoverArtifact(request: {
+    namespace: ArtifactRecoveryIdempotencyNamespace;
+    fingerprint: string;
+    artifactId: string;
+    recoveredAt: string;
+  }) {
+    return this.#database.transaction().execute(async (transaction) => {
+      const artifact = await transaction
+        .selectFrom('shelf_artifacts')
+        .select(['deleted_at', 'recoverable_until'])
+        .where('installation_id', '=', request.namespace.installationId)
+        .where('workspace_id', '=', request.namespace.workspaceId)
+        .where('artifact_id', '=', request.artifactId)
+        .forUpdate()
+        .executeTakeFirst();
+      if (artifact === undefined) {
+        return { status: 'not-found' as const };
+      }
+
+      const existing = await findRecoveryIdempotency(transaction, request.namespace);
+      if (existing !== undefined) {
+        return existing.fingerprint === request.fingerprint
+          ? { status: 'replayed' as const, artifact: existing.artifact }
+          : { status: 'conflict' as const };
+      }
+      if (artifact.deleted_at === null) return { status: 'not-found' as const };
+      if (
+        artifact.recoverable_until === null ||
+        artifact.recoverable_until.getTime() <= Date.parse(request.recoveredAt)
+      ) {
+        return { status: 'expired' as const };
+      }
+
+      const deletionState = await findArtifactDeletionState(transaction, request.artifactId);
+      if (deletionState === undefined || deletionState.deletedAt === null) {
+        throw new Error('Deleted artifact could not be read for recovery.');
+      }
+      const recoveredArtifact = {
+        ...deletionState.artifact,
+        updatedAt: request.recoveredAt,
+      };
+      const claim = await transaction
+        .insertInto('shelf_artifact_recovery_idempotency')
+        .values({
+          installation_id: request.namespace.installationId,
+          workspace_id: request.namespace.workspaceId,
+          actor_id: request.namespace.actorId,
+          operation: request.namespace.operation,
+          client_key: request.namespace.key,
+          fingerprint: request.fingerprint,
+          artifact_id: request.artifactId,
+          result: recoveredArtifact,
+          created_at: sql`transaction_timestamp()`,
+        })
+        .onConflict((conflict) =>
+          conflict
+            .columns(['installation_id', 'workspace_id', 'actor_id', 'operation', 'client_key'])
+            .doNothing(),
+        )
+        .returning('artifact_id')
+        .executeTakeFirst();
+      if (claim === undefined) {
+        const concurrent = await findRecoveryIdempotency(transaction, request.namespace);
+        if (concurrent === undefined) {
+          throw new Error('Artifact recovery idempotency claim disappeared.');
+        }
+        return concurrent.fingerprint === request.fingerprint
+          ? { status: 'replayed' as const, artifact: concurrent.artifact }
+          : { status: 'conflict' as const };
+      }
+      await transaction
+        .updateTable('shelf_artifacts')
+        .set({
+          deleted_at: null,
+          recoverable_until: null,
+          deleted_by_actor_id: null,
+          deleted_share_count: null,
+          updated_at: new Date(request.recoveredAt),
+        })
+        .where('installation_id', '=', request.namespace.installationId)
+        .where('workspace_id', '=', request.namespace.workspaceId)
+        .where('artifact_id', '=', request.artifactId)
+        .executeTakeFirstOrThrow();
+      return { status: 'recovered' as const, artifact: recoveredArtifact };
+    });
   }
 }

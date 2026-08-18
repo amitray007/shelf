@@ -1,9 +1,17 @@
-import type { Artifact, ArtifactPage, ArtifactRevisionPage, RestoreResult } from '@shelf/contracts';
+import type {
+  Artifact,
+  ArtifactDeletionResult,
+  ArtifactPage,
+  ArtifactRevisionPage,
+  RestoreResult,
+} from '@shelf/contracts';
 
 import {
+  deleteArtifact,
   getArtifact,
   listArtifactRevisions,
   listArtifacts,
+  recoverArtifact,
   renameArtifact,
   restoreArtifact,
 } from '../client.js';
@@ -26,11 +34,19 @@ export interface ShowArtifactCommandOptions {
 
 export interface ArtifactHistoryCommandOptions extends ShowArtifactCommandOptions {
   limit?: string;
+  order?: string;
   cursor?: string;
 }
 
 export interface RenameArtifactCommandOptions extends ShowArtifactCommandOptions {
   name: string;
+}
+
+export interface DeleteArtifactCommandOptions extends ShowArtifactCommandOptions {
+  confirm: string;
+}
+export interface RecoverArtifactCommandOptions extends ShowArtifactCommandOptions {
+  idempotencyKey?: string;
 }
 
 export interface RestoreArtifactCommandOptions extends ShowArtifactCommandOptions {
@@ -84,6 +100,12 @@ function artifactName(value: string): string {
   return name;
 }
 
+function artifactHistoryOrder(value: string | undefined): 'newest' | 'oldest' {
+  if (value === undefined || value === 'newest') return 'newest';
+  if (value === 'oldest') return 'oldest';
+  throw usageFailure('The history order must be newest or oldest.');
+}
+
 export function executeListArtifacts(
   options: ListArtifactsCommandOptions,
   runtime: CliRuntime,
@@ -129,6 +151,7 @@ export function executeArtifactHistory(
       installationUrl: options.url,
       artifactId: artifactId(options.artifact),
       limit: pageLimit(options.limit),
+      order: artifactHistoryOrder(options.order),
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
       token: token(runtime),
       ...(options.allowInsecureLoopback === undefined
@@ -157,6 +180,48 @@ export function executeRenameArtifact(
   );
 }
 
+export function executeDeleteArtifact(
+  options: DeleteArtifactCommandOptions,
+  runtime: CliRuntime,
+): Promise<ArtifactDeletionResult> {
+  const confirmedArtifactId = artifactId(options.artifact);
+  if (options.confirm !== confirmedArtifactId) {
+    throw usageFailure('The deletion confirmation must exactly match the artifact ID.');
+  }
+  return deleteArtifact(
+    {
+      installationUrl: options.url,
+      artifactId: confirmedArtifactId,
+      token: token(runtime),
+      ...(options.allowInsecureLoopback === undefined
+        ? {}
+        : { allowInsecureLoopback: options.allowInsecureLoopback }),
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
+export function executeRecoverArtifact(
+  options: RecoverArtifactCommandOptions,
+  runtime: CliRuntime,
+): Promise<Artifact> {
+  const recoveryIdempotencyKey = idempotencyKey(
+    options.idempotencyKey ?? `artifact-recover-${randomUUID()}`,
+  );
+  return recoverArtifact(
+    {
+      installationUrl: options.url,
+      artifactId: artifactId(options.artifact),
+      idempotencyKey: recoveryIdempotencyKey,
+      token: token(runtime),
+      ...(options.allowInsecureLoopback === undefined
+        ? {}
+        : { allowInsecureLoopback: options.allowInsecureLoopback }),
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
 export function executeRestoreArtifact(
   options: RestoreArtifactCommandOptions,
   runtime: CliRuntime,
@@ -176,3 +241,5 @@ export function executeRestoreArtifact(
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );
 }
+
+import { randomUUID } from 'node:crypto';

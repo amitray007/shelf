@@ -387,6 +387,7 @@ describePostgres('PostgresRevisionRepository', () => {
         installationId: first.installationId,
         artifactId,
         limit: 20,
+        order: 'newest',
       }),
     ).resolves.toMatchObject({
       items: [
@@ -400,6 +401,25 @@ describePostgres('PostgresRevisionRepository', () => {
         { revisionNumber: 2 },
         { revisionNumber: 1 },
       ],
+    });
+    const oldest = await repository.listArtifactRevisions({
+      installationId: first.installationId,
+      artifactId,
+      limit: 3,
+      order: 'oldest',
+    });
+    expect(oldest.items.map((revision) => revision.revisionNumber)).toEqual([1, 2, 3]);
+    expect(oldest.nextRevisionNumber).toBe(3);
+    await expect(
+      repository.listArtifactRevisions({
+        installationId: first.installationId,
+        artifactId,
+        limit: 3,
+        order: 'oldest',
+        cursorRevisionNumber: oldest.nextRevisionNumber as number,
+      }),
+    ).resolves.toMatchObject({
+      items: [{ revisionNumber: 4 }, { revisionNumber: 5 }, { revisionNumber: 6 }],
     });
     await database.destroy();
   });
@@ -501,6 +521,7 @@ describePostgres('PostgresRevisionRepository', () => {
         installationId: first.installationId,
         artifactId,
         limit: 10,
+        order: 'newest',
       }),
     ).resolves.toMatchObject({
       items: [
@@ -539,6 +560,7 @@ describePostgres('PostgresRevisionRepository', () => {
       installationId: source.installationId,
       artifactId,
       limit: 10,
+      order: 'newest',
     });
     expect(history.items.map((revision) => revision.revisionNumber)).toEqual([3, 2, 1]);
     expect(new Set(history.items.map((revision) => revision.revisionId))).toEqual(
@@ -562,6 +584,92 @@ describePostgres('PostgresRevisionRepository', () => {
 
     await expect(repository.commitPublish(input)).rejects.toThrow();
     await expect(repository.findIdempotency(input.namespace)).resolves.toBeUndefined();
+    await database.destroy();
+  });
+
+  it('atomically replays concurrent recovery and conflicts on semantic key reuse', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const repository = new PostgresRevisionRepository(database);
+    const actorId = 'actor-recovery-idempotency';
+    await database
+      .insertInto('shelf_actors')
+      .values({
+        actor_id: actorId,
+        installation_id: 'installation-main',
+        actor_kind: 'service',
+        actor_name: 'Recovery test actor',
+        auth_user_id: null,
+        created_by_actor_id: null,
+        created_at: new Date('2026-08-18T12:00:00.000Z'),
+        disabled_at: null,
+      })
+      .onConflict((conflict) => conflict.column('actor_id').doNothing())
+      .execute();
+    const first = stored('rev_recovery_AAAAAAAAAAAAAA', 'art_recovery_AAAAAAAAAAAAAA');
+    const second = stored('rev_recovery_BBBBBBBBBBBBBB', 'art_recovery_BBBBBBBBBBBBBB');
+    await repository.commitPublish(commitInput(first, 'recovery-first'));
+    await repository.commitPublish(commitInput(second, 'recovery-second'));
+    for (const artifact of [first, second]) {
+      await expect(
+        repository.deleteArtifact({
+          installationId: artifact.installationId,
+          workspaceId: artifact.workspaceId,
+          artifactId: artifact.artifactId,
+          actorId,
+          deletedAt: '2026-08-18T12:00:00.000Z',
+          recoverableUntil: '2026-09-17T12:00:00.000Z',
+        }),
+      ).resolves.toMatchObject({ status: 'deleted' });
+    }
+    const namespace = {
+      installationId: first.installationId,
+      workspaceId: first.workspaceId,
+      actorId,
+      operation: 'artifact.recover' as const,
+      key: 'recover-once',
+    };
+    const request = {
+      namespace,
+      fingerprint: `artifact-recovery-request/v1:sha256:${'1'.repeat(64)}`,
+      artifactId: first.artifactId,
+      recoveredAt: '2026-08-19T12:00:00.000Z',
+    };
+
+    const concurrent = await Promise.all([
+      repository.recoverArtifact(request),
+      repository.recoverArtifact(request),
+    ]);
+    expect(new Set(concurrent.map((outcome) => outcome.status))).toEqual(
+      new Set(['recovered', 'replayed']),
+    );
+    expect(concurrent).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          artifact: expect.objectContaining({
+            artifactId: first.artifactId,
+            updatedAt: request.recoveredAt,
+          }),
+        }),
+      ]),
+    );
+    await expect(repository.recoverArtifact(request)).resolves.toMatchObject({
+      status: 'replayed',
+      artifact: { artifactId: first.artifactId, updatedAt: request.recoveredAt },
+    });
+    await expect(
+      repository.recoverArtifact({
+        ...request,
+        fingerprint: `artifact-recovery-request/v1:sha256:${'2'.repeat(64)}`,
+        artifactId: second.artifactId,
+      }),
+    ).resolves.toEqual({ status: 'conflict' });
+    await expect(repository.findArtifact(second.artifactId)).resolves.toBeUndefined();
+    await expect(
+      repository.recoverArtifact({
+        ...request,
+        namespace: { ...namespace, key: 'new-key-for-active-artifact' },
+      }),
+    ).resolves.toEqual({ status: 'not-found' });
     await database.destroy();
   });
 

@@ -2,13 +2,15 @@ import { Button } from '@cloudflare/kumo/components/button';
 import { ClipboardText } from '@cloudflare/kumo/components/clipboard-text';
 import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
 import { Input } from '@cloudflare/kumo/components/input';
-import { Radio } from '@cloudflare/kumo/components/radio';
 import { Select } from '@cloudflare/kumo/components/select';
 import { Tabs } from '@cloudflare/kumo/components/tabs';
+import { CheckIcon } from '@phosphor-icons/react/Check';
 import { DotsThreeIcon } from '@phosphor-icons/react/DotsThree';
 import { LinkIcon } from '@phosphor-icons/react/Link';
 import { PencilSimpleIcon } from '@phosphor-icons/react/PencilSimple';
 import { ShareNetworkIcon } from '@phosphor-icons/react/ShareNetwork';
+import { SortAscendingIcon } from '@phosphor-icons/react/SortAscending';
+import { SortDescendingIcon } from '@phosphor-icons/react/SortDescending';
 import type {
   ArtifactRevision,
   RevisionComparison,
@@ -19,17 +21,18 @@ import { Group, Panel, Separator } from 'react-resizable-panels';
 import { Link, useLoaderData, useRevalidator, useSearchParams } from 'react-router';
 
 import { formatBytes } from '../components/format.js';
+import { revisionLabel, revisionSourceName } from '../components/revision-label.js';
 import {
   compareRevisions,
-  createArtifactShare,
   DashboardApiError,
   renameArtifact,
   restoreArtifact,
   revokeShare,
 } from './api.js';
-import { Modal, SecretReveal } from './dialogs.js';
+import { Modal } from './dialogs.js';
 import { ManagedArtifactContent } from './managed-artifact-content.js';
 import type { ArtifactDetailPayload } from './routes.js';
+import { ShareDialog } from './share-dialog.js';
 import { useManagedStatus } from './status.js';
 import './artifact.css';
 
@@ -40,10 +43,6 @@ const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
 
 function dateTime(value: string): string {
   return dateTimeFormatter.format(new Date(value));
-}
-
-function revisionLabel(revision: ArtifactRevision): string {
-  return revision.kind === 'file' ? revision.originalFileName : revision.rootName;
 }
 
 const inspectorPanels = ['history', 'details', 'compare', 'links'] as const;
@@ -166,12 +165,14 @@ function RestoreDialog({
         if (!open) close();
       }}
       open={revision !== null}
-      title={revision === null ? 'Restore revision' : `Restore r${revision.revisionNumber}`}
+      title={
+        revision === null ? 'Restore revision' : `Restore ${revisionLabel(revision.revisionNumber)}`
+      }
     >
       <div className="dialog-form">
         <div className="confirmation-block">
           <span>Source</span>
-          <strong>{revision === null ? '' : revisionLabel(revision)}</strong>
+          <strong>{revision === null ? '' : revisionSourceName(revision)}</strong>
           <code>{revision?.revisionId}</code>
         </div>
         {error === undefined ? null : <p className="form-error">{error}</p>}
@@ -184,147 +185,6 @@ function RestoreDialog({
           </Button>
         </div>
       </div>
-    </Modal>
-  );
-}
-
-function ShareDialog({
-  workspaceId,
-  artifactId,
-  revisions,
-  open,
-  onOpenChange,
-}: {
-  readonly workspaceId: string;
-  readonly artifactId: string;
-  readonly revisions: readonly ArtifactRevision[];
-  readonly open: boolean;
-  readonly onOpenChange: (open: boolean) => void;
-}) {
-  const revalidator = useRevalidator();
-  const [mode, setMode] = useState<'latest' | 'pinned'>('latest');
-  const [revisionId, setRevisionId] = useState(revisions[0]?.revisionId ?? '');
-  const [expiresAt, setExpiresAt] = useState('');
-  const [shareUrl, setShareUrl] = useState<string>();
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const idempotencyRef = useRef<{ intent: string; key: string } | undefined>(undefined);
-  const close = (next: boolean) => {
-    if (!next && busy) return;
-    if (!next) {
-      setShareUrl(undefined);
-      setError(undefined);
-      idempotencyRef.current = undefined;
-    }
-    onOpenChange(next);
-  };
-  const create = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(undefined);
-    try {
-      const target = mode === 'latest' ? { mode } : { mode, revisionId };
-      const expiry = expiresAt === '' ? null : new Date(expiresAt).toISOString();
-      const intent = JSON.stringify({ target, expiresAt: expiry });
-      if (idempotencyRef.current?.intent !== intent) {
-        idempotencyRef.current = { intent, key: crypto.randomUUID() };
-      }
-      const result = await createArtifactShare(
-        workspaceId,
-        artifactId,
-        target,
-        expiry,
-        idempotencyRef.current.key,
-      );
-      idempotencyRef.current = undefined;
-      setShareUrl(new URL(result.url, window.location.origin).href);
-      void revalidator.revalidate();
-    } catch (caught) {
-      setError(caught instanceof DashboardApiError ? caught.message : 'Share creation failed.');
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Modal
-      canClose={!busy}
-      description="Anyone with the generated capability link can open this unlisted artifact."
-      onOpenChange={close}
-      open={open}
-      title="Create share link"
-    >
-      {shareUrl === undefined ? (
-        <form className="dialog-form" onSubmit={create}>
-          <Radio.Group
-            className="choice-group"
-            legend="Link target"
-            name="share-mode"
-            onValueChange={(value) => setMode(value)}
-            value={mode}
-          >
-            <Radio.Item
-              label={
-                <span>
-                  <strong>Latest</strong>
-                  <small>Follows the artifact as new revisions arrive.</small>
-                </span>
-              }
-              value="latest"
-            />
-            <Radio.Item
-              label={
-                <span>
-                  <strong>Pinned</strong>
-                  <small>Always opens one exact immutable revision.</small>
-                </span>
-              }
-              value="pinned"
-            />
-          </Radio.Group>
-          {mode === 'pinned' ? (
-            <Select<string>
-              label="Revision"
-              onValueChange={(value) => setRevisionId(value ?? '')}
-              value={revisionId}
-            >
-              {revisions.map((revision) => (
-                <Select.Option key={revision.revisionId} value={revision.revisionId}>
-                  r{revision.revisionNumber} — {revisionLabel(revision)}
-                </Select.Option>
-              ))}
-            </Select>
-          ) : null}
-          <Input
-            label="Expires"
-            onChange={(event) => setExpiresAt(event.currentTarget.value)}
-            required={false}
-            type="datetime-local"
-            value={expiresAt}
-          />
-          {error === undefined ? null : <p className="form-error">{error}</p>}
-          <div className="dialog-actions">
-            <Button disabled={busy} onClick={() => close(false)} type="button">
-              Cancel
-            </Button>
-            <Button disabled={busy} loading={busy} type="submit" variant="primary">
-              {busy ? 'Creating…' : 'Create link'}
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <div className="dialog-form">
-          <SecretReveal
-            hint="Copy this now. Shelf never includes the capability in share listings."
-            label="Share URL"
-            value={shareUrl}
-          />
-          <div className="dialog-actions">
-            <Button onClick={() => close(false)} type="button" variant="primary">
-              Done
-            </Button>
-          </div>
-        </div>
-      )}
     </Modal>
   );
 }
@@ -392,12 +252,16 @@ function ComparisonPanel({ revisions }: { readonly revisions: readonly ArtifactR
             setBase(value ?? '');
             setComparison(undefined);
           }}
+          renderValue={(value) => {
+            const revision = revisions.find((candidate) => candidate.revisionId === value);
+            return revision === undefined ? null : revisionLabel(revision.revisionNumber);
+          }}
           size="sm"
           value={base}
         >
           {revisions.map((revision) => (
             <Select.Option key={revision.revisionId} value={revision.revisionId}>
-              r{revision.revisionNumber}
+              {revisionLabel(revision.revisionNumber)}
             </Select.Option>
           ))}
         </Select>
@@ -409,12 +273,16 @@ function ComparisonPanel({ revisions }: { readonly revisions: readonly ArtifactR
             setTarget(value ?? '');
             setComparison(undefined);
           }}
+          renderValue={(value) => {
+            const revision = revisions.find((candidate) => candidate.revisionId === value);
+            return revision === undefined ? null : revisionLabel(revision.revisionNumber);
+          }}
           size="sm"
           value={target}
         >
           {revisions.map((revision) => (
             <Select.Option key={revision.revisionId} value={revision.revisionId}>
-              r{revision.revisionNumber}
+              {revisionLabel(revision.revisionNumber)}
             </Select.Option>
           ))}
         </Select>
@@ -499,11 +367,18 @@ function ShareRow({ share }: { readonly share: ShareManagementSummary }) {
     <li className="share-row">
       <div className="share-row-identity">
         <strong>{share.target.mode === 'latest' ? 'Latest link' : 'Pinned link'}</strong>
-        <code>{share.shareId}</code>
+        <div className="share-row-id-line">
+          <code>{share.shareId}</code>
+          {active ? (
+            <span className="share-row-state" data-active="true" title="Active">
+              <CheckIcon aria-hidden="true" size={13} weight="bold" />
+              <span className="visually-hidden">Active</span>
+            </span>
+          ) : (
+            <span className="share-row-state">{status}</span>
+          )}
+        </div>
       </div>
-      <span className="ledger-status" data-active={active}>
-        {status}
-      </span>
       <time dateTime={share.createdAt}>{dateTime(share.createdAt)}</time>
       {active ? (
         <Button
@@ -553,6 +428,7 @@ export function ArtifactPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [restoreRevision, setRestoreRevision] = useState<ArtifactRevision | null>(null);
   const activePanel = inspectorPanel(searchParams.get('panel'));
+  const historyOrder = searchParams.get('historyOrder') === 'oldest' ? 'oldest' : 'newest';
   const artifactShares = useMemo(
     () => payload.shares.items.filter((share) => share.artifactId === artifact.artifactId),
     [artifact.artifactId, payload.shares.items],
@@ -567,6 +443,13 @@ export function ArtifactPage() {
     const next = new URLSearchParams(searchParams);
     next.set(name, cursor);
     return `?${next}`;
+  };
+  const toggleHistoryOrder = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('historyCursor');
+    if (historyOrder === 'newest') next.set('historyOrder', 'oldest');
+    else next.delete('historyOrder');
+    setSearchParams(next, { replace: true });
   };
   const latest = artifact.latestRevision;
 
@@ -642,7 +525,7 @@ export function ArtifactPage() {
             <header className="managed-stage-bar">
               <span id="preview-heading">Artifact preview</span>
               <span>
-                r{latest.revisionNumber} · {formatBytes(latest.byteCount)} · {revisionLabel(latest)}
+                {revisionLabel(latest.revisionNumber)} · {revisionSourceName(latest)}
               </span>
             </header>
             <ManagedArtifactContent
@@ -685,18 +568,31 @@ export function ArtifactPage() {
               {activePanel === 'history' ? (
                 <section aria-labelledby="history-panel-heading" className="inspector-section">
                   <header className="inspector-section-heading">
-                    <div>
-                      <p className="inspector-kicker">Immutable lineage</p>
-                      <h2 id="history-panel-heading">Revision history</h2>
-                    </div>
-                    <span>{history.nextCursor === null ? 'Newest first' : 'More available'}</span>
+                    <h2 id="history-panel-heading">Revision history</h2>
+                    <Button
+                      aria-label={
+                        historyOrder === 'newest'
+                          ? 'Revision order: newest first. Show oldest first'
+                          : 'Revision order: oldest first. Show newest first'
+                      }
+                      className="history-sort-control"
+                      icon={historyOrder === 'newest' ? SortDescendingIcon : SortAscendingIcon}
+                      onClick={toggleHistoryOrder}
+                      shape="square"
+                      size="sm"
+                      title={historyOrder === 'newest' ? 'Newest first' : 'Oldest first'}
+                      type="button"
+                      variant="ghost"
+                    />
                   </header>
                   <ol className="revision-list">
                     {history.items.map((revision) => (
                       <li className="revision-row" key={revision.revisionId}>
-                        <span className="revision-index">r{revision.revisionNumber}</span>
+                        <span className="revision-index">
+                          {revisionLabel(revision.revisionNumber)}
+                        </span>
                         <div className="revision-copy">
-                          <strong>{revisionLabel(revision)}</strong>
+                          <strong>{revisionSourceName(revision)}</strong>
                           <span>{dateTime(revision.createdAt)}</span>
                           <code title={revision.revisionId}>{revision.revisionId}</code>
                         </div>
@@ -732,10 +628,7 @@ export function ArtifactPage() {
               {activePanel === 'details' ? (
                 <section aria-labelledby="details-panel-heading" className="inspector-section">
                   <header className="inspector-section-heading">
-                    <div>
-                      <p className="inspector-kicker">Latest immutable state</p>
-                      <h2 id="details-panel-heading">Details</h2>
-                    </div>
+                    <h2 id="details-panel-heading">Details</h2>
                   </header>
                   <dl className="artifact-detail-ledger">
                     <div>
@@ -770,7 +663,7 @@ export function ArtifactPage() {
                     </div>
                     <div>
                       <dt>Source</dt>
-                      <dd>{revisionLabel(latest)}</dd>
+                      <dd>{revisionSourceName(latest)}</dd>
                     </div>
                     <div>
                       <dt>Kind</dt>
@@ -817,10 +710,7 @@ export function ArtifactPage() {
               {activePanel === 'links' ? (
                 <section aria-labelledby="links-panel-heading" className="inspector-section">
                   <header className="inspector-section-heading">
-                    <div>
-                      <p className="inspector-kicker">Unlisted access</p>
-                      <h2 id="links-panel-heading">Share links</h2>
-                    </div>
+                    <h2 id="links-panel-heading">Share links</h2>
                     <Button onClick={() => setShareOpen(true)} size="sm" variant="secondary">
                       New link
                     </Button>

@@ -84,6 +84,7 @@ describePostgres('artifact lifecycle migration', () => {
         { migrationName: '0004_artifact_lifecycle', status: 'Success' },
         { migrationName: '0005_folder_snapshots', status: 'Success' },
         { migrationName: '0006_shares', status: 'Success' },
+        { migrationName: '0007_artifact_deletion', status: 'Success' },
       ]);
       await expect(
         new PostgresRevisionRepository(database).findArtifact('art_AAAAAAAAAAAAAAAAAAAAAA'),
@@ -94,6 +95,59 @@ describePostgres('artifact lifecycle migration', () => {
           provenance: { classification: 'direct-publish' },
         },
       });
+
+      await sql`
+        insert into shelf_actors (
+          actor_id, installation_id, actor_kind, actor_name, auth_user_id,
+          created_by_actor_id, created_at, disabled_at
+        ) values (
+          'actor-agent', 'installation-main', 'service', 'Agent', null, null,
+          transaction_timestamp(), null
+        )
+      `.execute(database);
+      await sql`set time zone 'America/New_York'`.execute(database);
+      await expect(
+        sql`
+          update shelf_artifacts
+          set deleted_at = '2026-03-01 12:00:00-05'::timestamptz,
+              recoverable_until = '2026-03-31 13:00:00-04'::timestamptz,
+              deleted_by_actor_id = 'actor-agent',
+              deleted_share_count = 0
+          where artifact_id = 'art_AAAAAAAAAAAAAAAAAAAAAA'
+        `.execute(database),
+      ).resolves.toBeDefined();
+      await expect(
+        sql`
+          update shelf_artifacts
+          set recoverable_until = '2026-03-31 12:00:00-04'::timestamptz
+          where artifact_id = 'art_AAAAAAAAAAAAAAAAAAAAAA'
+        `.execute(database),
+      ).rejects.toThrow(/shelf_artifacts_deletion_state/u);
+      await sql`
+        update shelf_artifacts
+        set deleted_at = null,
+            recoverable_until = null,
+            deleted_by_actor_id = null,
+            deleted_share_count = null
+        where artifact_id = 'art_AAAAAAAAAAAAAAAAAAAAAA'
+      `.execute(database);
+      await expect(
+        sql`
+          update shelf_artifacts
+          set deleted_at = '2026-03-01 12:00:00-05'::timestamptz
+          where artifact_id = 'art_AAAAAAAAAAAAAAAAAAAAAA'
+        `.execute(database),
+      ).rejects.toThrow(/shelf_artifacts_deletion_state/u);
+      await expect(
+        sql`
+          update shelf_artifacts
+          set deleted_at = '2026-03-01 12:00:00-05'::timestamptz,
+              recoverable_until = '2026-03-31 13:00:00-04'::timestamptz,
+              deleted_by_actor_id = 'actor-agent',
+              deleted_share_count = null
+          where artifact_id = 'art_AAAAAAAAAAAAAAAAAAAAAA'
+        `.execute(database),
+      ).rejects.toThrow(/shelf_artifacts_deletion_state/u);
     } finally {
       await database.destroy();
       try {

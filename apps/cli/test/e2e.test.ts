@@ -11,6 +11,8 @@ describe('CLI wire contract', () => {
       document.paths['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/revisions'].post,
       document.paths['/api/v1/workspaces/{workspaceId}/artifacts'].get,
       document.paths['/api/v1/artifacts/{artifactId}'].patch,
+      document.paths['/api/v1/artifacts/{artifactId}'].delete,
+      document.paths['/api/v1/artifacts/{artifactId}/recovery'].post,
       document.paths['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/restores'].post,
       document.paths['/api/v1/workspaces/{workspaceId}/folders'].post,
       document.paths['/api/v1/revisions/{revisionId}/tree'].get,
@@ -40,6 +42,16 @@ describe('CLI wire contract', () => {
     });
     expect(document.paths['/api/v1/artifacts/{artifactId}'].patch).toMatchObject({
       operationId: 'renameArtifactV1',
+    });
+    expect(document.paths['/api/v1/artifacts/{artifactId}'].delete).toMatchObject({
+      operationId: 'deleteArtifactV1',
+    });
+    expect(document.paths['/api/v1/artifacts/{artifactId}/recovery'].post).toMatchObject({
+      operationId: 'recoverArtifactV1',
+      parameters: expect.arrayContaining([
+        expect.objectContaining({ name: 'idempotency-key', in: 'header', required: true }),
+      ]),
+      responses: { 200: expect.any(Object), 409: expect.any(Object), 410: expect.any(Object) },
     });
     expect(
       document.paths['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/restores'].post,

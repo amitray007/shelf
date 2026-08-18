@@ -21,6 +21,7 @@ export const ArtifactNameSchema = Type.String({
 });
 
 export const RESTORE_OPERATION = 'revision.restore' as const;
+export const RECOVER_OPERATION = 'artifact.recover' as const;
 
 export const DirectPublishProvenanceSchema = Type.Object(
   {
@@ -152,6 +153,18 @@ export const ArtifactRevisionPageSchema = Type.Object(
   { additionalProperties: false, $id: 'ArtifactRevisionPage' },
 );
 
+export const ArtifactDeletionResultSchema = Type.Object(
+  {
+    apiVersion: Type.Literal('v1'),
+    workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
+    artifactId: OpaqueArtifactIdSchema,
+    deletedAt: IsoInstantSchema,
+    recoverableUntil: IsoInstantSchema,
+    revokedShareCount: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+  },
+  { additionalProperties: false, $id: 'ArtifactDeletionResult' },
+);
+
 const RestoreResultCommon = {
   apiVersion: Type.Literal('v1'),
   workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
@@ -210,6 +223,7 @@ export type ArtifactRevision = Static<typeof ArtifactRevisionSchema>;
 export type Artifact = Static<typeof ArtifactSchema>;
 export type ArtifactPage = Static<typeof ArtifactPageSchema>;
 export type ArtifactRevisionPage = Static<typeof ArtifactRevisionPageSchema>;
+export type ArtifactDeletionResult = Static<typeof ArtifactDeletionResultSchema>;
 export type RestoreResult = Static<typeof RestoreResultSchema>;
 
 export function isArtifact(value: unknown): value is Artifact {
@@ -222,6 +236,10 @@ export function isArtifactPage(value: unknown): value is ArtifactPage {
 
 export function isArtifactRevisionPage(value: unknown): value is ArtifactRevisionPage {
   return Check(ArtifactRevisionPageSchema, value);
+}
+
+export function isArtifactDeletionResult(value: unknown): value is ArtifactDeletionResult {
+  return Check(ArtifactDeletionResultSchema, value);
 }
 
 export function isRestoreResult(value: unknown): value is RestoreResult {

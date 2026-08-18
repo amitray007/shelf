@@ -1,0 +1,306 @@
+.artifact-index .page-heading {
+  align-items: center;
+}
+
+.artifact-index .workspace-label {
+  font-family: "Geist Mono Variable", ui-monospace, monospace;
+}
+
+.cli-publish-hint {
+  width: min(100%, 352px);
+  min-width: 0;
+  color: var(--text-muted);
+}
+
+.cli-publish-label {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.cli-publish-label svg {
+  display: block;
+  justify-self: center;
+}
+
+.cli-publish-label span {
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.cli-clipboard {
+  width: 100%;
+  min-width: 0;
+  font-family: "Geist Mono Variable", ui-monospace, monospace;
+}
+
+.artifact-table-wrap {
+  max-width: 100%;
+  overflow: hidden;
+  border-top: 1px solid var(--rule);
+}
+
+.artifact-deletion-notice {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: -8px 0 16px;
+  padding: 9px 11px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--raised);
+}
+
+.artifact-deletion-notice > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.artifact-deletion-notice strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 580;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-deletion-notice span {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.artifact-table {
+  width: 100%;
+  color: var(--text-subtle);
+  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+}
+
+.artifact-name-column {
+  width: auto;
+}
+
+.artifact-kind-column {
+  width: 84px;
+}
+
+.artifact-revision-column {
+  width: 104px;
+}
+
+.artifact-created-column {
+  width: 120px;
+}
+
+.artifact-updated-column {
+  width: 132px;
+}
+
+.artifact-actions-column {
+  width: 76px;
+}
+
+.artifact-table th {
+  border-color: var(--rule);
+  background: var(--raised);
+  color: var(--text-muted);
+  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 520;
+  letter-spacing: 0.01em;
+}
+
+.artifact-table td {
+  border-color: var(--rule);
+}
+
+.artifact-ledger-row {
+  height: 52px;
+}
+
+.artifact-ledger-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.artifact-ledger-name > svg {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.artifact-ledger-name > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.artifact-ledger-name a {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 580;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-ledger-name code {
+  overflow: hidden;
+  color: var(--text-muted);
+  font:
+    480 11px / 1.3 "Geist Mono Variable",
+    ui-monospace,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-kind-cell {
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-size: 12px;
+  text-transform: capitalize;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-revision-cell {
+  overflow: hidden;
+  color: var(--text-subtle);
+  font:
+    500 11px / 1.35 "Geist Mono Variable",
+    ui-monospace,
+    monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-created-cell,
+.artifact-updated-cell {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-table th.artifact-kind-cell,
+.artifact-table th.artifact-revision-cell,
+.artifact-table th.artifact-created-cell,
+.artifact-table th.artifact-updated-cell {
+  color: var(--text-muted);
+  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 520;
+}
+
+.artifact-actions-cell {
+  text-align: right;
+}
+
+.artifact-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1px;
+}
+
+.artifact-row-actions button {
+  min-width: 32px;
+  min-height: 32px;
+  color: var(--text-muted);
+}
+
+.artifact-row-actions button:hover {
+  color: var(--text);
+}
+
+.artifact-index-empty {
+  display: grid;
+  min-height: 220px;
+  place-content: center;
+  justify-items: center;
+  padding: 28px;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  text-align: center;
+}
+
+.artifact-index-empty h2 {
+  margin: 7px 0 18px;
+  color: var(--text);
+  font-size: 19px;
+  font-weight: 580;
+  letter-spacing: -0.025em;
+}
+
+@media (max-width: 900px) {
+  .artifact-index .page-heading {
+    align-items: stretch;
+  }
+
+  .cli-publish-hint {
+    width: 100%;
+  }
+
+  .cli-clipboard button,
+  .artifact-ledger-name a {
+    min-height: 44px;
+  }
+
+  .artifact-ledger-name a {
+    display: flex;
+    align-items: center;
+  }
+
+  .artifact-kind-cell,
+  .artifact-kind-column,
+  .artifact-created-cell,
+  .artifact-created-column {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .artifact-deletion-notice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .artifact-updated-cell,
+  .artifact-updated-column {
+    display: none;
+  }
+
+  .artifact-revision-column {
+    width: 104px;
+  }
+
+  .artifact-actions-column {
+    width: 92px;
+  }
+
+  .artifact-table th,
+  .artifact-table td {
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+
+  .artifact-row-actions button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

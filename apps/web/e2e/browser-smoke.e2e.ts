@@ -14,6 +14,7 @@ import {
   markdownShareId,
   rendererOrigin,
   shareSecret,
+  shortArtifactId,
   workspaceId,
 } from './fixtures.js';
 
@@ -158,10 +159,86 @@ for (const viewport of densityViewports) {
   });
 }
 
-test('the authenticated utility stays artifact-first, accessible, and responsive', async ({
+test('artifact detail keeps revision and share controls compact and explicit', async ({
   page,
 }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'The focused workbench interaction runs once.');
   const diagnostics = trackPageErrors(page);
+
+  await page.goto(`/app/w/${workspaceId}/artifacts/${artifactId}`);
+
+  const artifactTitle = page.getByRole('heading', { level: 1, name: longArtifactName });
+  await expect(artifactTitle).toBeVisible();
+  expect(
+    Number.parseFloat(
+      await artifactTitle.evaluate((element) => getComputedStyle(element).fontSize),
+    ),
+  ).toBeLessThanOrEqual(16);
+
+  const previewBar = page.locator('.managed-stage-bar');
+  await expect(previewBar).toContainText(`Revision: 12th · ${longArtifactName}`);
+  await expect(previewBar).not.toContainText(/\d+(?:\.\d+)?\s+(?:k|M)?B/u);
+  await expect(page.getByText('Immutable lineage', { exact: true })).toHaveCount(0);
+
+  const revisions = page.locator('.revision-row');
+  await expect(revisions.first().locator('.revision-index')).toHaveText('Revision: 12th');
+  const sort = page.getByRole('button', {
+    name: 'Revision order: newest first. Show oldest first',
+  });
+  await sort.click();
+  await expect(page).toHaveURL(/[?&]historyOrder=oldest(?:&|$)/u);
+  await expect(revisions.first().locator('.revision-index')).toHaveText('Revision: 9th');
+  await expect(
+    page.getByRole('button', { name: 'Revision order: oldest first. Show newest first' }),
+  ).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Details' }).click();
+  await expect(page.getByText('Latest immutable state', { exact: true })).toHaveCount(0);
+
+  await page.getByRole('tab', { name: 'Links' }).click();
+  await expect(page.getByText('Unlisted access', { exact: true })).toHaveCount(0);
+  const activeShare = page.locator('.share-row').first();
+  await expect(activeShare.locator('.share-row-state[data-active="true"] svg')).toBeVisible();
+  const activeLabel = activeShare.getByText('Active', { exact: true });
+  await expect(activeLabel).toHaveClass('visually-hidden');
+  expect(await activeLabel.evaluate((element) => getComputedStyle(element).clipPath)).toBe(
+    'inset(50%)',
+  );
+  await expect(activeShare.getByRole('button', { name: 'Revoke' })).toBeVisible();
+  await expect(page.getByText('Revoked', { exact: true })).toBeVisible();
+  await expect(page.getByText('Expired', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Share', exact: true }).click();
+  const shareDialog = page.getByRole('dialog', { name: 'Create share link' });
+  await shareDialog.getByRole('radio', { name: /Pinned/u }).click();
+  await expect(shareDialog).toContainText(`Revision: 12th — ${longArtifactName}`);
+  await shareDialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('.shelf-dialog')).toHaveCount(0);
+
+  await expectNoAxeViolations(page);
+  diagnostics.assertClean();
+});
+
+test('the authenticated utility stays artifact-first, accessible, and responsive', async ({
+  context,
+  page,
+}, testInfo) => {
+  const diagnostics = trackPageErrors(page, [
+    /^Failed to load resource: the server responded with a status of 404 \(Not Found\)$/u,
+  ]);
+  const notFoundResponses: string[] = [];
+  page.on('response', (response) => {
+    if (response.status() === 404) notFoundResponses.push(new URL(response.url()).pathname);
+  });
+
+  await context.addCookies([
+    {
+      name: 'shelf-browser-state',
+      value: testInfo.project.name,
+      domain: '127.0.0.1',
+      path: '/',
+    },
+  ]);
 
   await page.goto(`/app/w/${workspaceId}/artifacts`);
   await expect(page.getByRole('heading', { level: 1, name: 'Artifacts' })).toBeVisible();
@@ -170,6 +247,43 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await expect(page.getByText('Collections', { exact: true })).toHaveCount(0);
   await expectNoHorizontalOverflow(page, [page.locator('.dashboard-main')]);
   await expectNoAxeViolations(page);
+
+  await page.getByRole('button', { name: `Share artifact ${longArtifactName}` }).click();
+  const indexShareDialog = page.getByRole('dialog', { name: 'Create share link' });
+  await expect(indexShareDialog.getByRole('radio', { name: /Latest/u })).toBeChecked();
+  await expect(indexShareDialog.getByLabel('Expires')).toHaveValue('');
+  await indexShareDialog.getByRole('button', { name: 'Create link' }).click();
+  await expect(indexShareDialog).toContainText(`/s/${createdShareId}#${shareSecret}`);
+  await expect(indexShareDialog.getByRole('button', { name: 'Copy share url' })).toBeVisible();
+  await indexShareDialog.getByRole('button', { name: 'Done' }).click();
+
+  await page.getByRole('button', { name: 'More actions for x' }).click();
+  await page.getByRole('menuitem', { name: 'Delete artifact' }).click();
+  const deleteDialog = page.getByRole('dialog', { name: 'Delete artifact?' });
+  await expect(deleteDialog).toContainText('recoverable for 30 days');
+  await deleteDialog.getByRole('button', { name: 'Delete artifact' }).click();
+  await expect(page.getByRole('link', { name: 'x', exact: true })).toHaveCount(0);
+  await expect(page.getByText('x deleted', { exact: true })).toBeVisible();
+  await expect(
+    page.evaluate(async (id) => {
+      const response = await fetch(`/api/v1/artifacts/${id}/recovery`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'other-tab-recovery' },
+      });
+      return response.status;
+    }, shortArtifactId),
+  ).resolves.toBe(200);
+  await page.getByRole('button', { name: 'Undo deletion' }).click();
+  await expect(page.getByRole('link', { name: 'x', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'More actions for x' }).click();
+  await page.getByRole('menuitem', { name: 'Delete artifact' }).click();
+  await page
+    .getByRole('dialog', { name: 'Delete artifact?' })
+    .getByRole('button', { name: 'Delete artifact' })
+    .click();
+  await page.getByRole('button', { name: 'Undo deletion' }).click();
+  await expect(page.getByRole('link', { name: 'x', exact: true })).toBeVisible();
 
   await page.getByRole('link', { name: longArtifactName }).click();
   await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
@@ -234,6 +348,7 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await expect(page.locator('.shelf-dialog')).toHaveCount(0);
   await expectNoHorizontalOverflow(page, [page.locator('.dashboard-main')]);
   await expectNoAxeViolations(page);
+  expect(notFoundResponses).toEqual([`/api/v1/artifacts/${shortArtifactId}/recovery`]);
   diagnostics.assertClean();
 });
 

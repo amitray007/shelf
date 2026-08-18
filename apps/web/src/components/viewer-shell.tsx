@@ -2,7 +2,7 @@ import { Loader } from '@cloudflare/kumo/components/loader';
 import { WarningCircleIcon } from '@phosphor-icons/react/WarningCircle';
 import type { PublicShareResolution } from '@shelf/contracts';
 
-import { formatBytes } from './format.js';
+import { revisionLabel } from './revision-label.js';
 
 export function LoadingView() {
   return (
@@ -40,7 +40,6 @@ export function UnavailableView() {
 export function ViewerRail({ resolution }: { readonly resolution: PublicShareResolution }) {
   const revision = resolution.revision;
   const targetLabel = resolution.target.mode === 'latest' ? 'latest' : 'pinned';
-  const totalBytes = formatBytes(revision.byteCount);
 
   return (
     <header className="rail viewer-rail">
@@ -59,7 +58,7 @@ export function ViewerRail({ resolution }: { readonly resolution: PublicShareRes
       </div>
       <div className="rail-context">
         <span className="target-state">
-          {targetLabel} · r{revision.revisionNumber} · {totalBytes}
+          {targetLabel} · {revisionLabel(revision.revisionNumber)}
         </span>
       </div>
     </header>

@@ -35,16 +35,19 @@
   min-height: 48px;
   flex: 0 0 48px;
   align-items: center;
-  padding: 0 16px;
+  padding: 0;
   border-bottom: 1px solid var(--rule);
   background: var(--ink);
 }
 
 .dashboard-location {
   display: flex;
+  width: min(100%, 1240px);
   min-width: 0;
   align-items: center;
   gap: 7px;
+  margin: 0 auto;
+  padding-inline: clamp(18px, 4vw, 48px);
 }
 
 .dashboard-wordmark {
@@ -190,7 +193,7 @@
   width: min(100%, 1240px);
   min-width: 0;
   margin: 0 auto;
-  padding: clamp(26px, 4vw, 52px) clamp(18px, 4vw, 48px) 80px;
+  padding: clamp(22px, 3vw, 36px) clamp(18px, 4vw, 48px) 56px;
 }
 
 .page-heading,
@@ -198,8 +201,8 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 28px;
-  margin-bottom: 30px;
+  gap: 22px;
+  margin-bottom: 22px;
 }
 
 .page-heading h1,

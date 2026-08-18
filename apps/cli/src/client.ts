@@ -2,12 +2,14 @@ import { openAsBlob } from 'node:fs';
 import { basename } from 'node:path';
 import {
   type Artifact,
+  type ArtifactDeletionResult,
   type ArtifactPage,
   type ArtifactRevisionPage,
   type FolderManifestInput,
   type FolderPublishResult,
   type FolderTreePage,
   isArtifact,
+  isArtifactDeletionResult,
   isArtifactPage,
   isArtifactRevisionPage,
   isErrorEnvelope,
@@ -69,11 +71,17 @@ export interface GetArtifactOptions {
 
 export interface ListArtifactRevisionsOptions extends GetArtifactOptions {
   limit: number;
+  order: 'newest' | 'oldest';
   cursor?: string;
 }
 
 export interface RenameArtifactOptions extends GetArtifactOptions {
   name: string;
+}
+
+export type DeleteArtifactOptions = GetArtifactOptions;
+export interface RecoverArtifactOptions extends GetArtifactOptions {
+  idempotencyKey: string;
 }
 
 export interface RestoreArtifactOptions extends GetArtifactOptions {
@@ -352,6 +360,44 @@ export async function renameArtifact(
   );
 }
 
+export async function deleteArtifact(
+  options: DeleteArtifactOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<ArtifactDeletionResult> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(`/api/v1/artifacts/${encodeURIComponent(options.artifactId)}`, origin);
+  return requestApiJson(
+    url,
+    { token: options.token, allowInsecureLoopback, method: 'DELETE' },
+    dependencies,
+    isArtifactDeletionResult,
+  );
+}
+
+export async function recoverArtifact(
+  options: RecoverArtifactOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<Artifact> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/artifacts/${encodeURIComponent(options.artifactId)}/recovery`,
+    origin,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'POST',
+      idempotencyKey: options.idempotencyKey,
+    },
+    dependencies,
+    isArtifact,
+  );
+}
+
 export async function restoreArtifact(
   options: RestoreArtifactOptions,
   dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
@@ -388,6 +434,7 @@ export async function listArtifactRevisions(
     origin,
   );
   url.searchParams.set('limit', String(options.limit));
+  url.searchParams.set('order', options.order);
   if (options.cursor !== undefined) url.searchParams.set('cursor', options.cursor);
   return requestApiJson(
     url,

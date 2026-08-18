@@ -11,6 +11,7 @@ import type {
   StoredShare,
   StoredShareRevision,
 } from '@shelf/core';
+import { ArtifactNotFoundError } from '@shelf/core';
 import { sql, type Transaction } from 'kysely';
 
 import type {
@@ -154,6 +155,7 @@ async function findArtifact(
       'artifact.updated_at as artifact_updated_at',
     ])
     .where('artifact.artifact_id', '=', artifactId)
+    .where('artifact.deleted_at', 'is', null)
     .executeTakeFirst();
   return row === undefined ? undefined : storedArtifact(row);
 }
@@ -163,9 +165,16 @@ async function findRevision(
   revisionId: string,
 ): Promise<StoredShareRevision | undefined> {
   const row = await database
-    .selectFrom('shelf_revisions')
-    .selectAll()
-    .where('revision_id', '=', revisionId)
+    .selectFrom('shelf_revisions as revision')
+    .innerJoin('shelf_artifacts as artifact', (join) =>
+      join
+        .onRef('artifact.installation_id', '=', 'revision.installation_id')
+        .onRef('artifact.workspace_id', '=', 'revision.workspace_id')
+        .onRef('artifact.artifact_id', '=', 'revision.artifact_id'),
+    )
+    .selectAll('revision')
+    .where('revision.revision_id', '=', revisionId)
+    .where('artifact.deleted_at', 'is', null)
     .executeTakeFirst();
   return row === undefined
     ? undefined
@@ -255,6 +264,16 @@ export class PostgresShareRepository implements ShareRepository {
 
   commitCreate(input: CommitShareCreateInput): Promise<CommitShareCreateOutcome> {
     return this.#database.transaction().execute(async (transaction) => {
+      const artifact = await transaction
+        .selectFrom('shelf_artifacts')
+        .select('artifact_id')
+        .where('installation_id', '=', input.result.installationId)
+        .where('workspace_id', '=', input.result.workspaceId)
+        .where('artifact_id', '=', input.result.artifactId)
+        .where('deleted_at', 'is', null)
+        .forKeyShare()
+        .executeTakeFirst();
+      if (artifact === undefined) throw new ArtifactNotFoundError();
       const claim = await transaction
         .insertInto('shelf_share_idempotency')
         .values({

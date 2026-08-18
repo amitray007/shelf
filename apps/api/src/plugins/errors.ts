@@ -23,6 +23,8 @@ function statusFor(code: ErrorCode): number {
     case 'SHARE_NOT_FOUND':
     case 'ACCESS_CREDENTIAL_NOT_FOUND':
       return 404;
+    case 'ARTIFACT_RECOVERY_EXPIRED':
+      return 410;
     case 'RANGE_NOT_SATISFIABLE':
     case 'MULTI_RANGE_UNSUPPORTED':
       return 416;

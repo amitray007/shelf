@@ -58,6 +58,14 @@ export class MemoryRevisionRepository
   readonly #folderEntries = new Map<string, readonly StoredFolderEntry[]>();
   readonly #restoreIdempotency = new Map<string, RestoreIdempotencyRecord>();
   readonly #revisions = new Map<string, StoredRevision>();
+  readonly #deletions = new Map<
+    string,
+    { deletedAt: string; recoverableUntil: string; revokedShareCount: number }
+  >();
+
+  #isActive(artifactId: string): boolean {
+    return !this.#deletions.has(artifactId);
+  }
 
   async findIdempotency(namespace: IdempotencyNamespace): Promise<IdempotencyRecord | undefined> {
     return this.#idempotency.get(namespaceKey(namespace));
@@ -80,7 +88,8 @@ export class MemoryRevisionRepository
     if (
       previous !== undefined &&
       (previous.installationId !== input.result.installationId ||
-        previous.workspaceId !== input.result.workspaceId)
+        previous.workspaceId !== input.result.workspaceId ||
+        !this.#isActive(input.result.artifactId))
     ) {
       throw new Error('Artifact identity belongs to another workspace.');
     }
@@ -138,7 +147,8 @@ export class MemoryRevisionRepository
       previous !== undefined &&
       (previous.installationId !== input.result.installationId ||
         previous.workspaceId !== input.result.workspaceId ||
-        previous.kind !== 'folder')
+        previous.kind !== 'folder' ||
+        !this.#isActive(input.result.artifactId))
     ) {
       throw new Error('Folder artifact identity is invalid.');
     }
@@ -177,7 +187,8 @@ export class MemoryRevisionRepository
   }
 
   async findFolderRevision(revisionId: string): Promise<StoredFolderRevision | undefined> {
-    return this.#folderRevisions.get(revisionId);
+    const revision = this.#folderRevisions.get(revisionId);
+    return revision !== undefined && this.#isActive(revision.artifactId) ? revision : undefined;
   }
 
   async listFolderEntries(request: {
@@ -187,7 +198,11 @@ export class MemoryRevisionRepository
     afterPath?: string;
   }) {
     const revision = this.#folderRevisions.get(request.revisionId);
-    if (revision === undefined || revision.installationId !== request.installationId) {
+    if (
+      revision === undefined ||
+      revision.installationId !== request.installationId ||
+      !this.#isActive(revision.artifactId)
+    ) {
       return { items: [] };
     }
     const ordered = [...(this.#folderEntries.get(request.revisionId) ?? [])]
@@ -203,18 +218,22 @@ export class MemoryRevisionRepository
   }
 
   async findRevision(revisionId: string): Promise<StoredRevision | undefined> {
-    return this.#revisions.get(revisionId);
+    const revision = this.#revisions.get(revisionId);
+    return revision !== undefined && this.#isActive(revision.artifactId) ? revision : undefined;
   }
 
   async findComparableRevision(revisionId: string) {
     const file = this.#revisions.get(revisionId);
-    if (file !== undefined) return { ...file, kind: 'file' as const };
-    return this.#folderRevisions.get(revisionId);
+    if (file !== undefined && this.#isActive(file.artifactId)) {
+      return { ...file, kind: 'file' as const };
+    }
+    const folder = this.#folderRevisions.get(revisionId);
+    return folder !== undefined && this.#isActive(folder.artifactId) ? folder : undefined;
   }
 
   async findArtifactIdentity(artifactId: string) {
     const artifact = this.#artifacts.get(artifactId);
-    return artifact === undefined
+    return artifact === undefined || !this.#isActive(artifactId)
       ? undefined
       : {
           artifactId: artifact.artifactId,
@@ -225,7 +244,7 @@ export class MemoryRevisionRepository
   }
 
   async findArtifact(artifactId: string): Promise<StoredArtifact | undefined> {
-    return this.#artifacts.get(artifactId);
+    return this.#isActive(artifactId) ? this.#artifacts.get(artifactId) : undefined;
   }
 
   async renameArtifact(request: {
@@ -238,7 +257,8 @@ export class MemoryRevisionRepository
     if (
       artifact === undefined ||
       artifact.installationId !== request.installationId ||
-      artifact.workspaceId !== request.workspaceId
+      artifact.workspaceId !== request.workspaceId ||
+      !this.#isActive(request.artifactId)
     ) {
       return undefined;
     }
@@ -272,6 +292,7 @@ export class MemoryRevisionRepository
         : this.#revisions.get(input.result.provenance.source.revisionId);
     if (
       artifact === undefined ||
+      !this.#isActive(input.result.artifactId) ||
       source === undefined ||
       artifact.installationId !== input.result.installationId ||
       artifact.workspaceId !== input.result.workspaceId ||
@@ -361,6 +382,7 @@ export class MemoryRevisionRepository
     const ordered = [...this.#artifacts.values()]
       .filter(
         (artifact) =>
+          this.#isActive(artifact.artifactId) &&
           artifact.installationId === request.installationId &&
           artifact.workspaceId === request.workspaceId,
       )
@@ -392,19 +414,28 @@ export class MemoryRevisionRepository
     installationId: string;
     artifactId: string;
     limit: number;
-    beforeRevisionNumber?: number;
+    order: 'newest' | 'oldest';
+    cursorRevisionNumber?: number;
   }) {
-    const artifact = this.#artifacts.get(request.artifactId);
+    const artifact = this.#isActive(request.artifactId)
+      ? this.#artifacts.get(request.artifactId)
+      : undefined;
     if (artifact === undefined || artifact.installationId !== request.installationId) {
       return { items: [] };
     }
     const ordered = [...(this.#artifactRevisions.get(request.artifactId) ?? [])]
       .filter(
         (revision) =>
-          request.beforeRevisionNumber === undefined ||
-          revision.revisionNumber < request.beforeRevisionNumber,
+          request.cursorRevisionNumber === undefined ||
+          (request.order === 'newest'
+            ? revision.revisionNumber < request.cursorRevisionNumber
+            : revision.revisionNumber > request.cursorRevisionNumber),
       )
-      .sort((left, right) => right.revisionNumber - left.revisionNumber);
+      .sort((left, right) =>
+        request.order === 'newest'
+          ? right.revisionNumber - left.revisionNumber
+          : left.revisionNumber - right.revisionNumber,
+      );
     const hasMore = ordered.length > request.limit;
     const items = ordered.slice(0, request.limit);
     const last = items.at(-1);
@@ -412,5 +443,69 @@ export class MemoryRevisionRepository
       items,
       ...(hasMore && last !== undefined ? { nextRevisionNumber: last.revisionNumber } : {}),
     };
+  }
+
+  findArtifactDeletionState(artifactId: string) {
+    const artifact = this.#artifacts.get(artifactId);
+    if (artifact === undefined) return undefined;
+    const deletion = this.#deletions.get(artifactId);
+    return {
+      artifact: structuredClone(artifact),
+      deletedAt: deletion?.deletedAt ?? null,
+      recoverableUntil: deletion?.recoverableUntil ?? null,
+      revokedShareCount: deletion?.revokedShareCount ?? null,
+    };
+  }
+
+  markArtifactDeleted(request: {
+    installationId: string;
+    workspaceId: string;
+    artifactId: string;
+    deletedAt: string;
+    recoverableUntil: string;
+    revokedShareCount: number;
+  }) {
+    const artifact = this.#artifacts.get(request.artifactId);
+    if (
+      artifact === undefined ||
+      artifact.installationId !== request.installationId ||
+      artifact.workspaceId !== request.workspaceId
+    ) {
+      return undefined;
+    }
+    const existing = this.#deletions.get(request.artifactId);
+    if (existing !== undefined) return { ...existing };
+    const deletion = {
+      deletedAt: request.deletedAt,
+      recoverableUntil: request.recoverableUntil,
+      revokedShareCount: request.revokedShareCount,
+    };
+    this.#deletions.set(request.artifactId, deletion);
+    return { ...deletion };
+  }
+
+  recoverArtifactState(request: {
+    installationId: string;
+    workspaceId: string;
+    artifactId: string;
+    recoveredAt: string;
+  }) {
+    const artifact = this.#artifacts.get(request.artifactId);
+    const deletion = this.#deletions.get(request.artifactId);
+    if (
+      artifact === undefined ||
+      deletion === undefined ||
+      artifact.installationId !== request.installationId ||
+      artifact.workspaceId !== request.workspaceId
+    ) {
+      return { status: 'not-found' as const };
+    }
+    if (Date.parse(deletion.recoverableUntil) <= Date.parse(request.recoveredAt)) {
+      return { status: 'expired' as const };
+    }
+    this.#deletions.delete(request.artifactId);
+    const recovered = { ...artifact, updatedAt: request.recoveredAt };
+    this.#artifacts.set(request.artifactId, recovered);
+    return { status: 'recovered' as const, artifact: structuredClone(recovered) };
   }
 }

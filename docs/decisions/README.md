@@ -17,6 +17,7 @@ The [Product Contract](../plans/2026-08-17-0030-feat-shelf-product-plan.md) owns
 | D8 | Shelf has no collection abstraction; shares target one artifact or one exact revision. | R9-R13 |
 | D9 | Import, export, and portable ownership are core behavior. | R18-R19 and R22-R24 |
 | D10 | Shelf is open source and self-hostable without a mandatory proprietary dependency. | R22-R25 |
+| D11 | Explicit artifact deletion is a recoverable soft deletion for exactly 30 days. It transactionally revokes active shares, hides the artifact from active lifecycle and resolution paths, preserves immutable revision content, and recovery does not restore revoked shares. | R12-R15 and F5 |
 
 ## Accepted technical decisions
 
@@ -47,7 +48,7 @@ These defaults make the current Product Contract coherent, but they may be revis
 | W5 | Restore creates a new revision and never rewrites history. | R5 and AE2 |
 | W6 | Rendered active content is isolated from Shelf's authenticated application. | R21 and AE5 |
 | W7 | Artifacts start private, shares start unlisted, and public indexing is separately enabled. | R10 |
-| W8 | Artifacts and revisions do not expire automatically, and explicit deletion has a 30-day recovery period. | R13 |
+| W8 | Artifacts and revisions do not expire automatically. Explicit artifact deletion has a 30-day recovery period, revokes active shares, and recovery never resurrects those share capabilities. | R12-R13 and F5 |
 | W9 | Provenance is immutable while later metadata edits are retained as auditable events. | R20 |
 | W10 | Artifact, revision, and share URLs remain stable across renames and later publishes. | R2-R3, R11, and AE9 |
 

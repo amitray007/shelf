@@ -117,13 +117,14 @@ export async function artifactLoader({
   return withSessionRedirect(request, async () => {
     const query = new URL(request.url).searchParams;
     const historyCursor = query.get('historyCursor') ?? undefined;
+    const historyOrder = query.get('historyOrder') === 'oldest' ? 'oldest' : 'newest';
     const shareCursor = query.get('shareCursor') ?? undefined;
     const artifact = await loadArtifact(artifactId, request.signal);
     if (artifact.workspaceId !== workspaceId) {
       throw new DashboardApiError('ARTIFACT_NOT_FOUND', 'The artifact was not found.');
     }
     const [history, shares] = await Promise.all([
-      loadArtifactHistory(artifactId, historyCursor, request.signal),
+      loadArtifactHistory(artifactId, historyOrder, historyCursor, request.signal),
       loadWorkspaceShares(workspaceId, shareCursor, request.signal),
     ]);
     let bytes: ArrayBuffer | null = null;

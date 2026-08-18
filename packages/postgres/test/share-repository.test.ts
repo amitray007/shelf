@@ -249,4 +249,119 @@ describePostgres('PostgresShareRepository', () => {
       await database.destroy();
     }
   });
+
+  it('atomically soft-deletes, revokes only active shares, and recovers without resurrecting them', async () => {
+    const firstDatabase = createPostgresDatabase({ connectionString });
+    const secondDatabase = createPostgresDatabase({ connectionString });
+    try {
+      const artifactId = 'art_FFFFFFFFFFFFFFFFFFFFFF';
+      const revisionId = 'rev_GGGGGGGGGGGGGGGGGGGGGG';
+      const activeShareId = 'shr_HHHHHHHHHHHHHHHHHHHHHH';
+      const expiredShareId = 'shr_IIIIIIIIIIIIIIIIIIIIII';
+      const revisions = new PostgresRevisionRepository(firstDatabase);
+      const result = publish(revisionId, '7');
+      result.artifactId = artifactId;
+      await revisions.commitPublish({
+        namespace: {
+          installationId: result.installationId,
+          workspaceId: result.workspaceId,
+          actorId: 'actor-publisher',
+          operation: 'file.publish',
+          key: 'deletion-publish',
+        },
+        fingerprint: `publish-request/v1:sha256:${'7'.repeat(64)}`,
+        result,
+      });
+      const shares = new PostgresShareRepository(firstDatabase);
+      await shares.commitCreate(
+        createInput({ ...share(activeShareId), artifactId }, 'delete-active'),
+      );
+      await shares.commitCreate(
+        createInput(
+          {
+            ...share(expiredShareId),
+            artifactId,
+            expiresAt: '2026-08-18T12:00:00.000Z',
+          },
+          'delete-expired',
+        ),
+      );
+
+      const request = {
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        artifactId,
+        actorId: 'actor-publisher',
+        deletedAt: '2026-08-19T12:00:00.000Z',
+        recoverableUntil: '2026-09-18T12:00:00.000Z',
+      };
+      const concurrent = new PostgresRevisionRepository(secondDatabase);
+      const [left, right] = await Promise.all([
+        revisions.deleteArtifact(request),
+        concurrent.deleteArtifact(request),
+      ]);
+      expect([left.status, right.status].sort()).toEqual(['already-deleted', 'deleted']);
+      expect(left).toMatchObject({ revokedShareCount: 1 });
+      expect(right).toMatchObject({ revokedShareCount: 1 });
+      await expect(revisions.findArtifact(artifactId)).resolves.toBeUndefined();
+      await expect(revisions.findRevision(revisionId)).resolves.toBeUndefined();
+      await expect(shares.resolveShareTarget(activeShareId)).resolves.toBeUndefined();
+      const rows = await firstDatabase
+        .selectFrom('shelf_shares')
+        .select(['share_id', 'revoked_at'])
+        .where('artifact_id', '=', artifactId)
+        .orderBy('share_id')
+        .execute();
+      expect(rows).toEqual([
+        { share_id: activeShareId, revoked_at: new Date(request.deletedAt) },
+        { share_id: expiredShareId, revoked_at: null },
+      ]);
+
+      await expect(
+        revisions.recoverArtifact({
+          namespace: {
+            installationId: request.installationId,
+            workspaceId: request.workspaceId,
+            actorId: request.actorId,
+            operation: 'artifact.recover',
+            key: 'recover-after-delete',
+          },
+          fingerprint: `artifact-recovery-request/v1:sha256:${'1'.repeat(64)}`,
+          artifactId,
+          recoveredAt: '2026-08-20T12:00:00.000Z',
+        }),
+      ).resolves.toMatchObject({ status: 'recovered', artifact: { artifactId } });
+      await expect(revisions.findArtifact(artifactId)).resolves.toMatchObject({ artifactId });
+      await expect(shares.findShare(activeShareId)).resolves.toMatchObject({
+        revokedAt: request.deletedAt,
+      });
+      const secondDeletion = {
+        ...request,
+        deletedAt: '2026-10-01T12:00:00.000Z',
+        recoverableUntil: '2026-10-31T12:00:00.000Z',
+      };
+      await expect(revisions.deleteArtifact(secondDeletion)).resolves.toMatchObject({
+        status: 'deleted',
+        revokedShareCount: 0,
+      });
+      await expect(
+        revisions.recoverArtifact({
+          namespace: {
+            installationId: request.installationId,
+            workspaceId: request.workspaceId,
+            actorId: request.actorId,
+            operation: 'artifact.recover',
+            key: 'recover-expired-delete',
+          },
+          fingerprint: `artifact-recovery-request/v1:sha256:${'2'.repeat(64)}`,
+          artifactId,
+          recoveredAt: secondDeletion.recoverableUntil,
+        }),
+      ).resolves.toEqual({ status: 'expired' });
+      await expect(revisions.findArtifact(artifactId)).resolves.toBeUndefined();
+    } finally {
+      await firstDatabase.destroy();
+      await secondDatabase.destroy();
+    }
+  });
 });

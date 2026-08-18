@@ -13,6 +13,7 @@ import type {
   StoredShare,
   StoredShareRevision,
 } from '@shelf/core';
+import { ArtifactNotFoundError } from '@shelf/core';
 
 type ShareRevisionSource = RevisionRepository &
   ArtifactCatalogRepository &
@@ -42,6 +43,16 @@ export class MemoryShareRepository implements ShareRepository {
     this.#source = source;
   }
 
+  #storeRevokedShare(
+    stored: StoredShare,
+    revokedAt: string,
+    revokedByActorId: string,
+  ): StoredShare {
+    const revoked = { ...stored, revokedAt, revokedByActorId };
+    this.#shares.set(revoked.shareId, revoked);
+    return revoked;
+  }
+
   async findArtifactForShare(artifactId: string) {
     return this.#source.findArtifact(artifactId);
   }
@@ -64,17 +75,18 @@ export class MemoryShareRepository implements ShareRepository {
     if (artifact.latestRevision.revisionId === revisionId) {
       descriptor = artifact.latestRevision;
     } else {
-      let beforeRevisionNumber: number | undefined;
+      let cursorRevisionNumber: number | undefined;
       do {
         const page = await this.#source.listArtifactRevisions({
           installationId: stored.installationId,
           artifactId: stored.artifactId,
           limit: 100,
-          ...(beforeRevisionNumber === undefined ? {} : { beforeRevisionNumber }),
+          order: 'newest',
+          ...(cursorRevisionNumber === undefined ? {} : { cursorRevisionNumber }),
         });
         descriptor = page.items.find((candidate) => candidate.revisionId === revisionId);
         if (descriptor !== undefined || page.nextRevisionNumber === undefined) break;
-        beforeRevisionNumber = page.nextRevisionNumber;
+        cursorRevisionNumber = page.nextRevisionNumber;
       } while (descriptor === undefined);
     }
     if (descriptor === undefined) return undefined;
@@ -96,6 +108,14 @@ export class MemoryShareRepository implements ShareRepository {
   }
 
   async commitCreate(input: CommitShareCreateInput): Promise<CommitShareCreateOutcome> {
+    const artifact = await this.#source.findArtifact(input.result.artifactId);
+    if (
+      artifact === undefined ||
+      artifact.installationId !== input.result.installationId ||
+      artifact.workspaceId !== input.result.workspaceId
+    ) {
+      throw new ArtifactNotFoundError();
+    }
     const key = namespaceKey(input.namespace);
     const existing = this.#idempotency.get(key);
     if (existing !== undefined) {
@@ -170,18 +190,47 @@ export class MemoryShareRepository implements ShareRepository {
     if (stored.revokedAt !== null) {
       return { status: 'already-revoked', result: copyShare(stored) };
     }
-    const revoked: StoredShare = {
-      ...stored,
-      revokedAt: request.revokedAt,
-      revokedByActorId: request.revokedByActorId,
-    };
-    this.#shares.set(revoked.shareId, revoked);
+    const revoked = this.#storeRevokedShare(stored, request.revokedAt, request.revokedByActorId);
     for (const [key, record] of this.#idempotency) {
       if (record.result.shareId === revoked.shareId) {
         this.#idempotency.set(key, { fingerprint: record.fingerprint, result: revoked });
       }
     }
     return { status: 'revoked', result: copyShare(revoked) };
+  }
+
+  revokeActiveArtifactShares(request: {
+    installationId: string;
+    workspaceId: string;
+    artifactId: string;
+    actorId: string;
+    revokedAt: string;
+  }): number {
+    let count = 0;
+    const revokedAt = Date.parse(request.revokedAt);
+    const revokedByShareId = new Map<string, StoredShare>();
+    for (const stored of this.#shares.values()) {
+      const expiresAt = stored.expiresAt === null ? null : Date.parse(stored.expiresAt);
+      if (
+        stored.installationId !== request.installationId ||
+        stored.workspaceId !== request.workspaceId ||
+        stored.artifactId !== request.artifactId ||
+        stored.revokedAt !== null ||
+        (expiresAt !== null && expiresAt <= revokedAt)
+      ) {
+        continue;
+      }
+      const revoked = this.#storeRevokedShare(stored, request.revokedAt, request.actorId);
+      revokedByShareId.set(revoked.shareId, revoked);
+      count += 1;
+    }
+    for (const [key, record] of this.#idempotency) {
+      const revoked = revokedByShareId.get(record.result.shareId);
+      if (revoked !== undefined) {
+        this.#idempotency.set(key, { fingerprint: record.fingerprint, result: revoked });
+      }
+    }
+    return count;
   }
 
   async resolveShareTarget(shareId: string): Promise<ResolvedStoredShare | undefined> {

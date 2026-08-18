@@ -98,6 +98,166 @@ function publicHeaders(response: { headers: Record<string, string | string[] | u
 }
 
 describe('share HTTP boundary', () => {
+  it('keeps an expired recovery deleted and returns the canonical gone error', async () => {
+    let now = new Date('2026-08-18T12:00:00.000Z');
+    const app = await fixture({ artifactClock: () => now });
+    const published = await publishFile(app, 'expires', 'publish-expiring-recovery');
+    const artifactId = published.json().artifactId as string;
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/artifacts/${artifactId}`,
+      headers: { authorization: 'Bearer test' },
+    });
+    now = new Date(deleted.json().recoverableUntil);
+    const expired = await app.inject({
+      method: 'POST',
+      url: `/api/v1/artifacts/${artifactId}/recovery`,
+      headers: { authorization: 'Bearer test', 'idempotency-key': 'recover-expired' },
+    });
+    const stillHidden = await app.inject({
+      method: 'GET',
+      url: `/api/v1/artifacts/${artifactId}`,
+      headers: { authorization: 'Bearer test' },
+    });
+
+    expect(expired.statusCode).toBe(410);
+    expect(expired.json()).toMatchObject({ error: { code: 'ARTIFACT_RECOVERY_EXPIRED' } });
+    expect(stillHidden.statusCode).toBe(404);
+  });
+
+  it('revokes artifact shares on recoverable deletion and never resurrects them', async () => {
+    const app = await fixture();
+    const published = await publishFile(app, 'recoverable', 'publish-recoverable');
+    const artifactId = published.json().artifactId as string;
+    const created = await createShare(app, artifactId, 'share-recoverable');
+    const shareId = created.json().shareId as string;
+    const secret = (created.json().url as string).split('#')[1] as string;
+
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/artifacts/${artifactId}`,
+      headers: { authorization: 'Bearer test' },
+    });
+    const replayed = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/artifacts/${artifactId}`,
+      headers: { authorization: 'Bearer test' },
+    });
+    const hidden = await app.inject({
+      method: 'GET',
+      url: `/api/v1/artifacts/${artifactId}`,
+      headers: { authorization: 'Bearer test' },
+    });
+    const hiddenHistory = await app.inject({
+      method: 'GET',
+      url: `/api/v1/artifacts/${artifactId}/revisions`,
+      headers: { authorization: 'Bearer test' },
+    });
+    const rejectedUpdate = await publishFile(
+      app,
+      'must not publish',
+      'publish-after-delete',
+      artifactId,
+    );
+    const rejectedShare = await createShare(app, artifactId, 'share-after-delete');
+    const publicMiss = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/resolve`,
+      payload: { secret },
+    });
+    const [recovered, replayedRecovery] = await Promise.all([
+      app.inject({
+        method: 'POST',
+        url: `/api/v1/artifacts/${artifactId}/recovery`,
+        headers: { authorization: 'Bearer test', 'idempotency-key': 'recover-once' },
+      }),
+      app.inject({
+        method: 'POST',
+        url: `/api/v1/artifacts/${artifactId}/recovery`,
+        headers: { authorization: 'Bearer test', 'idempotency-key': 'recover-once' },
+      }),
+    ]);
+    const visible = await app.inject({
+      method: 'GET',
+      url: `/api/v1/artifacts/${artifactId}`,
+      headers: { authorization: 'Bearer test' },
+    });
+    const stillRevoked = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/resolve`,
+      payload: { secret },
+    });
+
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    expect(deleted.json()).toMatchObject({
+      apiVersion: 'v1',
+      artifactId,
+      workspaceId: 'workspace-main',
+      revokedShareCount: 1,
+    });
+    expect(Date.parse(deleted.json().recoverableUntil) - Date.parse(deleted.json().deletedAt)).toBe(
+      30 * 24 * 60 * 60 * 1_000,
+    );
+    expect(replayed.json()).toEqual(deleted.json());
+    expect(hidden.statusCode).toBe(404);
+    expect(hiddenHistory.statusCode).toBe(404);
+    expect(rejectedUpdate.statusCode).toBe(404);
+    expect(rejectedShare.statusCode).toBe(404);
+    expect(publicMiss.statusCode).toBe(404);
+    expect(recovered.statusCode, recovered.body).toBe(200);
+    expect(recovered.json()).toMatchObject({ artifactId });
+    expect(replayedRecovery.statusCode, replayedRecovery.body).toBe(200);
+    expect(replayedRecovery.json()).toEqual(recovered.json());
+    expect(visible.statusCode).toBe(200);
+    expect(stillRevoked.statusCode).toBe(404);
+  });
+
+  it('rejects recovery idempotency reuse for a different artifact', async () => {
+    const app = await fixture();
+    const first = await publishFile(app, 'first', 'publish-recovery-first');
+    const second = await publishFile(app, 'second', 'publish-recovery-second');
+    const firstArtifactId = first.json().artifactId as string;
+    const secondArtifactId = second.json().artifactId as string;
+    for (const artifactId of [firstArtifactId, secondArtifactId]) {
+      const deleted = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/artifacts/${artifactId}`,
+        headers: { authorization: 'Bearer test' },
+      });
+      expect(deleted.statusCode, deleted.body).toBe(200);
+    }
+
+    const recovered = await app.inject({
+      method: 'POST',
+      url: `/api/v1/artifacts/${firstArtifactId}/recovery`,
+      headers: { authorization: 'Bearer test', 'idempotency-key': 'recover-semantic-key' },
+    });
+    const conflict = await app.inject({
+      method: 'POST',
+      url: `/api/v1/artifacts/${secondArtifactId}/recovery`,
+      headers: { authorization: 'Bearer test', 'idempotency-key': 'recover-semantic-key' },
+    });
+
+    expect(recovered.statusCode, recovered.body).toBe(200);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({ error: { code: 'IDEMPOTENCY_CONFLICT' } });
+  });
+
+  it('does not turn recovery into success for an artifact that was never deleted', async () => {
+    const app = await fixture();
+    const published = await publishFile(app, 'still active', 'publish-active-recovery');
+    const artifactId = published.json().artifactId as string;
+
+    const recovery = await app.inject({
+      method: 'POST',
+      url: `/api/v1/artifacts/${artifactId}/recovery`,
+      headers: { authorization: 'Bearer test', 'idempotency-key': 'recover-active' },
+    });
+
+    expect(recovery.statusCode).toBe(404);
+    expect(recovery.json()).toMatchObject({ error: { code: 'ARTIFACT_NOT_FOUND' } });
+  });
+
   it('creates, replays, lists, and revokes without exposing capability material in management data', async () => {
     const app = await fixture();
     const published = await publishFile(app, '<h1>launch</h1>', 'publish-launch');

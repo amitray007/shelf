@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto';
 
 import {
   type Artifact,
+  type ArtifactDeletionResult,
   PUBLISH_OPERATION,
   READ_REVISION_OPERATION,
+  RECOVER_OPERATION,
   RESTORE_OPERATION,
   type RestoreResult,
 } from '@shelf/contracts';
@@ -26,6 +28,9 @@ import { RevisionNotFoundError } from '../revisions/read.js';
 import { type StoredArtifact, storedArtifactToArtifact } from './catalog.js';
 
 type StoredLifecycleRestore = StoredRestore | StoredFolderRestore;
+
+const ARTIFACT_ID_PATTERN = /^art_[A-Za-z0-9_-]{22}$/u;
+const ARTIFACT_RECOVERY_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000;
 
 function containsControlCharacter(value: string): boolean {
   return [...value].some((character) => {
@@ -56,6 +61,53 @@ export interface ArtifactLifecycleRepository {
     namespace: RestoreIdempotencyNamespace,
   ): Promise<RestoreIdempotencyRecord | undefined>;
   commitRestore(input: CommitRestoreInput): Promise<CommitRestoreOutcome>;
+}
+
+export interface StoredArtifactDeletionState {
+  artifact: StoredArtifact;
+  deletedAt: string | null;
+  recoverableUntil: string | null;
+}
+
+export type DeleteArtifactOutcome =
+  | {
+      status: 'deleted' | 'already-deleted';
+      deletedAt: string;
+      recoverableUntil: string;
+      revokedShareCount: number;
+    }
+  | { status: 'not-found' };
+
+export type RecoverArtifactOutcome =
+  | { status: 'recovered' | 'replayed'; artifact: StoredArtifact }
+  | { status: 'conflict' }
+  | { status: 'expired' }
+  | { status: 'not-found' };
+
+export interface ArtifactRecoveryIdempotencyNamespace {
+  installationId: string;
+  workspaceId: string;
+  actorId: string;
+  operation: typeof RECOVER_OPERATION;
+  key: string;
+}
+
+export interface ArtifactDeletionRepository {
+  findArtifactForDeletion(artifactId: string): Promise<StoredArtifactDeletionState | undefined>;
+  deleteArtifact(request: {
+    installationId: string;
+    workspaceId: string;
+    artifactId: string;
+    actorId: string;
+    deletedAt: string;
+    recoverableUntil: string;
+  }): Promise<DeleteArtifactOutcome>;
+  recoverArtifact(request: {
+    namespace: ArtifactRecoveryIdempotencyNamespace;
+    fingerprint: string;
+    artifactId: string;
+    recoveredAt: string;
+  }): Promise<RecoverArtifactOutcome>;
 }
 
 export interface RestoreIdempotencyNamespace {
@@ -97,6 +149,42 @@ export class InvalidArtifactNameError extends ShelfCoreError {
   }
 }
 
+export class ArtifactRecoveryExpiredError extends ShelfCoreError {
+  constructor() {
+    super('ARTIFACT_RECOVERY_EXPIRED', 'The artifact recovery window has expired.', {
+      retryable: false,
+    });
+    this.name = 'ArtifactRecoveryExpiredError';
+  }
+}
+
+export function createArtifactRecoveryFingerprint(input: { artifactId: string }): string {
+  const canonical = JSON.stringify({ version: 1, ...input });
+  return `artifact-recovery-request/v1:sha256:${createHash('sha256').update(canonical).digest('hex')}`;
+}
+
+function validateRecoveryRequest(request: {
+  installationId: string;
+  actorId: string;
+  artifactId: string;
+  idempotencyKey: string;
+}): void {
+  const details: Array<{ field: string; reason: string }> = [];
+  for (const [field, value] of [
+    ['installationId', request.installationId],
+    ['actorId', request.actorId],
+    ['idempotencyKey', request.idempotencyKey],
+  ] as const) {
+    if (value.length === 0 || value.length > 128) {
+      details.push({ field, reason: 'must contain 1-128 characters' });
+    }
+  }
+  if (!ARTIFACT_ID_PATTERN.test(request.artifactId)) {
+    details.push({ field: 'artifactId', reason: 'must be a valid opaque artifact ID' });
+  }
+  if (details.length > 0) throw new InvalidPublishRequestError(details);
+}
+
 function normalizeName(value: string): string {
   const name = value.trim();
   if (name.length === 0 || [...name].length > 255 || containsControlCharacter(name)) {
@@ -126,7 +214,7 @@ function validateRestoreRequest(request: {
       details.push({ field, reason: 'must contain 1-128 characters' });
     }
   }
-  if (!/^art_[A-Za-z0-9_-]{22}$/u.test(request.artifactId)) {
+  if (!ARTIFACT_ID_PATTERN.test(request.artifactId)) {
     details.push({ field: 'artifactId', reason: 'must be a valid opaque artifact ID' });
   }
   if (!/^rev_[A-Za-z0-9_-]{22}$/u.test(request.sourceRevisionId)) {
@@ -204,10 +292,137 @@ function restoreResult(
 export function createArtifactLifecycleService(dependencies: {
   authorizer: Authorizer;
   artifacts: ArtifactLifecycleRepository;
+  deletions?: ArtifactDeletionRepository;
   generateId?: OpaqueIdGenerator;
+  clock?: () => Date;
 }) {
   const generateId = dependencies.generateId ?? createOpaqueId;
+  const clock = dependencies.clock ?? (() => new Date());
+
+  function deletionRepository(): ArtifactDeletionRepository {
+    if (dependencies.deletions !== undefined) return dependencies.deletions;
+    throw boundaryFailure(
+      'SERVICE_UNAVAILABLE',
+      'Artifact lifecycle storage is unavailable.',
+      new Error('Artifact deletion repository is not configured.'),
+    );
+  }
+
+  async function deletionState(request: {
+    installationId: string;
+    actorId: string;
+    artifactId: string;
+    signal?: AbortSignal;
+  }): Promise<StoredArtifactDeletionState> {
+    if (!ARTIFACT_ID_PATTERN.test(request.artifactId)) throw new ArtifactNotFoundError();
+    const deletions = deletionRepository();
+    let state: StoredArtifactDeletionState | undefined;
+    try {
+      request.signal?.throwIfAborted();
+      state = await deletions.findArtifactForDeletion(request.artifactId);
+    } catch (error) {
+      throw boundaryFailure('SERVICE_UNAVAILABLE', 'Artifact lookup failed.', error);
+    }
+    if (
+      state === undefined ||
+      state.artifact.artifactId !== request.artifactId ||
+      state.artifact.installationId !== request.installationId
+    ) {
+      throw new ArtifactNotFoundError();
+    }
+    await dependencies.authorizer.authorize(
+      {
+        installationId: request.installationId,
+        workspaceId: state.artifact.workspaceId,
+        actorId: request.actorId,
+        action: PUBLISH_OPERATION,
+      },
+      request.signal,
+    );
+    request.signal?.throwIfAborted();
+    return state;
+  }
+
   return {
+    async deleteArtifact(request: {
+      installationId: string;
+      actorId: string;
+      artifactId: string;
+      signal?: AbortSignal;
+    }): Promise<ArtifactDeletionResult> {
+      const state = await deletionState(request);
+      const now = clock();
+      const deletedAt = now.toISOString();
+      const recoverableUntil = new Date(now.getTime() + ARTIFACT_RECOVERY_WINDOW_MS).toISOString();
+      let outcome: DeleteArtifactOutcome;
+      try {
+        outcome = await deletionRepository().deleteArtifact({
+          installationId: request.installationId,
+          workspaceId: state.artifact.workspaceId,
+          artifactId: request.artifactId,
+          actorId: request.actorId,
+          deletedAt,
+          recoverableUntil,
+        });
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Artifact deletion failed.', error);
+      }
+      if (outcome.status === 'not-found') throw new ArtifactNotFoundError();
+      return {
+        apiVersion: 'v1',
+        workspaceId: state.artifact.workspaceId,
+        artifactId: request.artifactId,
+        deletedAt: outcome.deletedAt,
+        recoverableUntil: outcome.recoverableUntil,
+        revokedShareCount: outcome.revokedShareCount,
+      };
+    },
+
+    async recoverArtifact(request: {
+      installationId: string;
+      actorId: string;
+      artifactId: string;
+      idempotencyKey: string;
+      signal?: AbortSignal;
+    }): Promise<Artifact> {
+      validateRecoveryRequest(request);
+      const state = await deletionState(request);
+      const namespace: ArtifactRecoveryIdempotencyNamespace = {
+        installationId: request.installationId,
+        workspaceId: state.artifact.workspaceId,
+        actorId: request.actorId,
+        operation: RECOVER_OPERATION,
+        key: request.idempotencyKey,
+      };
+      let outcome: RecoverArtifactOutcome;
+      try {
+        request.signal?.throwIfAborted();
+        outcome = await deletionRepository().recoverArtifact({
+          namespace,
+          fingerprint: createArtifactRecoveryFingerprint({ artifactId: request.artifactId }),
+          artifactId: request.artifactId,
+          recoveredAt: clock().toISOString(),
+        });
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Artifact recovery failed.', error);
+      }
+      if (outcome.status === 'expired') throw new ArtifactRecoveryExpiredError();
+      if (outcome.status === 'not-found') throw new ArtifactNotFoundError();
+      if (outcome.status === 'conflict') throw new IdempotencyConflictError();
+      if (
+        outcome.artifact.artifactId !== request.artifactId ||
+        outcome.artifact.installationId !== request.installationId ||
+        outcome.artifact.workspaceId !== state.artifact.workspaceId
+      ) {
+        throw boundaryFailure(
+          'SERVICE_UNAVAILABLE',
+          'Artifact recovery returned invalid scope.',
+          new Error('Artifact recovery adapter crossed its requested scope.'),
+        );
+      }
+      return storedArtifactToArtifact(outcome.artifact);
+    },
+
     async renameArtifact(request: {
       installationId: string;
       actorId: string;

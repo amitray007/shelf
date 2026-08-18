@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import axe from 'axe-core';
 
 import {
-  artifactId,
   artifactPage,
   createdCredentialId,
   createdCredentialToken,
@@ -30,6 +29,7 @@ const artifactsById = new Map(
   artifactPage.items.map((artifact) => [artifact.artifactId, artifact]),
 );
 const historiesByArtifactId = new Map(historyPages.map((page) => [page.artifactId, page]));
+const deletedArtifacts = new Set();
 const latestFilesByRevisionId = new Map(
   artifactPage.items.flatMap((artifact) =>
     artifact.latestRevision.kind === 'file'
@@ -89,6 +89,13 @@ async function body(request) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+function deletedArtifactKey(request, artifactId) {
+  const fixtureSession = /(?:^|;\s*)shelf-browser-state=([^;]+)/u.exec(
+    request.headers.cookie ?? '',
+  )?.[1];
+  return `${fixtureSession ?? 'default'}:${artifactId}`;
+}
+
 async function api(request, response, url) {
   const path = url.pathname;
   if (path === '/api/v1/dashboard/session') {
@@ -101,31 +108,102 @@ async function api(request, response, url) {
     return;
   }
   if (path === `/api/v1/workspaces/${workspaceId}/artifacts`) {
-    json(response, 200, artifactPage);
+    json(response, 200, {
+      ...artifactPage,
+      items: artifactPage.items.filter(
+        (artifact) => !deletedArtifacts.has(deletedArtifactKey(request, artifact.artifactId)),
+      ),
+    });
+    return;
+  }
+  const recoveryMatch = /^\/api\/v1\/artifacts\/(art_[A-Za-z0-9_-]{22})\/recovery$/u.exec(path);
+  if (request.method === 'POST' && recoveryMatch !== null) {
+    const requestedArtifactId = recoveryMatch[1];
+    const artifact = artifactsById.get(requestedArtifactId);
+    const deletionKey = deletedArtifactKey(request, requestedArtifactId);
+    if (artifact === undefined || !deletedArtifacts.has(deletionKey)) {
+      json(response, 404, {
+        error: {
+          code: 'ARTIFACT_NOT_FOUND',
+          message: 'Artifact not found.',
+          retryable: false,
+          requestId: 'request-browser-recovery',
+        },
+      });
+      return;
+    }
+    deletedArtifacts.delete(deletionKey);
+    json(response, 200, artifact);
+    return;
+  }
+  const deleteMatch = /^\/api\/v1\/artifacts\/(art_[A-Za-z0-9_-]{22})$/u.exec(path);
+  if (request.method === 'DELETE' && deleteMatch !== null) {
+    const requestedArtifactId = deleteMatch[1];
+    if (!artifactsById.has(requestedArtifactId)) {
+      json(response, 404, {
+        error: {
+          code: 'ARTIFACT_NOT_FOUND',
+          message: 'Artifact not found.',
+          retryable: false,
+          requestId: 'request-browser-deletion',
+        },
+      });
+      return;
+    }
+    deletedArtifacts.add(deletedArtifactKey(request, requestedArtifactId));
+    json(response, 200, {
+      apiVersion: 'v1',
+      workspaceId,
+      artifactId: requestedArtifactId,
+      deletedAt: '2026-08-18T12:00:00.000Z',
+      recoverableUntil: '2026-09-17T12:00:00.000Z',
+      revokedShareCount: requestedArtifactId === artifactPage.items[0]?.artifactId ? 2 : 0,
+    });
     return;
   }
   const artifactMatch = /^\/api\/v1\/artifacts\/(art_[A-Za-z0-9_-]{22})(\/revisions)?$/u.exec(path);
   if (artifactMatch !== null) {
     const requestedArtifactId = artifactMatch[1];
-    const value =
-      artifactMatch[2] === undefined
-        ? artifactsById.get(requestedArtifactId)
-        : historiesByArtifactId.get(requestedArtifactId);
+    if (deletedArtifacts.has(deletedArtifactKey(request, requestedArtifactId))) {
+      json(response, 404, {
+        error: {
+          code: 'ARTIFACT_NOT_FOUND',
+          message: 'Artifact not found.',
+          retryable: false,
+          requestId: 'request-browser-artifact',
+        },
+      });
+      return;
+    }
+    const history = historiesByArtifactId.get(requestedArtifactId);
+    let value = artifactMatch[2] === undefined ? artifactsById.get(requestedArtifactId) : history;
+    if (
+      artifactMatch[2] !== undefined &&
+      history !== undefined &&
+      url.searchParams.get('order') === 'oldest'
+    ) {
+      value = { ...history, items: [...history.items].reverse() };
+    }
     if (value !== undefined) {
       json(response, 200, value);
       return;
     }
   }
-  if (
-    request.method === 'POST' &&
-    path === `/api/v1/workspaces/${workspaceId}/artifacts/${artifactId}/shares`
-  ) {
+  const createShareMatch = new RegExp(
+    `^/api/v1/workspaces/${workspaceId}/artifacts/(art_[A-Za-z0-9_-]{22})/shares$`,
+    'u',
+  ).exec(path);
+  if (request.method === 'POST' && createShareMatch !== null) {
+    const requestedArtifactId = createShareMatch[1];
     const value = JSON.parse(await body(request));
+    const validTarget =
+      value.target?.mode === 'latest' ||
+      (value.target?.mode === 'pinned' && typeof value.target.revisionId === 'string');
     if (
       request.headers['idempotency-key'] === undefined ||
       value.expiresAt !== null ||
-      value.target?.mode !== 'pinned' ||
-      typeof value.target.revisionId !== 'string'
+      !validTarget ||
+      !artifactsById.has(requestedArtifactId)
     ) {
       json(response, 400, {
         apiVersion: 'v1',
@@ -138,7 +216,7 @@ async function api(request, response, url) {
       requestId: 'request-browser-share',
       workspaceId,
       shareId: createdShareId,
-      artifactId,
+      artifactId: requestedArtifactId,
       visibility: 'unlisted',
       target: value.target,
       createdAt: '2026-08-18T10:10:00.000Z',

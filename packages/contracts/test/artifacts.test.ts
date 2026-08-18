@@ -2,11 +2,13 @@ import { Check } from 'typebox/value';
 import { describe, expect, it } from 'vitest';
 
 import {
+  ArtifactDeletionResultSchema,
   ArtifactPageSchema,
   ArtifactRevisionPageSchema,
   ArtifactRevisionSchema,
   ArtifactSchema,
   isArtifact,
+  isArtifactDeletionResult,
   isArtifactPage,
   isArtifactRevisionPage,
   isRestoreResult,
@@ -120,5 +122,23 @@ describe('artifact catalog contracts', () => {
     expect(Check(RestoreResultSchema, result)).toBe(true);
     expect(isRestoreResult(result)).toBe(true);
     expect(isRestoreResult({ ...result, sourceRevisionId: artifact.artifactId })).toBe(false);
+  });
+
+  it('accepts a recoverable deletion result without exposing installation identity', () => {
+    const result = {
+      apiVersion: 'v1',
+      workspaceId: artifact.workspaceId,
+      artifactId: artifact.artifactId,
+      deletedAt: '2026-08-18T12:00:00.000Z',
+      recoverableUntil: '2026-09-17T12:00:00.000Z',
+      revokedShareCount: 2,
+    };
+
+    expect(Check(ArtifactDeletionResultSchema, result)).toBe(true);
+    expect(isArtifactDeletionResult(result)).toBe(true);
+    expect(isArtifactDeletionResult({ ...result, installationId: 'installation-main' })).toBe(
+      false,
+    );
+    expect(isArtifactDeletionResult({ ...result, revokedShareCount: -1 })).toBe(false);
   });
 });
