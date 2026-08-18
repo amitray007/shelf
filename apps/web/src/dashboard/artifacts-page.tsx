@@ -1,4 +1,4 @@
-import { Button } from '@cloudflare/kumo/components/button';
+import { Button, LinkButton } from '@cloudflare/kumo/components/button';
 import { ClipboardText } from '@cloudflare/kumo/components/clipboard-text';
 import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
 import { Table } from '@cloudflare/kumo/components/table';
@@ -6,6 +6,7 @@ import { CaretDownIcon } from '@phosphor-icons/react/CaretDown';
 import { CaretUpIcon } from '@phosphor-icons/react/CaretUp';
 import { CaretUpDownIcon } from '@phosphor-icons/react/CaretUpDown';
 import { DotsThreeIcon } from '@phosphor-icons/react/DotsThree';
+import { EyeIcon } from '@phosphor-icons/react/Eye';
 import { ShareNetworkIcon } from '@phosphor-icons/react/ShareNetwork';
 import { TerminalWindowIcon } from '@phosphor-icons/react/TerminalWindow';
 import { TrashIcon } from '@phosphor-icons/react/Trash';
@@ -268,6 +269,16 @@ export function ArtifactsPage() {
                     </Table.Cell>
                     <Table.Cell className="artifact-actions-cell">
                       <div className="artifact-row-actions">
+                        <LinkButton
+                          aria-label={`Preview artifact ${artifact.name}`}
+                          href={`/preview/${encodeURIComponent(artifact.artifactId)}`}
+                          icon={EyeIcon}
+                          rel="noopener noreferrer"
+                          shape="square"
+                          size="sm"
+                          target="_blank"
+                          variant="ghost"
+                        />
                         <Button
                           aria-label={`Share artifact ${artifact.name}`}
                           icon={ShareNetworkIcon}

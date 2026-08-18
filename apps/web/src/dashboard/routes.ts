@@ -35,8 +35,21 @@ export interface ArtifactDetailPayload {
   entries: readonly FolderEntry[];
 }
 
+export interface ArtifactPreviewPayload {
+  artifact: Artifact;
+  revision: ArtifactRevision;
+  bytes: ArrayBuffer | null;
+  entries: readonly FolderEntry[];
+}
+
 export function safeReturnPath(value: string | null): string {
-  if (value === null || !value.startsWith('/app') || value.startsWith('//')) return '/app';
+  if (
+    value === null ||
+    (!value.startsWith('/app') && !value.startsWith('/preview/')) ||
+    value.startsWith('//')
+  ) {
+    return '/app';
+  }
   return value;
 }
 
@@ -160,5 +173,54 @@ export async function artifactLoader({
       }
     }
     return { artifact, revision, history, shares, bytes, entries };
+  });
+}
+
+export async function artifactPreviewLoader({
+  params,
+  request,
+}: LoaderFunctionArgs): Promise<ArtifactPreviewPayload> {
+  const artifactId = params.artifactId ?? '';
+  return withSessionRedirect(request, async () => {
+    const artifact = await loadArtifact(artifactId, request.signal);
+    const requestedRevisionId = new URL(request.url).searchParams.get('revision');
+    let revision = artifact.latestRevision;
+    if (
+      requestedRevisionId !== null &&
+      requestedRevisionId !== artifact.latestRevision.revisionId
+    ) {
+      let cursor: string | undefined;
+      const visited = new Set<string>();
+      let requestedRevision: ArtifactRevision | undefined;
+      do {
+        const page = await loadArtifactHistory(artifactId, 'newest', cursor, request.signal);
+        if (page.artifactId !== artifactId || page.workspaceId !== artifact.workspaceId) {
+          throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
+        }
+        requestedRevision = page.items.find(
+          (candidate) => candidate.revisionId === requestedRevisionId,
+        );
+        cursor = requestedRevision === undefined ? (page.nextCursor ?? undefined) : undefined;
+        if (cursor !== undefined && visited.has(cursor)) {
+          throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned a repeated cursor.');
+        }
+        if (cursor !== undefined) visited.add(cursor);
+      } while (cursor !== undefined);
+      if (requestedRevision === undefined) {
+        throw new DashboardApiError('REVISION_NOT_FOUND', 'The revision was not found.');
+      }
+      revision = requestedRevision;
+    }
+    let bytes: ArrayBuffer | null = null;
+    let entries: readonly FolderEntry[] = [];
+    if (revision.kind === 'folder') {
+      entries = await loadFolderEntries(revision.revisionId, request.signal);
+    } else {
+      const renderer = selectRenderer(revision.mediaType, undefined);
+      if (['text', 'json', 'markdown', 'image'].includes(renderer.kind)) {
+        bytes = await loadRevisionBytes(revision.revisionId, request.signal);
+      }
+    }
+    return { artifact, revision, bytes, entries };
   });
 }

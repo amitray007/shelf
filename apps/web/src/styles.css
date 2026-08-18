@@ -177,6 +177,23 @@ a {
   white-space: nowrap;
 }
 
+.preview-open-artifact {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-subtle);
+  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--font-meta);
+  font-weight: 540;
+  text-decoration: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .preview-open-artifact:hover {
+    color: var(--text);
+  }
+}
+
 .artifact-surface {
   min-width: 0;
   min-height: 0;
@@ -560,6 +577,10 @@ a {
 
   .rail-context {
     margin-left: auto;
+  }
+
+  .artifact-private-preview .target-state {
+    display: none;
   }
 
   .artifact-document {

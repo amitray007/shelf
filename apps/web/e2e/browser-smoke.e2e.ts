@@ -171,6 +171,7 @@ for (const viewport of densityViewports) {
       ).toBeGreaterThan(520);
     }
     await expectActionWithinViewport(page, 'Share');
+    await expectActionWithinViewport(page, 'Preview');
     await expectNoHorizontalOverflow(page, [
       page.locator('.dashboard-main'),
       page.locator('.artifact-surface'),
@@ -355,6 +356,9 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
     await expect(page).toHaveURL(/sort=updated&order=desc/u);
   }
   await expectNoHorizontalOverflow(page, [page.locator('.dashboard-main')]);
+  await expect(
+    page.getByRole('link', { name: `Preview artifact ${longArtifactName}` }),
+  ).toHaveAttribute('href', `/preview/${artifactId}`);
   await expectNoAxeViolations(page);
 
   await page.getByRole('button', { name: `Share artifact ${longArtifactName}` }).click();

@@ -49,6 +49,21 @@ const router = createBrowserRouter([
     },
   },
   {
+    path: '/preview/:artifactId',
+    lazy: async () => {
+      const [page, routes] = await Promise.all([
+        import('./preview-page.js'),
+        import('./dashboard/routes.js'),
+      ]);
+      return {
+        Component: page.PreviewPage,
+        ErrorBoundary: page.PreviewErrorBoundary,
+        HydrateFallback: LoadingView,
+        loader: routes.artifactPreviewLoader,
+      };
+    },
+  },
+  {
     id: 'dashboard',
     path: '/app',
     lazy: async () => {

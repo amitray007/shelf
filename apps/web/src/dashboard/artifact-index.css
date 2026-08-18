@@ -99,7 +99,7 @@
 }
 
 .artifact-actions-column {
-  width: 76px;
+  width: 108px;
 }
 
 .artifact-table th {
@@ -229,12 +229,14 @@
   gap: 1px;
 }
 
+.artifact-row-actions a,
 .artifact-row-actions button {
   min-width: 32px;
   min-height: 32px;
   color: var(--text-muted);
 }
 
+.artifact-row-actions a:hover,
 .artifact-row-actions button:hover {
   color: var(--text);
 }
@@ -299,7 +301,7 @@
   }
 
   .artifact-actions-column {
-    width: 92px;
+    width: 140px;
   }
 
   .artifact-table th,
@@ -308,6 +310,7 @@
     padding-left: 7px;
   }
 
+  .artifact-row-actions a,
   .artifact-row-actions button {
     min-width: 44px;
     min-height: 44px;

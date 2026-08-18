@@ -1,7 +1,8 @@
-import { Button } from '@cloudflare/kumo/components/button';
+import { Button, LinkButton } from '@cloudflare/kumo/components/button';
 import { ClipboardText } from '@cloudflare/kumo/components/clipboard-text';
 import { Input } from '@cloudflare/kumo/components/input';
 import { Tabs } from '@cloudflare/kumo/components/tabs';
+import { EyeIcon } from '@phosphor-icons/react/Eye';
 import { GitForkIcon } from '@phosphor-icons/react/GitFork';
 import { PencilSimpleIcon } from '@phosphor-icons/react/PencilSimple';
 import { ShareNetworkIcon } from '@phosphor-icons/react/ShareNetwork';
@@ -370,6 +371,16 @@ export function ArtifactPage() {
           />
         </div>
         <div className="heading-actions">
+          <LinkButton
+            className="artifact-preview-action"
+            href={`/preview/${encodeURIComponent(artifact.artifactId)}${viewingLatest ? '' : `?revision=${encodeURIComponent(viewedRevision.revisionId)}`}`}
+            icon={EyeIcon}
+            rel="noopener noreferrer"
+            target="_blank"
+            variant="secondary"
+          >
+            Preview
+          </LinkButton>
           <Button
             className="artifact-share-action"
             icon={ShareNetworkIcon}

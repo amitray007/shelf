@@ -27,6 +27,7 @@
   flex: 0 0 auto;
 }
 
+.artifact-preview-action,
 .artifact-share-action,
 .artifact-delete-action {
   min-height: 36px;

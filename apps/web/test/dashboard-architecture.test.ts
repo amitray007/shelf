@@ -16,6 +16,7 @@ describe('dashboard architecture', () => {
     const source = await readFile(path.join(sourceRoot, 'main.tsx'), 'utf8');
     expect(source).toContain("path: '/signin'");
     expect(source).toContain("path: '/app'");
+    expect(source).toContain("path: '/preview/:artifactId'");
     expect(source).toContain("path: 'w/:workspaceId/artifacts'");
     expect(source).toContain("path: 'w/:workspaceId/artifacts/:artifactId'");
     expect(source).toContain("path: 'w/:workspaceId/access'");
@@ -155,6 +156,6 @@ describe('dashboard architecture', () => {
 
   it('provides route-level loading fallbacks instead of flashing an empty document', async () => {
     const source = await readFile(path.join(sourceRoot, 'main.tsx'), 'utf8');
-    expect(source.match(/HydrateFallback:/gu)).toHaveLength(3);
+    expect(source.match(/HydrateFallback:/gu)).toHaveLength(4);
   });
 });
