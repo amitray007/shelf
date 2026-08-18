@@ -81,10 +81,14 @@ function share(shareId: string, target: StoredShare['target'] = { mode: 'latest'
     shareId,
     artifactId: ids.artifact,
     visibility: 'unlisted',
+    accessType: 'protected',
+    publicCode: null,
     target,
     createdByActorId: 'actor-publisher',
     createdAt: '2026-08-17T12:00:00.000Z',
     expiresAt: null,
+    maxSessions: null,
+    sessionsUsed: 0,
     revokedAt: null,
     revokedByActorId: null,
   };
@@ -247,6 +251,219 @@ describePostgres('PostgresShareRepository', () => {
       });
     } finally {
       await database.destroy();
+    }
+  });
+
+  it('resolves only Public selectors and consumes one lifetime unit for a live Protected receipt', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    try {
+      const repository = new PostgresShareRepository(database);
+      const protectedId = 'shr_JJJJJJJJJJJJJJJJJJJJJJ';
+      const publicId = 'shr_KKKKKKKKKKKKKKKKKKKKKK';
+      await repository.commitCreate(
+        createInput({ ...share(protectedId), maxSessions: 1 }, 'protected-policy'),
+      );
+      await repository.commitCreate(
+        createInput(
+          {
+            ...share(publicId),
+            accessType: 'public',
+            publicCode: 'PublicCode12',
+            expiresAt: '2026-08-20T12:00:00.000Z',
+          },
+          'public-policy',
+        ),
+      );
+      const collisionId = 'shr_LLLLLLLLLLLLLLLLLLLLLL';
+      await expect(
+        repository.commitCreate(
+          createInput(
+            {
+              ...share(collisionId),
+              accessType: 'public',
+              publicCode: 'PublicCode12',
+              expiresAt: '2026-08-20T12:00:00.000Z',
+            },
+            'public-policy-collision',
+          ),
+        ),
+      ).resolves.toEqual({ status: 'public-code-conflict' });
+      await expect(
+        repository.findCreateIdempotency({
+          installationId: 'installation-main',
+          workspaceId: 'workspace-main',
+          actorId: 'actor-publisher',
+          operation: 'share.create',
+          key: 'public-policy-collision',
+        }),
+      ).resolves.toBeUndefined();
+      await expect(
+        repository.commitCreate(
+          createInput(
+            {
+              ...share(collisionId),
+              accessType: 'public',
+              publicCode: 'OtherCode123',
+              expiresAt: '2026-08-20T12:00:00.000Z',
+            },
+            'public-policy-collision',
+          ),
+        ),
+      ).resolves.toMatchObject({ status: 'committed' });
+
+      await expect(repository.resolvePublicShareTarget('PublicCode12')).resolves.toMatchObject({
+        share: { shareId: publicId, accessType: 'public' },
+      });
+      await expect(
+        repository.resolvePublicShareTarget(protectedId.slice(-12)),
+      ).resolves.toBeUndefined();
+
+      const request = {
+        shareId: protectedId,
+        sessionId: '00000000-0000-4000-8000-000000000001',
+        now: '2026-08-18T12:00:00.000Z',
+        receiptExpiresAt: '2026-08-19T12:00:00.000Z',
+      };
+      await expect(repository.establishProtectedSession(request)).resolves.toMatchObject({
+        status: 'established',
+        result: { share: { sessionsUsed: 1 } },
+      });
+      await expect(repository.establishProtectedSession(request)).resolves.toMatchObject({
+        status: 'reused',
+        result: { share: { sessionsUsed: 1 } },
+      });
+      await expect(
+        repository.establishProtectedSession({
+          ...request,
+          sessionId: '00000000-0000-4000-8000-000000000002',
+        }),
+      ).resolves.toEqual({ status: 'unavailable' });
+
+      const cleanupId = 'shr_MMMMMMMMMMMMMMMMMMMMMM';
+      await repository.commitCreate(createInput(share(cleanupId), 'receipt-cleanup'));
+      await repository.establishProtectedSession({
+        shareId: cleanupId,
+        sessionId: '00000000-0000-4000-8000-000000000003',
+        now: '2026-08-18T12:00:00.000Z',
+        receiptExpiresAt: '2026-08-18T13:00:00.000Z',
+      });
+      await expect(
+        repository.establishProtectedSession({
+          shareId: cleanupId,
+          sessionId: '00000000-0000-4000-8000-000000000004',
+          now: '2026-08-18T14:00:00.000Z',
+          receiptExpiresAt: '2026-08-19T14:00:00.000Z',
+        }),
+      ).resolves.toMatchObject({ status: 'established', result: { share: { sessionsUsed: 2 } } });
+    } finally {
+      await database.destroy();
+    }
+  });
+
+  it('admits exactly one independent connection into the final Protected slot', async () => {
+    const firstDatabase = createPostgresDatabase({ connectionString });
+    const secondDatabase = createPostgresDatabase({ connectionString });
+    try {
+      const shareId = 'shr_NNNNNNNNNNNNNNNNNNNNNN';
+      const first = new PostgresShareRepository(firstDatabase);
+      const second = new PostgresShareRepository(secondDatabase);
+      const sameReceiptShareId = 'shr_OOOOOOOOOOOOOOOOOOOOOO';
+      await first.commitCreate(
+        createInput({ ...share(sameReceiptShareId), maxSessions: 2 }, 'same-receipt-race'),
+      );
+      const sameReceiptRequest = {
+        shareId: sameReceiptShareId,
+        sessionId: '00000000-0000-4000-8000-000000000007',
+        now: '2026-08-18T12:00:00.000Z',
+        receiptExpiresAt: '2026-08-19T12:00:00.000Z',
+      };
+      const sameReceipt = await Promise.all([
+        first.establishProtectedSession(sameReceiptRequest),
+        second.establishProtectedSession(sameReceiptRequest),
+      ]);
+      expect(sameReceipt.map((outcome) => outcome.status).sort()).toEqual([
+        'established',
+        'reused',
+      ]);
+      await expect(first.findShare(sameReceiptShareId)).resolves.toMatchObject({ sessionsUsed: 1 });
+
+      await first.commitCreate(
+        createInput({ ...share(shareId), maxSessions: 1 }, 'final-slot-race'),
+      );
+      const common = {
+        shareId,
+        now: '2026-08-18T12:00:00.000Z',
+        receiptExpiresAt: '2026-08-19T12:00:00.000Z',
+      };
+      const [left, right] = await Promise.all([
+        first.establishProtectedSession({
+          ...common,
+          sessionId: '00000000-0000-4000-8000-000000000005',
+        }),
+        second.establishProtectedSession({
+          ...common,
+          sessionId: '00000000-0000-4000-8000-000000000006',
+        }),
+      ]);
+      expect([left.status, right.status].sort()).toEqual(['established', 'unavailable']);
+      await expect(first.findShare(shareId)).resolves.toMatchObject({ sessionsUsed: 1 });
+    } finally {
+      await firstDatabase.destroy();
+      await secondDatabase.destroy();
+    }
+  });
+
+  it('does not deadlock establishment against artifact deletion or retain post-delete authority', async () => {
+    const firstDatabase = createPostgresDatabase({ connectionString });
+    const secondDatabase = createPostgresDatabase({ connectionString });
+    try {
+      const artifactId = 'art_PPPPPPPPPPPPPPPPPPPPPP';
+      const revisionId = 'rev_QQQQQQQQQQQQQQQQQQQQQQ';
+      const shareId = 'shr_RRRRRRRRRRRRRRRRRRRRRR';
+      const result = publish(revisionId, '8');
+      result.artifactId = artifactId;
+      const revisions = new PostgresRevisionRepository(firstDatabase);
+      await revisions.commitPublish({
+        namespace: {
+          installationId: result.installationId,
+          workspaceId: result.workspaceId,
+          actorId: 'actor-publisher',
+          operation: 'file.publish',
+          key: 'establishment-delete-race',
+        },
+        fingerprint: `publish-request/v1:sha256:${'8'.repeat(64)}`,
+        result,
+      });
+      const first = new PostgresShareRepository(firstDatabase);
+      const second = new PostgresShareRepository(secondDatabase);
+      await first.commitCreate(
+        createInput({ ...share(shareId), artifactId }, 'establishment-delete-share'),
+      );
+      const establishment = {
+        shareId,
+        sessionId: '00000000-0000-4000-8000-000000000008',
+        now: '2026-08-18T12:00:00.000Z',
+        receiptExpiresAt: '2026-08-19T12:00:00.000Z',
+      };
+      const [, deletion] = await Promise.all([
+        first.establishProtectedSession(establishment),
+        new PostgresRevisionRepository(secondDatabase).deleteArtifact({
+          installationId: result.installationId,
+          workspaceId: result.workspaceId,
+          artifactId,
+          actorId: 'actor-publisher',
+          deletedAt: '2026-08-18T12:00:00.000Z',
+          recoverableUntil: '2026-09-17T12:00:00.000Z',
+        }),
+      ]);
+      expect(deletion.status).toBe('deleted');
+      await expect(first.establishProtectedSession(establishment)).resolves.toEqual({
+        status: 'unavailable',
+      });
+      await expect(second.resolveShareTarget(shareId)).resolves.toBeUndefined();
+    } finally {
+      await firstDatabase.destroy();
+      await secondDatabase.destroy();
     }
   });
 

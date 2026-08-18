@@ -2,7 +2,9 @@ import type {
   ArtifactCatalogRepository,
   CommitShareCreateInput,
   CommitShareCreateOutcome,
+  EstablishProtectedSessionOutcome,
   FolderRevisionRepository,
+  ProtectedSessionEstablishment,
   ResolvedStoredShare,
   RevisionRepository,
   RevokeShareOutcome,
@@ -38,6 +40,7 @@ export class MemoryShareRepository implements ShareRepository {
   readonly #source: ShareRevisionSource;
   readonly #shares = new Map<string, StoredShare>();
   readonly #idempotency = new Map<string, ShareCreateIdempotencyRecord>();
+  readonly #sessionReceipts = new Map<string, ProtectedSessionEstablishment>();
 
   constructor(source: ShareRevisionSource) {
     this.#source = source;
@@ -125,6 +128,13 @@ export class MemoryShareRepository implements ShareRepository {
     }
     if (this.#shares.has(input.result.shareId)) {
       throw new Error('Share ID collision.');
+    }
+    if (
+      input.result.accessType === 'public' &&
+      input.result.publicCode !== null &&
+      [...this.#shares.values()].some((share) => share.publicCode === input.result.publicCode)
+    ) {
+      return { status: 'public-code-conflict' };
     }
     const stored = copyShare(input.result);
     this.#shares.set(stored.shareId, stored);
@@ -253,5 +263,75 @@ export class MemoryShareRepository implements ShareRepository {
       artifact: structuredClone(artifact),
       revision,
     };
+  }
+
+  async resolvePublicShareTarget(publicCode: string): Promise<ResolvedStoredShare | undefined> {
+    const share = [...this.#shares.values()].find(
+      (candidate) => candidate.accessType === 'public' && candidate.publicCode === publicCode,
+    );
+    if (share === undefined) return undefined;
+    const resolved = await this.resolveShareTarget(share.shareId);
+    return resolved?.share.accessType === 'public' && resolved.share.publicCode === publicCode
+      ? resolved
+      : undefined;
+  }
+
+  async establishProtectedSession(request: {
+    shareId: string;
+    sessionId: string;
+    now: string;
+    receiptExpiresAt: string;
+  }): Promise<EstablishProtectedSessionOutcome> {
+    const now = Date.parse(request.now);
+    const receiptExpiresAt = Date.parse(request.receiptExpiresAt);
+    if (!Number.isFinite(now) || !Number.isFinite(receiptExpiresAt) || receiptExpiresAt <= now) {
+      throw new Error('Protected session establishment timestamps are invalid.');
+    }
+
+    let removed = 0;
+    for (const [key, receipt] of this.#sessionReceipts) {
+      if (
+        removed < 100 &&
+        receipt.share.shareId === request.shareId &&
+        Date.parse(receipt.receiptExpiresAt) <= now
+      ) {
+        this.#sessionReceipts.delete(key);
+        removed += 1;
+      }
+    }
+
+    const share = this.#shares.get(request.shareId);
+    const expiresAt = share?.expiresAt === null ? null : Date.parse(share?.expiresAt ?? '');
+    if (
+      share === undefined ||
+      share.accessType !== 'protected' ||
+      share.revokedAt !== null ||
+      (expiresAt !== null && expiresAt <= now)
+    ) {
+      return { status: 'unavailable' };
+    }
+
+    const receiptKey = `${request.shareId}\u0000${request.sessionId}`;
+    const existing = this.#sessionReceipts.get(receiptKey);
+    if (existing !== undefined && Date.parse(existing.receiptExpiresAt) > now) {
+      return {
+        status: 'reused',
+        result: { ...structuredClone(existing), share: copyShare(share) },
+      };
+    }
+    if (share.maxSessions !== null && share.sessionsUsed >= share.maxSessions) {
+      return { status: 'unavailable' };
+    }
+
+    const updated = { ...share, sessionsUsed: share.sessionsUsed + 1 };
+    this.#shares.set(updated.shareId, updated);
+    const establishment: ProtectedSessionEstablishment = {
+      share: updated,
+      sessionId: request.sessionId,
+      establishedAt: request.now,
+      receiptExpiresAt: request.receiptExpiresAt,
+    };
+    this.#sessionReceipts.set(receiptKey, establishment);
+    return { status: 'established', result: structuredClone(establishment) };
   }
 }

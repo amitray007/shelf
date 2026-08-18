@@ -1,6 +1,7 @@
 import type {
   CommitShareCreateInput,
   CommitShareCreateOutcome,
+  EstablishProtectedSessionOutcome,
   ResolvedStoredShare,
   RevokeShareOutcome,
   ShareCreateIdempotencyNamespace,
@@ -125,10 +126,14 @@ function storedShare(row: ShareTable): StoredShare {
     shareId: row.share_id,
     artifactId: row.artifact_id,
     visibility: row.visibility,
+    accessType: row.access_type,
+    publicCode: row.public_code,
     target,
     createdByActorId: row.created_by_actor_id,
     createdAt: row.created_at.toISOString(),
     expiresAt: row.expires_at?.toISOString() ?? null,
+    maxSessions: row.max_sessions,
+    sessionsUsed: safeInteger(row.sessions_used, { positive: false }),
     revokedAt: row.revoked_at?.toISOString() ?? null,
     revokedByActorId: row.revoked_by_actor_id,
   };
@@ -231,14 +236,55 @@ function shareValues(result: StoredShare): ShareTable {
     workspace_id: result.workspaceId,
     artifact_id: result.artifactId,
     visibility: result.visibility,
+    access_type: result.accessType,
+    public_code: result.publicCode,
     target_mode: result.target.mode,
     target_revision_id: result.target.mode === 'pinned' ? result.target.revisionId : null,
     created_by_actor_id: result.createdByActorId,
     created_at: new Date(result.createdAt),
     expires_at: result.expiresAt === null ? null : new Date(result.expiresAt),
+    max_sessions: result.maxSessions,
+    sessions_used: String(result.sessionsUsed),
     revoked_at: result.revokedAt === null ? null : new Date(result.revokedAt),
     revoked_by_actor_id: result.revokedByActorId,
   };
+}
+
+function isPublicCodeConflict(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === '23505' &&
+    'constraint' in error &&
+    error.constraint === 'shelf_shares_public_code_unique_idx'
+  );
+}
+
+async function resolveTarget(
+  database: DatabaseExecutor,
+  share: StoredShare,
+): Promise<ResolvedStoredShare | undefined> {
+  const artifact = await findArtifact(database, share.artifactId);
+  if (
+    artifact === undefined ||
+    artifact.installationId !== share.installationId ||
+    artifact.workspaceId !== share.workspaceId
+  ) {
+    return undefined;
+  }
+  const revisionId =
+    share.target.mode === 'pinned' ? share.target.revisionId : artifact.latestRevision.revisionId;
+  const revision = await findRevision(database, revisionId);
+  if (
+    revision === undefined ||
+    revision.installationId !== share.installationId ||
+    revision.workspaceId !== share.workspaceId ||
+    revision.artifactId !== share.artifactId
+  ) {
+    return undefined;
+  }
+  return { share, artifact, revision };
 }
 
 export class PostgresShareRepository implements ShareRepository {
@@ -262,55 +308,60 @@ export class PostgresShareRepository implements ShareRepository {
     return findIdempotency(this.#database, namespace);
   }
 
-  commitCreate(input: CommitShareCreateInput): Promise<CommitShareCreateOutcome> {
-    return this.#database.transaction().execute(async (transaction) => {
-      const artifact = await transaction
-        .selectFrom('shelf_artifacts')
-        .select('artifact_id')
-        .where('installation_id', '=', input.result.installationId)
-        .where('workspace_id', '=', input.result.workspaceId)
-        .where('artifact_id', '=', input.result.artifactId)
-        .where('deleted_at', 'is', null)
-        .forKeyShare()
-        .executeTakeFirst();
-      if (artifact === undefined) throw new ArtifactNotFoundError();
-      const claim = await transaction
-        .insertInto('shelf_share_idempotency')
-        .values({
-          installation_id: input.namespace.installationId,
-          workspace_id: input.namespace.workspaceId,
-          actor_id: input.namespace.actorId,
-          operation: input.namespace.operation,
-          client_key: input.namespace.key,
-          fingerprint: input.fingerprint,
-          share_id: input.result.shareId,
-          created_at: sql`transaction_timestamp()`,
-        })
-        .onConflict((conflict) =>
-          conflict
-            .columns(['installation_id', 'workspace_id', 'actor_id', 'operation', 'client_key'])
-            .doNothing(),
-        )
-        .returning('share_id')
-        .executeTakeFirst();
+  async commitCreate(input: CommitShareCreateInput): Promise<CommitShareCreateOutcome> {
+    try {
+      return await this.#database.transaction().execute(async (transaction) => {
+        const artifact = await transaction
+          .selectFrom('shelf_artifacts')
+          .select('artifact_id')
+          .where('installation_id', '=', input.result.installationId)
+          .where('workspace_id', '=', input.result.workspaceId)
+          .where('artifact_id', '=', input.result.artifactId)
+          .where('deleted_at', 'is', null)
+          .forKeyShare()
+          .executeTakeFirst();
+        if (artifact === undefined) throw new ArtifactNotFoundError();
+        const claim = await transaction
+          .insertInto('shelf_share_idempotency')
+          .values({
+            installation_id: input.namespace.installationId,
+            workspace_id: input.namespace.workspaceId,
+            actor_id: input.namespace.actorId,
+            operation: input.namespace.operation,
+            client_key: input.namespace.key,
+            fingerprint: input.fingerprint,
+            share_id: input.result.shareId,
+            created_at: sql`transaction_timestamp()`,
+          })
+          .onConflict((conflict) =>
+            conflict
+              .columns(['installation_id', 'workspace_id', 'actor_id', 'operation', 'client_key'])
+              .doNothing(),
+          )
+          .returning('share_id')
+          .executeTakeFirst();
 
-      if (claim !== undefined) {
-        const inserted = await transaction
-          .insertInto('shelf_shares')
-          .values(shareValues(input.result))
-          .returningAll()
-          .executeTakeFirstOrThrow();
-        return { status: 'committed', result: storedShare(inserted) };
-      }
+        if (claim !== undefined) {
+          const inserted = await transaction
+            .insertInto('shelf_shares')
+            .values(shareValues(input.result))
+            .returningAll()
+            .executeTakeFirstOrThrow();
+          return { status: 'committed', result: storedShare(inserted) };
+        }
 
-      const existing = await findIdempotency(transaction, input.namespace);
-      if (existing === undefined) {
-        throw new Error('Share idempotency claim disappeared during creation.');
-      }
-      return existing.fingerprint === input.fingerprint
-        ? { status: 'replayed', result: existing.result }
-        : { status: 'conflict' };
-    });
+        const existing = await findIdempotency(transaction, input.namespace);
+        if (existing === undefined) {
+          throw new Error('Share idempotency claim disappeared during creation.');
+        }
+        return existing.fingerprint === input.fingerprint
+          ? { status: 'replayed', result: existing.result }
+          : { status: 'conflict' };
+      });
+    } catch (error) {
+      if (isPublicCodeConflict(error)) return { status: 'public-code-conflict' };
+      throw error;
+    }
   }
 
   async listShares(request: {
@@ -398,28 +449,123 @@ export class PostgresShareRepository implements ShareRepository {
       .execute(async (transaction) => {
         const share = await findShare(transaction, shareId);
         if (share === undefined) return undefined;
-        const artifact = await findArtifact(transaction, share.artifactId);
-        if (
-          artifact === undefined ||
-          artifact.installationId !== share.installationId ||
-          artifact.workspaceId !== share.workspaceId
-        ) {
-          return undefined;
-        }
-        const revisionId =
-          share.target.mode === 'pinned'
-            ? share.target.revisionId
-            : artifact.latestRevision.revisionId;
-        const revision = await findRevision(transaction, revisionId);
-        if (
-          revision === undefined ||
-          revision.installationId !== share.installationId ||
-          revision.workspaceId !== share.workspaceId ||
-          revision.artifactId !== share.artifactId
-        ) {
-          return undefined;
-        }
-        return { share, artifact, revision };
+        return resolveTarget(transaction, share);
       });
+  }
+
+  resolvePublicShareTarget(publicCode: string): Promise<ResolvedStoredShare | undefined> {
+    return this.#database
+      .transaction()
+      .setIsolationLevel('repeatable read')
+      .execute(async (transaction) => {
+        const row = await transaction
+          .selectFrom('shelf_shares')
+          .selectAll()
+          .where('access_type', '=', 'public')
+          .where('public_code', '=', publicCode)
+          .executeTakeFirst();
+        if (row === undefined) return undefined;
+        return resolveTarget(transaction, storedShare(row));
+      });
+  }
+
+  async establishProtectedSession(request: {
+    shareId: string;
+    sessionId: string;
+    now: string;
+    receiptExpiresAt: string;
+  }): Promise<EstablishProtectedSessionOutcome> {
+    const now = new Date(request.now);
+    const receiptExpiresAt = new Date(request.receiptExpiresAt);
+    if (
+      !Number.isFinite(now.getTime()) ||
+      !Number.isFinite(receiptExpiresAt.getTime()) ||
+      receiptExpiresAt <= now
+    ) {
+      throw new Error('Protected session establishment timestamps are invalid.');
+    }
+
+    await sql`
+      delete from shelf_share_session_receipts
+      where (share_id, session_id) in (
+        select share_id, session_id
+        from shelf_share_session_receipts
+        where share_id = ${request.shareId}
+          and receipt_expires_at <= ${now}
+        order by receipt_expires_at, session_id
+        limit 100
+      )
+    `.execute(this.#database);
+
+    return this.#database.transaction().execute(async (transaction) => {
+      const row = await transaction
+        .selectFrom('shelf_shares')
+        .selectAll()
+        .where('share_id', '=', request.shareId)
+        .forUpdate()
+        .executeTakeFirst();
+      if (
+        row === undefined ||
+        row.access_type !== 'protected' ||
+        row.revoked_at !== null ||
+        (row.expires_at !== null && row.expires_at <= now)
+      ) {
+        return { status: 'unavailable' };
+      }
+
+      const liveReceipt = await transaction
+        .selectFrom('shelf_share_session_receipts')
+        .selectAll()
+        .where('share_id', '=', request.shareId)
+        .where('session_id', '=', request.sessionId)
+        .where('receipt_expires_at', '>', now)
+        .executeTakeFirst();
+      if (liveReceipt !== undefined) {
+        return {
+          status: 'reused',
+          result: {
+            share: storedShare(row),
+            sessionId: liveReceipt.session_id,
+            establishedAt: liveReceipt.established_at.toISOString(),
+            receiptExpiresAt: liveReceipt.receipt_expires_at.toISOString(),
+          },
+        };
+      }
+
+      const sessionsUsed = safeInteger(row.sessions_used, { positive: false });
+      if (row.max_sessions !== null && sessionsUsed >= row.max_sessions) {
+        return { status: 'unavailable' };
+      }
+      const updated = await transaction
+        .updateTable('shelf_shares')
+        .set({ sessions_used: sql`sessions_used + 1` })
+        .where('share_id', '=', request.shareId)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await transaction
+        .insertInto('shelf_share_session_receipts')
+        .values({
+          share_id: request.shareId,
+          session_id: request.sessionId,
+          established_at: now,
+          receipt_expires_at: receiptExpiresAt,
+        })
+        .onConflict((conflict) =>
+          conflict.columns(['share_id', 'session_id']).doUpdateSet({
+            established_at: now,
+            receipt_expires_at: receiptExpiresAt,
+          }),
+        )
+        .execute();
+      return {
+        status: 'established',
+        result: {
+          share: storedShare(updated),
+          sessionId: request.sessionId,
+          establishedAt: request.now,
+          receiptExpiresAt: request.receiptExpiresAt,
+        },
+      };
+    });
   }
 }

@@ -9,6 +9,7 @@ import { folderSnapshotsMigration } from './migrations/0005_folder_snapshots.js'
 import { sharesMigration } from './migrations/0006_shares.js';
 import { artifactDeletionMigration } from './migrations/0007_artifact_deletion.js';
 import { workspacesMigration } from './migrations/0008_workspaces.js';
+import { shareAccessPoliciesMigration } from './migrations/0009_share_access_policies.js';
 
 const migrations = Object.freeze<Record<string, Migration>>({
   '0001_initial': initialMigration,
@@ -19,6 +20,7 @@ const migrations = Object.freeze<Record<string, Migration>>({
   '0006_shares': sharesMigration,
   '0007_artifact_deletion': artifactDeletionMigration,
   '0008_workspaces': workspacesMigration,
+  '0009_share_access_policies': shareAccessPoliciesMigration,
 });
 
 const provider: MigrationProvider = {

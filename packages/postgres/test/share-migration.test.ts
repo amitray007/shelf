@@ -72,6 +72,8 @@ describePostgres('shares migration', () => {
       await expect(migratePostgresToLatest(database)).resolves.toEqual([
         { migrationName: '0006_shares', status: 'Success' },
         { migrationName: '0007_artifact_deletion', status: 'Success' },
+        { migrationName: '0008_workspaces', status: 'Success' },
+        { migrationName: '0009_share_access_policies', status: 'Success' },
       ]);
       await sql`
         insert into shelf_actors (

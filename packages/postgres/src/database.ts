@@ -68,13 +68,24 @@ export interface ShareTable {
   workspace_id: string;
   artifact_id: string;
   visibility: 'unlisted';
+  access_type: 'protected' | 'public';
+  public_code: string | null;
   target_mode: 'latest' | 'pinned';
   target_revision_id: string | null;
   created_by_actor_id: string;
   created_at: Date;
   expires_at: Date | null;
+  max_sessions: number | null;
+  sessions_used: string;
   revoked_at: Date | null;
   revoked_by_actor_id: string | null;
+}
+
+export interface ShareSessionReceiptTable {
+  share_id: string;
+  session_id: string;
+  established_at: Date;
+  receipt_expires_at: Date;
 }
 
 export interface ShareIdempotencyTable {
@@ -167,6 +178,7 @@ export interface ShelfPostgresSchema {
   shelf_idempotency: IdempotencyTable;
   shelf_shares: ShareTable;
   shelf_share_idempotency: ShareIdempotencyTable;
+  shelf_share_session_receipts: ShareSessionReceiptTable;
   shelf_workspaces: WorkspaceTable;
 }
 
