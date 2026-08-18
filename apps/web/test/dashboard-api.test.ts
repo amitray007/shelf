@@ -199,11 +199,58 @@ describe('dashboard API client', () => {
       restoreArtifact('workspace-main', `art_${'a'.repeat(22)}`, `rev_${'b'.repeat(22)}`, key),
     ).rejects.toBeInstanceOf(DashboardApiError);
     await expect(
-      createArtifactShare('workspace-main', `art_${'a'.repeat(22)}`, { mode: 'latest' }, null, key),
+      createArtifactShare(
+        'workspace-main',
+        `art_${'a'.repeat(22)}`,
+        { accessType: 'protected', target: { mode: 'latest' }, expiresIn: 'never' },
+        key,
+      ),
     ).rejects.toBeInstanceOf(DashboardApiError);
     for (const call of fetch.mock.calls) {
       expect(call[1]?.headers).toMatchObject({ 'idempotency-key': key });
     }
+  });
+
+  it('sends canonical Protected and Public share policies without dropping mode fields', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => json({ invalid: true }));
+    globalThis.fetch = fetch;
+    await expect(
+      createArtifactShare(
+        'workspace-main',
+        `art_${'a'.repeat(22)}`,
+        {
+          accessType: 'protected',
+          target: { mode: 'latest' },
+          expiresIn: '7d',
+          maxSessions: 5,
+        },
+        'protected-key',
+      ),
+    ).rejects.toBeInstanceOf(DashboardApiError);
+    await expect(
+      createArtifactShare(
+        'workspace-main',
+        `art_${'a'.repeat(22)}`,
+        {
+          accessType: 'public',
+          target: { mode: 'pinned', revisionId: `rev_${'b'.repeat(22)}` },
+          expiresAt: '2026-08-19T12:00:00.000Z',
+        },
+        'public-key',
+      ),
+    ).rejects.toBeInstanceOf(DashboardApiError);
+
+    expect(JSON.parse(fetch.mock.calls[0]?.[1]?.body as string)).toEqual({
+      accessType: 'protected',
+      target: { mode: 'latest' },
+      expiresIn: '7d',
+      maxSessions: 5,
+    });
+    expect(JSON.parse(fetch.mock.calls[1]?.[1]?.body as string)).toEqual({
+      accessType: 'public',
+      target: { mode: 'pinned', revisionId: `rev_${'b'.repeat(22)}` },
+      expiresAt: '2026-08-19T12:00:00.000Z',
+    });
   });
 
   it('uses the recoverable artifact lifecycle endpoints and validates their results', async () => {

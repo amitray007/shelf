@@ -16,6 +16,7 @@ import {
   Link,
   useLoaderData,
   useLocation,
+  useNavigate,
   useParams,
   useRevalidator,
   useSearchParams,
@@ -42,6 +43,7 @@ export function ArtifactsPage() {
   const page = useLoaderData() as ArtifactPage;
   const workspaceId = useParams().workspaceId;
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const revalidator = useRevalidator();
   const [shareArtifact, setShareArtifact] = useState<Artifact>();
@@ -142,7 +144,7 @@ export function ArtifactsPage() {
       <header className="page-heading">
         <div>
           <h1>Artifacts</h1>
-          <p>Published files and folders, 10 per page.</p>
+          <p>Published files and folders.</p>
         </div>
         <div className="cli-publish-hint">
           <div className="cli-publish-label">
@@ -236,25 +238,44 @@ export function ArtifactsPage() {
             </Table.Header>
             <Table.Body>
               {visibleArtifacts.map((artifact) => {
+                const artifactPath = `/app/w/${encodeURIComponent(artifact.workspaceId)}/artifacts/${encodeURIComponent(artifact.artifactId)}`;
+                const metadataTitle = artifact.latestRevision.publisherMetadata.title?.trim();
+                const displayTitle =
+                  metadataTitle === undefined || metadataTitle.length === 0
+                    ? artifact.name
+                    : metadataTitle;
+                const sourceName =
+                  artifact.latestRevision.kind === 'file'
+                    ? artifact.latestRevision.originalFileName
+                    : artifact.latestRevision.rootName;
                 return (
-                  <Table.Row className="artifact-ledger-row" key={artifact.artifactId}>
+                  <Table.Row
+                    className="artifact-ledger-row"
+                    key={artifact.artifactId}
+                    onClick={(event) => {
+                      const target = event.target;
+                      if (
+                        target instanceof Element &&
+                        target.closest('a, button, input, select, textarea, [role="menuitem"]') !==
+                          null
+                      ) {
+                        return;
+                      }
+                      void navigate(artifactPath);
+                    }}
+                  >
                     <Table.Cell>
                       <div className="artifact-ledger-name">
-                        <ArtifactIcon
-                          kind={artifact.kind}
-                          name={
-                            artifact.latestRevision.kind === 'file'
-                              ? artifact.latestRevision.originalFileName
-                              : artifact.name
-                          }
-                        />
+                        <ArtifactIcon kind={artifact.kind} name={sourceName} />
                         <span>
-                          <Link
-                            to={`/app/w/${encodeURIComponent(artifact.workspaceId)}/artifacts/${encodeURIComponent(artifact.artifactId)}`}
-                          >
-                            {artifact.name}
+                          <Link title={displayTitle} to={artifactPath}>
+                            {displayTitle}
                           </Link>
-                          <code title={artifact.artifactId}>{artifact.artifactId}</code>
+                          <span className="artifact-ledger-secondary">
+                            <span title={sourceName}>{sourceName}</span>
+                            <span aria-hidden="true">·</span>
+                            <code title={artifact.artifactId}>{artifact.artifactId}</code>
+                          </span>
                         </span>
                       </div>
                     </Table.Cell>
@@ -270,7 +291,7 @@ export function ArtifactsPage() {
                     <Table.Cell className="artifact-actions-cell">
                       <div className="artifact-row-actions">
                         <LinkButton
-                          aria-label={`Preview artifact ${artifact.name}`}
+                          aria-label={`Preview artifact ${displayTitle}`}
                           href={`/preview/${encodeURIComponent(artifact.artifactId)}`}
                           icon={EyeIcon}
                           rel="noopener noreferrer"
@@ -280,7 +301,7 @@ export function ArtifactsPage() {
                           variant="ghost"
                         />
                         <Button
-                          aria-label={`Share artifact ${artifact.name}`}
+                          aria-label={`Share artifact ${displayTitle}`}
                           icon={ShareNetworkIcon}
                           onClick={() => setShareArtifact(artifact)}
                           shape="square"
@@ -291,7 +312,7 @@ export function ArtifactsPage() {
                           <DropdownMenu.Trigger
                             render={
                               <Button
-                                aria-label={`More actions for ${artifact.name}`}
+                                aria-label={`More actions for ${displayTitle}`}
                                 icon={DotsThreeIcon}
                                 shape="square"
                                 size="sm"

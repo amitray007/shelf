@@ -81,19 +81,17 @@
 
 .choice-group > label {
   display: grid;
-  min-height: 62px;
+  min-height: 48px;
   grid-template-columns: 18px 1fr;
   align-items: start;
   gap: 9px;
-  padding: 11px;
-  border: 1px solid var(--rule);
-  border-radius: 5px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--rule);
   cursor: pointer;
 }
 
 .choice-group > label:has(input:checked) {
-  border-color: color-mix(in oklch, var(--action) 55%, var(--line));
-  background: color-mix(in oklch, var(--action) 14%, var(--surface));
+  color: var(--text);
 }
 
 .choice-group input {
@@ -120,6 +118,33 @@
 
 .choice-group > label:has(input:checked) small {
   color: var(--text-subtle);
+}
+
+.compact-choice-group > label {
+  min-height: 40px;
+  align-items: center;
+}
+
+.expiry-preview {
+  margin: -8px 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+}
+
+.expiry-preview time {
+  color: var(--text-subtle);
+}
+
+.public-share-warning {
+  display: grid;
+  gap: 10px;
+}
+
+.public-share-warning p {
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: var(--font-meta);
+  line-height: 1.45;
 }
 
 .confirmation-block {
@@ -159,6 +184,17 @@
   font-size: var(--font-meta);
 }
 
+.share-dialog-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.share-dialog-error p {
+  margin: 0;
+}
+
 .share-dialog-empty {
   display: grid;
   gap: 4px;
@@ -174,13 +210,10 @@
   font-weight: 580;
 }
 
-.latest-share-card {
+.latest-share-summary {
   display: grid;
   gap: 16px;
-  padding: 16px;
-  border: 1px solid var(--rule);
-  border-radius: 5px;
-  background: var(--canvas);
+  padding: 4px 0;
 }
 
 .latest-share-heading {
@@ -209,6 +242,32 @@
 
 .latest-share-heading time {
   flex: 0 0 auto;
+}
+
+.share-dialog-metadata {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.share-dialog-metadata > div {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 10px;
+}
+
+.share-dialog-metadata dt,
+.share-dialog-metadata dd {
+  margin: 0;
+  font-size: var(--font-meta);
+}
+
+.share-dialog-metadata dt {
+  color: var(--text-muted);
+}
+
+.share-dialog-metadata dd {
+  color: var(--text-subtle);
 }
 
 @media (max-width: 680px) {

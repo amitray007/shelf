@@ -26,10 +26,10 @@ import {
   isWorkspaceCreateResult,
   type RestoreResult,
   type RevisionComparison,
+  type ShareCreateInput,
   type ShareCreateResult,
   type ShareManagementSummary,
   type SharePage,
-  type ShareTarget,
   type WorkspaceCreateResult,
 } from '@shelf/contracts';
 
@@ -225,6 +225,7 @@ export async function loadLatestActiveArtifactShare(
     const share = page.items.find(
       (candidate) =>
         candidate.artifactId === artifactId &&
+        candidate.status === 'active' &&
         candidate.revokedAt === null &&
         (candidate.expiresAt === null || new Date(candidate.expiresAt).getTime() > now),
     );
@@ -351,17 +352,12 @@ export async function compareRevisions(
 export async function createArtifactShare(
   workspaceId: string,
   artifactId: string,
-  target: ShareTarget,
-  expiresAt: string | null | undefined,
+  input: ShareCreateInput,
   idempotencyKey: string,
 ): Promise<ShareCreateResult> {
   const value = await requestJson(
     `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/shares`,
-    jsonRequest(
-      'POST',
-      { target, ...(expiresAt === undefined ? {} : { expiresAt }) },
-      { 'idempotency-key': idempotencyKey },
-    ),
+    jsonRequest('POST', input, { 'idempotency-key': idempotencyKey }),
   );
   if (!isShareCreateResult(value)) {
     throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');

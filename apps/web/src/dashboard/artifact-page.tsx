@@ -10,7 +10,11 @@ import { SidebarSimpleIcon } from '@phosphor-icons/react/SidebarSimple';
 import { SortAscendingIcon } from '@phosphor-icons/react/SortAscending';
 import { SortDescendingIcon } from '@phosphor-icons/react/SortDescending';
 import { TrashIcon } from '@phosphor-icons/react/Trash';
-import type { ArtifactRevision, ShareManagementSummary } from '@shelf/contracts';
+import {
+  type ArtifactRevision,
+  PUBLISHER_METADATA_KEYS,
+  type ShareManagementSummary,
+} from '@shelf/contracts';
 import { type FormEvent, useMemo, useRef, useState } from 'react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { Link, useLoaderData, useNavigate, useRevalidator, useSearchParams } from 'react-router';
@@ -23,7 +27,7 @@ import { DeleteArtifactDialog } from './delete-artifact-dialog.js';
 import { Modal } from './dialogs.js';
 import { ManagedArtifactContent } from './managed-artifact-content.js';
 import type { ArtifactDetailPayload } from './routes.js';
-import { useManagedStatus } from './status.js';
+import { managedStatus, shareSessionUsage } from './status.js';
 import './artifact.css';
 
 const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -35,7 +39,7 @@ function dateTime(value: string): string {
   return dateTimeFormatter.format(new Date(value));
 }
 
-const inspectorPanels = ['details', 'history', 'links'] as const;
+const inspectorPanels = ['details', 'metadata', 'history', 'links'] as const;
 type InspectorPanel = (typeof inspectorPanels)[number];
 
 function inspectorPanel(value: string | null): InspectorPanel {
@@ -189,8 +193,9 @@ function ShareRow({ share }: { readonly share: ShareManagementSummary }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const status = useManagedStatus(share.revokedAt, share.expiresAt);
+  const status = managedStatus(share.status);
   const active = status === 'Active';
+  const revocable = status !== 'Revoked';
   const shareUrl = new URL(share.url, window.location.origin).href;
   const revoke = async () => {
     setBusy(true);
@@ -209,8 +214,8 @@ function ShareRow({ share }: { readonly share: ShareManagementSummary }) {
     <li className="share-row">
       <header className="share-row-heading">
         <div>
-          <strong>{share.target.mode === 'latest' ? 'Latest share' : 'Pinned share'}</strong>
-          <span className="share-row-state" data-active={active}>
+          <strong>{share.accessType === 'protected' ? 'Protected link' : 'Public link'}</strong>
+          <span className="share-row-state" data-status={status}>
             <span aria-hidden="true" className="status-dot" />
             {status}
           </span>
@@ -263,8 +268,14 @@ function ShareRow({ share }: { readonly share: ShareManagementSummary }) {
             )}
           </dd>
         </div>
+        {share.accessType === 'protected' ? (
+          <div>
+            <dt>Sessions</dt>
+            <dd>{shareSessionUsage(share)}</dd>
+          </div>
+        ) : null}
       </dl>
-      {active ? (
+      {revocable ? (
         <footer className="share-row-actions">
           <Button
             className="danger-text"
@@ -279,7 +290,7 @@ function ShareRow({ share }: { readonly share: ShareManagementSummary }) {
       ) : null}
       <Modal
         canClose={!busy}
-        description="The capability link will stop resolving immediately. The artifact and revisions remain."
+        description={`${share.accessType === 'protected' ? 'The Protected link' : 'The Public link'} will stop resolving immediately. The artifact and revisions remain.`}
         onOpenChange={setConfirming}
         open={confirming}
         title="Revoke share link?"
@@ -323,6 +334,22 @@ export function ArtifactPage() {
     () => payload.shares.items.filter((share) => share.artifactId === artifact.artifactId),
     [artifact.artifactId, payload.shares.items],
   );
+  const metadataEntries = useMemo(() => {
+    const priority: readonly string[] = [
+      PUBLISHER_METADATA_KEYS.title,
+      PUBLISHER_METADATA_KEYS.description,
+    ];
+    return Object.entries(viewedRevision.publisherMetadata).sort(([left], [right]) => {
+      const leftPriority = priority.indexOf(left);
+      const rightPriority = priority.indexOf(right);
+      if (leftPriority !== -1 || rightPriority !== -1) {
+        if (leftPriority === -1) return 1;
+        if (rightPriority === -1) return -1;
+        return leftPriority - rightPriority;
+      }
+      return left.localeCompare(right);
+    });
+  }, [viewedRevision.publisherMetadata]);
   const selectPanel = (panel: InspectorPanel) => {
     const next = new URLSearchParams(searchParams);
     if (panel === 'details') next.delete('panel');
@@ -480,6 +507,7 @@ export function ArtifactPage() {
                     size="sm"
                     tabs={[
                       { value: 'details', label: 'Details' },
+                      { value: 'metadata', label: 'Metadata' },
                       { value: 'history', label: 'History' },
                       { value: 'links', label: 'Links' },
                     ]}
@@ -683,6 +711,41 @@ export function ArtifactPage() {
                           <dd>{viewedRevision.provenance.classification}</dd>
                         </div>
                       </dl>
+                    </section>
+                  ) : null}
+
+                  {activePanel === 'metadata' ? (
+                    <section aria-labelledby="metadata-panel-heading" className="inspector-section">
+                      <header className="inspector-section-heading">
+                        <h2 id="metadata-panel-heading">Metadata</h2>
+                        {viewingLatest ? null : (
+                          <span>Viewing {ordinal(viewedRevision.revisionNumber)}</span>
+                        )}
+                      </header>
+                      {metadataEntries.length === 0 ? (
+                        <p className="section-empty">No publisher metadata for this revision.</p>
+                      ) : (
+                        <dl className="artifact-metadata-list">
+                          {metadataEntries.map(([key, value]) => (
+                            <div key={key}>
+                              <dt>
+                                {key === PUBLISHER_METADATA_KEYS.title
+                                  ? 'Title'
+                                  : key === PUBLISHER_METADATA_KEYS.description
+                                    ? 'Description'
+                                    : key}
+                              </dt>
+                              <dd>
+                                {value.length === 0 ? (
+                                  <span className="empty-value">Empty</span>
+                                ) : (
+                                  value
+                                )}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
                     </section>
                   ) : null}
 
