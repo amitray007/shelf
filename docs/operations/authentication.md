@@ -8,8 +8,12 @@ Shelf separates login mechanics from product authorization. Better Auth owns the
 |---|---|---|---|
 | Browser owner | Better Auth secure cookie | Shelf human actor mapped from the Better Auth user ID | `shelf_actor_grants` |
 | CLI or agent | `Authorization: Bearer shf_v1...` | Stable Shelf service actor | `shelf_actor_grants` |
+| Protected viewer | Fragment capability once, then a signed tab-scoped viewer token | One idempotent viewer session | Share lifecycle and optional session budget |
+| Public viewer | Short Public selector | Anonymous read until expiry or revocation | Share lifecycle |
 
 A browser session never becomes an agent bearer token. A service actor may have overlapping credentials during deliberate rotation, so provenance remains attached to the actor rather than changing with each secret.
+
+Protected capabilities are captured from the URL fragment and scrubbed before anonymous requests. Successful establishment consumes at most one use for the client-generated session ID and returns a signed token that is stored only in `sessionStorage`; refresh and token renewal reuse that session without another consumption. The token is bound to its share and session, expires within 24 hours and never after the share itself, and is rechecked against revocation and expiry on every access. Public selectors are intentionally non-confidential, but their links remain unlisted, non-indexed, and time-limited. Neither viewer path sends owner cookies or agent bearer credentials.
 
 ## Database setup
 
