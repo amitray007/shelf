@@ -98,9 +98,7 @@ describe('dashboard architecture', () => {
     const manifest = await readFile(path.resolve(sourceRoot, '../package.json'), 'utf8');
 
     expect(detail).toContain("from 'react-resizable-panels'");
-    expect(detail).toContain("from '@cloudflare/kumo/components/dropdown'");
     expect(detail).toContain("from '@cloudflare/kumo/components/input'");
-    expect(detail).toContain("from '@cloudflare/kumo/components/select'");
     expect(detail).toContain("from '@cloudflare/kumo/components/tabs'");
     expect(shareDialog).toContain("from '@cloudflare/kumo/components/input'");
     expect(shareDialog).toContain("from '@cloudflare/kumo/components/radio'");
@@ -121,6 +119,8 @@ describe('dashboard architecture', () => {
 
     expect(detail).toContain("searchParams.get('panel')");
     expect(detail).toContain('defaultShouldRevalidate: false');
+    expect(detail).toContain("useState(searchParams.has('panel'))");
+    expect(detail).not.toContain("value: 'compare'");
     expect(detail).not.toContain('{history.items.length}');
   });
 

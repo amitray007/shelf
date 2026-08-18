@@ -6,7 +6,7 @@ import type { ArtifactRevision } from '@shelf/contracts';
 import { type FormEvent, useRef, useState } from 'react';
 import { useRevalidator } from 'react-router';
 
-import { revisionLabel, revisionSourceName } from '../components/revision-label.js';
+import { ordinal, revisionSourceName } from '../components/revision-label.js';
 import { createArtifactShare, DashboardApiError } from './api.js';
 import { Modal, SecretReveal } from './dialogs.js';
 
@@ -111,13 +111,13 @@ export function ShareDialog({
                 const revision = revisions.find((candidate) => candidate.revisionId === value);
                 return revision === undefined
                   ? null
-                  : `${revisionLabel(revision.revisionNumber)} — ${revisionSourceName(revision)}`;
+                  : `${ordinal(revision.revisionNumber)} — ${revisionSourceName(revision)}`;
               }}
               value={revisionId}
             >
               {revisions.map((revision) => (
                 <Select.Option key={revision.revisionId} value={revision.revisionId}>
-                  {revisionLabel(revision.revisionNumber)} — {revisionSourceName(revision)}
+                  {ordinal(revision.revisionNumber)} — {revisionSourceName(revision)}
                 </Select.Option>
               ))}
             </Select>

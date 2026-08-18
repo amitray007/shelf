@@ -100,7 +100,9 @@ function IssueCredentialDialog({
       setIssued(result);
       void revalidator.revalidate();
     } catch (caught) {
-      setError(caught instanceof DashboardApiError ? caught.message : 'Credential issue failed.');
+      setError(
+        caught instanceof DashboardApiError ? caught.message : 'Credential creation failed.',
+      );
     } finally {
       setBusy(false);
     }
@@ -113,7 +115,7 @@ function IssueCredentialDialog({
       initialFocus={agentNameRef}
       onOpenChange={close}
       open={open}
-      title="Issue access credential"
+      title="Create credential"
     >
       {issued === undefined ? (
         <form className="dialog-form" onSubmit={submit}>
@@ -167,7 +169,7 @@ function IssueCredentialDialog({
               Cancel
             </Button>
             <Button disabled={busy} loading={busy} type="submit" variant="primary">
-              {busy ? 'Issuing…' : 'Issue credential'}
+              {busy ? 'Creating…' : 'Create Credential'}
             </Button>
           </div>
         </form>
@@ -464,7 +466,7 @@ export function AccessPage() {
           type="button"
           variant="primary"
         >
-          Issue credential
+          Create Credential
         </Button>
       </header>
       <Banner

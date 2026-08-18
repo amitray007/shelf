@@ -2,15 +2,9 @@
   .quiet-button,
   .control,
   button.group {
-    transition-property: color, background-color, border-color, transform;
+    transition-property: color, background-color, border-color;
     transition-duration: 160ms;
     transition-timing-function: var(--ease-out);
-  }
-
-  .control:active,
-  .quiet-button:active,
-  button.group:active:not(:disabled) {
-    transform: scale(0.97);
   }
 }
 
@@ -43,14 +37,6 @@
     gap: 3px;
     padding-top: 7px;
     padding-bottom: 7px;
-  }
-
-  .comparison-controls {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .comparison-controls .control {
-    grid-column: 1 / -1;
   }
 
   .access-principle {

@@ -56,7 +56,7 @@ export function CreateWorkspaceDialog({
           label="Workspace ID"
           maxLength={128}
           onChange={(event) => setWorkspaceId(event.currentTarget.value)}
-          pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,127}"
+          pattern="[A-Za-z0-9](?:[A-Za-z0-9._]|-){0,127}"
           placeholder="workspace-work"
           ref={idRef}
           required

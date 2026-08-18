@@ -5,28 +5,27 @@
   font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   font-synthesis: none;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --canvas: #121518;
-  --surface: #181c20;
-  --elevated: #1e2328;
-  --line: #2c3339;
-  --line-strong: #3d454c;
-  --ink: #121518;
+  --canvas: #0a0a0a;
+  --surface: #111111;
+  --elevated: #1a1a1a;
+  --line: #262626;
+  --line-strong: #3f3f46;
+  --ink: #0a0a0a;
   --raised: var(--surface);
   --rule: var(--line);
   --rule-strong: var(--line-strong);
-  --text: #eceff1;
-  --text-subtle: #b7bec4;
-  --text-muted: #8b939a;
-  --action: #215f6d;
-  --action-hover: #287384;
-  --action-ink: #8ebbc7;
-  --proof: #86b598;
-  --warning: #c4a05c;
-  --danger: #c98986;
+  --text: #ededed;
+  --text-subtle: #c4c4c7;
+  --text-muted: #a1a1aa;
+  --action: #0072f5;
+  --action-hover: #0068d9;
+  --action-ink: #52a8ff;
+  --proof: #45a557;
+  --warning: #ff990a;
+  --danger: #e5484d;
   --accent: var(--action-ink);
-  --accent-strong: #c3dce2;
+  --accent-strong: #52a8ff;
   --trust: var(--warning);
-  /* Kumo primary buttons mix brand with 30% white and paint white labels. Brand must stay dark. */
   --color-kumo-brand: var(--action);
   --color-kumo-brand-hover: var(--action-hover);
   --color-kumo-focus: var(--action-ink);
@@ -90,8 +89,10 @@ a {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent-strong);
-  outline-offset: 3px;
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--canvas),
+    0 0 0 4px var(--accent-strong);
 }
 
 ::selection {
@@ -543,7 +544,7 @@ a {
 @media (hover: hover) and (pointer: fine) {
   .tree-row,
   .markdown-body a {
-    transition-property: color, background-color, border-color, transform;
+    transition-property: color, background-color, border-color;
     transition-duration: 120ms;
     transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
   }

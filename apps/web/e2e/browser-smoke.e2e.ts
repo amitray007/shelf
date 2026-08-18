@@ -205,18 +205,25 @@ test('artifact detail keeps revision and share controls compact and explicit', a
   ).toBeLessThanOrEqual(24);
 
   const previewBar = page.locator('.managed-stage-bar');
-  await expect(previewBar).toContainText(`Revision: 12th · ${longArtifactName}`);
+  await expect(previewBar).toContainText('12th');
+  await expect(previewBar).not.toContainText('Revision:');
+  await expect(previewBar).not.toContainText(longArtifactName);
   await expect(previewBar).not.toContainText(/\d+(?:\.\d+)?\s+(?:k|M)?B/u);
   await expect(page.getByText('Immutable lineage', { exact: true })).toHaveCount(0);
 
+  await expect(page.getByRole('complementary', { name: 'Artifact inspector' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Show inspector' }).click();
+  await expect(page.getByRole('complementary', { name: 'Artifact inspector' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Compare' })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'History' }).click();
   const revisions = page.locator('.revision-row');
-  await expect(revisions.first().locator('.revision-index')).toHaveText('Revision: 12th');
+  await expect(revisions.first().locator('.revision-index')).toHaveText('12th');
   const sort = page.getByRole('button', {
     name: 'Revision order: newest first. Show oldest first',
   });
   await sort.click();
   await expect(page).toHaveURL(/[?&]historyOrder=oldest(?:&|$)/u);
-  await expect(revisions.first().locator('.revision-index')).toHaveText('Revision: 9th');
+  await expect(revisions.first().locator('.revision-index')).toHaveText('9th');
   await expect(
     page.getByRole('button', { name: 'Revision order: oldest first. Show newest first' }),
   ).toBeVisible();
@@ -227,21 +234,40 @@ test('artifact detail keeps revision and share controls compact and explicit', a
   await page.getByRole('tab', { name: 'Links' }).click();
   await expect(page.getByText('Unlisted access', { exact: true })).toHaveCount(0);
   const activeShare = page.locator('.share-row').first();
-  await expect(activeShare.locator('.share-row-state[data-active="true"] svg')).toBeVisible();
+  await expect(
+    activeShare.locator('.share-row-state[data-active="true"] .status-dot'),
+  ).toBeVisible();
   const activeLabel = activeShare.getByText('Active', { exact: true });
-  await expect(activeLabel).toHaveClass('visually-hidden');
-  expect(await activeLabel.evaluate((element) => getComputedStyle(element).clipPath)).toBe(
-    'inset(50%)',
-  );
-  await expect(activeShare.getByRole('button', { name: 'Revoke' })).toBeVisible();
+  await expect(activeLabel).toBeVisible();
+  await expect(activeShare.getByRole('button', { name: 'Revoke link' })).toBeVisible();
   await expect(page.getByText('Revoked', { exact: true })).toBeVisible();
   await expect(page.getByText('Expired', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Share', exact: true }).click();
   const shareDialog = page.getByRole('dialog', { name: 'Create share link' });
   await shareDialog.getByRole('radio', { name: /Pinned/u }).click();
-  await expect(shareDialog).toContainText(`Revision: 12th — ${longArtifactName}`);
+  await expect(shareDialog).toContainText(`12th — ${longArtifactName}`);
   await shareDialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('.shelf-dialog')).toHaveCount(0);
+
+  await page
+    .getByRole('complementary', { name: 'Artifact inspector' })
+    .getByRole('button', { name: 'Hide inspector' })
+    .click();
+  await expect(page.getByRole('complementary', { name: 'Artifact inspector' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Rename artifact' }).click();
+  await expect(page.getByRole('dialog', { name: 'Rename artifact' })).toBeVisible();
+  await page
+    .getByRole('dialog', { name: 'Rename artifact' })
+    .getByRole('button', { name: 'Cancel' })
+    .click();
+  await page.getByRole('button', { name: 'Delete' }).click();
+  await expect(page.getByRole('dialog', { name: 'Delete artifact?' })).toBeVisible();
+  await page
+    .getByRole('dialog', { name: 'Delete artifact?' })
+    .getByRole('button', { name: 'Cancel' })
+    .click();
   await expect(page.locator('.shelf-dialog')).toHaveCount(0);
 
   await expectNoAxeViolations(page);
@@ -328,8 +354,10 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   page.on('request', (request) => {
     if (new URL(request.url()).pathname.startsWith('/api/v1/')) panelRequests.push(request.url());
   });
+  await page.getByRole('button', { name: 'Show inspector' }).click();
+  await page.getByRole('tab', { name: 'History' }).click();
   await page.getByRole('tab', { name: 'Details' }).click();
-  await expect(page).toHaveURL(/[?&]panel=details(?:&|$)/u);
+  await expect(page).not.toHaveURL(/[?&]panel=/u);
   await page.waitForTimeout(100);
   expect(panelRequests).toEqual([]);
 
@@ -354,20 +382,18 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await page.getByRole('button', { name: /Workspace menu/u }).click();
   await page.getByRole('menuitem', { name: 'Access' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Access' })).toBeVisible();
-  const issue = page.locator('.page-heading').getByRole('button', { name: 'Issue credential' });
+  const issue = page.locator('.page-heading').getByRole('button', { name: 'Create Credential' });
   await focusWithKeyboard(page, issue, testInfo.project.name === 'webkit' ? 'Alt+Tab' : 'Tab');
   expect(await issue.evaluate((element) => element.matches(':focus-visible'))).toBe(true);
-  expect(await issue.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe(
-    'none',
-  );
+  expect(await issue.evaluate((element) => getComputedStyle(element).boxShadow)).not.toBe('none');
   await page.keyboard.press('Enter');
   const name = page.getByRole('textbox', { name: 'Agent name' });
   await expect(name).toBeFocused();
-  const issueDialog = page.getByRole('dialog', { name: 'Issue access credential' });
+  const issueDialog = page.getByRole('dialog', { name: 'Create credential' });
   await expect(issueDialog).toBeVisible();
   await name.fill('browser-agent');
-  await issueDialog.getByRole('checkbox', { name: 'file.publish' }).check();
-  await issueDialog.getByRole('button', { name: 'Issue credential' }).click();
+  await issueDialog.getByRole('checkbox', { name: 'file.publish' }).first().check();
+  await issueDialog.getByRole('button', { name: 'Create Credential' }).click();
   await expect(issueDialog).toContainText(createdCredentialToken);
   await issueDialog.getByRole('button', { name: 'I saved it' }).click();
   await expect(page.locator('.shelf-dialog')).toHaveCount(0);
@@ -472,9 +498,9 @@ test('reduced motion and the 200 percent layout equivalent preserve utility', as
   await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'dark' });
   await page.goto('/app/access');
 
-  const issue = page.locator('.page-heading').getByRole('button', { name: 'Issue credential' });
+  const issue = page.locator('.page-heading').getByRole('button', { name: 'Create Credential' });
   await issue.click();
-  const dialog = page.getByRole('dialog', { name: 'Issue access credential' });
+  const dialog = page.getByRole('dialog', { name: 'Create credential' });
   await expect(dialog).toBeVisible();
   const reducedTransition = await dialog.evaluate((element) => {
     const style = getComputedStyle(element);
