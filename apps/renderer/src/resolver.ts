@@ -3,7 +3,6 @@ import {
   createShareAccessService,
   type FolderRevisionRepository,
   type RevisionRepository,
-  type ShareCapabilityCodec,
   type ShareClock,
   ShareNotFoundError,
   type ShareRepository,
@@ -12,6 +11,13 @@ import {
 import type { RendererHtmlResolver } from './app.js';
 
 export const DEFAULT_MAX_HTML_BYTES = 10 * 1024 * 1024;
+
+export interface ViewerSessionTokenVerifier {
+  verify(
+    token: string,
+    options: { now: Date; shareId?: string; sessionId?: string; allowExpired?: boolean },
+  ): { shareId: string; sessionId: string; issuedAt: string; accessExpiresAt: string } | undefined;
+}
 
 function normalizedMediaType(value: string): string {
   return value.split(';', 1)[0]?.trim().toLowerCase() ?? '';
@@ -40,7 +46,7 @@ async function readExactUtf8(
 
 export function createCoreHtmlResolver(dependencies: {
   shares: ShareRepository;
-  capabilityCodec: ShareCapabilityCodec;
+  viewerSessionTokenCodec: ViewerSessionTokenVerifier;
   revisions: RevisionRepository;
   folders: FolderRevisionRepository;
   contentReader: ContentReader;
@@ -53,7 +59,6 @@ export function createCoreHtmlResolver(dependencies: {
   }
   const access = createShareAccessService({
     shares: dependencies.shares,
-    capabilityCodec: dependencies.capabilityCodec,
     revisions: dependencies.revisions,
     folders: dependencies.folders,
     contentReader: dependencies.contentReader,
@@ -63,7 +68,25 @@ export function createCoreHtmlResolver(dependencies: {
   return {
     async resolveHtml(request) {
       try {
-        const file = await access.readFile(request);
+        const authority =
+          request.accessType === 'public'
+            ? { type: 'public' as const, publicCode: request.publicCode }
+            : (() => {
+                const claims = dependencies.viewerSessionTokenCodec.verify(request.viewerToken, {
+                  now: dependencies.clock?.() ?? new Date(),
+                  shareId: request.shareId,
+                });
+                if (claims === undefined) throw new ShareNotFoundError();
+                return {
+                  type: 'protected-session' as const,
+                  shareId: request.shareId,
+                  sessionId: claims.sessionId,
+                };
+              })();
+        const file = await access.readFile({
+          authority,
+          ...(request.signal === undefined ? {} : { signal: request.signal }),
+        });
         if (normalizedMediaType(file.mediaType) !== 'text/html' || file.byteCount > maximumBytes) {
           return { status: 'unavailable' };
         }

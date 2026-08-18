@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { capabilityStorageKey, isShareCapability } from '../capability.js';
+import type { ViewerAuthority } from '../api.js';
 import type { PassiveRenderer } from '../rendering.js';
 import type { FileShareResolution } from '../share-types.js';
 
@@ -8,9 +8,11 @@ type HtmlRenderer = Extract<PassiveRenderer, { kind: 'html' }>;
 export function RendererFrame({
   renderer,
   resolution,
+  authority,
 }: {
   readonly renderer: HtmlRenderer;
   readonly resolution: FileShareResolution;
+  readonly authority: ViewerAuthority;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const nonceRef = useRef<string>(window.crypto.randomUUID());
@@ -87,29 +89,16 @@ export function RendererFrame({
 
   const submitRenderer = useCallback(() => {
     if (submittedRef.current || terminatedRef.current) return;
-    let capability: string | null = null;
-    try {
-      capability = window.sessionStorage.getItem(capabilityStorageKey(resolution.shareId));
-    } catch {
-      terminateFrame();
-      return;
-    }
-    if (capability === null || !isShareCapability(capability)) {
-      terminateFrame();
-      return;
-    }
-
     const form = document.createElement('form');
     form.action = renderer.url;
     form.method = 'post';
     form.target = frameNameRef.current;
     form.hidden = true;
 
-    const fields = {
-      shareId: resolution.shareId,
-      secret: capability,
-      nonce: nonceRef.current,
-    };
+    const fields =
+      authority.accessType === 'protected'
+        ? { shareId: authority.shareId, viewerToken: authority.token, nonce: nonceRef.current }
+        : { publicCode: authority.publicCode, nonce: nonceRef.current };
     for (const [name, value] of Object.entries(fields)) {
       const input = document.createElement('input');
       input.type = 'hidden';
@@ -127,7 +116,7 @@ export function RendererFrame({
     }
     clearDeadline();
     timeoutRef.current = window.setTimeout(terminateFrame, 8_000);
-  }, [clearDeadline, renderer.url, resolution.shareId, terminateFrame]);
+  }, [authority, clearDeadline, renderer.url, terminateFrame]);
 
   const stopPostReadyNavigation = useCallback(() => {
     if (terminatedRef.current) return;

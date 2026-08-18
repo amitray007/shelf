@@ -381,6 +381,12 @@ describe('share HTTP boundary', () => {
         url: `/api/v1/public/shares/${shareId}/content`,
         payload: { token },
       });
+      const formContent = await app.inject({
+        method: 'POST',
+        url: `/api/v1/public/shares/${shareId}/content`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: new URLSearchParams({ token }).toString(),
+      });
 
       expect(established.statusCode, established.body).toBe(200);
       expect(resolved.statusCode).toBe(200);
@@ -393,8 +399,12 @@ describe('share HTTP boundary', () => {
       expect(content.body).toBe(expectedBody);
       expect(content.headers['content-type']).toContain('application/octet-stream');
       expect(content.headers['content-disposition']).toMatch(/^attachment;/u);
+      expect(formContent.statusCode).toBe(200);
+      expect(formContent.body).toBe(expectedBody);
+      expect(formContent.headers['content-disposition']).toMatch(/^attachment;/u);
       publicHeaders(resolved);
       publicHeaders(content);
+      publicHeaders(formContent);
     }
   });
 

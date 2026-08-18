@@ -6,6 +6,7 @@ import { rendererDependencies, rendererStoredShare } from './support/renderer-de
 
 const apps: RendererApp[] = [];
 const appOrigin = 'https://shelf.example';
+const viewerToken = `${'v'.repeat(24)}.${'s'.repeat(43)}`;
 
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
@@ -26,7 +27,7 @@ async function fixture() {
 
 async function postRender(
   app: RendererApp,
-  values: { shareId?: string; secret?: string; nonce?: string } = {},
+  values: { shareId?: string; viewerToken?: string; publicCode?: string; nonce?: string } = {},
 ) {
   return app.inject({
     method: 'POST',
@@ -35,11 +36,15 @@ async function postRender(
       'content-type': 'application/x-www-form-urlencoded',
       origin: 'null',
     },
-    payload: new URLSearchParams({
-      shareId: values.shareId ?? 'shr_AAAAAAAAAAAAAAAAAAAAAA',
-      secret: values.secret ?? 's'.repeat(43),
-      nonce: values.nonce ?? 'n'.repeat(22),
-    }).toString(),
+    payload: new URLSearchParams(
+      values.publicCode === undefined
+        ? {
+            shareId: values.shareId ?? 'shr_AAAAAAAAAAAAAAAAAAAAAA',
+            viewerToken: values.viewerToken ?? viewerToken,
+            nonce: values.nonce ?? 'n'.repeat(22),
+          }
+        : { publicCode: values.publicCode, nonce: values.nonce ?? 'n'.repeat(22) },
+    ).toString(),
   });
 }
 
@@ -53,6 +58,7 @@ describe('isolated HTML renderer', () => {
     expect(response.headers['cache-control']).toBe('no-store');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['x-robots-tag']).toBe('noindex, nofollow, noarchive');
     expect(response.headers['permissions-policy']).toContain('camera=()');
     expect(response.headers['content-security-policy']).toContain("default-src 'none'");
     expect(response.headers['content-security-policy']).toContain("connect-src 'none'");
@@ -76,6 +82,7 @@ describe('isolated HTML renderer', () => {
     expect(response.headers['cache-control']).toBe('no-store');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['x-robots-tag']).toBe('noindex, nofollow, noarchive');
     expect(response.headers['permissions-policy']).toContain('camera=()');
     expect(response.headers['content-security-policy']).toContain("script-src 'none'");
     expect(response.body).not.toContain(secretCanary);
@@ -88,7 +95,7 @@ describe('isolated HTML renderer', () => {
     }));
     const app = await createRendererApp({ appOrigin, resolver: { resolveHtml } });
     apps.push(app);
-    const secret = 's'.repeat(43);
+    const token = viewerToken;
     const nonce = 'n'.repeat(22);
 
     const response = await app.inject({
@@ -100,7 +107,7 @@ describe('isolated HTML renderer', () => {
       },
       payload: new URLSearchParams({
         shareId: 'shr_AAAAAAAAAAAAAAAAAAAAAA',
-        secret,
+        viewerToken: token,
         nonce,
       }).toString(),
     });
@@ -110,6 +117,7 @@ describe('isolated HTML renderer', () => {
     expect(response.headers['cache-control']).toBe('no-store');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['x-robots-tag']).toBe('noindex, nofollow, noarchive');
     expect(response.headers['permissions-policy']).toContain('geolocation=()');
     expect(response.headers['content-security-policy']).toContain("default-src 'none'");
     expect(response.headers['content-security-policy']).toContain("connect-src 'none'");
@@ -125,16 +133,34 @@ describe('isolated HTML renderer', () => {
     expect(response.body).toContain('crypto.getRandomValues');
     expect(response.body).toContain('addEventListener("load"');
     expect(response.body).toContain(nonce);
-    expect(response.body).not.toContain(secret);
+    expect(response.body).not.toContain(token);
     expect(response.body.indexOf('shelf:renderer-ready')).toBeLessThan(
       response.body.indexOf('collector.invalid'),
     );
     expect(resolveHtml).toHaveBeenCalledWith(
       expect.objectContaining({
+        accessType: 'protected',
         shareId: 'shr_AAAAAAAAAAAAAAAAAAAAAA',
-        secret,
+        viewerToken: token,
         signal: expect.any(AbortSignal),
       }),
+    );
+  });
+
+  it('renders Public HTML with only the selector and nonce', async () => {
+    const resolveHtml = vi.fn(async () => ({
+      status: 'available' as const,
+      html: '<!doctype html><h1>Public artifact</h1>',
+    }));
+    const app = await createRendererApp({ appOrigin, resolver: { resolveHtml } });
+    apps.push(app);
+
+    const response = await postRender(app, { publicCode: 'AbCdEf0123_-' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('Public artifact');
+    expect(resolveHtml).toHaveBeenCalledWith(
+      expect.objectContaining({ accessType: 'public', publicCode: 'AbCdEf0123_-' }),
     );
   });
 
@@ -165,7 +191,7 @@ describe('isolated HTML renderer', () => {
     expect(response.body).toContain('shelf:renderer-unavailable');
   });
 
-  it('accepts capabilities only from an opaque sandbox form body', async () => {
+  it('accepts only exact discriminated authority from an opaque sandbox form body', async () => {
     const resolveHtml = vi.fn(async () => ({
       status: 'available' as const,
       html: '<!doctype html><title>Artifact</title>',
@@ -173,10 +199,10 @@ describe('isolated HTML renderer', () => {
     const app = await createRendererApp({ appOrigin, resolver: { resolveHtml } });
     apps.push(app);
     const nonce = 'n'.repeat(22);
-    const secretCanary = 's'.repeat(43);
+    const tokenCanary = viewerToken;
     const validBody = new URLSearchParams({
       shareId: 'shr_AAAAAAAAAAAAAAAAAAAAAA',
-      secret: secretCanary,
+      viewerToken: tokenCanary,
       nonce,
     }).toString();
     const invalidRequests = [
@@ -215,7 +241,7 @@ describe('isolated HTML renderer', () => {
           'content-type': 'application/x-www-form-urlencoded',
           origin: 'null',
         },
-        payload: `${validBody}&secret=${secretCanary}`,
+        payload: `${validBody}&viewerToken=${encodeURIComponent(tokenCanary)}`,
         url: '/render',
       },
       {
@@ -232,7 +258,15 @@ describe('isolated HTML renderer', () => {
           origin: 'null',
         },
         payload: validBody,
-        url: `/render?secret=${secretCanary}`,
+        url: `/render?viewerToken=${encodeURIComponent(tokenCanary)}`,
+      },
+      {
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          origin: 'null',
+        },
+        payload: `${validBody}&publicCode=AbCdEf0123_-`,
+        url: '/render',
       },
     ];
 
@@ -240,8 +274,9 @@ describe('isolated HTML renderer', () => {
       const response = await app.inject({ method: 'POST', ...request });
       expect(response.statusCode).toBe(404);
       expect(response.headers['referrer-policy']).toBe('no-referrer');
+      expect(response.headers['x-robots-tag']).toBe('noindex, nofollow, noarchive');
       expect(response.body).toContain('shelf:renderer-unavailable');
-      expect(response.body).not.toContain(secretCanary);
+      expect(response.body).not.toContain(tokenCanary);
     }
     expect(resolveHtml).not.toHaveBeenCalled();
   });
@@ -266,11 +301,11 @@ describe('isolated HTML renderer', () => {
     expect(response.body).not.toMatch(/payload|too large|error|stack/i);
   });
 
-  it('makes wrong, malformed, revoked, and expired capabilities indistinguishable', async () => {
+  it('makes wrong, malformed, revoked, and expired viewer authority indistinguishable', async () => {
     const nonce = 'n'.repeat(22);
     const cases = [
-      { dependencies: rendererDependencies(), secret: 'w'.repeat(43) },
-      { dependencies: rendererDependencies(), secret: 'malformed' },
+      { dependencies: rendererDependencies(), token: `${'w'.repeat(24)}.${'x'.repeat(43)}` },
+      { dependencies: rendererDependencies(), token: 'malformed' },
       {
         dependencies: rendererDependencies({
           share: rendererStoredShare({ revokedAt: '2026-08-17T12:15:00.000Z' }),
@@ -288,15 +323,27 @@ describe('isolated HTML renderer', () => {
         appOrigin,
         resolver: createCoreHtmlResolver({
           ...testCase.dependencies,
-          capabilityCodec: {
-            deriveSecret: () => 's'.repeat(43),
-            validateSecret: (_shareId, supplied) => supplied === 's'.repeat(43),
+          viewerSessionTokenCodec: {
+            verify: (token) =>
+              token === viewerToken
+                ? {
+                    shareId: 'shr_AAAAAAAAAAAAAAAAAAAAAA',
+                    sessionId: '123e4567-e89b-42d3-a456-426614174000',
+                    issuedAt: '2026-08-17T12:00:00.000Z',
+                    accessExpiresAt: '2026-08-18T12:00:00.000Z',
+                  }
+                : undefined,
           },
           clock: () => new Date('2026-08-17T12:30:00.000Z'),
         }),
       });
       apps.push(app);
-      responses.push(await postRender(app, { secret: testCase.secret, nonce }));
+      responses.push(
+        await postRender(app, {
+          ...(testCase.token === undefined ? {} : { viewerToken: testCase.token }),
+          nonce,
+        }),
+      );
     }
 
     for (const response of responses) {

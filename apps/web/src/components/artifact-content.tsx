@@ -8,8 +8,7 @@ import { FileDashedIcon } from '@phosphor-icons/react/FileDashed';
 import { FolderIcon } from '@phosphor-icons/react/Folder';
 import type { FolderEntry, PublicShareResolution } from '@shelf/contracts';
 
-import { publicShareActionUrl } from '../api.js';
-import { capabilityStorageKey, isShareCapability } from '../capability.js';
+import { type ViewerAuthority, viewerShareActionUrl } from '../api.js';
 import type { PassiveRenderer } from '../rendering.js';
 import { isFileShareResolution, isFolderShareResolution } from '../share-types.js';
 import { formatBytes } from './format.js';
@@ -22,36 +21,34 @@ interface ArtifactContentProps {
   readonly text?: string;
   readonly entries?: readonly FolderEntry[];
   readonly downloadUrl?: string;
+  readonly authority: ViewerAuthority;
 }
 
 function DownloadAction({
   resolution,
+  authority,
 }: {
   readonly resolution: Extract<PublicShareResolution, { artifact: { kind: 'file' } }>;
+  readonly authority: ViewerAuthority;
 }) {
   const download = () => {
-    let secret: string | null = null;
-    try {
-      secret = window.sessionStorage.getItem(capabilityStorageKey(resolution.shareId));
-    } catch {
-      return;
-    }
-    if (secret === null || !isShareCapability(secret)) return;
     let action: string;
     try {
-      action = publicShareActionUrl(resolution.action.path);
+      action = viewerShareActionUrl(resolution, authority);
     } catch {
       return;
     }
     const form = document.createElement('form');
     form.action = action;
-    form.method = 'post';
+    form.method = authority.accessType === 'protected' ? 'post' : 'get';
     form.hidden = true;
     const input = document.createElement('input');
     input.type = 'hidden';
-    input.name = 'secret';
-    input.value = secret;
-    form.append(input);
+    if (authority.accessType === 'protected') {
+      input.name = 'token';
+      input.value = authority.token;
+      form.append(input);
+    }
     document.body.append(form);
     try {
       form.submit();
@@ -69,14 +66,16 @@ function DownloadAction({
 function DownloadOnly({
   mediaType,
   resolution,
+  authority,
 }: {
   readonly mediaType: string;
   readonly resolution: Extract<PublicShareResolution, { artifact: { kind: 'file' } }>;
+  readonly authority: ViewerAuthority;
 }) {
   return (
     <Empty
       className="download-empty"
-      contents={<DownloadAction resolution={resolution} />}
+      contents={<DownloadAction authority={authority} resolution={resolution} />}
       description={`This ${mediaType} artifact stays download-only to keep active content outside Shelf.`}
       icon={<FileDashedIcon aria-hidden="true" size={32} />}
       size="sm"
@@ -136,6 +135,7 @@ export function ArtifactContent({
   text = '',
   entries = [],
   downloadUrl,
+  authority,
 }: ArtifactContentProps) {
   if (isFolderShareResolution(resolution)) {
     return (
@@ -154,9 +154,9 @@ export function ArtifactContent({
   if (renderer.kind === 'html') {
     return (
       <div className="artifact-surface artifact-html">
-        <RendererFrame renderer={renderer} resolution={resolution} />
+        <RendererFrame authority={authority} renderer={renderer} resolution={resolution} />
         <div className="renderer-download">
-          <DownloadAction resolution={resolution} />
+          <DownloadAction authority={authority} resolution={resolution} />
         </div>
       </div>
     );
@@ -164,7 +164,11 @@ export function ArtifactContent({
   if (renderer.kind === 'download') {
     return (
       <div className="artifact-surface artifact-download">
-        <DownloadOnly mediaType={resolution.revision.mediaType} resolution={resolution} />
+        <DownloadOnly
+          authority={authority}
+          mediaType={resolution.revision.mediaType}
+          resolution={resolution}
+        />
       </div>
     );
   }

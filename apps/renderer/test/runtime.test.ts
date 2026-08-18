@@ -12,7 +12,7 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 }
 
 it('composes the existing share data plane into an independently managed renderer process', async () => {
-  const secret = 's'.repeat(43);
+  const viewerToken = `${'v'.repeat(24)}.${'s'.repeat(43)}`;
   const ready = vi.fn(async () => undefined);
   let runtime: RendererRuntime;
   const close = vi.fn(async () => {
@@ -29,9 +29,16 @@ it('composes the existing share data plane into an independently managed rendere
     {
       ...dependencies,
       shares: dependencies.shares,
-      capabilityCodec: {
-        deriveSecret: () => secret,
-        validateSecret: (_shareId, supplied) => supplied === secret,
+      viewerSessionTokenCodec: {
+        verify: (token) =>
+          token === viewerToken
+            ? {
+                shareId: rendererIds.share,
+                sessionId: rendererIds.sessionId,
+                issuedAt: '2026-08-17T12:00:00.000Z',
+                accessExpiresAt: '2026-08-18T12:00:00.000Z',
+              }
+            : undefined,
       },
       clock: () => new Date('2026-08-17T12:30:00.000Z'),
       ready,
@@ -48,7 +55,7 @@ it('composes the existing share data plane into an independently managed rendere
       },
       body: new URLSearchParams({
         shareId: rendererIds.share,
-        secret,
+        viewerToken,
         nonce: 'n'.repeat(22),
       }),
     });
@@ -75,6 +82,7 @@ it('cannot reopen the listener when shutdown begins during dependency startup', 
     },
     {
       ...dependencies,
+      viewerSessionTokenCodec: { verify: () => undefined },
       ready: () => readiness.promise,
       close: closeDataPlane,
     },

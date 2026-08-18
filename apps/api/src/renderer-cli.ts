@@ -7,7 +7,7 @@ import { createRendererRuntime, loadRendererConfig, type RendererRuntime } from 
 import { createShelfPersistence } from './persistence.js';
 import { shelfPersistenceConfigFromEnv } from './persistence-env.js';
 import { loadShareSigningKey, type ShelfServerEnvironment } from './server-config.js';
-import { createHmacShareCapabilityCodec } from './share-capability.js';
+import { createHmacShareSecurityCodecs } from './share-capability.js';
 
 export interface RendererCliRuntime {
   env: ShelfServerEnvironment;
@@ -34,7 +34,7 @@ export async function runShelfRenderer(
   try {
     const rendererConfig = loadRendererConfig(runtime.env);
     const persistenceConfig = shelfPersistenceConfigFromEnv(runtime.env);
-    const capabilityCodec = createHmacShareCapabilityCodec(await loadShareSigningKey(runtime.env));
+    const securityCodecs = createHmacShareSecurityCodecs(await loadShareSigningKey(runtime.env));
     const persistence = createShelfPersistence(persistenceConfig);
     let closePromise: Promise<void> | undefined;
     closePersistence = () => {
@@ -44,7 +44,7 @@ export async function runShelfRenderer(
     const createRuntime = runtime.createRuntime ?? createRendererRuntime;
     renderer = await createRuntime(rendererConfig, {
       shares: persistence.shareRepository,
-      capabilityCodec,
+      viewerSessionTokenCodec: securityCodecs.viewerSession,
       revisions: persistence.revisionRepository,
       folders: persistence.revisionRepository,
       contentReader: persistence.contentReader,

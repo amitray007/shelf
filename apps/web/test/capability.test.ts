@@ -3,12 +3,20 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   capabilityStorageKey,
   captureShareCapability,
+  isPublicCode,
   isShareCapability,
+  protectedSessionIdStorageKey,
+  protectedViewerTokenStorageKey,
+  readOrCreateProtectedSessionId,
+  saveProtectedSessionAuthority,
   shareIdFromViewerPath,
+  shareReferenceFromViewerPath,
 } from '../src/capability.js';
 
 const SHARE_ID = `shr_${'a'.repeat(22)}`;
 const SECRET = 'A'.repeat(32);
+const PUBLIC_CODE = 'AbCdEf0123_-';
+const SESSION_ID = '123e4567-e89b-42d3-a456-426614174000';
 
 function memoryStorage(): Storage {
   const values = new Map<string, string>();
@@ -45,6 +53,8 @@ describe('share capability capture', () => {
   it('recovers the secret on a tab reload without putting it back in the URL', () => {
     const storage = memoryStorage();
     storage.setItem(capabilityStorageKey(SHARE_ID), SECRET);
+    storage.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+    storage.setItem(protectedViewerTokenStorageKey(SHARE_ID), 'viewer.token');
     const replaceState = vi.fn();
 
     expect(
@@ -61,6 +71,8 @@ describe('share capability capture', () => {
   it('scrubs a malformed fragment and never persists it', () => {
     const storage = memoryStorage();
     storage.setItem(capabilityStorageKey(SHARE_ID), SECRET);
+    storage.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+    storage.setItem(protectedViewerTokenStorageKey(SHARE_ID), 'viewer.token');
     const replaceState = vi.fn();
 
     expect(
@@ -85,5 +97,39 @@ describe('share capability capture', () => {
     expect(shareIdFromViewerPath(`/s/${SHARE_ID}`)).toBe(SHARE_ID);
     expect(shareIdFromViewerPath(`/s/${SHARE_ID}/`)).toBe(SHARE_ID);
     expect(shareIdFromViewerPath(`/dashboard/s/${SHARE_ID}`)).toBeNull();
+  });
+
+  it('parses the complete legacy grammar before the exact Public selector grammar', () => {
+    expect(shareReferenceFromViewerPath(`/s/${SHARE_ID}`)).toEqual({
+      accessType: 'protected',
+      shareId: SHARE_ID,
+    });
+    expect(shareReferenceFromViewerPath(`/s/${PUBLIC_CODE}`)).toEqual({
+      accessType: 'public',
+      publicCode: PUBLIC_CODE,
+    });
+    expect(shareReferenceFromViewerPath(`/s/${PUBLIC_CODE}x`)).toBeNull();
+    expect(shareReferenceFromViewerPath(`/s/shr_${'a'.repeat(21)}`)).toBeNull();
+    expect(isPublicCode(PUBLIC_CODE)).toBe(true);
+  });
+
+  it('creates one tab-scoped session id and replaces capability state with authority', () => {
+    const storage = memoryStorage();
+    storage.setItem(capabilityStorageKey(SHARE_ID), SECRET);
+    expect(readOrCreateProtectedSessionId(SHARE_ID, storage, () => SESSION_ID)).toBe(SESSION_ID);
+    expect(readOrCreateProtectedSessionId(SHARE_ID, storage, () => 'unused')).toBe(SESSION_ID);
+
+    saveProtectedSessionAuthority(storage, {
+      apiVersion: 'v1',
+      shareId: SHARE_ID,
+      sessionId: SESSION_ID,
+      token: 'token.value',
+      issuedAt: '2026-08-19T00:00:00.000Z',
+      expiresAt: '2026-08-20T00:00:00.000Z',
+    });
+
+    expect(storage.getItem(protectedSessionIdStorageKey(SHARE_ID))).toBe(SESSION_ID);
+    expect(storage.getItem(protectedViewerTokenStorageKey(SHARE_ID))).toBe('token.value');
+    expect(storage.getItem(capabilityStorageKey(SHARE_ID))).toBeNull();
   });
 });

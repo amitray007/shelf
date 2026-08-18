@@ -3,15 +3,15 @@ import '@fontsource-variable/geist-mono/wght.css';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router';
 
-import { captureShareCapability, shareIdFromViewerPath } from './capability.js';
+import { captureShareCapability, shareReferenceFromViewerPath } from './capability.js';
 import { LoadingView, UnavailableView } from './components/viewer-shell.js';
 import './styles.css';
 
 function captureCurrentCapability(): string | null {
-  const shareId = shareIdFromViewerPath(window.location.pathname);
-  if (shareId === null) return null;
+  const reference = shareReferenceFromViewerPath(window.location.pathname);
+  if (reference?.accessType !== 'protected') return null;
   return captureShareCapability({
-    shareId,
+    shareId: reference.shareId,
     location: window.location,
     history: window.history,
     sessionStorage: window.sessionStorage,
@@ -23,7 +23,7 @@ document.documentElement.dataset.mode = 'dark';
 
 const router = createBrowserRouter([
   {
-    path: '/s/:shareId',
+    path: '/s/:shareRef',
     lazy: async () => {
       const viewer = await import('./viewer-page.js');
       return { Component: viewer.ViewerPage, loader: viewer.viewerLoader };

@@ -11,11 +11,11 @@ import { requestCancellationSignal } from './request-cancellation.js';
 export type RendererApp = FastifyInstance;
 
 export interface RendererHtmlResolver {
-  resolveHtml(request: {
-    shareId: string;
-    secret: string;
-    signal?: AbortSignal;
-  }): Promise<{ status: 'available'; html: string } | { status: 'unavailable' }>;
+  resolveHtml(
+    request:
+      | { accessType: 'protected'; shareId: string; viewerToken: string; signal?: AbortSignal }
+      | { accessType: 'public'; publicCode: string; signal?: AbortSignal },
+  ): Promise<{ status: 'available'; html: string } | { status: 'unavailable' }>;
 }
 
 export interface CreateRendererAppOptions {
@@ -27,7 +27,8 @@ export interface CreateRendererAppOptions {
 const BOOTSTRAP_DOCUMENT =
   '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Shelf renderer</title></head><body></body></html>';
 const SHARE_ID_PATTERN = /^shr_[A-Za-z0-9_-]{22}$/u;
-const SECRET_PATTERN = /^[A-Za-z0-9_-]{32,128}$/u;
+const PUBLIC_CODE_PATTERN = /^[A-Za-z0-9_-]{12}$/u;
+const VIEWER_TOKEN_PATTERN = /^[A-Za-z0-9._-]{24,4096}$/u;
 const NONCE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/u;
 
 function applyBoundaryHeaders(reply: FastifyReply, contentSecurityPolicy: string): void {
@@ -36,11 +37,14 @@ function applyBoundaryHeaders(reply: FastifyReply, contentSecurityPolicy: string
   void reply.header('Permissions-Policy', DENIED_PERMISSIONS_POLICY);
   void reply.header('Referrer-Policy', 'no-referrer');
   void reply.header('X-Content-Type-Options', 'nosniff');
+  void reply.header('X-Robots-Tag', 'noindex, nofollow, noarchive');
 }
 
 function parseRenderRequest(body: unknown): {
   nonce: string;
-  request?: { shareId: string; secret: string };
+  request?:
+    | { accessType: 'protected'; shareId: string; viewerToken: string }
+    | { accessType: 'public'; publicCode: string };
 } {
   if (typeof body !== 'string') return { nonce: '' };
   const parameters = new URLSearchParams(body);
@@ -50,19 +54,34 @@ function parseRenderRequest(body: unknown): {
       ? (nonceValues[0] ?? '')
       : '';
   if (nonce === '') return { nonce };
+  const keys = [...parameters.keys()];
+  const protectedBody = keys.every(
+    (key) => key === 'shareId' || key === 'viewerToken' || key === 'nonce',
+  );
   if (
-    [...parameters.keys()].some(
-      (key) => key !== 'shareId' && key !== 'secret' && key !== 'nonce',
-    ) ||
-    parameters.getAll('shareId').length !== 1 ||
-    parameters.getAll('secret').length !== 1
-  )
-    return { nonce };
-  const shareId = parameters.get('shareId') ?? '';
-  const secret = parameters.get('secret') ?? '';
-  return SHARE_ID_PATTERN.test(shareId) && SECRET_PATTERN.test(secret)
-    ? { nonce, request: { shareId, secret } }
-    : { nonce };
+    protectedBody &&
+    parameters.getAll('shareId').length === 1 &&
+    parameters.getAll('viewerToken').length === 1 &&
+    parameters.getAll('nonce').length === 1
+  ) {
+    const shareId = parameters.get('shareId') ?? '';
+    const viewerToken = parameters.get('viewerToken') ?? '';
+    return SHARE_ID_PATTERN.test(shareId) && VIEWER_TOKEN_PATTERN.test(viewerToken)
+      ? { nonce, request: { accessType: 'protected', shareId, viewerToken } }
+      : { nonce };
+  }
+  const publicBody = keys.every((key) => key === 'publicCode' || key === 'nonce');
+  if (
+    publicBody &&
+    parameters.getAll('publicCode').length === 1 &&
+    parameters.getAll('nonce').length === 1
+  ) {
+    const publicCode = parameters.get('publicCode') ?? '';
+    return PUBLIC_CODE_PATTERN.test(publicCode)
+      ? { nonce, request: { accessType: 'public', publicCode } }
+      : { nonce };
+  }
+  return { nonce };
 }
 
 function javascriptLiteral(value: unknown): string {
@@ -159,8 +178,7 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
     let result: Awaited<ReturnType<RendererHtmlResolver['resolveHtml']>>;
     try {
       result = await options.resolver.resolveHtml({
-        shareId: input.request.shareId,
-        secret: input.request.secret,
+        ...input.request,
         signal: requestCancellationSignal(request, reply),
       });
     } catch {

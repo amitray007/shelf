@@ -189,6 +189,20 @@ export async function registerShareRoutes(
   app: FastifyInstance,
   dependencies: ShelfAppDependencies,
 ): Promise<void> {
+  app.addContentTypeParser(
+    'application/x-www-form-urlencoded',
+    { parseAs: 'string', bodyLimit: 4_096 },
+    (_request, body, done) => {
+      const parameters = new URLSearchParams(String(body));
+      const keys = [...parameters.keys()];
+      done(
+        null,
+        keys.length === 1 && keys[0] === 'token' && parameters.getAll('token').length === 1
+          ? { token: parameters.get('token') }
+          : {},
+      );
+    },
+  );
   const lifecycle = createShareLifecycleService({
     authorizer: dependencies.authorizer,
     shares: dependencies.shareRepository,

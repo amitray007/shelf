@@ -3,14 +3,24 @@ import type { LoaderFunctionArgs } from 'react-router';
 import { useLoaderData } from 'react-router';
 
 import {
+  establishProtectedSession,
   loadPublicClientConfig,
-  loadPublicFileBytes,
-  loadPublicFolderEntries,
+  loadViewerFileBytes,
+  loadViewerFolderEntries,
   type PublicSharePayload,
   PublicShareUnavailableError,
-  resolvePublicShare,
+  resolveViewerShare,
+  type ViewerAuthority,
 } from './api.js';
-import { captureShareCapability, isShareId } from './capability.js';
+import {
+  capabilityStorageKey,
+  captureShareCapability,
+  readOrCreateProtectedSessionId,
+  readProtectedViewerToken,
+  saveProtectedSessionAuthority,
+  shareReferenceFromViewerPath,
+  type ViewerShareReference,
+} from './capability.js';
 import { ArtifactContent } from './components/artifact-content.js';
 import { ViewerRail } from './components/viewer-shell.js';
 import { type PassiveRenderer, selectRenderer } from './rendering.js';
@@ -47,33 +57,73 @@ export async function viewerLoader({
   params,
   request,
 }: LoaderFunctionArgs): Promise<PublicSharePayload> {
-  const shareId = params.shareId ?? '';
-  if (!isShareId(shareId)) throw new PublicShareUnavailableError();
+  const reference = shareReferenceFromViewerPath(`/s/${params.shareRef ?? ''}`);
+  if (reference === null) throw new PublicShareUnavailableError();
 
-  const secret = captureShareCapability({
-    shareId,
-    location: window.location,
-    history: window.history,
-    sessionStorage: window.sessionStorage,
-  });
-  if (secret === null) throw new PublicShareUnavailableError();
+  let authority: ViewerAuthority;
+  if (reference.accessType === 'public') {
+    authority = { accessType: 'public', publicCode: reference.publicCode };
+  } else {
+    const sessionId = readOrCreateProtectedSessionId(reference.shareId, window.sessionStorage);
+    if (sessionId === null) throw new PublicShareUnavailableError();
+    const token = readProtectedViewerToken(reference.shareId, window.sessionStorage);
+    const secret =
+      token === null
+        ? captureShareCapability({
+            shareId: reference.shareId,
+            location: window.location,
+            history: window.history,
+            sessionStorage: window.sessionStorage,
+          })
+        : null;
+    if (token === null && secret === null) throw new PublicShareUnavailableError();
+    try {
+      const established = await establishProtectedSession(
+        reference.shareId,
+        sessionId,
+        token === null ? { secret: secret as string } : { token },
+        request.signal,
+      );
+      saveProtectedSessionAuthority(window.sessionStorage, established);
+      authority = {
+        accessType: 'protected',
+        shareId: established.shareId,
+        sessionId: established.sessionId,
+        token: established.token,
+      };
+    } catch (error) {
+      if (
+        token === null &&
+        error instanceof PublicShareUnavailableError &&
+        !error.transportFailure
+      ) {
+        try {
+          window.sessionStorage.removeItem(capabilityStorageKey(reference.shareId));
+        } catch {
+          // Terminal failures use the same unavailable projection even without writable storage.
+        }
+      }
+      throw error;
+    }
+  }
 
   const config = await loadPublicClientConfig(request.signal);
-  return loadViewerPayload(shareId, secret, request.signal, config.rendererOrigin);
+  return loadViewerPayload(reference, authority, request.signal, config.rendererOrigin);
 }
 
 export async function loadViewerPayload(
-  shareId: string,
-  secret: string,
+  reference: ViewerShareReference,
+  authority: ViewerAuthority,
   signal: AbortSignal | undefined,
   rendererOrigin: string | undefined,
 ): Promise<PublicSharePayload> {
-  const resolution = await resolvePublicShare(shareId, secret, signal);
+  const resolution = await resolveViewerShare(reference, authority, signal);
   if (isFolderShareResolution(resolution)) {
     return {
       kind: 'folder',
       resolution,
-      entries: await loadPublicFolderEntries(resolution, secret, signal),
+      authority,
+      entries: await loadViewerFolderEntries(resolution, authority, signal),
     };
   }
   if (!isFileShareResolution(resolution)) throw new PublicShareUnavailableError();
@@ -82,7 +132,8 @@ export async function loadViewerPayload(
   return {
     kind: 'file',
     resolution,
-    bytes: needsBytes ? await loadPublicFileBytes(resolution, secret, signal) : null,
+    authority,
+    bytes: needsBytes ? await loadViewerFileBytes(resolution, authority, signal) : null,
     ...(rendererOrigin === undefined ? {} : { rendererOrigin }),
   };
 }
@@ -118,6 +169,7 @@ function FileArtifact({
       {...(downloadUrl === undefined ? {} : { downloadUrl })}
       renderer={prepared.renderer}
       resolution={payload.resolution}
+      authority={payload.authority}
       text={prepared.text}
     />
   );
@@ -141,6 +193,7 @@ export function ViewerPage() {
       ) : (
         <ArtifactContent
           entries={payload.entries}
+          authority={payload.authority}
           renderer={{ kind: 'download' }}
           resolution={payload.resolution}
         />

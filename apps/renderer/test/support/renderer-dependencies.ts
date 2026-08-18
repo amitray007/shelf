@@ -10,6 +10,8 @@ export const rendererIds = {
   artifact: 'art_AAAAAAAAAAAAAAAAAAAAAA',
   revision: 'rev_BBBBBBBBBBBBBBBBBBBBBB',
   share: 'shr_AAAAAAAAAAAAAAAAAAAAAA',
+  publicCode: 'AbCdEf0123_-',
+  sessionId: '123e4567-e89b-42d3-a456-426614174000',
 };
 
 export function rendererStoredShare(overrides: Partial<StoredShare> = {}): StoredShare {
@@ -20,10 +22,14 @@ export function rendererStoredShare(overrides: Partial<StoredShare> = {}): Store
     shareId: rendererIds.share,
     artifactId: rendererIds.artifact,
     visibility: 'unlisted',
+    accessType: 'protected',
+    publicCode: null,
     target: { mode: 'latest' },
     createdByActorId: 'private-actor',
     createdAt: '2026-08-17T12:00:00.000Z',
     expiresAt: null,
+    maxSessions: null,
+    sessionsUsed: 1,
     revokedAt: null,
     revokedByActorId: null,
     ...overrides,
@@ -97,6 +103,13 @@ export function rendererDependencies(
           revision: descriptor,
         },
       };
+    },
+    async resolvePublicShareTarget(publicCode) {
+      if (share.accessType !== 'public' || share.publicCode !== publicCode) return undefined;
+      return this.resolveShareTarget(share.shareId);
+    },
+    async establishProtectedSession() {
+      return { status: 'unavailable' };
     },
   };
   const revisions: RevisionRepository = {

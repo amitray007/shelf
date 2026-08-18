@@ -2,18 +2,18 @@ import type {
   ContentReader,
   FolderRevisionRepository,
   RevisionRepository,
-  ShareCapabilityCodec,
   ShareClock,
   ShareRepository,
 } from '@shelf/core';
 
 import type { RendererConfig } from './config.js';
+import type { ViewerSessionTokenVerifier } from './resolver.js';
 import { createCoreHtmlResolver } from './resolver.js';
 import { createRendererServer, type RendererServer } from './server.js';
 
 export interface RendererDataPlane {
   shares: ShareRepository;
-  capabilityCodec: ShareCapabilityCodec;
+  viewerSessionTokenCodec: ViewerSessionTokenVerifier;
   revisions: RevisionRepository;
   folders: FolderRevisionRepository;
   contentReader: ContentReader;
@@ -36,7 +36,7 @@ export async function createRendererRuntime(
       appOrigin: config.appOrigin,
       resolver: createCoreHtmlResolver({
         shares: dataPlane.shares,
-        capabilityCodec: dataPlane.capabilityCodec,
+        viewerSessionTokenCodec: dataPlane.viewerSessionTokenCodec,
         revisions: dataPlane.revisions,
         folders: dataPlane.folders,
         contentReader: dataPlane.contentReader,

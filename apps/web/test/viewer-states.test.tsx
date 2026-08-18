@@ -8,6 +8,7 @@ import { UnavailableView, ViewerRail } from '../src/components/viewer-shell.js';
 const FILE_RESOLUTION = {
   apiVersion: 'v1',
   shareId: `shr_${'a'.repeat(22)}`,
+  accessType: 'protected',
   target: { mode: 'latest' },
   expiresAt: null,
   artifact: { artifactId: `art_${'b'.repeat(22)}`, kind: 'file', name: 'idea.md' },
@@ -29,6 +30,7 @@ const FILE_RESOLUTION = {
 const FOLDER_RESOLUTION = {
   apiVersion: 'v1',
   shareId: `shr_${'a'.repeat(22)}`,
+  accessType: 'protected',
   target: { mode: 'pinned', revisionId: `rev_${'c'.repeat(22)}` },
   expiresAt: null,
   artifact: { artifactId: `art_${'b'.repeat(22)}`, kind: 'folder', name: 'ideas' },
@@ -50,6 +52,12 @@ const FOLDER_RESOLUTION = {
 function renderContent(props: Partial<React.ComponentProps<typeof ArtifactContent>> = {}): string {
   return renderToStaticMarkup(
     <ArtifactContent
+      authority={{
+        accessType: 'protected',
+        shareId: FILE_RESOLUTION.shareId,
+        sessionId: '123e4567-e89b-42d3-a456-426614174000',
+        token: `${'v'.repeat(24)}.${'s'.repeat(43)}`,
+      }}
       resolution={FILE_RESOLUTION}
       renderer={{ kind: 'text' }}
       text={'const idea = "keep";'}
