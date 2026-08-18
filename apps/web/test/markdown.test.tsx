@@ -29,4 +29,25 @@ describe('Markdown rendering', () => {
     expect(html).toContain('rel="noreferrer noopener"');
     expect(html).not.toContain('<img');
   });
+
+  it('renders GitHub-flavored tables, task lists, and strikethrough', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownView
+        source={[
+          '| State | Owner |',
+          '| --- | --- |',
+          '| Ready | agent |',
+          '',
+          '- [x] publish',
+          '- [ ] share',
+          '',
+          '~~discarded~~',
+        ].join('\n')}
+      />,
+    );
+
+    expect(html).toContain('<table>');
+    expect(html).toContain('type="checkbox"');
+    expect(html).toContain('<del>discarded</del>');
+  });
 });

@@ -1,6 +1,7 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable code blocks must be keyboard reachable.
 import type { ComponentPropsWithoutRef } from 'react';
 import ReactMarkdown, { type UrlTransform } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 function safeLink(value: string): string {
   if (value.startsWith('#') || /^(?:\.\.?\/|\/(?!\/))/.test(value)) return value;
@@ -40,6 +41,7 @@ export function MarkdownView({ source }: { readonly source: string }) {
     <div className="markdown-body">
       <ReactMarkdown
         components={{ a: SafeAnchor, img: ImageDescription, pre: ScrollableCodeBlock }}
+        remarkPlugins={[remarkGfm]}
         skipHtml={true}
         urlTransform={linkTransform}
       >
