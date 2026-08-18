@@ -10,6 +10,7 @@ import {
   isShareCreateResult,
   isSharePage,
   ProtectedSessionAuthoritySchema,
+  ProtectedSessionEstablishInputSchema,
   PublicShareResolutionSchema,
   SHARE_EXPIRY_PRESETS,
   ShareCreateInputSchema,
@@ -233,10 +234,11 @@ describe('share contracts', () => {
   });
 
   it('contracts successful anonymous Protected session authority without URL credentials', () => {
+    const sessionId = '123e4567-e89b-42d3-a456-426614174000';
     const authority = {
       apiVersion: 'v1',
       shareId,
-      sessionId: '123e4567-e89b-42d3-a456-426614174000',
+      sessionId,
       token: 'v1.viewer-session.signed-authority',
       issuedAt: '2026-08-18T12:00:00.000Z',
       expiresAt: '2026-08-19T12:00:00.000Z',
@@ -246,6 +248,26 @@ describe('share contracts', () => {
     expect(isProtectedSessionAuthority(authority)).toBe(true);
     expect(isProtectedSessionAuthority({ ...authority, url: `/s/${shareId}#secret` })).toBe(false);
     expect(isProtectedSessionAuthority({ ...authority, sessionId: 'not-a-uuid' })).toBe(false);
+    expect(
+      Check(ProtectedSessionEstablishInputSchema, {
+        sessionId,
+        secret: 's'.repeat(43),
+      }),
+    ).toBe(true);
+    expect(
+      Check(ProtectedSessionEstablishInputSchema, {
+        sessionId,
+        token: authority.token,
+      }),
+    ).toBe(true);
+    expect(Check(ProtectedSessionEstablishInputSchema, { sessionId })).toBe(false);
+    expect(
+      Check(ProtectedSessionEstablishInputSchema, {
+        sessionId,
+        secret: 's'.repeat(43),
+        token: authority.token,
+      }),
+    ).toBe(false);
   });
 
   it('accepts a sanitized Protected file projection with a share-ID content action', () => {

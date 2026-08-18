@@ -76,6 +76,11 @@ const ViewerSessionTokenSchema = Type.String({
   maxLength: 4096,
   pattern: '^[A-Za-z0-9._-]+$',
 });
+const ShareCapabilitySecretSchema = Type.String({
+  minLength: 32,
+  maxLength: 128,
+  pattern: '^[A-Za-z0-9_-]+$',
+});
 
 export const LatestShareTargetSchema = Type.Object(
   { mode: Type.Literal('latest') },
@@ -410,12 +415,18 @@ export const PublicShareResolutionSchema = Type.Union(
   { $id: 'PublicShareResolution' },
 );
 
-export const ProtectedSessionEstablishInputSchema = Type.Object(
-  {
-    sessionId: ViewerSessionIdSchema,
-    token: Type.Optional(ViewerSessionTokenSchema),
-  },
-  { additionalProperties: false, $id: 'ProtectedSessionEstablishInput' },
+export const ProtectedSessionEstablishInputSchema = Type.Union(
+  [
+    Type.Object(
+      { sessionId: ViewerSessionIdSchema, secret: ShareCapabilitySecretSchema },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      { sessionId: ViewerSessionIdSchema, token: ViewerSessionTokenSchema },
+      { additionalProperties: false },
+    ),
+  ],
+  { $id: 'ProtectedSessionEstablishInput' },
 );
 
 export const ProtectedSessionAuthoritySchema = Type.Object(
