@@ -17,6 +17,8 @@ import {
 } from 'react-router';
 
 import { signOut } from './api.js';
+import './shell.css';
+import './responsive.css';
 
 export function DashboardLayout() {
   const session = useLoaderData() as DashboardSession;
@@ -51,68 +53,70 @@ export function DashboardLayout() {
 
   return (
     <div className="dashboard-shell">
-      <header className="dashboard-bar">
-        <nav className="dashboard-location" aria-label="Current location">
-          <Link className="wordmark dashboard-wordmark" to={artifactsPath}>
-            shelf
-          </Link>
-          <span className="location-separator" aria-hidden="true">
-            /
-          </span>
-          <DropdownMenu>
-            <DropdownMenu.Trigger
-              render={
-                <Button
-                  aria-label={`Workspace menu, ${activeWorkspace?.workspaceId ?? 'no workspace grant'}`}
-                  className="workspace-menu-trigger"
-                  icon={StackIcon}
-                  size="sm"
-                  variant="ghost"
-                >
-                  <span className="workspace-menu-label">
-                    {activeWorkspace?.workspaceId ?? 'No workspace grant'}
-                  </span>
-                </Button>
-              }
-            />
-            <DropdownMenu.Content align="start" className="workspace-menu-content">
-              {readableWorkspaces.length === 0 ? (
-                <DropdownMenu.Item disabled>No readable workspaces</DropdownMenu.Item>
-              ) : (
-                <DropdownMenu.Group>
-                  <DropdownMenu.Label>Workspaces</DropdownMenu.Label>
-                  {readableWorkspaces.map((workspace) => (
-                    <DropdownMenu.Item
-                      key={workspace.workspaceId}
-                      onClick={() => changeWorkspace(workspace.workspaceId)}
-                      selected={workspace.workspaceId === activeWorkspace?.workspaceId}
-                    >
-                      {workspace.workspaceId}
-                    </DropdownMenu.Item>
-                  ))}
-                </DropdownMenu.Group>
-              )}
-              <DropdownMenu.Separator />
-              <DropdownMenu.Item icon={KeyIcon} onClick={() => void navigate('/app/access')}>
-                Access
-              </DropdownMenu.Item>
-              <DropdownMenu.Item icon={SignOutIcon} onClick={() => void leave()}>
-                Sign out
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu>
-          <span className="location-separator" aria-hidden="true">
-            /
-          </span>
-          {locationLabel === 'Artifacts' && activeWorkspace !== undefined ? (
-            <Link className="dashboard-current" to={artifactsPath}>
-              Artifacts
+      {params.artifactId === undefined ? (
+        <header className="dashboard-bar">
+          <nav className="dashboard-location" aria-label="Current location">
+            <Link className="wordmark dashboard-wordmark" to={artifactsPath}>
+              shelf
             </Link>
-          ) : (
-            <span className="dashboard-current">{locationLabel}</span>
-          )}
-        </nav>
-      </header>
+            <span className="location-separator" aria-hidden="true">
+              /
+            </span>
+            <DropdownMenu>
+              <DropdownMenu.Trigger
+                render={
+                  <Button
+                    aria-label={`Workspace menu, ${activeWorkspace?.workspaceId ?? 'no workspace grant'}`}
+                    className="workspace-menu-trigger"
+                    icon={StackIcon}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <span className="workspace-menu-label">
+                      {activeWorkspace?.workspaceId ?? 'No workspace grant'}
+                    </span>
+                  </Button>
+                }
+              />
+              <DropdownMenu.Content align="start" className="workspace-menu-content">
+                {readableWorkspaces.length === 0 ? (
+                  <DropdownMenu.Item disabled>No readable workspaces</DropdownMenu.Item>
+                ) : (
+                  <DropdownMenu.Group>
+                    <DropdownMenu.Label>Workspaces</DropdownMenu.Label>
+                    {readableWorkspaces.map((workspace) => (
+                      <DropdownMenu.Item
+                        key={workspace.workspaceId}
+                        onClick={() => changeWorkspace(workspace.workspaceId)}
+                        selected={workspace.workspaceId === activeWorkspace?.workspaceId}
+                      >
+                        {workspace.workspaceId}
+                      </DropdownMenu.Item>
+                    ))}
+                  </DropdownMenu.Group>
+                )}
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item icon={KeyIcon} onClick={() => void navigate('/app/access')}>
+                  Access
+                </DropdownMenu.Item>
+                <DropdownMenu.Item icon={SignOutIcon} onClick={() => void leave()}>
+                  Sign out
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu>
+            <span className="location-separator" aria-hidden="true">
+              /
+            </span>
+            {locationLabel === 'Artifacts' && activeWorkspace !== undefined ? (
+              <Link className="dashboard-current" to={artifactsPath}>
+                Artifacts
+              </Link>
+            ) : (
+              <span className="dashboard-current">{locationLabel}</span>
+            )}
+          </nav>
+        </header>
+      ) : null}
       {signOutFailed ? (
         <p className="inline-notice" role="alert">
           Sign out failed. Your session is still active.

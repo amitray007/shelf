@@ -2,7 +2,7 @@ import { Loader } from '@cloudflare/kumo/components/loader';
 import { WarningCircleIcon } from '@phosphor-icons/react/WarningCircle';
 import type { PublicShareResolution } from '@shelf/contracts';
 
-import { formatBytes } from './artifact-content.js';
+import { formatBytes } from './format.js';
 
 export function LoadingView() {
   return (
@@ -50,7 +50,7 @@ export function ViewerRail({ resolution }: { readonly resolution: PublicShareRes
           /
         </span>
         <span className="rail-muted">Shared artifact</span>
-        <span className="rail-separator" aria-hidden="true">
+        <span className="rail-separator rail-secondary-separator" aria-hidden="true">
           /
         </span>
         <strong className="artifact-title" title={resolution.artifact.name}>

@@ -18,7 +18,7 @@ import { type FormEvent, useMemo, useRef, useState } from 'react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { Link, useLoaderData, useRevalidator, useSearchParams } from 'react-router';
 
-import { formatBytes } from '../components/artifact-content.js';
+import { formatBytes } from '../components/format.js';
 import {
   compareRevisions,
   createArtifactShare,
@@ -31,12 +31,15 @@ import { Modal, SecretReveal } from './dialogs.js';
 import { ManagedArtifactContent } from './managed-artifact-content.js';
 import type { ArtifactDetailPayload } from './routes.js';
 import { useManagedStatus } from './status.js';
+import './artifact.css';
+
+const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
 
 function dateTime(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
+  return dateTimeFormatter.format(new Date(value));
 }
 
 function revisionLabel(revision: ArtifactRevision): string {
@@ -472,13 +475,7 @@ function ComparisonPanel({ revisions }: { readonly revisions: readonly ArtifactR
   );
 }
 
-function ShareRow({
-  share,
-  workspaceId,
-}: {
-  readonly share: ShareManagementSummary;
-  readonly workspaceId: string;
-}) {
+function ShareRow({ share }: { readonly share: ShareManagementSummary }) {
   const revalidator = useRevalidator();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -489,7 +486,7 @@ function ShareRow({
     setBusy(true);
     setError(undefined);
     try {
-      await revokeShare(workspaceId, share.shareId);
+      await revokeShare(share.workspaceId, share.shareId);
       setConfirming(false);
       void revalidator.revalidate();
     } catch (caught) {
@@ -564,7 +561,7 @@ export function ArtifactPage() {
     const next = new URLSearchParams(searchParams);
     if (panel === 'history') next.delete('panel');
     else next.set('panel', panel);
-    setSearchParams(next, { replace: true });
+    setSearchParams(next, { defaultShouldRevalidate: false, replace: true });
   };
   const pageLink = (name: 'historyCursor' | 'shareCursor', cursor: string): string => {
     const next = new URLSearchParams(searchParams);
@@ -629,7 +626,12 @@ export function ArtifactPage() {
         </div>
       </header>
 
-      <Group className="artifact-workbench" id="artifact-workbench" orientation="horizontal">
+      <Group
+        className="artifact-workbench"
+        id="artifact-workbench"
+        orientation="horizontal"
+        style={{ height: 'min(760px, calc(100dvh - 148px))' }}
+      >
         <Panel
           className="artifact-preview-panel"
           defaultSize="70%"
@@ -832,11 +834,7 @@ export function ArtifactPage() {
                   ) : (
                     <ul className="share-list">
                       {artifactShares.map((share) => (
-                        <ShareRow
-                          key={share.shareId}
-                          share={share}
-                          workspaceId={artifact.workspaceId}
-                        />
+                        <ShareRow key={share.shareId} share={share} />
                       ))}
                     </ul>
                   )}

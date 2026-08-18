@@ -12,6 +12,7 @@ import { publicShareActionUrl } from '../api.js';
 import { capabilityStorageKey, isShareCapability } from '../capability.js';
 import type { PassiveRenderer } from '../rendering.js';
 import { isFileShareResolution, isFolderShareResolution } from '../share-types.js';
+import { formatBytes } from './format.js';
 import { MarkdownView } from './markdown-view.js';
 import { RendererFrame } from './renderer-frame.js';
 
@@ -127,12 +128,6 @@ export function formatJson(value: string): string {
   } catch {
     return value;
   }
-}
-
-export function formatBytes(value: number): string {
-  if (value < 1_000) return `${value} B`;
-  if (value < 1_000_000) return `${(value / 1_000).toFixed(value < 10_000 ? 1 : 0)} kB`;
-  return `${(value / 1_000_000).toFixed(value < 10_000_000 ? 1 : 0)} MB`;
 }
 
 export function ArtifactContent({

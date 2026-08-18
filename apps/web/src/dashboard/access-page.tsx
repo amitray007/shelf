@@ -19,13 +19,22 @@ import { Link, useLoaderData, useRevalidator, useRouteLoaderData } from 'react-r
 import { createDashboardCredential, DashboardApiError, revokeDashboardCredential } from './api.js';
 import { Modal, SecretReveal } from './dialogs.js';
 import { useManagedStatus } from './status.js';
+import './access.css';
+
+const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
 
 function dateTime(value: string | null): string {
   if (value === null) return 'Never';
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
+  return dateTimeFormatter.format(new Date(value));
+}
+
+type GrantKey = `${string}\u0000${DashboardCredentialAction}`;
+
+function grantKey(workspaceId: string, action: DashboardCredentialAction): GrantKey {
+  return `${workspaceId}\u0000${action}`;
 }
 
 function IssueCredentialDialog({
@@ -40,7 +49,7 @@ function IssueCredentialDialog({
   const revalidator = useRevalidator();
   const [actorName, setActorName] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
-  const [selected, setSelected] = useState(() => new Set<string>());
+  const [selected, setSelected] = useState(() => new Set<GrantKey>());
   const [issued, setIssued] = useState<DashboardCredentialIssue>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -61,7 +70,7 @@ function IssueCredentialDialog({
     action: DashboardCredentialAction,
     checked: boolean,
   ) => {
-    const key = `${workspaceId}\u0000${action}`;
+    const key = grantKey(workspaceId, action);
     setSelected((current) => {
       const next = new Set(current);
       if (checked) next.add(key);
@@ -73,7 +82,7 @@ function IssueCredentialDialog({
     event.preventDefault();
     const grants = session.workspaces.flatMap((workspace) =>
       workspace.actions
-        .filter((action) => selected.has(`${workspace.workspaceId}\u0000${action}`))
+        .filter((action) => selected.has(grantKey(workspace.workspaceId, action)))
         .map((action) => ({ workspaceId: workspace.workspaceId, action })),
     );
     if (grants.length === 0) {
@@ -125,7 +134,7 @@ function IssueCredentialDialog({
                 <div>
                   {workspace.actions.map((action) => (
                     <Checkbox
-                      checked={selected.has(`${workspace.workspaceId}\u0000${action}`)}
+                      checked={selected.has(grantKey(workspace.workspaceId, action))}
                       controlFirst
                       key={action}
                       label={action}
@@ -188,14 +197,15 @@ function IssueCredentialDialog({
 
 function CredentialActions({
   credential,
+  active,
   onDetails,
   onRevoke,
 }: {
   readonly credential: DashboardCredentialSummary;
+  readonly active: boolean;
   readonly onDetails: () => void;
   readonly onRevoke: () => void;
 }) {
-  const active = useManagedStatus(credential.revokedAt, credential.expiresAt) === 'Active';
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
@@ -329,7 +339,12 @@ function CredentialTableRow({
         </span>
       </Table.Cell>
       <Table.Cell>
-        <CredentialActions credential={credential} onDetails={onDetails} onRevoke={onRevoke} />
+        <CredentialActions
+          active={status === 'Active'}
+          credential={credential}
+          onDetails={onDetails}
+          onRevoke={onRevoke}
+        />
       </Table.Cell>
     </Table.Row>
   );
@@ -354,7 +369,12 @@ function CredentialMobileRow({
       <span className={status === 'Active' ? 'credential-status' : 'credential-status is-muted'}>
         {status}
       </span>
-      <CredentialActions credential={credential} onDetails={onDetails} onRevoke={onRevoke} />
+      <CredentialActions
+        active={status === 'Active'}
+        credential={credential}
+        onDetails={onDetails}
+        onRevoke={onRevoke}
+      />
     </li>
   );
 }

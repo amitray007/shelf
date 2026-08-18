@@ -20,6 +20,11 @@ describe('dashboard architecture', () => {
     expect(source).toContain("path: 'w/:workspaceId/artifacts/:artifactId'");
     expect(source).toContain("path: 'access'");
     expect(source).not.toMatch(/path:\s*['"][^'"]*publish/);
+    expect(source).not.toMatch(
+      /import \{ (?:AccessPage|ArtifactPage|ArtifactsPage|SignInPage) \}/u,
+    );
+    expect(source).toContain('lazy: async');
+    expect(source).not.toMatch(/^import .*['"]\.\/dashboard\//mu);
   });
 
   it('uses granular Kumo controls and never stores access secrets in browser storage', async () => {
@@ -99,6 +104,7 @@ describe('dashboard architecture', () => {
     const detail = await readFile(path.join(sourceRoot, 'dashboard/artifact-page.tsx'), 'utf8');
 
     expect(detail).toContain("searchParams.get('panel')");
+    expect(detail).toContain('defaultShouldRevalidate: false');
     expect(detail).not.toContain('{history.items.length}');
   });
 
@@ -110,6 +116,7 @@ describe('dashboard architecture', () => {
     expect(layout).toContain('Access');
     expect(layout).toContain('Sign out');
     expect(layout).not.toContain('dashboard-nav');
+    expect(layout).toContain('params.artifactId === undefined');
     expect(shell).toMatch(/\.dashboard-bar\s*\{[^}]*height:\s*48px/su);
     expect(responsive).not.toContain('.dashboard-nav');
   });

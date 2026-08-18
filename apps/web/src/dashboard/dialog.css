@@ -1,0 +1,167 @@
+.shelf-dialog {
+  max-height: min(760px, calc(100dvh - 32px));
+  overflow: auto;
+  scrollbar-color: var(--rule-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.shelf-secret-copy {
+  width: 100%;
+  min-width: 0;
+  color: #e2c98e;
+}
+
+.secret-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.inline-notice,
+.form-error {
+  margin: 0;
+  color: #e0a8ac;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.inline-notice {
+  padding: 9px 20px;
+  border-bottom: 1px solid #633a3e;
+  background: #251719;
+  text-align: right;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 20px 17px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.dialog-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 610;
+  letter-spacing: -0.025em;
+}
+
+.dialog-description {
+  max-width: 390px;
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.dialog-form {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.choice-group {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice-group > label {
+  display: grid;
+  min-height: 62px;
+  grid-template-columns: 18px 1fr;
+  align-items: start;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.choice-group > label:has(input:checked) {
+  border-color: #456984;
+  background: #15202a;
+}
+
+.choice-group input {
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.choice-group span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.choice-group strong {
+  color: var(--text-subtle);
+  font-size: 12px;
+}
+
+.choice-group small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.choice-group > label:has(input:checked) small {
+  color: var(--text-subtle);
+}
+
+.confirmation-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--ink);
+}
+
+.confirmation-block span,
+.confirmation-block code {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.confirmation-block strong {
+  color: var(--text-subtle);
+  font-size: 13px;
+}
+
+.secret-reveal {
+  display: grid;
+  gap: 9px;
+}
+
+@media (max-width: 680px) {
+  .shelf-dialog {
+    top: auto;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - 16px);
+    translate: none;
+  }
+
+  .dialog-actions > button,
+  .dialog-form input {
+    min-height: 44px;
+  }
+}

@@ -561,7 +561,7 @@ a {
   }
 
   .rail-muted,
-  .rail-title-group .rail-separator:first-of-type {
+  .rail-secondary-separator {
     display: none;
   }
 }

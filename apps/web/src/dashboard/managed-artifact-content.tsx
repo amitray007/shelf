@@ -3,7 +3,7 @@
 import { LinkButton } from '@cloudflare/kumo/components/button';
 import { FileArrowDownIcon } from '@phosphor-icons/react/FileArrowDown';
 import type { Artifact, FolderEntry } from '@shelf/contracts';
-import { useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 
 import { FolderTree, formatJson } from '../components/artifact-content.js';
 import { MarkdownView } from '../components/markdown-view.js';
@@ -25,7 +25,7 @@ function DownloadOnly({ artifact }: { readonly artifact: Artifact }) {
   );
 }
 
-export function ManagedArtifactContent({
+export const ManagedArtifactContent = memo(function ManagedArtifactContent({
   artifact,
   bytes,
   entries,
@@ -110,4 +110,4 @@ export function ManagedArtifactContent({
       </pre>
     </section>
   );
-}
+});

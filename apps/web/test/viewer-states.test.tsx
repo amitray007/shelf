@@ -110,6 +110,7 @@ describe('viewer content states', () => {
 
     expect(html).toContain('Shared artifact');
     expect(html).toContain('idea.md');
+    expect(html).toContain('rail-secondary-separator');
     expect(html).not.toContain('trust-dot');
   });
 });

@@ -124,8 +124,8 @@ for (const viewport of densityViewports) {
     await page.setViewportSize(viewport);
 
     await page.goto(`/app/w/${workspaceId}/artifacts`);
-    const ledger = page.getByRole('list', { name: 'Artifacts' });
-    await expect(ledger.getByRole('listitem')).toHaveCount(5);
+    const ledger = page.getByRole('table', { name: 'Artifacts' });
+    await expect(ledger.locator('tbody tr')).toHaveCount(5);
     await expect(ledger.getByText('x', { exact: true })).toBeVisible();
     await expect(ledger.getByText(longArtifactName, { exact: true })).toBeVisible();
     await expect(ledger.getByText(longFolderName, { exact: true })).toBeVisible();
@@ -133,6 +133,11 @@ for (const viewport of densityViewports) {
 
     await page.goto(`/app/w/${workspaceId}/artifacts/${artifactId}`);
     await expect(page).toHaveURL(new RegExp(`${artifactId}$`, 'u'));
+    if (viewport.width > 900) {
+      expect(
+        await page.locator('.artifact-workbench').evaluate((element) => element.clientHeight),
+      ).toBeGreaterThan(520);
+    }
     await expectActionWithinViewport(page, 'Share');
     await expectNoHorizontalOverflow(page, [
       page.locator('.dashboard-main'),
@@ -174,6 +179,15 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
     page.locator('.artifact-surface'),
   ]);
 
+  const panelRequests: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/v1/')) panelRequests.push(request.url());
+  });
+  await page.getByRole('tab', { name: 'Details' }).click();
+  await expect(page).toHaveURL(/[?&]panel=details(?:&|$)/u);
+  expect(panelRequests).toEqual([]);
+
+  await page.getByRole('link', { name: 'Artifacts', exact: true }).click();
   await page.getByRole('button', { name: /Workspace menu/u }).click();
   await page.getByRole('menuitem', { name: 'Access' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Access' })).toBeVisible();
@@ -212,9 +226,7 @@ test('anonymous dashboard requests collapse to the owner sign-in surface', async
 
   await page.goto('/app');
   await expect(page).toHaveURL(/\/signin\?returnTo=%2Fapp$/u);
-  await expect(
-    page.getByRole('heading', { level: 1, name: 'Open your artifact shelf' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
   const email = page.getByRole('textbox', { name: 'Email' });
   await focusWithKeyboard(page, email, testInfo.project.name === 'webkit' ? 'Alt+Tab' : 'Tab');
   await expect(email).toBeFocused();

@@ -6,19 +6,23 @@ import { TerminalWindowIcon } from '@phosphor-icons/react/TerminalWindow';
 import type { ArtifactPage } from '@shelf/contracts';
 import { Link, useLoaderData, useParams } from 'react-router';
 
-import { formatBytes } from '../components/artifact-content.js';
+import { formatBytes } from '../components/format.js';
+import './artifact.css';
+
+const dateLabelFormatter = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
 
 function dateLabel(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(value));
+  return dateLabelFormatter.format(new Date(value));
 }
 
 export function ArtifactsPage() {
   const page = useLoaderData() as ArtifactPage;
-  const workspaceId = useParams().workspaceId ?? page.items[0]?.workspaceId ?? '';
+  const workspaceId = useParams().workspaceId;
+  if (workspaceId === undefined) throw new Error('Artifact workspace is unavailable.');
 
   return (
     <div className="dashboard-page artifact-index">

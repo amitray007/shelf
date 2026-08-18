@@ -4,6 +4,8 @@ import { Dialog } from '@cloudflare/kumo/components/dialog';
 import { XIcon } from '@phosphor-icons/react/X';
 import { type ReactNode, type RefObject, useEffect } from 'react';
 
+import './dialog.css';
+
 export function Modal({
   open,
   onOpenChange,

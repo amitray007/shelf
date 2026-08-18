@@ -5,26 +5,7 @@ import { createBrowserRouter, Navigate, RouterProvider } from 'react-router';
 
 import { captureShareCapability, shareIdFromViewerPath } from './capability.js';
 import { LoadingView, UnavailableView } from './components/viewer-shell.js';
-import { AccessPage } from './dashboard/access-page.js';
-import { ArtifactPage } from './dashboard/artifact-page.js';
-import { ArtifactsPage } from './dashboard/artifacts-page.js';
-import { DashboardErrorBoundary, DashboardLayout, DashboardLoading } from './dashboard/layout.js';
-import {
-  accessLoader,
-  artifactLoader,
-  artifactsLoader,
-  dashboardIndexLoader,
-  dashboardLoader,
-  signInAction,
-  signInLoader,
-} from './dashboard/routes.js';
-import { SignInPage } from './dashboard/signin-page.js';
 import './styles.css';
-import './dashboard/shell.css';
-import './dashboard/artifact.css';
-import './dashboard/access.css';
-import './dashboard/responsive.css';
-import { ViewerPage, viewerLoader } from './viewer-page.js';
 
 function captureCurrentCapability(): string | null {
   const shareId = shareIdFromViewerPath(window.location.pathname);
@@ -43,39 +24,82 @@ document.documentElement.dataset.mode = 'dark';
 const router = createBrowserRouter([
   {
     path: '/s/:shareId',
-    loader: viewerLoader,
-    Component: ViewerPage,
+    lazy: async () => {
+      const viewer = await import('./viewer-page.js');
+      return { Component: viewer.ViewerPage, loader: viewer.viewerLoader };
+    },
     ErrorBoundary: UnavailableView,
     HydrateFallback: LoadingView,
   },
   {
     path: '/signin',
-    loader: signInLoader,
-    action: signInAction,
-    Component: SignInPage,
-    ErrorBoundary: DashboardErrorBoundary,
-    HydrateFallback: DashboardLoading,
+    lazy: async () => {
+      const [page, routes, layout] = await Promise.all([
+        import('./dashboard/signin-page.js'),
+        import('./dashboard/routes.js'),
+        import('./dashboard/layout.js'),
+      ]);
+      return {
+        action: routes.signInAction,
+        Component: page.SignInPage,
+        ErrorBoundary: layout.DashboardErrorBoundary,
+        HydrateFallback: layout.DashboardLoading,
+        loader: routes.signInLoader,
+      };
+    },
   },
   {
     id: 'dashboard',
     path: '/app',
-    loader: dashboardLoader,
-    Component: DashboardLayout,
-    ErrorBoundary: DashboardErrorBoundary,
-    HydrateFallback: DashboardLoading,
+    lazy: async () => {
+      const [layout, routes] = await Promise.all([
+        import('./dashboard/layout.js'),
+        import('./dashboard/routes.js'),
+      ]);
+      return {
+        Component: layout.DashboardLayout,
+        ErrorBoundary: layout.DashboardErrorBoundary,
+        HydrateFallback: layout.DashboardLoading,
+        loader: routes.dashboardLoader,
+      };
+    },
     children: [
-      { index: true, loader: dashboardIndexLoader },
+      {
+        index: true,
+        lazy: async () => ({
+          loader: (await import('./dashboard/routes.js')).dashboardIndexLoader,
+        }),
+      },
       {
         path: 'w/:workspaceId/artifacts',
-        loader: artifactsLoader,
-        Component: ArtifactsPage,
+        lazy: async () => {
+          const [page, routes] = await Promise.all([
+            import('./dashboard/artifacts-page.js'),
+            import('./dashboard/routes.js'),
+          ]);
+          return { Component: page.ArtifactsPage, loader: routes.artifactsLoader };
+        },
       },
       {
         path: 'w/:workspaceId/artifacts/:artifactId',
-        loader: artifactLoader,
-        Component: ArtifactPage,
+        lazy: async () => {
+          const [page, routes] = await Promise.all([
+            import('./dashboard/artifact-page.js'),
+            import('./dashboard/routes.js'),
+          ]);
+          return { Component: page.ArtifactPage, loader: routes.artifactLoader };
+        },
       },
-      { path: 'access', loader: accessLoader, Component: AccessPage },
+      {
+        path: 'access',
+        lazy: async () => {
+          const [page, routes] = await Promise.all([
+            import('./dashboard/access-page.js'),
+            import('./dashboard/routes.js'),
+          ]);
+          return { Component: page.AccessPage, loader: routes.accessLoader };
+        },
+      },
     ],
   },
   { path: '*', element: <Navigate replace to="/app" /> },

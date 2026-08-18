@@ -4,6 +4,8 @@ import { Input } from '@cloudflare/kumo/components/input';
 import { SensitiveInput } from '@cloudflare/kumo/components/sensitive-input';
 import { Form, useActionData, useNavigation } from 'react-router';
 
+import './access.css';
+
 export function SignInPage() {
   const action = useActionData() as { error?: string } | undefined;
   const navigation = useNavigation();
