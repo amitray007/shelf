@@ -1,5 +1,8 @@
-import { Dialog } from '@base-ui/react/dialog';
-import { type ReactNode, type RefObject, useState } from 'react';
+import { Button } from '@cloudflare/kumo/components/button';
+import { ClipboardText } from '@cloudflare/kumo/components/clipboard-text';
+import { Dialog } from '@cloudflare/kumo/components/dialog';
+import { XIcon } from '@phosphor-icons/react/X';
+import { type ReactNode, type RefObject, useEffect } from 'react';
 
 export function Modal({
   open,
@@ -18,33 +21,47 @@ export function Modal({
   readonly initialFocus?: RefObject<HTMLElement | null>;
   readonly canClose?: boolean;
 }) {
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  useEffect(() => {
+    if (!open || initialFocus === undefined) return;
+    const frame = requestAnimationFrame(() => initialFocus.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [initialFocus, open]);
+
   return (
     <Dialog.Root
-      disablePointerDismissal={!canClose}
       open={open}
       onOpenChange={(next) => {
         if (next || canClose) onOpenChange(next);
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Backdrop className="dialog-backdrop" />
-        <Dialog.Viewport className="dialog-viewport">
-          <Dialog.Popup className="dialog-popup" initialFocus={initialFocus}>
-            <header className="dialog-header">
-              <div>
-                <Dialog.Title className="dialog-title">{title}</Dialog.Title>
-                <Dialog.Description className="dialog-description">
-                  {description}
-                </Dialog.Description>
-              </div>
-              <Dialog.Close className="icon-button" aria-label="Close dialog" disabled={!canClose}>
-                Close
-              </Dialog.Close>
-            </header>
-            {children}
-          </Dialog.Popup>
-        </Dialog.Viewport>
-      </Dialog.Portal>
+      <Dialog
+        className="shelf-dialog"
+        size="lg"
+        {...(prefersReducedMotion
+          ? { style: { transitionDuration: '100ms', transitionProperty: 'opacity' } }
+          : {})}
+      >
+        <header className="dialog-header">
+          <div>
+            <Dialog.Title className="dialog-title">{title}</Dialog.Title>
+            <Dialog.Description className="dialog-description">{description}</Dialog.Description>
+          </div>
+          <Dialog.Close
+            render={
+              <Button
+                aria-label="Close dialog"
+                disabled={!canClose}
+                icon={XIcon}
+                shape="square"
+                size="sm"
+                variant="ghost"
+              />
+            }
+          />
+        </header>
+        {children}
+      </Dialog>
     </Dialog.Root>
   );
 }
@@ -58,26 +75,17 @@ export function SecretReveal({
   readonly value: string;
   readonly hint: string;
 }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  };
-
   return (
     <div className="secret-reveal">
       <div className="field-label">{label}</div>
-      <code className="secret-value">{value}</code>
-      <div className="secret-actions">
-        <p>{hint}</p>
-        <button className="control control-primary" type="button" onClick={copy}>
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      </div>
+      <ClipboardText
+        className="shelf-secret-copy"
+        labels={{ copyAction: `Copy ${label.toLocaleLowerCase()}` }}
+        size="sm"
+        text={value}
+        tooltip={{ copiedText: 'Copied', text: 'Copy' }}
+      />
+      <p className="secret-hint">{hint}</p>
     </div>
   );
 }

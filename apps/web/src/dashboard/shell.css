@@ -11,7 +11,7 @@
   display: grid;
   min-width: 320px;
   min-height: 100dvh;
-  grid-template-rows: 58px 1fr;
+  grid-template-rows: 48px 1fr;
   padding: 0 24px;
 }
 
@@ -30,37 +30,21 @@
 .dashboard-bar {
   position: relative;
   z-index: 10;
-  display: grid;
-  min-height: 58px;
-  flex: 0 0 auto;
-  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+  display: flex;
+  height: 48px;
+  min-height: 48px;
+  flex: 0 0 48px;
   align-items: center;
-  gap: 24px;
-  padding: 0 20px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--rule);
   background: var(--ink);
 }
 
-.dashboard-bar::after {
-  position: absolute;
-  bottom: -1px;
-  left: 20px;
-  width: 42px;
-  height: 1px;
-  background: var(--accent);
-  content: "";
-}
-
-.dashboard-identity,
-.dashboard-authority,
-.dashboard-nav {
+.dashboard-location {
   display: flex;
   min-width: 0;
   align-items: center;
-}
-
-.dashboard-identity {
-  gap: 12px;
+  gap: 7px;
 }
 
 .dashboard-wordmark {
@@ -68,69 +52,44 @@
   text-decoration: none;
 }
 
-.dashboard-rule {
-  width: 1px;
-  height: 16px;
+.location-separator {
   flex: 0 0 auto;
-  background: var(--rule-strong);
-}
-
-.dashboard-context {
-  overflow: hidden;
   color: var(--text-muted);
   font:
-    500 11px / 1.2 "Geist Mono Variable",
+    500 12px / 1 "Geist Mono Variable",
     ui-monospace,
     monospace;
+}
+
+.dashboard-current {
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-size: 12px;
+  font-weight: 560;
+  text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.dashboard-nav {
-  align-self: stretch;
-  gap: 2px;
-}
-
-.dashboard-nav-link {
-  position: relative;
-  display: inline-flex;
-  height: 100%;
-  align-items: center;
-  padding: 0 15px;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 560;
-  text-decoration: none;
-}
-
-.dashboard-nav-link:hover {
+.workspace-menu-trigger {
+  min-width: 0;
+  min-height: 32px;
+  max-width: min(42vw, 280px);
   color: var(--text-subtle);
+  font-family: "Geist Mono Variable", ui-monospace, monospace;
 }
 
-.dashboard-nav-link.is-active {
-  color: var(--text);
+.workspace-menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.dashboard-nav-link.is-active::after {
-  position: absolute;
-  right: 14px;
-  bottom: -1px;
-  left: 14px;
-  height: 1px;
-  background: var(--accent-strong);
-  content: "";
+.workspace-menu-content {
+  width: min(300px, calc(100vw - 24px));
+  font-size: 12px;
 }
 
-.dashboard-authority {
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.signout-label-short {
-  display: none;
-}
-
-.workspace-control select,
 .field input,
 .field select,
 .compact-field select {
@@ -145,20 +104,9 @@
   font: inherit;
 }
 
-.workspace-control select {
-  max-width: 220px;
-  min-height: 32px;
-  color: var(--text-subtle);
-  font:
-    500 11px / 1.2 "Geist Mono Variable",
-    ui-monospace,
-    monospace;
-}
-
 .field input:focus,
 .field select:focus,
-.compact-field select:focus,
-.workspace-control select:focus {
+.compact-field select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px #8eb3d419;
 }
@@ -180,6 +128,26 @@
 .icon-button:hover {
   background: var(--raised);
   color: var(--text);
+}
+
+.shelf-dialog {
+  max-height: min(760px, calc(100dvh - 32px));
+  overflow: auto;
+  scrollbar-color: var(--rule-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.shelf-secret-copy {
+  width: 100%;
+  min-width: 0;
+  color: #e2c98e;
+}
+
+.secret-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .dashboard-main {

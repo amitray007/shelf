@@ -1,5 +1,4 @@
 @media (hover: hover) and (pointer: fine) {
-  .dashboard-nav-link,
   .artifact-row,
   .quiet-button,
   .icon-button,
@@ -18,47 +17,7 @@
 
 @media (max-width: 900px) {
   .dashboard-bar {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px;
     padding: 0 14px;
-  }
-
-  .dashboard-nav {
-    position: fixed;
-    z-index: 20;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    min-height: 52px;
-    justify-content: center;
-    border-top: 1px solid var(--rule);
-    background: #0b0d10f5;
-  }
-
-  .dashboard-nav-link {
-    height: 52px;
-  }
-
-  .dashboard-nav-link.is-active::after {
-    top: -1px;
-    bottom: auto;
-  }
-
-  .dashboard-authority {
-    gap: 5px;
-  }
-
-  .dashboard-context,
-  .dashboard-rule {
-    display: none;
-  }
-
-  .workspace-control select {
-    max-width: 160px;
-  }
-
-  .dashboard-page {
-    padding-bottom: 90px;
   }
 
   .artifact-management-grid {
@@ -85,6 +44,10 @@
 }
 
 @media (max-width: 680px) {
+  .workspace-menu-trigger {
+    min-height: 44px;
+  }
+
   .page-heading,
   .artifact-heading {
     align-items: stretch;
@@ -172,53 +135,26 @@
     grid-column: 2;
   }
 
-  .dialog-viewport {
-    align-items: end;
-    padding: 8px;
-  }
-
-  .dialog-popup {
-    width: 100%;
+  .shelf-dialog {
+    top: auto;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    width: auto;
     max-height: calc(100dvh - 16px);
+    max-width: none;
+    translate: none;
   }
 
-  .secret-actions,
   .grant-workspace {
     align-items: stretch;
     grid-template-columns: 1fr;
   }
-
-  .secret-actions {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .secret-actions .control {
-    width: 100%;
-  }
 }
 
 @media (max-width: 430px) {
-  .dashboard-bar {
-    min-height: 54px;
-  }
-
-  .dashboard-authority .quiet-button {
-    width: 32px;
-    overflow: hidden;
-    padding: 0;
-  }
-
-  .signout-label {
-    display: none;
-  }
-
-  .signout-label-short {
-    display: inline;
-  }
-
-  .workspace-control select {
-    max-width: 142px;
+  .workspace-menu-trigger {
+    max-width: 46vw;
   }
 
   .dashboard-page {
@@ -247,20 +183,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dialog-backdrop {
-    transition: opacity 100ms cubic-bezier(0.23, 1, 0.32, 1);
-  }
-
-  .dialog-popup {
-    transition: opacity 100ms cubic-bezier(0.23, 1, 0.32, 1);
-  }
-
-  .dialog-popup[data-starting-style],
-  .dialog-popup[data-ending-style] {
-    transform: none;
-  }
-
-  .dashboard-nav-link,
   .artifact-row,
   .quiet-button,
   .icon-button,

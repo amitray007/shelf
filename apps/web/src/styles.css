@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "@cloudflare/kumo/styles/standalone";
 
 :root {
   color-scheme: dark;
@@ -15,6 +15,10 @@
   --accent: #8eb3d4;
   --accent-strong: #b7d2e8;
   --trust: #d5a95a;
+  --color-kumo-brand: #456984;
+  --color-kumo-brand-hover: #648aa7;
+  --color-kumo-focus: var(--accent-strong);
+  --text-color-kumo-link: var(--accent);
   background: var(--ink);
   color: var(--text);
 }

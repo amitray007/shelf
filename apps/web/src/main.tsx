@@ -38,6 +38,7 @@ function captureCurrentCapability(): string | null {
 }
 
 captureCurrentCapability();
+document.documentElement.dataset.mode = 'dark';
 
 const router = createBrowserRouter([
   {
