@@ -73,10 +73,29 @@
 
 .workspace-menu-trigger {
   min-width: 0;
-  min-height: 32px;
+  min-height: 28px;
   max-width: min(42vw, 280px);
   color: var(--text-subtle);
   font-family: "Geist Mono Variable", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  padding-inline: 6px;
+}
+
+.workspace-menu-trigger > svg {
+  width: 13px;
+  height: 13px;
+  color: var(--text-muted);
+}
+
+.workspace-menu-trigger[data-popup-open] {
+  background: transparent;
+  color: var(--text);
+}
+
+.workspace-menu-trigger:focus-visible {
+  outline: none;
+  outline-offset: 0;
 }
 
 .workspace-menu-label {
@@ -86,8 +105,59 @@
 }
 
 .workspace-menu-content {
-  width: min(300px, calc(100vw - 24px));
+  width: min(220px, calc(100vw - 24px));
+  padding: 4px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: #111111;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  color: var(--text-subtle);
   font-size: 12px;
+  animation-duration: 140ms;
+}
+
+.workspace-menu-content [role="presentation"] {
+  padding: 6px 8px 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.workspace-menu-content [role="menuitem"] {
+  min-height: 32px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  color: var(--text-subtle);
+  font-size: 12px;
+}
+
+.workspace-menu-content [role="menuitem"] > svg {
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  color: var(--text-muted);
+}
+
+.workspace-menu-content [role="menuitem"] > span:last-child {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+.workspace-menu-content [role="separator"] {
+  margin-block: 4px;
+  background: var(--rule);
+}
+
+.workspace-menu-content [role="menuitem"][data-highlighted] {
+  background: #1c1c1c;
+  color: var(--text);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workspace-menu-trigger:hover {
+    background: var(--raised);
+    color: var(--text);
+  }
 }
 
 .quiet-button {
@@ -190,14 +260,15 @@
 }
 
 .control-primary {
-  border-color: #456984;
-  background: #182632;
-  color: #deedf7;
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--ink);
 }
 
 .control-primary:hover {
-  border-color: #648aa7;
-  background: #1d2e3b;
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--ink);
 }
 
 .control:disabled,

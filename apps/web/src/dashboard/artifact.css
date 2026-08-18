@@ -542,6 +542,7 @@
 .artifact-table {
   width: 100%;
   color: var(--text-subtle);
+  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
 }
 
 .artifact-name-column {
@@ -566,8 +567,16 @@
 
 .artifact-table th {
   color: var(--text-muted);
+  background: var(--raised);
+  border-color: var(--rule);
+  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   font-size: 11px;
-  font-weight: 550;
+  font-weight: 520;
+  letter-spacing: 0.01em;
+}
+
+.artifact-table td {
+  border-color: var(--rule);
 }
 
 .artifact-ledger-row {
@@ -603,11 +612,7 @@
   white-space: nowrap;
 }
 
-.artifact-ledger-name code,
-.artifact-kind-cell,
-.artifact-revision-cell,
-.artifact-size-cell,
-.artifact-updated-cell {
+.artifact-ledger-name code {
   overflow: hidden;
   color: var(--text-muted);
   font:
@@ -619,7 +624,54 @@
 }
 
 .artifact-kind-cell {
+  overflow: hidden;
+  color: var(--text-subtle);
+  font:
+    450 12px / 1.35 "Geist Variable",
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
   text-transform: capitalize;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-revision-cell,
+.artifact-size-cell {
+  overflow: hidden;
+  color: var(--text-subtle);
+  font:
+    480 11px / 1.35 "Geist Mono Variable",
+    ui-monospace,
+    monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-updated-cell {
+  overflow: hidden;
+  color: var(--text-muted);
+  font:
+    450 12px / 1.35 "Geist Variable",
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-table th.artifact-kind-cell,
+.artifact-table th.artifact-revision-cell,
+.artifact-table th.artifact-size-cell,
+.artifact-table th.artifact-updated-cell {
+  color: var(--text-muted);
+  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 520;
 }
 
 .artifact-index-empty {

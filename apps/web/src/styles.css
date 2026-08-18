@@ -4,19 +4,19 @@
   color-scheme: dark;
   font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   font-synthesis: none;
-  --ink: #0b0d10;
-  --canvas: #101318;
-  --raised: #161a20;
-  --rule: #272d35;
-  --rule-strong: #343c46;
-  --text: #edf0f3;
-  --text-subtle: #a0a8b2;
-  --text-muted: #7b8590;
-  --accent: #8eb3d4;
-  --accent-strong: #b7d2e8;
+  --ink: #0a0a0a;
+  --canvas: #0a0a0a;
+  --raised: #171717;
+  --rule: #262626;
+  --rule-strong: #333333;
+  --text: #ededed;
+  --text-subtle: #a1a1a1;
+  --text-muted: #8a8a8a;
+  --accent: #ededed;
+  --accent-strong: #ffffff;
   --trust: #d5a95a;
-  --color-kumo-brand: #456984;
-  --color-kumo-brand-hover: #648aa7;
+  --color-kumo-brand: #d4d4d4;
+  --color-kumo-brand-hover: #ffffff;
   --color-kumo-focus: var(--accent-strong);
   --text-color-kumo-link: var(--accent);
   background: var(--ink);
@@ -58,7 +58,7 @@ a {
 }
 
 ::selection {
-  background: #294057;
+  background: #333333;
   color: var(--text);
 }
 
