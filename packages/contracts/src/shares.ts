@@ -5,6 +5,30 @@ import { OpaqueArtifactIdSchema, OpaqueRevisionIdSchema } from './publish.js';
 
 export const SHARE_CREATE_OPERATION = 'share.create' as const;
 
+export const SHARE_EXPIRY_PRESETS = [
+  '5m',
+  '30m',
+  '2hr',
+  '6hr',
+  '24hr',
+  '3d',
+  '7d',
+  '15d',
+  '30d',
+] as const;
+
+export const PROTECTED_SHARE_EXPIRY_OPTIONS = [
+  'never',
+  ...SHARE_EXPIRY_PRESETS,
+  'custom',
+] as const;
+export const PUBLIC_SHARE_EXPIRY_OPTIONS = [...SHARE_EXPIRY_PRESETS, 'custom'] as const;
+
+export const SHARE_SESSION_LIMITS = {
+  minimum: 1,
+  maximum: 1_000_000,
+} as const;
+
 export const OpaqueShareIdSchema = Type.String({
   pattern: '^shr_[A-Za-z0-9_-]{22}$',
 });
@@ -14,6 +38,44 @@ const IsoInstantSchema = Type.String({
 });
 const NullableIsoInstantSchema = Type.Union([IsoInstantSchema, Type.Null()]);
 const CursorSchema = Type.Union([Type.String({ minLength: 1, maxLength: 2048 }), Type.Null()]);
+const ShareSessionLimitSchema = Type.Integer(SHARE_SESSION_LIMITS);
+const SessionsUsedSchema = Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
+const SessionsRemainingSchema = Type.Integer({ minimum: 0, maximum: SHARE_SESSION_LIMITS.maximum });
+
+export const ShareExpiryPresetSchema = Type.Union([
+  Type.Literal('5m'),
+  Type.Literal('30m'),
+  Type.Literal('2hr'),
+  Type.Literal('6hr'),
+  Type.Literal('24hr'),
+  Type.Literal('3d'),
+  Type.Literal('7d'),
+  Type.Literal('15d'),
+  Type.Literal('30d'),
+]);
+
+export const ProtectedShareExpiryPresetSchema = Type.Union([
+  Type.Literal('never'),
+  ShareExpiryPresetSchema,
+]);
+
+export const ShareLifecycleStatusSchema = Type.Union([
+  Type.Literal('active'),
+  Type.Literal('session-limit-reached'),
+  Type.Literal('expired'),
+  Type.Literal('revoked'),
+]);
+
+export const PublicShareCodeSchema = Type.String({ pattern: '^[A-Za-z0-9_-]{12}$' });
+
+const ViewerSessionIdSchema = Type.String({
+  pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+});
+const ViewerSessionTokenSchema = Type.String({
+  minLength: 24,
+  maxLength: 4096,
+  pattern: '^[A-Za-z0-9._-]+$',
+});
 
 export const LatestShareTargetSchema = Type.Object(
   { mode: Type.Literal('latest') },
@@ -32,6 +94,68 @@ export const ShareTargetSchema = Type.Union([LatestShareTargetSchema, PinnedShar
   $id: 'ShareTarget',
 });
 
+const ProtectedPolicyFields = {
+  accessType: Type.Literal('protected'),
+  maxSessions: Type.Optional(ShareSessionLimitSchema),
+};
+const PublicPolicyFields = { accessType: Type.Literal('public') };
+
+export const ProtectedShareAccessPolicyInputSchema = Type.Union([
+  Type.Object(ProtectedPolicyFields, { additionalProperties: false }),
+  Type.Object(
+    { ...ProtectedPolicyFields, expiresIn: ProtectedShareExpiryPresetSchema },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { ...ProtectedPolicyFields, expiresAt: IsoInstantSchema },
+    { additionalProperties: false },
+  ),
+]);
+
+export const PublicShareAccessPolicyInputSchema = Type.Union([
+  Type.Object(PublicPolicyFields, { additionalProperties: false }),
+  Type.Object(
+    { ...PublicPolicyFields, expiresIn: ShareExpiryPresetSchema },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { ...PublicPolicyFields, expiresAt: IsoInstantSchema },
+    { additionalProperties: false },
+  ),
+]);
+
+export const ShareAccessPolicyInputSchema = Type.Union([
+  ProtectedShareAccessPolicyInputSchema,
+  PublicShareAccessPolicyInputSchema,
+]);
+
+const ProtectedCreateFields = { ...ProtectedPolicyFields, target: ShareTargetSchema };
+const PublicCreateFields = { ...PublicPolicyFields, target: ShareTargetSchema };
+
+export const ShareCreateInputSchema = Type.Union(
+  [
+    Type.Object(ProtectedCreateFields, { additionalProperties: false }),
+    Type.Object(
+      { ...ProtectedCreateFields, expiresIn: ProtectedShareExpiryPresetSchema },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      { ...ProtectedCreateFields, expiresAt: IsoInstantSchema },
+      { additionalProperties: false },
+    ),
+    Type.Object(PublicCreateFields, { additionalProperties: false }),
+    Type.Object(
+      { ...PublicCreateFields, expiresIn: ShareExpiryPresetSchema },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      { ...PublicCreateFields, expiresAt: IsoInstantSchema },
+      { additionalProperties: false },
+    ),
+  ],
+  { $id: 'ShareCreateInput' },
+);
+
 const ShareManagementFields = {
   apiVersion: Type.Literal('v1'),
   workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
@@ -39,13 +163,14 @@ const ShareManagementFields = {
   artifactId: OpaqueArtifactIdSchema,
   visibility: Type.Literal('unlisted'),
   createdAt: IsoInstantSchema,
-  expiresAt: NullableIsoInstantSchema,
   revokedAt: NullableIsoInstantSchema,
+  status: ShareLifecycleStatusSchema,
 };
 
-const ShareUrlSchema = Type.String({
+export const ProtectedShareUrlSchema = Type.String({
   pattern: '^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$',
 });
+export const PublicShareUrlSchema = Type.String({ pattern: '^/s/[A-Za-z0-9_-]{12}$' });
 
 const ShareManagementTargetSchema = Type.Union([
   LatestShareTargetSchema,
@@ -59,23 +184,104 @@ const ShareManagementTargetSchema = Type.Union([
   ),
 ]);
 
-export const ShareManagementSummarySchema = Type.Object(
-  { ...ShareManagementFields, target: ShareManagementTargetSchema, url: ShareUrlSchema },
-  {
-    additionalProperties: false,
-    $id: 'ShareManagementSummary',
-  },
+const ProtectedLimitedUsageFields = {
+  accessType: Type.Literal('protected'),
+  maxSessions: ShareSessionLimitSchema,
+  sessionsUsed: SessionsUsedSchema,
+  sessionsRemaining: SessionsRemainingSchema,
+};
+const ProtectedUnlimitedUsageFields = {
+  accessType: Type.Literal('protected'),
+  maxSessions: Type.Null(),
+  sessionsUsed: SessionsUsedSchema,
+  sessionsRemaining: Type.Null(),
+};
+const PublicAccessFields = {
+  accessType: Type.Literal('public'),
+  publicCode: PublicShareCodeSchema,
+};
+
+const publicManagementFields = {
+  ...ShareManagementFields,
+  ...PublicAccessFields,
+  target: ShareManagementTargetSchema,
+  expiresAt: IsoInstantSchema,
+  url: PublicShareUrlSchema,
+};
+
+export const ProtectedShareManagementSummarySchema = Type.Union([
+  Type.Object(
+    {
+      ...ShareManagementFields,
+      ...ProtectedLimitedUsageFields,
+      target: ShareManagementTargetSchema,
+      expiresAt: NullableIsoInstantSchema,
+      url: ProtectedShareUrlSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...ShareManagementFields,
+      ...ProtectedUnlimitedUsageFields,
+      target: ShareManagementTargetSchema,
+      expiresAt: NullableIsoInstantSchema,
+      url: ProtectedShareUrlSchema,
+    },
+    { additionalProperties: false },
+  ),
+]);
+export const PublicShareManagementSummarySchema = Type.Object(publicManagementFields, {
+  additionalProperties: false,
+});
+export const ShareManagementSummarySchema = Type.Union(
+  [ProtectedShareManagementSummarySchema, PublicShareManagementSummarySchema],
+  { $id: 'ShareManagementSummary' },
 );
 
-export const ShareCreateResultSchema = Type.Object(
+const ShareCreateResultFields = {
+  requestId: Type.String({ minLength: 1, maxLength: 128 }),
+  replayed: Type.Boolean(),
+};
+
+export const ProtectedShareCreateResultSchema = Type.Union([
+  Type.Object(
+    {
+      ...ShareManagementFields,
+      ...ProtectedLimitedUsageFields,
+      ...ShareCreateResultFields,
+      target: ShareTargetSchema,
+      expiresAt: NullableIsoInstantSchema,
+      url: ProtectedShareUrlSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...ShareManagementFields,
+      ...ProtectedUnlimitedUsageFields,
+      ...ShareCreateResultFields,
+      target: ShareTargetSchema,
+      expiresAt: NullableIsoInstantSchema,
+      url: ProtectedShareUrlSchema,
+    },
+    { additionalProperties: false },
+  ),
+]);
+export const PublicShareCreateResultSchema = Type.Object(
   {
     ...ShareManagementFields,
+    ...PublicAccessFields,
+    ...ShareCreateResultFields,
     target: ShareTargetSchema,
-    requestId: Type.String({ minLength: 1, maxLength: 128 }),
-    url: ShareUrlSchema,
-    replayed: Type.Boolean(),
+    expiresAt: IsoInstantSchema,
+    url: PublicShareUrlSchema,
   },
-  { additionalProperties: false, $id: 'ShareCreateResult' },
+  { additionalProperties: false },
+);
+export const ShareCreateResultSchema = Type.Union(
+  [ProtectedShareCreateResultSchema, PublicShareCreateResultSchema],
+  { $id: 'ShareCreateResult' },
 );
 
 export const SharePageSchema = Type.Object(
@@ -167,11 +373,42 @@ export const PublicShareResolutionSchema = Type.Union(
   { $id: 'PublicShareResolution' },
 );
 
+export const ProtectedSessionEstablishInputSchema = Type.Object(
+  {
+    sessionId: ViewerSessionIdSchema,
+    token: Type.Optional(ViewerSessionTokenSchema),
+  },
+  { additionalProperties: false, $id: 'ProtectedSessionEstablishInput' },
+);
+
+export const ProtectedSessionAuthoritySchema = Type.Object(
+  {
+    apiVersion: Type.Literal('v1'),
+    shareId: OpaqueShareIdSchema,
+    sessionId: ViewerSessionIdSchema,
+    token: ViewerSessionTokenSchema,
+    issuedAt: IsoInstantSchema,
+    expiresAt: IsoInstantSchema,
+  },
+  { additionalProperties: false, $id: 'ProtectedSessionAuthority' },
+);
+
 export type ShareTarget = Static<typeof ShareTargetSchema>;
+export type ShareExpiryPreset = Static<typeof ShareExpiryPresetSchema>;
+export type ProtectedShareExpiryPreset = Static<typeof ProtectedShareExpiryPresetSchema>;
+export type ShareLifecycleStatus = Static<typeof ShareLifecycleStatusSchema>;
+export type ShareAccessPolicyInput = Static<typeof ShareAccessPolicyInputSchema>;
+export type ShareCreateInput = Static<typeof ShareCreateInputSchema>;
 export type ShareManagementSummary = Static<typeof ShareManagementSummarySchema>;
 export type ShareCreateResult = Static<typeof ShareCreateResultSchema>;
 export type SharePage = Static<typeof SharePageSchema>;
 export type PublicShareResolution = Static<typeof PublicShareResolutionSchema>;
+export type ProtectedSessionEstablishInput = Static<typeof ProtectedSessionEstablishInputSchema>;
+export type ProtectedSessionAuthority = Static<typeof ProtectedSessionAuthoritySchema>;
+
+export function isShareCreateInput(value: unknown): value is ShareCreateInput {
+  return Check(ShareCreateInputSchema, value);
+}
 
 export function isShareCreateResult(value: unknown): value is ShareCreateResult {
   return Check(ShareCreateResultSchema, value);
@@ -183,4 +420,8 @@ export function isSharePage(value: unknown): value is SharePage {
 
 export function isPublicShareResolution(value: unknown): value is PublicShareResolution {
   return Check(PublicShareResolutionSchema, value);
+}
+
+export function isProtectedSessionAuthority(value: unknown): value is ProtectedSessionAuthority {
+  return Check(ProtectedSessionAuthoritySchema, value);
 }
