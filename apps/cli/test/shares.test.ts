@@ -49,6 +49,19 @@ function runtime(fetch: typeof globalThis.fetch) {
 }
 
 describe('shelf shares', () => {
+  it('documents access, expiry, limits, targets, and examples in command help', async () => {
+    const output = runtime(vi.fn() as typeof globalThis.fetch);
+
+    const exitCode = await runCli(['node', 'shelf', 'shares', 'create', '--help'], output.value);
+
+    expect(exitCode).toBe(0);
+    expect(output.stdout.value()).toContain('--access <protected|public>');
+    expect(output.stdout.value()).toContain('--expires-in <preset>');
+    expect(output.stdout.value()).toContain('--max-sessions <count>');
+    expect(output.stdout.value()).toContain('Targets default to Latest');
+    expect(output.stdout.value()).toContain('non-confidential');
+  });
+
   it('creates an explicit latest share and prints its capability URL once', async () => {
     const result = {
       ...summary,

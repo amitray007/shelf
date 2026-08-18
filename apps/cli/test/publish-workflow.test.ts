@@ -105,12 +105,24 @@ describe('profile-backed shelf publish', () => {
     const stdout: string[] = [];
     const stderr: string[] = [];
     const fetch = vi.fn(async () => Response.json(publishResult, { status: 201 }));
-    const exitCode = await runCli(['node', 'shelf', 'publish', file], {
-      env,
-      stdout: (chunk) => stdout.push(chunk),
-      stderr: (chunk) => stderr.push(chunk),
-      fetch,
-    });
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'publish',
+        file,
+        '--title',
+        'Keep this idea',
+        '--description',
+        'A small HTML concept for review.',
+      ],
+      {
+        env,
+        stdout: (chunk) => stdout.push(chunk),
+        stderr: (chunk) => stderr.push(chunk),
+        fetch,
+      },
+    );
 
     expect(exitCode).toBe(0);
     expect(stderr).toEqual([]);
@@ -141,6 +153,43 @@ describe('profile-backed shelf publish', () => {
     );
     const form = fetch.mock.calls[0]?.[1]?.body as FormData;
     expect((form.get('file') as Blob).type).toBe('text/html');
+    expect(form.get('publisherMetadata')).toBe(
+      JSON.stringify({ title: 'Keep this idea', description: 'A small HTML concept for review.' }),
+    );
+  });
+
+  it('requires agent-friendly title and description unless the user explicitly bypasses them', async () => {
+    const { config, file } = await fixture();
+    const env = { SHELF_CONFIG_DIR: config, SHELF_PERSONAL_TOKEN: 'personal-secret' };
+    await runCli(
+      [
+        'node',
+        'shelf',
+        'profiles',
+        'set',
+        'default',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'personal',
+        '--credential-env',
+        'SHELF_PERSONAL_TOKEN',
+      ],
+      { env, stdout() {}, stderr() {} },
+    );
+    const stderr: string[] = [];
+    const fetch = vi.fn();
+
+    const exitCode = await runCli(['node', 'shelf', 'publish', file], {
+      env,
+      stdout() {},
+      stderr: (chunk) => stderr.push(chunk),
+      fetch: fetch as typeof globalThis.fetch,
+    });
+
+    expect(exitCode).toBe(2);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(stderr.join('')).toContain('--user-bypass');
   });
 
   it('dispatches a positional directory to the existing complete-folder transport', async () => {
@@ -170,12 +219,15 @@ describe('profile-backed shelf publish', () => {
     const stdout: string[] = [];
     const fetch = vi.fn(async () => Response.json(folderPublishResult, { status: 201 }));
 
-    const exitCode = await runCli(['node', 'shelf', 'publish', directory, '--profile', 'work'], {
-      env,
-      stdout: (chunk) => stdout.push(chunk),
-      stderr() {},
-      fetch,
-    });
+    const exitCode = await runCli(
+      ['node', 'shelf', 'publish', directory, '--profile', 'work', '--user-bypass'],
+      {
+        env,
+        stdout: (chunk) => stdout.push(chunk),
+        stderr() {},
+        fetch,
+      },
+    );
 
     expect(exitCode).toBe(0);
     expect(JSON.parse(stdout[0] ?? '{}')).toMatchObject({
@@ -217,7 +269,7 @@ describe('profile-backed shelf publish', () => {
       .mockResolvedValueOnce(Response.json(publishResult, { status: 201 }))
       .mockResolvedValueOnce(Response.json(shareResult, { status: 201 }));
 
-    const exitCode = await runCli(['node', 'shelf', 'publish', file, '--share'], {
+    const exitCode = await runCli(['node', 'shelf', 'publish', file, '--share', '--user-bypass'], {
       env,
       stdout: (chunk) => stdout.push(chunk),
       stderr() {},
@@ -285,7 +337,7 @@ describe('profile-backed shelf publish', () => {
     const stdout: string[] = [];
     const stderr: string[] = [];
 
-    const exitCode = await runCli(['node', 'shelf', 'publish', file, '--share'], {
+    const exitCode = await runCli(['node', 'shelf', 'publish', file, '--share', '--user-bypass'], {
       env,
       fetch,
       stdout: (chunk) => stdout.push(chunk),
@@ -343,7 +395,7 @@ describe('profile-backed shelf publish', () => {
           { status: 503 },
         ),
       );
-    const firstExit = await runCli(['node', 'shelf', 'publish', file, '--share'], {
+    const firstExit = await runCli(['node', 'shelf', 'publish', file, '--share', '--user-bypass'], {
       env,
       stdout: (chunk) => firstStdout.push(chunk),
       stderr: (chunk) => firstStderr.push(chunk),
@@ -381,7 +433,7 @@ describe('profile-backed shelf publish', () => {
     const retryFetch = vi.fn<typeof globalThis.fetch>(async () =>
       Response.json({ ...shareResult, replayed: true }, { status: 201 }),
     );
-    const retryExit = await runCli(['node', 'shelf', 'publish', file, '--share'], {
+    const retryExit = await runCli(['node', 'shelf', 'publish', file, '--share', '--user-bypass'], {
       env,
       stdout: (chunk) => retryStdout.push(chunk),
       stderr: (chunk) => retryStderr.push(chunk),
@@ -408,7 +460,7 @@ describe('profile-backed shelf publish', () => {
         { status: 201 },
       ),
     );
-    const afterDeliveryExit = await runCli(['node', 'shelf', 'publish', file], {
+    const afterDeliveryExit = await runCli(['node', 'shelf', 'publish', file, '--user-bypass'], {
       env,
       stdout() {},
       stderr() {},
@@ -454,7 +506,7 @@ describe('profile-backed shelf publish', () => {
       .mockResolvedValueOnce(Response.json(publishResult, { status: 201 }))
       .mockResolvedValueOnce(Response.json(unavailable, { status: 503 }));
     expect(
-      await runCli(['node', 'shelf', 'publish', file, '--share'], {
+      await runCli(['node', 'shelf', 'publish', file, '--share', '--user-bypass'], {
         env,
         fetch: firstFetch,
         stdout() {},
@@ -474,7 +526,7 @@ describe('profile-backed shelf publish', () => {
       .mockResolvedValueOnce(Response.json(shareResult, { status: 201 }));
 
     expect(
-      await runCli(['node', 'shelf', 'publish', file, '--share'], {
+      await runCli(['node', 'shelf', 'publish', file, '--share', '--user-bypass'], {
         env,
         fetch: retryFetch,
         stdout() {},
@@ -522,7 +574,7 @@ describe('profile-backed shelf publish', () => {
 
     const exits = await Promise.all(
       [0, 1].map(() =>
-        runCli(['node', 'shelf', 'publish', file], {
+        runCli(['node', 'shelf', 'publish', file, '--user-bypass'], {
           env,
           stdout() {},
           stderr() {},
@@ -580,7 +632,7 @@ describe('profile-backed shelf publish', () => {
 
     for (const profile of ['personal', 'work']) {
       expect(
-        await runCli(['node', 'shelf', 'publish', file, '--profile', profile], {
+        await runCli(['node', 'shelf', 'publish', file, '--profile', profile, '--user-bypass'], {
           env,
           fetch,
           stdout() {},
@@ -626,7 +678,7 @@ describe('profile-backed shelf publish', () => {
       throw new Error('response lost');
     });
     expect(
-      await runCli(['node', 'shelf', 'publish', file], {
+      await runCli(['node', 'shelf', 'publish', file, '--user-bypass'], {
         env,
         fetch: lostResponse,
         stdout() {},
@@ -651,7 +703,7 @@ describe('profile-backed shelf publish', () => {
       ),
     );
     expect(
-      await runCli(['node', 'shelf', 'publish', file], {
+      await runCli(['node', 'shelf', 'publish', file, '--user-bypass'], {
         env,
         fetch: conflict,
         stdout() {},
@@ -668,7 +720,7 @@ describe('profile-backed shelf publish', () => {
       Response.json({ ...publishResult, byteCount: 21 }, { status: 201 }),
     );
     expect(
-      await runCli(['node', 'shelf', 'publish', file], {
+      await runCli(['node', 'shelf', 'publish', file, '--user-bypass'], {
         env,
         fetch: next,
         stdout() {},

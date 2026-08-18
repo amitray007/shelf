@@ -25,6 +25,8 @@ export interface PublishFolderCommandOptions {
   idempotencyKey: string;
   artifact?: string;
   metadata: readonly string[];
+  title?: string;
+  description?: string;
   allowInsecureLoopback?: boolean;
 }
 
@@ -238,7 +240,7 @@ export async function executePublishFolderWithToken(
         ? {}
         : { artifactId: opaqueId(options.artifact, 'artifact') }),
       token: authenticationToken,
-      publisherMetadata: publisherMetadata(options.metadata),
+      publisherMetadata: publisherMetadata(options),
       manifest: folder.manifest,
       files: folder.files,
       ...(options.allowInsecureLoopback === undefined

@@ -78,11 +78,27 @@ export async function runCli(
 ): Promise<number> {
   const program = new Command()
     .name('shelf')
+    .description('Publish, version, inspect, and share Shelf artifacts')
     .showHelpAfterError(false)
     .showSuggestionAfterError(false)
     .exitOverride()
     .configureOutput({ writeOut: runtime.stdout, writeErr() {} })
     .allowExcessArguments(false);
+
+  program.addHelpText(
+    'after',
+    `
+Agent workflow:
+  1. Configure a profile: shelf profiles set default --url <url> --workspace <id> --credential-env SHELF_TOKEN
+  2. Publish with context: shelf publish ./report.md --title "Report" --description "What this artifact contains"
+  3. Inspect JSON output or use: shelf artifacts list --url <url> --workspace <id>
+
+Authentication and output:
+  Credentials are read from the configured profile or SHELF_TOKEN; never pass tokens as arguments.
+  Success writes one JSON document to stdout. Errors write one redacted JSON document to stderr.
+  Run "shelf <command> --help" for command-specific flags and examples.
+`,
+  );
 
   let result: unknown;
   let finalizeResult: (() => Promise<void>) | undefined;
@@ -90,7 +106,7 @@ export async function runCli(
   program
     .command('publish')
     .description('Publish one immutable file or folder revision')
-    .argument('[path]')
+    .argument('[path]', 'file or directory to publish through a configured profile')
     .option('--profile <name>', 'use one configured profile')
     .option('--url <url>')
     .option('--workspace <workspace>')
@@ -98,6 +114,12 @@ export async function runCli(
     .option('--idempotency-key <key>')
     .option('--artifact <artifact-id>', 'publish another revision to this artifact')
     .option('--metadata <key=value>', 'publisher metadata; repeatable', collect, [])
+    .option('--title <title>', 'human-readable artifact title stored as metadata')
+    .option('--description <description>', 'artifact description stored as metadata')
+    .option(
+      '--user-bypass',
+      'allow an intentional human publish without title and description metadata',
+    )
     .option('--share', 'create one unlisted latest share after publishing')
     .option('--access <protected|public>', 'share access policy; defaults to protected')
     .option(
@@ -110,6 +132,23 @@ export async function runCli(
     )
     .option('--max-sessions <count>', 'protected share session budget, from 1 to 1000000')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Metadata:
+  Agent publishes require --title and --description. Add arbitrary strings with repeatable
+  --metadata key=value. Humans may intentionally omit title/description with --user-bypass.
+
+Sharing:
+  --share creates a Latest Protected link by default. Use --access public for a short,
+  non-confidential link. Public links expire after 24hr by default and cannot be permanent.
+
+Examples:
+  shelf publish ./notes.md --title "Release notes" --description "Changes in this build"
+  shelf publish ./site --title "Preview" --description "Static site review" --share --access public --expires-in 24hr
+  shelf publish ./draft.txt --user-bypass
+`,
+    )
     .action(async (path: string | undefined, options: PublishCliOptions) => {
       if (path !== undefined) {
         if (
@@ -170,6 +209,8 @@ export async function runCli(
     .requiredOption('--idempotency-key <key>')
     .option('--artifact <artifact-id>', 'publish another snapshot to this folder artifact')
     .option('--metadata <key=value>', 'publisher metadata; repeatable', collect, [])
+    .option('--title <title>', 'human-readable artifact title stored as metadata')
+    .option('--description <description>', 'artifact description stored as metadata')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: PublishFolderCommandOptions) => {
       result = await executePublishFolder(options, runtime);
@@ -203,6 +244,7 @@ export async function runCli(
   const artifacts = program.command('artifacts').description('Inspect versioned artifacts');
   artifacts
     .command('list')
+    .description('List a workspace artifact page')
     .requiredOption('--url <url>')
     .requiredOption('--workspace <workspace>')
     .option('--limit <count>')
@@ -213,6 +255,7 @@ export async function runCli(
     });
   artifacts
     .command('show')
+    .description('Show one artifact and its latest revision')
     .requiredOption('--url <url>')
     .requiredOption('--artifact <artifact-id>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
@@ -221,6 +264,7 @@ export async function runCli(
     });
   artifacts
     .command('history')
+    .description('List immutable revision history')
     .requiredOption('--url <url>')
     .requiredOption('--artifact <artifact-id>')
     .option('--limit <count>')
@@ -232,6 +276,7 @@ export async function runCli(
     });
   artifacts
     .command('rename')
+    .description('Rename an artifact without changing revision content')
     .requiredOption('--url <url>')
     .requiredOption('--artifact <artifact-id>')
     .requiredOption('--name <name>')
@@ -241,6 +286,7 @@ export async function runCli(
     });
   artifacts
     .command('restore')
+    .description('Create a new revision from an earlier immutable revision')
     .requiredOption('--url <url>')
     .requiredOption('--workspace <workspace>')
     .requiredOption('--artifact <artifact-id>')
@@ -252,6 +298,7 @@ export async function runCli(
     });
   artifacts
     .command('delete')
+    .description('Soft-delete an artifact and revoke its active shares')
     .requiredOption('--url <url>')
     .requiredOption('--artifact <artifact-id>')
     .requiredOption('--confirm <artifact-id>', 'confirm the exact artifact ID to delete')
@@ -261,6 +308,7 @@ export async function runCli(
     });
   artifacts
     .command('recover')
+    .description('Recover a soft-deleted artifact during its recovery window')
     .requiredOption('--url <url>')
     .requiredOption('--artifact <artifact-id>')
     .option('--idempotency-key <key>')
@@ -286,11 +334,28 @@ export async function runCli(
     .option('--expires-at <instant>', 'expiry as an ISO UTC instant; conflicts with --expires-in')
     .option('--max-sessions <count>', 'protected session budget, from 1 to 1000000')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Access policies:
+  protected  Capability URL. May never expire and may set --max-sessions.
+  public     Short non-confidential URL. Must expire; omission defaults to 24hr.
+
+Targets default to Latest. Add --revision to pin the link to one immutable revision.
+Use either --expires-in or --expires-at, never both.
+
+Examples:
+  shelf shares create --url <url> --workspace <id> --artifact <artifact-id> --idempotency-key <key>
+  shelf shares create --url <url> --workspace <id> --artifact <artifact-id> --access protected --max-sessions 5 --expires-in 7d --idempotency-key <key>
+  shelf shares create --url <url> --workspace <id> --artifact <artifact-id> --access public --expires-in 24hr --idempotency-key <key>
+`,
+    )
     .action(async (options: CreateShareCommandOptions) => {
       result = await executeCreateShare(options, runtime);
     });
   shares
     .command('list')
+    .description('List reusable share URLs, lifecycle state, and usage')
     .requiredOption('--url <url>')
     .requiredOption('--workspace <workspace>')
     .option('--limit <count>')
@@ -301,6 +366,7 @@ export async function runCli(
     });
   shares
     .command('revoke')
+    .description('Revoke one share immediately')
     .requiredOption('--url <url>')
     .requiredOption('--workspace <workspace>')
     .requiredOption('--share <share-id>')
@@ -312,6 +378,7 @@ export async function runCli(
   const profiles = program.command('profiles').description('Configure isolated CLI contexts');
   profiles
     .command('set')
+    .description('Create or update an isolated CLI context')
     .argument('<name>')
     .requiredOption('--url <url>')
     .requiredOption('--workspace <workspace>')
@@ -321,17 +388,22 @@ export async function runCli(
     .action(async (name: string, options: Omit<SetProfileOptions, 'name'>) => {
       result = await executeSetProfile({ name, ...options }, runtime);
     });
-  profiles.command('list').action(async () => {
-    result = await executeListProfiles(runtime.env);
-  });
+  profiles
+    .command('list')
+    .description('List configured profile names and contexts')
+    .action(async () => {
+      result = await executeListProfiles(runtime.env);
+    });
   profiles
     .command('show')
+    .description('Show one profile without revealing its credential')
     .argument('<name>')
     .action(async (name: string) => {
       result = await executeShowProfile(name, runtime.env);
     });
   profiles
     .command('remove')
+    .description('Remove one profile and its stored credential reference')
     .argument('<name>')
     .option('--yes', 'confirm removal without prompting')
     .action(async (name: string, options: { yes?: boolean }) => {

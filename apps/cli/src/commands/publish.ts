@@ -1,4 +1,5 @@
 import {
+  PUBLISHER_METADATA_KEYS,
   PUBLISHER_METADATA_LIMITS,
   type PublisherMetadata,
   type PublishResult,
@@ -15,11 +16,28 @@ export interface PublishCommandOptions {
   idempotencyKey: string;
   artifact?: string;
   metadata: readonly string[];
+  title?: string;
+  description?: string;
   allowInsecureLoopback?: boolean;
 }
 
-export function publisherMetadata(entries: readonly string[]): PublisherMetadata {
-  if (entries.length > PUBLISHER_METADATA_LIMITS.maxKeys) {
+export interface PublisherMetadataOptions {
+  readonly metadata: readonly string[];
+  readonly title?: string;
+  readonly description?: string;
+}
+
+export function publisherMetadata(options: PublisherMetadataOptions): PublisherMetadata {
+  const entries = options.metadata;
+  const authoredEntries = [
+    ...(options.title === undefined
+      ? []
+      : [[PUBLISHER_METADATA_KEYS.title, options.title] as const]),
+    ...(options.description === undefined
+      ? []
+      : [[PUBLISHER_METADATA_KEYS.description, options.description] as const]),
+  ];
+  if (entries.length + authoredEntries.length > PUBLISHER_METADATA_LIMITS.maxKeys) {
     throw usageFailure('Too many publisher metadata entries.');
   }
   const metadata: PublisherMetadata = {};
@@ -41,7 +59,29 @@ export function publisherMetadata(entries: readonly string[]): PublisherMetadata
       throw usageFailure(`Publisher metadata key "${key}" is duplicated.`);
     metadata[key] = value;
   }
+  for (const [key, value] of authoredEntries) {
+    if (value.trim().length === 0) throw usageFailure(`Publisher metadata ${key} cannot be empty.`);
+    if (value.length > PUBLISHER_METADATA_LIMITS.maxValueLength) {
+      throw usageFailure(`Publisher metadata ${key} is too long.`);
+    }
+    if (Object.hasOwn(metadata, key)) {
+      throw usageFailure(`Publisher metadata key "${key}" is duplicated.`);
+    }
+    metadata[key] = value;
+  }
   return metadata;
+}
+
+export function requireAgentMetadata(metadata: PublisherMetadata, userBypass?: boolean): void {
+  if (userBypass === true) return;
+  const missing = [PUBLISHER_METADATA_KEYS.title, PUBLISHER_METADATA_KEYS.description].filter(
+    (key) => metadata[key] === undefined || metadata[key].trim().length === 0,
+  );
+  if (missing.length > 0) {
+    throw usageFailure(
+      `Publishing requires ${missing.join(' and ')} metadata. Supply --title and --description, or use --user-bypass for an intentional human publish.`,
+    );
+  }
 }
 
 export async function executePublish(
@@ -64,7 +104,7 @@ export async function executePublish(
       idempotencyKey: options.idempotencyKey,
       ...(options.artifact === undefined ? {} : { artifactId: options.artifact }),
       token,
-      publisherMetadata: publisherMetadata(options.metadata),
+      publisherMetadata: publisherMetadata(options),
       ...(options.allowInsecureLoopback === undefined
         ? {}
         : { allowInsecureLoopback: options.allowInsecureLoopback }),

@@ -17,7 +17,7 @@ import { CliFailure, CliPartialFailure, usageFailure } from '../output.js';
 import { resolveProfile } from '../profiles.js';
 import type { CliRuntime } from '../runtime.js';
 import { executePublishFolderWithToken, prepareLocalFolder } from './folders.js';
-import { publisherMetadata } from './publish.js';
+import { publisherMetadata, requireAgentMetadata } from './publish.js';
 import { type SharePolicyCommandOptions, shareCreateInput } from './shares.js';
 
 export interface PublishWorkflowOptions extends SharePolicyCommandOptions {
@@ -25,6 +25,9 @@ export interface PublishWorkflowOptions extends SharePolicyCommandOptions {
   readonly profile?: string;
   readonly artifact?: string;
   readonly metadata: readonly string[];
+  readonly title?: string;
+  readonly description?: string;
+  readonly userBypass?: boolean;
   readonly idempotencyKey?: string;
   readonly share?: boolean;
 }
@@ -88,7 +91,8 @@ export async function executePublishWorkflow(
     throw usageFailure('The publish path must identify a real file or directory, not a link.');
   }
   const artifactId = opaqueArtifactId(options.artifact);
-  const metadataInput = publisherMetadata(options.metadata);
+  const metadataInput = publisherMetadata(options);
+  requireAgentMetadata(metadataInput, options.userBypass);
   const preparedFolder = metadata.isDirectory()
     ? await prepareLocalFolder(options.path)
     : undefined;
@@ -125,6 +129,8 @@ export async function executePublishWorkflow(
               idempotencyKey,
               ...(artifactId === undefined ? {} : { artifact: artifactId }),
               metadata: options.metadata,
+              ...(options.title === undefined ? {} : { title: options.title }),
+              ...(options.description === undefined ? {} : { description: options.description }),
               allowInsecureLoopback: profile.allowInsecureLoopback,
             },
             runtime,

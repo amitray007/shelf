@@ -10,6 +10,11 @@ export const PUBLISHER_METADATA_LIMITS = {
   maxValueLength: 2048,
 } as const;
 
+export const PUBLISHER_METADATA_KEYS = {
+  title: 'title',
+  description: 'description',
+} as const;
+
 export const RESERVED_PROVENANCE_KEYS = [
   'actorId',
   'classification',

@@ -262,7 +262,7 @@ describe('shelf profiles', () => {
         { status: 201 },
       ),
     );
-    const exit = await runCli(['node', 'shelf', 'publish', file], {
+    const exit = await runCli(['node', 'shelf', 'publish', file, '--user-bypass'], {
       env: { SHELF_CONFIG_DIR: configDirectory },
       keyring,
       fetch,

@@ -83,7 +83,26 @@ describe('shelf publish', () => {
     expect(exitCode).toBe(0);
     expect(stdout.value()).toContain('Usage: shelf');
     expect(stdout.value()).toContain('publish');
+    expect(stdout.value()).toContain('Agent workflow:');
+    expect(stdout.value()).toContain('SHELF_TOKEN');
     expect(stderr.value()).toBe('');
+  });
+
+  it('provides complete publish guidance to agents through command help', async () => {
+    const stdout = capture();
+
+    const exitCode = await runCli(['node', 'shelf', 'publish', '--help'], {
+      env: {},
+      stdout: stdout.write,
+      stderr() {},
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stdout.value()).toContain('--title <title>');
+    expect(stdout.value()).toContain('--description <description>');
+    expect(stdout.value()).toContain('--user-bypass');
+    expect(stdout.value()).toContain('--access <protected|public>');
+    expect(stdout.value()).toContain('Agent publishes require');
   });
 
   it('returns the usage exit class and one canonical error when required arguments are missing', async () => {
