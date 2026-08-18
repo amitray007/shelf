@@ -133,7 +133,7 @@ describe('dashboard architecture', () => {
     expect(layout).toContain('Access');
     expect(layout).toContain('Sign out');
     expect(layout).not.toContain('dashboard-nav');
-    expect(layout).toContain('params.artifactId === undefined');
+    expect(layout).not.toContain('params.artifactId === undefined');
     expect(shell).toMatch(/\.dashboard-bar\s*\{[^}]*height:\s*var\(--bar-size\)/su);
     expect(responsive).not.toContain('.dashboard-nav');
   });

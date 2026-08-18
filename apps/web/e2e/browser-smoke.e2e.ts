@@ -127,6 +127,12 @@ for (const viewport of densityViewports) {
     await page.setViewportSize(viewport);
 
     await page.goto(`/app/w/${workspaceId}/artifacts`);
+    const applicationBar = page.getByRole('navigation', { name: 'Current location' });
+    await expect(applicationBar).toBeVisible();
+    const listHeading = page.getByRole('heading', { level: 1, name: 'Artifacts' });
+    const listHeadingSize = await listHeading.evaluate(
+      (element) => getComputedStyle(element).fontSize,
+    );
     const ledger = page.getByRole('table', { name: 'Artifacts' });
     await expect(ledger.locator('tbody tr')).toHaveCount(5);
     await expect(ledger.getByText('x', { exact: true })).toBeVisible();
@@ -136,6 +142,15 @@ for (const viewport of densityViewports) {
 
     await page.goto(`/app/w/${workspaceId}/artifacts/${artifactId}`);
     await expect(page).toHaveURL(new RegExp(`${artifactId}$`, 'u'));
+    await expect(applicationBar).toBeVisible();
+    await expect(
+      applicationBar.getByRole('link', { name: 'Artifacts', exact: true }),
+    ).toBeVisible();
+    const detailHeading = page.getByRole('heading', { level: 1, name: longArtifactName });
+    await expect(detailHeading).toBeVisible();
+    expect(await detailHeading.evaluate((element) => getComputedStyle(element).fontSize)).toBe(
+      listHeadingSize,
+    );
     if (viewport.width > 900) {
       expect(
         await page.locator('.artifact-workbench').evaluate((element) => element.clientHeight),
@@ -173,7 +188,7 @@ test('artifact detail keeps revision and share controls compact and explicit', a
     Number.parseFloat(
       await artifactTitle.evaluate((element) => getComputedStyle(element).fontSize),
     ),
-  ).toBeLessThanOrEqual(16);
+  ).toBeLessThanOrEqual(24);
 
   const previewBar = page.locator('.managed-stage-bar');
   await expect(previewBar).toContainText(`Revision: 12th · ${longArtifactName}`);

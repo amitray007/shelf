@@ -1,68 +1,22 @@
 /* biome-ignore-all lint/complexity/noImportantStyles: Mobile reflow must override the panel library's inline flex dimensions. */
 
 .artifact-detail {
-  width: min(100%, 1500px);
-  padding-top: 16px;
+  width: min(100%, 1360px);
 }
 
-.artifact-map-bar {
-  display: flex;
-  min-height: var(--bar-size);
-  height: var(--bar-size);
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 0 0 12px;
-  padding: 0 2px 0 4px;
-  border-bottom: 1px solid var(--rule);
-}
-
-.artifact-breadcrumbs {
-  display: flex;
+.artifact-heading > div:first-child {
   min-width: 0;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: var(--font-meta);
+}
+
+.artifact-heading h1 {
+  overflow: hidden;
+  max-width: min(100%, 52rem);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.artifact-breadcrumbs a {
+.artifact-heading .heading-actions {
   flex: 0 0 auto;
-  color: var(--text-muted);
-  text-decoration: none;
-}
-
-.artifact-breadcrumbs a:hover {
-  color: var(--text);
-}
-
-.artifact-breadcrumbs .wordmark {
-  color: var(--text);
-  font-size: 16px;
-}
-
-.artifact-workspace,
-.artifact-breadcrumbs h1 {
-  overflow: hidden;
-  min-width: 0;
-  text-overflow: ellipsis;
-}
-
-.artifact-map-bar .artifact-breadcrumbs h1 {
-  margin: 0;
-  color: var(--text-subtle);
-  font-size: var(--font-body);
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  line-height: 1.2;
-}
-
-.artifact-map-bar .heading-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 7px;
 }
 
 .artifact-share-action,
@@ -612,24 +566,9 @@
     padding-left: 14px;
   }
 
-  .artifact-detail .artifact-map-bar {
-    align-items: center;
-    flex-direction: row;
-    gap: 10px;
-  }
-
   .artifact-share-action,
   .artifact-actions-trigger {
     min-height: 44px;
-  }
-
-  .artifact-breadcrumbs {
-    gap: 6px;
-  }
-
-  .artifact-workspace,
-  .artifact-workspace + span {
-    display: none;
   }
 
   .artifact-detail .managed-stage-bar {
@@ -645,11 +584,6 @@
 }
 
 @media (max-width: 430px) {
-  .artifact-breadcrumbs .wordmark,
-  .artifact-breadcrumbs .wordmark + span {
-    display: none;
-  }
-
   .managed-stage {
     min-height: 340px;
     height: min(58dvh, 500px);

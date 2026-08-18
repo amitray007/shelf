@@ -455,20 +455,13 @@ export function ArtifactPage() {
 
   return (
     <div className="dashboard-page artifact-detail">
-      <header className="artifact-heading artifact-map-bar">
-        <nav aria-label="Artifact location" className="artifact-breadcrumbs">
-          <Link className="wordmark" to="/app">
-            shelf
-          </Link>
-          <span aria-hidden="true">/</span>
-          <span className="artifact-workspace" title={artifact.workspaceId}>
-            {artifact.workspaceId}
-          </span>
-          <span aria-hidden="true">/</span>
-          <Link to={`/app/w/${encodeURIComponent(artifact.workspaceId)}/artifacts`}>Artifacts</Link>
-          <span aria-hidden="true">/</span>
+      <header className="page-heading artifact-heading">
+        <div>
           <h1 title={artifact.name}>{artifact.name}</h1>
-        </nav>
+          <p>
+            {revisionLabel(latest.revisionNumber)} · {revisionSourceName(latest)}
+          </p>
+        </div>
         <div className="heading-actions">
           <Button
             className="artifact-share-action"
@@ -513,7 +506,7 @@ export function ArtifactPage() {
         className="artifact-workbench"
         id="artifact-workbench"
         orientation="horizontal"
-        style={{ height: 'min(760px, calc(100dvh - 148px))' }}
+        style={{ height: 'min(760px, calc(100dvh - 196px))' }}
       >
         <Panel
           className="artifact-preview-panel"
