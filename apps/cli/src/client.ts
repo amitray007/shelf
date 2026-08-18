@@ -18,16 +18,17 @@ import {
   isPublishResult,
   isRestoreResult,
   isRevisionComparison,
+  isShareCreateInput,
   isShareCreateResult,
   isSharePage,
   type PublisherMetadata,
   type PublishResult,
   type RestoreResult,
   type RevisionComparison,
+  type ShareCreateInput,
   type ShareCreateResult,
   type ShareManagementSummary,
   type SharePage,
-  type ShareTarget,
 } from '@shelf/contracts';
 import { mediaTypeForPath } from './media-type.js';
 import { failure, remoteFailure, usageFailure } from './output.js';
@@ -126,8 +127,7 @@ export interface CreateShareOptions {
   installationUrl: string;
   workspaceId: string;
   artifactId: string;
-  target: ShareTarget;
-  expiresAt: string | null;
+  input: ShareCreateInput;
   idempotencyKey: string;
   token: string;
   allowInsecureLoopback?: boolean;
@@ -496,7 +496,9 @@ function isCanonicalShareCreateResult(
     isShareCreateResult(value) &&
     value.workspaceId === expected.workspaceId &&
     value.artifactId === expected.artifactId &&
-    value.url.startsWith(`/s/${value.shareId}#`)
+    (value.accessType === 'protected'
+      ? value.url.startsWith(`/s/${value.shareId}#`)
+      : value.url === `/s/${value.publicCode}`)
   );
 }
 
@@ -504,6 +506,7 @@ export async function createShare(
   options: CreateShareOptions,
   dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
 ): Promise<ShareCreateResult> {
+  if (!isShareCreateInput(options.input)) throw usageFailure('The share policy is invalid.');
   const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
   const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
   const url = new URL(
@@ -516,7 +519,7 @@ export async function createShare(
       token: options.token,
       allowInsecureLoopback,
       method: 'POST',
-      body: JSON.stringify({ target: options.target, expiresAt: options.expiresAt }),
+      body: JSON.stringify(options.input),
       expectedStatus: 201,
       idempotencyKey: options.idempotencyKey,
       redactShareCapabilities: true,

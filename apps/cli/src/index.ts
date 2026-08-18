@@ -99,6 +99,16 @@ export async function runCli(
     .option('--artifact <artifact-id>', 'publish another revision to this artifact')
     .option('--metadata <key=value>', 'publisher metadata; repeatable', collect, [])
     .option('--share', 'create one unlisted latest share after publishing')
+    .option('--access <protected|public>', 'share access policy; defaults to protected')
+    .option(
+      '--expires-in <preset>',
+      'share duration: never, 5m, 30m, 2hr, 6hr, 24hr, 3d, 7d, 15d, or 30d',
+    )
+    .option(
+      '--expires-at <instant>',
+      'share expiry as an ISO UTC instant; conflicts with --expires-in',
+    )
+    .option('--max-sessions <count>', 'protected share session budget, from 1 to 1000000')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (path: string | undefined, options: PublishCliOptions) => {
       if (path !== undefined) {
@@ -109,6 +119,15 @@ export async function runCli(
           options.allowInsecureLoopback !== undefined
         ) {
           throw usageFailure('Profile-backed publishing cannot mix legacy context flags.');
+        }
+        if (
+          !options.share &&
+          (options.access !== undefined ||
+            options.expiresIn !== undefined ||
+            options.expiresAt !== undefined ||
+            options.maxSessions !== undefined)
+        ) {
+          throw usageFailure('Share policy options require --share.');
         }
         const execution = await executePublishWorkflow({ ...options, path }, runtime);
         result = execution.output;
@@ -125,6 +144,14 @@ export async function runCli(
       }
       if (options.profile !== undefined || options.share) {
         throw usageFailure('Legacy publishing cannot mix profile or share options.');
+      }
+      if (
+        options.access !== undefined ||
+        options.expiresIn !== undefined ||
+        options.expiresAt !== undefined ||
+        options.maxSessions !== undefined
+      ) {
+        throw usageFailure('Share policy options require profile-backed publishing with --share.');
       }
       result = await executePublish(
         options as PublishCommandOptions,
@@ -245,12 +272,19 @@ export async function runCli(
   const shares = program.command('shares').description('Create and manage share links');
   shares
     .command('create')
+    .description('Create a reusable Protected or Public share link')
     .requiredOption('--url <url>')
     .requiredOption('--workspace <workspace>')
     .requiredOption('--artifact <artifact-id>')
     .requiredOption('--idempotency-key <key>')
     .option('--revision <revision-id>', 'pin the share to one immutable revision')
-    .option('--expires-at <instant>', 'expire the share at an ISO instant')
+    .option('--access <protected|public>', 'access policy; defaults to protected')
+    .option(
+      '--expires-in <preset>',
+      'duration: never, 5m, 30m, 2hr, 6hr, 24hr, 3d, 7d, 15d, or 30d',
+    )
+    .option('--expires-at <instant>', 'expiry as an ISO UTC instant; conflicts with --expires-in')
+    .option('--max-sessions <count>', 'protected session budget, from 1 to 1000000')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: CreateShareCommandOptions) => {
       result = await executeCreateShare(options, runtime);

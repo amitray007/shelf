@@ -16,10 +16,15 @@ const summary = {
   shareId: ids.share,
   artifactId: ids.artifact,
   visibility: 'unlisted',
+  accessType: 'protected',
   target: { mode: 'latest' },
   createdAt: '2026-08-17T12:00:00.000Z',
   expiresAt: null,
   revokedAt: null,
+  status: 'active',
+  maxSessions: null,
+  sessionsUsed: 0,
+  sessionsRemaining: null,
   url: capabilityUrl,
 };
 
@@ -84,7 +89,7 @@ describe('shelf shares', () => {
     expect(fetch.mock.calls[0]?.[1]).toMatchObject({
       method: 'POST',
       redirect: 'manual',
-      body: JSON.stringify({ target: { mode: 'latest' }, expiresAt: null }),
+      body: JSON.stringify({ accessType: 'protected', target: { mode: 'latest' } }),
       headers: expect.objectContaining({
         authorization: 'Bearer secret-token',
         'idempotency-key': 'share-launch-notes',
@@ -130,8 +135,102 @@ describe('shelf shares', () => {
     expect(exitCode).toBe(0);
     expect(fetch.mock.calls[0]?.[1]).toMatchObject({
       body: JSON.stringify({
+        accessType: 'protected',
         target: { mode: 'pinned', revisionId: ids.revision },
         expiresAt,
+      }),
+    });
+  });
+
+  it('creates a public share with the default 24 hour server policy', async () => {
+    const result = {
+      apiVersion: 'v1' as const,
+      workspaceId: summary.workspaceId,
+      shareId: summary.shareId,
+      artifactId: summary.artifactId,
+      visibility: 'unlisted' as const,
+      accessType: 'public' as const,
+      publicCode: 'AbCdEf0123_-',
+      target: { mode: 'latest' as const },
+      createdAt: summary.createdAt,
+      expiresAt: '2026-08-18T12:00:00.000Z',
+      revokedAt: null,
+      status: 'active' as const,
+      url: '/s/AbCdEf0123_-',
+      requestId: 'request-create-public-share',
+      replayed: false,
+    };
+    const fetch = vi.fn(async () => Response.json(result, { status: 201 }));
+    const output = runtime(fetch);
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'shares',
+        'create',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--artifact',
+        ids.artifact,
+        '--access',
+        'public',
+        '--idempotency-key',
+        'public-share',
+      ],
+      output.value,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      body: JSON.stringify({ accessType: 'public', target: { mode: 'latest' } }),
+    });
+    expect(output.stdout.value()).toContain('/s/AbCdEf0123_-');
+  });
+
+  it('creates a session-limited protected share with a named expiry', async () => {
+    const result = {
+      ...summary,
+      maxSessions: 5,
+      sessionsRemaining: 5,
+      expiresAt: '2026-08-18T12:00:00.000Z',
+      requestId: 'request-create-limited-share',
+      replayed: false,
+    };
+    const fetch = vi.fn(async () => Response.json(result, { status: 201 }));
+    const output = runtime(fetch);
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'shares',
+        'create',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--artifact',
+        ids.artifact,
+        '--expires-in',
+        '24hr',
+        '--max-sessions',
+        '5',
+        '--idempotency-key',
+        'limited-share',
+      ],
+      output.value,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      body: JSON.stringify({
+        accessType: 'protected',
+        target: { mode: 'latest' },
+        expiresIn: '24hr',
+        maxSessions: 5,
       }),
     });
   });
@@ -293,6 +392,48 @@ describe('shelf shares', () => {
     ],
     ['list limit', ['list', '--limit', '101']],
     ['revoke share', ['revoke', '--share', 'not-a-share']],
+    [
+      'conflicting expiry',
+      [
+        'create',
+        '--artifact',
+        ids.artifact,
+        '--expires-in',
+        '24hr',
+        '--expires-at',
+        '2026-08-24T12:00:00.000Z',
+        '--idempotency-key',
+        'key',
+      ],
+    ],
+    [
+      'public session limit',
+      [
+        'create',
+        '--artifact',
+        ids.artifact,
+        '--access',
+        'public',
+        '--max-sessions',
+        '2',
+        '--idempotency-key',
+        'key',
+      ],
+    ],
+    [
+      'permanent public share',
+      [
+        'create',
+        '--artifact',
+        ids.artifact,
+        '--access',
+        'public',
+        '--expires-in',
+        'never',
+        '--idempotency-key',
+        'key',
+      ],
+    ],
   ])('rejects an invalid %s before making a network request', async (_case, command) => {
     const fetch = vi.fn();
     const output = runtime(fetch as typeof globalThis.fetch);

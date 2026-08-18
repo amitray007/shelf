@@ -1,9 +1,13 @@
 import type {
+  ProtectedShareExpiryPreset,
+  ShareCreateInput,
   ShareCreateResult,
+  ShareExpiryPreset,
   ShareManagementSummary,
   SharePage,
   ShareTarget,
 } from '@shelf/contracts';
+import { SHARE_EXPIRY_PRESETS, SHARE_SESSION_LIMITS } from '@shelf/contracts';
 
 import { createShare, listShares, revokeShare } from '../client.js';
 import { usageFailure } from '../output.js';
@@ -17,9 +21,19 @@ interface ShareCommandOptions {
 
 export interface CreateShareCommandOptions extends ShareCommandOptions {
   artifact: string;
+  access?: string;
   revision?: string;
+  expiresIn?: string;
   expiresAt?: string;
+  maxSessions?: string;
   idempotencyKey: string;
+}
+
+export interface SharePolicyCommandOptions {
+  access?: string;
+  expiresIn?: string;
+  expiresAt?: string;
+  maxSessions?: string;
 }
 
 export interface ListSharesCommandOptions extends ShareCommandOptions {
@@ -64,13 +78,76 @@ function idempotencyKey(value: string): string {
   return value;
 }
 
-function expiry(value: string | undefined): string | null {
-  if (value === undefined) return null;
+function expiry(value: string): string {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== value) {
     throw usageFailure('The share expiry is invalid.');
   }
   return value;
+}
+
+function sessionLimit(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!/^\d+$/u.test(value)) throw usageFailure('The maximum session count is invalid.');
+  const parsed = Number(value);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < SHARE_SESSION_LIMITS.minimum ||
+    parsed > SHARE_SESSION_LIMITS.maximum
+  ) {
+    throw usageFailure(
+      `The maximum session count must be between ${SHARE_SESSION_LIMITS.minimum} and ${SHARE_SESSION_LIMITS.maximum}.`,
+    );
+  }
+  return parsed;
+}
+
+export function shareCreateInput(
+  options: SharePolicyCommandOptions,
+  shareTarget: ShareTarget,
+): ShareCreateInput {
+  const accessType = options.access ?? 'protected';
+  if (accessType !== 'protected' && accessType !== 'public') {
+    throw usageFailure('Share access must be protected or public.');
+  }
+  if (options.expiresIn !== undefined && options.expiresAt !== undefined) {
+    throw usageFailure('--expires-in and --expires-at cannot be combined.');
+  }
+  const maxSessions = sessionLimit(options.maxSessions);
+  if (accessType === 'public' && maxSessions !== undefined) {
+    throw usageFailure('--max-sessions is available only for protected shares.');
+  }
+  let expiresIn: ProtectedShareExpiryPreset | ShareExpiryPreset | undefined;
+  if (options.expiresIn !== undefined) {
+    const allowed =
+      options.expiresIn === 'never' ||
+      (SHARE_EXPIRY_PRESETS as readonly string[]).includes(options.expiresIn);
+    if (!allowed) {
+      throw usageFailure(
+        'The expiry preset must be one of: never, 5m, 30m, 2hr, 6hr, 24hr, 3d, 7d, 15d, 30d.',
+      );
+    }
+    if (accessType === 'public' && options.expiresIn === 'never') {
+      throw usageFailure('Public shares must expire.');
+    }
+    expiresIn = options.expiresIn as ProtectedShareExpiryPreset | ShareExpiryPreset;
+  }
+  const expiresAt = options.expiresAt === undefined ? undefined : expiry(options.expiresAt);
+  if (accessType === 'public') {
+    return {
+      accessType,
+      target: shareTarget,
+      ...(expiresIn === undefined ? {} : { expiresIn: expiresIn as ShareExpiryPreset }),
+      ...(expiresAt === undefined ? {} : { expiresAt }),
+    };
+  }
+  return {
+    accessType,
+    target: shareTarget,
+    ...(expiresIn === undefined ? {} : { expiresIn }),
+    ...(expiresAt === undefined ? {} : { expiresAt }),
+    ...(maxSessions === undefined ? {} : { maxSessions }),
+  };
 }
 
 function pageLimit(value: string | undefined): number {
@@ -108,8 +185,7 @@ export function executeCreateShare(
     {
       ...transport(options, runtime),
       artifactId: artifactId(options.artifact),
-      target: target(options.revision),
-      expiresAt: expiry(options.expiresAt),
+      input: shareCreateInput(options, target(options.revision)),
       idempotencyKey: idempotencyKey(options.idempotencyKey),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },

@@ -62,10 +62,15 @@ const shareResult = {
   shareId: 'shr_CCCCCCCCCCCCCCCCCCCCCC',
   artifactId: publishResult.artifactId,
   visibility: 'unlisted' as const,
+  accessType: 'protected' as const,
   target: { mode: 'latest' as const },
   createdAt: '2026-08-18T12:00:00.000Z',
   expiresAt: null,
   revokedAt: null,
+  status: 'active' as const,
+  maxSessions: null,
+  sessionsUsed: 0,
+  sessionsRemaining: null,
   requestId: 'request-share',
   url: `/s/shr_CCCCCCCCCCCCCCCCCCCCCC#${'s'.repeat(43)}`,
   replayed: false,
@@ -235,7 +240,7 @@ describe('profile-backed shelf publish', () => {
     );
     expect(fetch.mock.calls[1]?.[1]).toMatchObject({
       method: 'POST',
-      body: JSON.stringify({ target: { mode: 'latest' }, expiresAt: null }),
+      body: JSON.stringify({ accessType: 'protected', target: { mode: 'latest' } }),
       headers: expect.objectContaining({
         authorization: 'Bearer personal-secret',
         'idempotency-key': expect.any(String),

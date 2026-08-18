@@ -18,8 +18,9 @@ import { resolveProfile } from '../profiles.js';
 import type { CliRuntime } from '../runtime.js';
 import { executePublishFolderWithToken, prepareLocalFolder } from './folders.js';
 import { publisherMetadata } from './publish.js';
+import { type SharePolicyCommandOptions, shareCreateInput } from './shares.js';
 
-export interface PublishWorkflowOptions {
+export interface PublishWorkflowOptions extends SharePolicyCommandOptions {
   readonly path: string;
   readonly profile?: string;
   readonly artifact?: string;
@@ -105,7 +106,7 @@ export async function executePublishWorkflow(
         Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8')),
       ),
     ),
-    share: options.share ?? false,
+    share: options.share === true ? shareCreateInput(options, { mode: 'latest' }) : false,
     explicitIdempotencyKey: options.idempotencyKey ?? null,
     contentFingerprint,
   });
@@ -176,8 +177,7 @@ export async function executePublishWorkflow(
           installationUrl: profile.installationUrl,
           workspaceId: profile.workspaceId,
           artifactId: publish.artifactId,
-          target: { mode: 'latest' },
-          expiresAt: null,
+          input: shareCreateInput(options, { mode: 'latest' }),
           idempotencyKey: journal.record.shareIdempotencyKey,
           token: profile.token,
           allowInsecureLoopback: profile.allowInsecureLoopback,
