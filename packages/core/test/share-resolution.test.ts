@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  createProtectedSessionEstablishmentService,
   createShareResolutionService,
   type ShareRepository,
   type StoredShare,
@@ -42,10 +43,14 @@ function share(shareId: string, overrides: Partial<StoredShare> = {}): StoredSha
     shareId,
     artifactId: ids.artifact,
     visibility: 'unlisted',
+    accessType: 'protected',
+    publicCode: null,
     target: { mode: 'latest' },
     createdByActorId: 'actor-private',
     createdAt: '2026-08-17T12:00:00.000Z',
     expiresAt: null,
+    maxSessions: null,
+    sessionsUsed: 0,
     revokedAt: null,
     revokedByActorId: null,
     ...overrides,
@@ -77,6 +82,12 @@ function repository(overrides: Partial<ShareRepository>): ShareRepository {
     },
     async resolveShareTarget() {
       return undefined;
+    },
+    async resolvePublicShareTarget() {
+      return undefined;
+    },
+    async establishProtectedSession() {
+      return { status: 'unavailable' };
     },
     ...overrides,
   };
@@ -125,28 +136,31 @@ describe('anonymous share resolution', () => {
           };
         },
       }),
-      capabilityCodec,
       clock: () => new Date('2026-08-17T12:30:00.000Z'),
     });
 
-    await expect(resolve({ shareId: ids.latestShare, secret: validSecret })).resolves.toMatchObject(
-      { revision: { revisionId: ids.firstRevision } },
-    );
+    const authority = (shareId: string) => ({
+      type: 'protected-session' as const,
+      shareId,
+      sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    });
+    await expect(resolve({ authority: authority(ids.latestShare) })).resolves.toMatchObject({
+      revision: { revisionId: ids.firstRevision },
+    });
     current = fileRevision(ids.secondRevision, 2);
-    await expect(resolve({ shareId: ids.latestShare, secret: validSecret })).resolves.toMatchObject(
-      { revision: { revisionId: ids.secondRevision } },
-    );
-    await expect(resolve({ shareId: ids.pinnedShare, secret: validSecret })).resolves.toMatchObject(
-      { revision: { revisionId: ids.firstRevision } },
-    );
+    await expect(resolve({ authority: authority(ids.latestShare) })).resolves.toMatchObject({
+      revision: { revisionId: ids.secondRevision },
+    });
+    await expect(resolve({ authority: authority(ids.pinnedShare) })).resolves.toMatchObject({
+      revision: { revisionId: ids.firstRevision },
+    });
   });
 
   it('collapses invalid, missing, revoked, and exactly expired capabilities to one miss', async () => {
     const expired = share(ids.latestShare, { expiresAt: '2026-08-17T12:30:00.000Z' });
     const find = vi.fn(async () => undefined);
     const resolveMissing = createShareResolutionService({
-      shares: repository({ resolveShareTarget: find }),
-      capabilityCodec,
+      shares: repository({ resolvePublicShareTarget: find }),
       clock: () => new Date('2026-08-17T12:30:00.000Z'),
     });
     const revision = fileRevision(ids.firstRevision, 1);
@@ -175,7 +189,6 @@ describe('anonymous share resolution', () => {
           return record(expired);
         },
       }),
-      capabilityCodec,
       clock: () => new Date('2026-08-17T12:30:00.000Z'),
     });
     const resolveRevoked = createShareResolutionService({
@@ -184,15 +197,25 @@ describe('anonymous share resolution', () => {
           return record(share(ids.latestShare, { revokedAt: '2026-08-17T12:15:00.000Z' }));
         },
       }),
-      capabilityCodec,
     });
 
     for (const promise of [
-      resolveMissing({ shareId: ids.latestShare, secret: wrongSecret }),
-      resolveMissing({ shareId: ids.latestShare, secret: validSecret }),
-      resolveExpired({ shareId: ids.latestShare, secret: validSecret }),
-      resolveRevoked({ shareId: ids.latestShare, secret: validSecret }),
-      resolveMissing({ shareId: 'not-a-share', secret: validSecret }),
+      resolveMissing({ authority: { type: 'public', publicCode: 'MissingCode1' } }),
+      resolveExpired({
+        authority: {
+          type: 'protected-session',
+          shareId: ids.latestShare,
+          sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      }),
+      resolveRevoked({
+        authority: {
+          type: 'protected-session',
+          shareId: ids.latestShare,
+          sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      }),
+      resolveMissing({ authority: { type: 'public', publicCode: 'bad' } }),
     ]) {
       await expect(promise).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
     }
@@ -225,14 +248,20 @@ describe('anonymous share resolution', () => {
           };
         },
       }),
-      capabilityCodec,
     });
 
-    const result = await resolve({ shareId: ids.latestShare, secret: validSecret });
+    const result = await resolve({
+      authority: {
+        type: 'protected-session',
+        shareId: ids.latestShare,
+        sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+    });
 
     expect(result).toEqual({
       apiVersion: 'v1',
       shareId: ids.latestShare,
+      accessType: 'protected',
       target: { mode: 'latest' },
       artifact: { artifactId: ids.artifact, kind: 'file', name: 'Launch notes' },
       revision: {
@@ -298,12 +327,20 @@ describe('anonymous share resolution', () => {
           };
         },
       }),
-      capabilityCodec,
     });
 
-    await expect(resolve({ shareId: ids.pinnedShare, secret: validSecret })).resolves.toEqual({
+    await expect(
+      resolve({
+        authority: {
+          type: 'protected-session',
+          shareId: ids.pinnedShare,
+          sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      }),
+    ).resolves.toEqual({
       apiVersion: 'v1',
       shareId: ids.pinnedShare,
+      accessType: 'protected',
       target: { mode: 'pinned', revisionId: ids.firstRevision },
       artifact: { artifactId: ids.artifact, kind: 'folder', name: 'Prototype' },
       revision: {
@@ -321,5 +358,165 @@ describe('anonymous share resolution', () => {
       },
       expiresAt: null,
     });
+  });
+
+  it('resolves a secretless Public selector and uses selector action paths', async () => {
+    const revision = fileRevision(ids.firstRevision, 1);
+    const stored = share(ids.latestShare, {
+      accessType: 'public',
+      publicCode: 'PublicCode12',
+      expiresAt: '2026-08-19T12:00:00.000Z',
+    });
+    const resolve = createShareResolutionService({
+      shares: repository({
+        async resolvePublicShareTarget() {
+          return {
+            share: stored,
+            artifact: {
+              installationId: stored.installationId,
+              workspaceId: stored.workspaceId,
+              artifactId: stored.artifactId,
+              kind: 'file',
+              name: 'Launch notes',
+              createdAt: stored.createdAt,
+              updatedAt: revision.createdAt,
+              latestRevision: revision,
+            },
+            revision: {
+              installationId: stored.installationId,
+              workspaceId: stored.workspaceId,
+              artifactId: stored.artifactId,
+              revision,
+            },
+          };
+        },
+      }),
+      clock: () => new Date('2026-08-18T12:00:00.000Z'),
+    });
+
+    await expect(
+      resolve({ authority: { type: 'public', publicCode: 'PublicCode12' } }),
+    ).resolves.toMatchObject({
+      accessType: 'public',
+      publicCode: 'PublicCode12',
+      action: { path: '/api/v1/public/links/PublicCode12/content' },
+    });
+  });
+
+  it('allows the final established session after the limit while blocking a new establishment', async () => {
+    const sessionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const stored = share(ids.latestShare, { maxSessions: 1, sessionsUsed: 1 });
+    const repositoryWithLimit = repository({
+      async establishProtectedSession(request) {
+        if (request.sessionId !== sessionId) return { status: 'unavailable' };
+        return {
+          status: 'reused',
+          result: {
+            share: stored,
+            sessionId,
+            establishedAt: '2026-08-18T12:00:00.000Z',
+            receiptExpiresAt: '2026-08-19T12:00:00.000Z',
+          },
+        };
+      },
+      async resolveShareTarget() {
+        const revision = fileRevision(ids.firstRevision, 1);
+        return {
+          share: stored,
+          artifact: {
+            installationId: stored.installationId,
+            workspaceId: stored.workspaceId,
+            artifactId: stored.artifactId,
+            kind: 'file',
+            name: 'Launch notes',
+            createdAt: stored.createdAt,
+            updatedAt: revision.createdAt,
+            latestRevision: revision,
+          },
+          revision: {
+            installationId: stored.installationId,
+            workspaceId: stored.workspaceId,
+            artifactId: stored.artifactId,
+            revision,
+          },
+        };
+      },
+    });
+    const establish = createProtectedSessionEstablishmentService({
+      shares: repositoryWithLimit,
+      capabilityCodec,
+      clock: () => new Date('2026-08-18T12:30:00.000Z'),
+    });
+    const resolve = createShareResolutionService({
+      shares: repositoryWithLimit,
+      clock: () => new Date('2026-08-18T12:30:00.000Z'),
+    });
+
+    await expect(
+      establish({ shareId: ids.latestShare, secret: validSecret, sessionId }),
+    ).resolves.toMatchObject({ reused: true });
+    await expect(
+      establish({
+        shareId: ids.latestShare,
+        secret: validSecret,
+        sessionId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      }),
+    ).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
+    await expect(
+      resolve({ authority: { type: 'protected-session', shareId: ids.latestShare, sessionId } }),
+    ).resolves.toMatchObject({ shareId: ids.latestShare });
+  });
+
+  it('normalizes wrong capability, wrong mode, missing, and limit-blocked establishment', async () => {
+    const sessionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const publicStored = share(ids.latestShare, {
+      accessType: 'public',
+      publicCode: 'PublicCode12',
+      expiresAt: '2026-08-19T12:00:00.000Z',
+    });
+    const establish = createProtectedSessionEstablishmentService({
+      shares: repository({
+        async establishProtectedSession() {
+          return { status: 'unavailable' };
+        },
+      }),
+      capabilityCodec,
+      clock: () => new Date('2026-08-18T12:00:00.000Z'),
+    });
+    const wrongMode = createShareResolutionService({
+      shares: repository({
+        async resolveShareTarget() {
+          const revision = fileRevision(ids.firstRevision, 1);
+          return {
+            share: publicStored,
+            artifact: {
+              installationId: publicStored.installationId,
+              workspaceId: publicStored.workspaceId,
+              artifactId: publicStored.artifactId,
+              kind: 'file',
+              name: 'Launch notes',
+              createdAt: publicStored.createdAt,
+              updatedAt: revision.createdAt,
+              latestRevision: revision,
+            },
+            revision: {
+              installationId: publicStored.installationId,
+              workspaceId: publicStored.workspaceId,
+              artifactId: publicStored.artifactId,
+              revision,
+            },
+          };
+        },
+      }),
+    });
+
+    for (const promise of [
+      establish({ shareId: ids.latestShare, secret: wrongSecret, sessionId }),
+      establish({ shareId: ids.latestShare, secret: validSecret, sessionId }),
+      establish({ shareId: 'malformed', secret: validSecret, sessionId }),
+      wrongMode({ authority: { type: 'protected-session', shareId: ids.latestShare, sessionId } }),
+    ]) {
+      await expect(promise).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
+    }
   });
 });

@@ -9,10 +9,14 @@ export interface StoredShare {
   shareId: string;
   artifactId: string;
   visibility: 'unlisted';
+  accessType: 'protected' | 'public';
+  publicCode: string | null;
   target: ShareTarget;
   createdByActorId: string;
   createdAt: string;
   expiresAt: string | null;
+  maxSessions: number | null;
+  sessionsUsed: number;
   revokedAt: string | null;
   revokedByActorId: string | null;
 }
@@ -45,7 +49,22 @@ export interface CommitShareCreateInput {
 
 export type CommitShareCreateOutcome =
   | { status: 'committed' | 'replayed'; result: StoredShare }
-  | { status: 'conflict' };
+  | { status: 'conflict' }
+  | { status: 'public-code-conflict' };
+
+export interface ProtectedSessionEstablishment {
+  share: StoredShare;
+  sessionId: string;
+  establishedAt: string;
+  receiptExpiresAt: string;
+}
+
+export type EstablishProtectedSessionOutcome =
+  | {
+      status: 'established' | 'reused';
+      result: ProtectedSessionEstablishment;
+    }
+  | { status: 'unavailable' };
 
 export interface ResolvedStoredShare {
   share: StoredShare;
@@ -82,6 +101,18 @@ export interface ShareRepository {
   }): Promise<RevokeShareOutcome>;
   /** Resolve latest or pinned revision selection atomically with the share lookup. */
   resolveShareTarget(shareId: string): Promise<ResolvedStoredShare | undefined>;
+  /** Resolve a secret-free Public selector without exposing Protected rows. */
+  resolvePublicShareTarget(publicCode: string): Promise<ResolvedStoredShare | undefined>;
+  /**
+   * Linearize a Protected establishment receipt and the lifetime usage increment on the share.
+   * Reusing the same live receipt does not increment usage; a different ID at the limit is unavailable.
+   */
+  establishProtectedSession(request: {
+    shareId: string;
+    sessionId: string;
+    now: string;
+    receiptExpiresAt: string;
+  }): Promise<EstablishProtectedSessionOutcome>;
 }
 
 export interface ShareCapabilityCodec {
@@ -93,3 +124,4 @@ export interface ShareCapabilityCodec {
 
 export type ShareClock = () => Date;
 export type ShareIdGenerator = () => string;
+export type PublicShareCodeGenerator = () => string;

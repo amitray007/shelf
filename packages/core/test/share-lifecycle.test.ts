@@ -4,6 +4,7 @@ import {
   createShareLifecycleService,
   type ShareRepository,
   type StoredShare,
+  shareLifecycleStatus,
 } from '../src/index.js';
 
 const ids = {
@@ -67,6 +68,12 @@ function repository(overrides: Partial<ShareRepository> = {}): ShareRepository {
     async resolveShareTarget() {
       return undefined;
     },
+    async resolvePublicShareTarget() {
+      return undefined;
+    },
+    async establishProtectedSession() {
+      return { status: 'unavailable' };
+    },
     ...overrides,
   };
 }
@@ -88,10 +95,14 @@ function storedShare(overrides: Partial<StoredShare> = {}): StoredShare {
     shareId: ids.share,
     artifactId: ids.artifact,
     visibility: 'unlisted',
+    accessType: 'protected',
+    publicCode: null,
     target: { mode: 'latest' },
     createdByActorId: 'actor-publisher',
     createdAt: '2026-08-17T12:00:00.000Z',
     expiresAt: null,
+    maxSessions: null,
+    sessionsUsed: 0,
     revokedAt: null,
     revokedByActorId: null,
     ...overrides,
@@ -327,10 +338,15 @@ describe('share lifecycle service', () => {
           shareId: ids.share,
           artifactId: ids.artifact,
           visibility: 'unlisted',
+          accessType: 'protected',
           target: { mode: 'pinned', revisionId: ids.secondRevision, revisionNumber: 2 },
           createdAt: '2026-08-17T12:00:00.000Z',
           expiresAt: null,
           revokedAt: null,
+          status: 'active',
+          maxSessions: null,
+          sessionsUsed: 0,
+          sessionsRemaining: null,
           url: `/s/${ids.share}#${'s'.repeat(43)}`,
         },
       ],
@@ -389,5 +405,224 @@ describe('share lifecycle service', () => {
     expect(concurrent).toEqual(first);
     expect(replayed).toEqual(first);
     expect(revokeShare).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('share access policies', () => {
+  it('replays a Public default with its persisted deadline and URL after expiry', async () => {
+    let now = new Date('2026-08-18T00:00:00.000Z');
+    let record: { fingerprint: string; result: StoredShare } | undefined;
+    const service = createShareLifecycleService({
+      authorizer: { async authorize() {} },
+      shares: repository({
+        async findCreateIdempotency() {
+          return record;
+        },
+        async commitCreate(input) {
+          record = { fingerprint: input.fingerprint, result: input.result };
+          return { status: 'committed', result: input.result };
+        },
+      }),
+      capabilityCodec,
+      clock: () => now,
+      generateShareId: () => ids.share,
+      generatePublicCode: () => 'PublicCode12',
+    });
+    const request = {
+      installationId: 'installation-main',
+      workspaceId: 'workspace-main',
+      actorId: 'actor-publisher',
+      artifactId: ids.artifact,
+      accessType: 'public' as const,
+      target: { mode: 'latest' as const },
+      idempotencyKey: 'public-default',
+      requestId: 'request-public',
+    };
+
+    const created = await service.createShare(request);
+    now = new Date('2026-08-20T00:00:00.000Z');
+    const replayed = await service.createShare({ ...request, requestId: 'request-replay' });
+
+    expect(created).toMatchObject({
+      accessType: 'public',
+      publicCode: 'PublicCode12',
+      expiresAt: '2026-08-19T00:00:00.000Z',
+      url: '/s/PublicCode12',
+      replayed: false,
+    });
+    expect(replayed).toEqual({
+      ...created,
+      requestId: 'request-replay',
+      replayed: true,
+      status: 'expired',
+    });
+  });
+
+  it('keeps legacy-equivalent Protected requests on v1 and replays an expired absolute date', async () => {
+    let now = new Date('2026-08-18T00:00:00.000Z');
+    let record: { fingerprint: string; result: StoredShare } | undefined;
+    const service = createShareLifecycleService({
+      authorizer: { async authorize() {} },
+      shares: repository({
+        async findCreateIdempotency() {
+          return record;
+        },
+        async commitCreate(input) {
+          record = { fingerprint: input.fingerprint, result: input.result };
+          return { status: 'committed', result: input.result };
+        },
+      }),
+      capabilityCodec,
+      clock: () => now,
+      generateShareId: () => ids.share,
+    });
+    const request = {
+      installationId: 'installation-main',
+      workspaceId: 'workspace-main',
+      actorId: 'actor-publisher',
+      artifactId: ids.artifact,
+      accessType: 'protected' as const,
+      target: { mode: 'latest' as const },
+      expiresAt: '2026-08-19T00:00:00.000Z',
+      idempotencyKey: 'protected-expiring',
+      requestId: 'request-protected',
+    };
+    const created = await service.createShare(request);
+    expect(record?.fingerprint).toMatch(/^share-create-request\/v1:/u);
+    now = new Date('2026-08-20T00:00:00.000Z');
+    await expect(service.createShare({ ...request, requestId: 'request-replay' })).resolves.toEqual(
+      {
+        ...created,
+        requestId: 'request-replay',
+        replayed: true,
+        status: 'expired',
+      },
+    );
+  });
+
+  it('enforces Public expiry and Protected limit combinations', async () => {
+    const commits: StoredShare[] = [];
+    let suffix = 0;
+    const service = createShareLifecycleService({
+      authorizer: { async authorize() {} },
+      shares: repository({
+        async commitCreate(input) {
+          commits.push(input.result);
+          return { status: 'committed', result: input.result };
+        },
+      }),
+      capabilityCodec,
+      clock: () => new Date('2026-08-18T00:00:00.000Z'),
+      generateShareId: () => `shr_${String.fromCharCode(65 + suffix++).repeat(22)}`,
+      generatePublicCode: () => 'PublicCode12',
+    });
+    const base = {
+      installationId: 'installation-main',
+      workspaceId: 'workspace-main',
+      actorId: 'actor-publisher',
+      artifactId: ids.artifact,
+      target: { mode: 'latest' as const },
+      requestId: 'request-policy',
+    };
+
+    await expect(
+      service.createShare({
+        ...base,
+        accessType: 'public',
+        expiresAt: '2026-09-17T00:00:00.000Z',
+        idempotencyKey: 'public-inclusive-cap',
+      }),
+    ).resolves.toMatchObject({ expiresAt: '2026-09-17T00:00:00.000Z' });
+    await expect(
+      service.createShare({
+        ...base,
+        accessType: 'public',
+        expiresAt: '2026-09-17T00:00:00.001Z',
+        idempotencyKey: 'public-over-cap',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    await expect(
+      service.createShare({
+        ...base,
+        accessType: 'public',
+        maxSessions: 1,
+        idempotencyKey: 'public-limit',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    await expect(
+      service.createShare({
+        ...base,
+        accessType: 'protected',
+        expiresIn: '7d',
+        maxSessions: 5,
+        idempotencyKey: 'protected-both',
+      }),
+    ).resolves.toMatchObject({
+      accessType: 'protected',
+      expiresAt: '2026-08-25T00:00:00.000Z',
+      maxSessions: 5,
+      sessionsUsed: 0,
+      sessionsRemaining: 5,
+    });
+    expect(commits).toHaveLength(2);
+  });
+
+  it('retries Public selector collisions three times and then reports service failure', async () => {
+    let attempts = 0;
+    const service = createShareLifecycleService({
+      authorizer: { async authorize() {} },
+      shares: repository({
+        async commitCreate() {
+          attempts += 1;
+          return { status: 'public-code-conflict' };
+        },
+      }),
+      capabilityCodec,
+      clock: () => new Date('2026-08-18T00:00:00.000Z'),
+      generateShareId: () => ids.share,
+      generatePublicCode: () => 'PublicCode12',
+    });
+
+    await expect(
+      service.createShare({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        actorId: 'actor-publisher',
+        artifactId: ids.artifact,
+        accessType: 'public',
+        target: { mode: 'latest' },
+        idempotencyKey: 'public-collision',
+        requestId: 'request-collision',
+      }),
+    ).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    expect(attempts).toBe(3);
+  });
+
+  it('projects lifecycle status with revoked over expired over session limit precedence', () => {
+    const now = new Date('2026-08-18T12:00:00.000Z');
+    expect(
+      shareLifecycleStatus(
+        storedShare({
+          revokedAt: '2026-08-18T11:00:00.000Z',
+          expiresAt: '2026-08-18T10:00:00.000Z',
+          maxSessions: 1,
+          sessionsUsed: 1,
+        }),
+        now,
+      ),
+    ).toBe('revoked');
+    expect(
+      shareLifecycleStatus(
+        storedShare({
+          expiresAt: '2026-08-18T10:00:00.000Z',
+          maxSessions: 1,
+          sessionsUsed: 1,
+        }),
+        now,
+      ),
+    ).toBe('expired');
+    expect(shareLifecycleStatus(storedShare({ maxSessions: 1, sessionsUsed: 1 }), now)).toBe(
+      'session-limit-reached',
+    );
   });
 });

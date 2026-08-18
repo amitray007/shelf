@@ -10,8 +10,8 @@ import type {
   StoredRevision,
 } from '../publishing/ports.js';
 import { ShareNotFoundError } from './lifecycle.js';
-import type { ShareCapabilityCodec, ShareClock, ShareRepository } from './ports.js';
-import { createShareResolutionService } from './resolution.js';
+import type { ShareClock, ShareRepository } from './ports.js';
+import { createShareResolutionService, type ShareResolutionAuthority } from './resolution.js';
 
 const CURSOR_PATTERN = /^[A-Za-z0-9_-]{1,2048}$/u;
 
@@ -102,7 +102,6 @@ function validFolderScope(
 
 export function createShareAccessService(dependencies: {
   shares: ShareRepository;
-  capabilityCodec: ShareCapabilityCodec;
   revisions: RevisionRepository;
   folders: FolderRevisionRepository;
   contentReader: ContentReader;
@@ -110,14 +109,12 @@ export function createShareAccessService(dependencies: {
 }) {
   const resolveShare = createShareResolutionService({
     shares: dependencies.shares,
-    capabilityCodec: dependencies.capabilityCodec,
     ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
   });
 
   return {
     async readFile(request: {
-      shareId: string;
-      secret: string;
+      authority: ShareResolutionAuthority;
       signal?: AbortSignal;
     }): Promise<PublicSharedFile> {
       const resolved = await resolveShare(request);
@@ -174,8 +171,7 @@ export function createShareAccessService(dependencies: {
     },
 
     async readTree(request: {
-      shareId: string;
-      secret: string;
+      authority: ShareResolutionAuthority;
       limit: number;
       cursor?: string;
       signal?: AbortSignal;

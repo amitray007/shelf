@@ -11,9 +11,7 @@ const ids = {
   revision: 'rev_BBBBBBBBBBBBBBBBBBBBBB',
   share: 'shr_CCCCCCCCCCCCCCCCCCCCCC',
 };
-const secret = 's'.repeat(43);
-
-function shares(): ShareRepository {
+function shares(overrides: Partial<ShareRepository> = {}): ShareRepository {
   const revision = {
     kind: 'file' as const,
     revisionId: ids.revision,
@@ -60,10 +58,14 @@ function shares(): ShareRepository {
           shareId: ids.share,
           artifactId: ids.artifact,
           visibility: 'unlisted',
+          accessType: 'protected',
+          publicCode: null,
           target: { mode: 'latest' },
           createdByActorId: 'private-actor',
           createdAt: '2026-08-17T12:00:00.000Z',
           expiresAt: null,
+          maxSessions: null,
+          sessionsUsed: 0,
           revokedAt: null,
           revokedByActorId: null,
         },
@@ -85,6 +87,13 @@ function shares(): ShareRepository {
         },
       };
     },
+    async resolvePublicShareTarget() {
+      return undefined;
+    },
+    async establishProtectedSession() {
+      return { status: 'unavailable' };
+    },
+    ...overrides,
   };
 }
 
@@ -99,10 +108,6 @@ describe('public share access', () => {
     );
     const access = createShareAccessService({
       shares: repository,
-      capabilityCodec: {
-        deriveSecret: () => secret,
-        validateSecret: (_shareId, value) => value === secret,
-      },
       revisions: {
         async findIdempotency() {
           return undefined;
@@ -149,7 +154,13 @@ describe('public share access', () => {
       contentReader: { read },
     });
 
-    const file = await access.readFile({ shareId: ids.share, secret });
+    const file = await access.readFile({
+      authority: {
+        type: 'protected-session',
+        shareId: ids.share,
+        sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+    });
     const chunks = [];
     for await (const chunk of await file.read()) chunks.push(chunk);
 
@@ -170,10 +181,6 @@ describe('public share access', () => {
   it('returns a sanitized, bounded tree and refuses tree access for file shares', async () => {
     const access = createShareAccessService({
       shares: shares(),
-      capabilityCodec: {
-        deriveSecret: () => secret,
-        validateSecret: (_shareId, value) => value === secret,
-      },
       revisions: {
         async findIdempotency() {
           return undefined;
@@ -206,8 +213,92 @@ describe('public share access', () => {
       },
     });
 
-    await expect(access.readTree({ shareId: ids.share, secret, limit: 20 })).rejects.toMatchObject({
-      code: 'SHARE_NOT_FOUND',
+    await expect(
+      access.readTree({
+        authority: {
+          type: 'protected-session',
+          shareId: ids.share,
+          sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+        limit: 20,
+      }),
+    ).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
+  });
+
+  it('reads the same content through a secretless Public selector', async () => {
+    const protectedRepository = shares();
+    const repository = shares({
+      async resolvePublicShareTarget() {
+        const resolved = await protectedRepository.resolveShareTarget(ids.share);
+        if (resolved === undefined) return undefined;
+        return {
+          ...resolved,
+          share: {
+            ...resolved.share,
+            accessType: 'public',
+            publicCode: 'PublicCode12',
+            expiresAt: '2026-08-19T12:00:00.000Z',
+          },
+        };
+      },
     });
+    const access = createShareAccessService({
+      shares: repository,
+      revisions: {
+        async findIdempotency() {
+          return undefined;
+        },
+        async commitPublish(input) {
+          return { status: 'committed', result: input.result };
+        },
+        async findRevision() {
+          return {
+            apiVersion: 'v1',
+            installationId: 'install-main',
+            workspaceId: 'workspace-main',
+            artifactId: ids.artifact,
+            revisionId: ids.revision,
+            content: {
+              contentId: 'private-storage-id',
+              contentHash: `sha256:${'a'.repeat(64)}`,
+              byteCount: 7,
+            },
+            originalFileName: 'launch.html',
+            mediaType: 'text/html',
+            provenance: {
+              classification: 'direct-publish',
+              observed: { actorId: 'private-actor', operation: 'file.publish' },
+            },
+            publisherMetadata: {},
+          };
+        },
+      },
+      folders: {
+        async findFolderIdempotency() {
+          return undefined;
+        },
+        async commitFolderPublish(input) {
+          return { status: 'committed', result: input.result };
+        },
+        async findFolderRevision() {
+          return undefined;
+        },
+        async listFolderEntries() {
+          return { items: [] };
+        },
+      },
+      contentReader: {
+        async read() {
+          return (async function* bytes() {
+            yield new TextEncoder().encode('<html>');
+          })();
+        },
+      },
+      clock: () => new Date('2026-08-18T12:00:00.000Z'),
+    });
+
+    await expect(
+      access.readFile({ authority: { type: 'public', publicCode: 'PublicCode12' } }),
+    ).resolves.toMatchObject({ revisionId: ids.revision });
   });
 });
