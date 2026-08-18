@@ -284,7 +284,7 @@ describe('share lifecycle service', () => {
     expect(commitCreate).not.toHaveBeenCalled();
   });
 
-  it('lists only workspace-scoped summaries after revision-read authorization', async () => {
+  it('lists reusable workspace-scoped links with pinned revision identity', async () => {
     const authorization: unknown[] = [];
     const service = createShareLifecycleService({
       authorizer: {
@@ -293,8 +293,18 @@ describe('share lifecycle service', () => {
         },
       },
       shares: repository({
+        async findRevisionForShare() {
+          return {
+            installationId: 'installation-main',
+            workspaceId: 'workspace-main',
+            artifactId: ids.artifact,
+            revision: artifact().latestRevision,
+          };
+        },
         async listShares() {
-          return { items: [storedShare()] };
+          return {
+            items: [storedShare({ target: { mode: 'pinned', revisionId: ids.secondRevision } })],
+          };
         },
       }),
       capabilityCodec,
@@ -317,10 +327,11 @@ describe('share lifecycle service', () => {
           shareId: ids.share,
           artifactId: ids.artifact,
           visibility: 'unlisted',
-          target: { mode: 'latest' },
+          target: { mode: 'pinned', revisionId: ids.secondRevision, revisionNumber: 2 },
           createdAt: '2026-08-17T12:00:00.000Z',
           expiresAt: null,
           revokedAt: null,
+          url: `/s/${ids.share}#${'s'.repeat(43)}`,
         },
       ],
       nextCursor: null,
@@ -333,7 +344,7 @@ describe('share lifecycle service', () => {
         action: 'revision.read',
       },
     ]);
-    expect(page.items[0]).not.toHaveProperty('url');
+    expect(page.items[0]).toHaveProperty('url');
     expect(page.items[0]).not.toHaveProperty('createdByActorId');
   });
 

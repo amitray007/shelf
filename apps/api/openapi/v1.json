@@ -1205,10 +1205,11 @@
           "shareId",
           "artifactId",
           "visibility",
-          "target",
           "createdAt",
           "expiresAt",
-          "revokedAt"
+          "revokedAt",
+          "target",
+          "url"
         ],
         "properties": {
           "apiVersion": {
@@ -1232,37 +1233,6 @@
           "visibility": {
             "type": "string",
             "enum": ["unlisted"]
-          },
-          "target": {
-            "anyOf": [
-              {
-                "type": "object",
-                "required": ["mode"],
-                "properties": {
-                  "mode": {
-                    "type": "string",
-                    "enum": ["latest"]
-                  }
-                },
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "required": ["mode", "revisionId"],
-                "properties": {
-                  "mode": {
-                    "type": "string",
-                    "enum": ["pinned"]
-                  },
-                  "revisionId": {
-                    "type": "string",
-                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
-                    "description": "Opaque revision identifier containing 128 bits of entropy."
-                  }
-                },
-                "additionalProperties": false
-              }
-            ]
           },
           "createdAt": {
             "type": "string",
@@ -1289,6 +1259,46 @@
                 "type": "null"
               }
             ]
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": ["mode"],
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": ["latest"]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["mode", "revisionId", "revisionNumber"],
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": ["pinned"]
+                  },
+                  "revisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
+                  },
+                  "revisionNumber": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$"
           }
         },
         "additionalProperties": false,
@@ -1302,10 +1312,10 @@
           "shareId",
           "artifactId",
           "visibility",
-          "target",
           "createdAt",
           "expiresAt",
           "revokedAt",
+          "target",
           "requestId",
           "url",
           "replayed"
@@ -1333,6 +1343,32 @@
             "type": "string",
             "enum": ["unlisted"]
           },
+          "createdAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "target": {
             "anyOf": [
               {
@@ -1361,32 +1397,6 @@
                   }
                 },
                 "additionalProperties": false
-              }
-            ]
-          },
-          "createdAt": {
-            "type": "string",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-          },
-          "expiresAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "revokedAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-              },
-              {
-                "type": "null"
               }
             ]
           },
@@ -1429,10 +1439,11 @@
                 "shareId",
                 "artifactId",
                 "visibility",
-                "target",
                 "createdAt",
                 "expiresAt",
-                "revokedAt"
+                "revokedAt",
+                "target",
+                "url"
               ],
               "properties": {
                 "apiVersion": {
@@ -1456,37 +1467,6 @@
                 "visibility": {
                   "type": "string",
                   "enum": ["unlisted"]
-                },
-                "target": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "required": ["mode"],
-                      "properties": {
-                        "mode": {
-                          "type": "string",
-                          "enum": ["latest"]
-                        }
-                      },
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "required": ["mode", "revisionId"],
-                      "properties": {
-                        "mode": {
-                          "type": "string",
-                          "enum": ["pinned"]
-                        },
-                        "revisionId": {
-                          "type": "string",
-                          "pattern": "^rev_[A-Za-z0-9_-]{22}$",
-                          "description": "Opaque revision identifier containing 128 bits of entropy."
-                        }
-                      },
-                      "additionalProperties": false
-                    }
-                  ]
                 },
                 "createdAt": {
                   "type": "string",
@@ -1513,6 +1493,46 @@
                       "type": "null"
                     }
                   ]
+                },
+                "target": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "required": ["mode"],
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": ["latest"]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "required": ["mode", "revisionId", "revisionNumber"],
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": ["pinned"]
+                        },
+                        "revisionId": {
+                          "type": "string",
+                          "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                          "description": "Opaque revision identifier containing 128 bits of entropy."
+                        },
+                        "revisionNumber": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "url": {
+                  "type": "string",
+                  "pattern": "^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$"
                 }
               },
               "additionalProperties": false
@@ -6946,7 +6966,7 @@
     "/api/v1/workspaces/{workspaceId}/shares": {
       "get": {
         "operationId": "listSharesV1",
-        "summary": "List share management records without capability material",
+        "summary": "List reusable share links for authorized workspace management",
         "tags": ["shares"],
         "parameters": [
           {

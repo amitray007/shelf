@@ -17,11 +17,11 @@ import { Link, useLoaderData, useNavigate, useRevalidator, useSearchParams } fro
 import { formatBytes } from '../components/format.js';
 import { ordinal, revisionSourceName } from '../components/revision-label.js';
 import { DashboardApiError, renameArtifact, restoreArtifact, revokeShare } from './api.js';
+import { ArtifactShareDialog } from './artifact-share-dialog.js';
 import { DeleteArtifactDialog } from './delete-artifact-dialog.js';
 import { Modal } from './dialogs.js';
 import { ManagedArtifactContent } from './managed-artifact-content.js';
 import type { ArtifactDetailPayload } from './routes.js';
-import { ShareDialog } from './share-dialog.js';
 import { useManagedStatus } from './status.js';
 import './artifact.css';
 
@@ -190,6 +190,7 @@ function ShareRow({ share }: { readonly share: ShareManagementSummary }) {
   const [error, setError] = useState<string>();
   const status = useManagedStatus(share.revokedAt, share.expiresAt);
   const active = status === 'Active';
+  const shareUrl = new URL(share.url, window.location.origin).href;
   const revoke = async () => {
     setBusy(true);
     setError(undefined);
@@ -222,7 +223,26 @@ function ShareRow({ share }: { readonly share: ShareManagementSummary }) {
             {share.target.mode === 'latest' ? (
               'Latest revision'
             ) : (
-              <code title={share.target.revisionId}>{share.target.revisionId}</code>
+              <span className="pinned-share-target">
+                <strong>{ordinal(share.target.revisionNumber)} Revision</strong>
+                <code title={share.target.revisionId}>{share.target.revisionId}</code>
+              </span>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Link</dt>
+          <dd>
+            {active ? (
+              <ClipboardText
+                className="share-url-copy"
+                labels={{ copyAction: 'Copy share URL' }}
+                size="sm"
+                text={shareUrl}
+                tooltip={{ copiedText: 'Link copied', text: 'Copy link' }}
+              />
+            ) : (
+              'Unavailable'
             )}
           </dd>
         </div>
@@ -294,7 +314,7 @@ export function ArtifactPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(searchParams.has('panel'));
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const [restoreRevision, setRestoreRevision] = useState<ArtifactRevision | null>(null);
   const activePanel = inspectorPanel(searchParams.get('panel'));
   const historyOrder = searchParams.get('historyOrder') === 'oldest' ? 'oldest' : 'newest';
@@ -391,8 +411,8 @@ export function ArtifactPage() {
               <div className="managed-stage-actions">
                 <span>
                   {viewingLatest
-                    ? ordinal(viewedRevision.revisionNumber)
-                    : `Viewing ${ordinal(viewedRevision.revisionNumber)}`}
+                    ? `${ordinal(viewedRevision.revisionNumber)} Revision`
+                    : `Viewing ${ordinal(viewedRevision.revisionNumber)} Revision`}
                 </span>
                 {viewingLatest ? null : (
                   <Button
@@ -454,17 +474,6 @@ export function ArtifactPage() {
                     ]}
                     value={activePanel}
                     variant="underline"
-                  />
-                  <Button
-                    aria-label="Hide inspector"
-                    className="inspector-hide-action"
-                    icon={SidebarSimpleIcon}
-                    onClick={() => setInspectorOpen(false)}
-                    shape="square"
-                    size="sm"
-                    title="Hide inspector"
-                    type="button"
-                    variant="ghost"
                   />
                 </header>
 
@@ -717,12 +726,11 @@ export function ArtifactPage() {
         revision={restoreRevision}
         workspaceId={artifact.workspaceId}
       />
-      <ShareDialog
-        artifactId={artifact.artifactId}
+      <ArtifactShareDialog
+        artifact={artifact}
         onOpenChange={setShareOpen}
         open={shareOpen}
         revisions={history.items}
-        workspaceId={artifact.workspaceId}
       />
       <DeleteArtifactDialog
         artifact={deleteOpen ? artifact : undefined}

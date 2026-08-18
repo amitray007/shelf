@@ -202,15 +202,14 @@ test('artifact detail keeps revision and share controls compact and explicit', a
   ).toBeLessThanOrEqual(24);
 
   const previewBar = page.locator('.managed-stage-bar');
-  await expect(previewBar).toContainText('12th');
+  await expect(previewBar).toContainText('12th Revision');
   await expect(previewBar).not.toContainText('Revision:');
   await expect(previewBar).not.toContainText(longArtifactName);
   await expect(previewBar).not.toContainText(/\d+(?:\.\d+)?\s+(?:k|M)?B/u);
   await expect(page.getByText('Immutable lineage', { exact: true })).toHaveCount(0);
 
-  await expect(page.getByRole('complementary', { name: 'Artifact inspector' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Show inspector' }).click();
   await expect(page.getByRole('complementary', { name: 'Artifact inspector' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hide inspector' })).toHaveCount(1);
   await expect(page.getByRole('tab', { name: 'Compare' })).toHaveCount(0);
   await page.getByRole('tab', { name: 'History' }).click();
   const revisions = page.locator('.revision-row');
@@ -228,7 +227,7 @@ test('artifact detail keeps revision and share controls compact and explicit', a
   });
   await previousRevision.getByRole('button', { name: 'View', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`revision=rev_${'l'.repeat(22)}`, 'u'));
-  await expect(previewBar).toContainText('Viewing 10th');
+  await expect(previewBar).toContainText('Viewing 10th Revision');
   await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
     'notes.md',
   );
@@ -258,21 +257,24 @@ test('artifact detail keeps revision and share controls compact and explicit', a
   ).toBeVisible();
   const activeLabel = activeShare.getByText('Active', { exact: true });
   await expect(activeLabel).toBeVisible();
+  await expect(activeShare.getByRole('button', { name: 'Copy share URL' })).toBeVisible();
   await expect(activeShare.getByRole('button', { name: 'Revoke link' })).toBeVisible();
+  await expect(page.getByText('11th Revision', { exact: true })).toBeVisible();
+  await expect(page.getByText('10th Revision', { exact: true })).toBeVisible();
   await expect(page.getByText('Revoked', { exact: true })).toBeVisible();
   await expect(page.getByText('Expired', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Share', exact: true }).click();
+  const shareOverview = page.getByRole('dialog', { name: 'Share artifact' });
+  await expect(shareOverview).toContainText('Latest active link');
+  await shareOverview.getByRole('button', { name: 'Create new link' }).click();
   const shareDialog = page.getByRole('dialog', { name: 'Create share link' });
   await shareDialog.getByRole('radio', { name: /Pinned/u }).click();
   await expect(shareDialog).toContainText(`12th — ${longArtifactName}`);
   await shareDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.locator('.shelf-dialog')).toHaveCount(0);
 
-  await page
-    .getByRole('complementary', { name: 'Artifact inspector' })
-    .getByRole('button', { name: 'Hide inspector' })
-    .click();
+  await page.getByRole('button', { name: 'Hide inspector' }).click();
   await expect(page.getByRole('complementary', { name: 'Artifact inspector' })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Rename artifact' }).click();
@@ -356,6 +358,11 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await expectNoAxeViolations(page);
 
   await page.getByRole('button', { name: `Share artifact ${longArtifactName}` }).click();
+  const shareOverviewDialog = page.getByRole('dialog', { name: 'Share artifact' });
+  await expect(shareOverviewDialog).toContainText('Latest active link');
+  await expect(shareOverviewDialog).toContainText(`/s/shr_${'n'.repeat(22)}#${shareSecret}`);
+  await expect(shareOverviewDialog.getByRole('button', { name: 'Copy share url' })).toBeVisible();
+  await shareOverviewDialog.getByRole('button', { name: 'Create new link' }).click();
   const indexShareDialog = page.getByRole('dialog', { name: 'Create share link' });
   await expect(indexShareDialog.getByRole('radio', { name: /Latest/u })).toBeChecked();
   await expect(indexShareDialog.getByLabel('Expires')).toHaveValue('');
@@ -406,7 +413,7 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   page.on('request', (request) => {
     if (new URL(request.url()).pathname.startsWith('/api/v1/')) panelRequests.push(request.url());
   });
-  await page.getByRole('button', { name: 'Show inspector' }).click();
+  await expect(page.getByRole('complementary', { name: 'Artifact inspector' })).toBeVisible();
   await page.getByRole('tab', { name: 'History' }).click();
   await page.getByRole('tab', { name: 'Details' }).click();
   await expect(page).not.toHaveURL(/[?&]panel=/u);
@@ -414,6 +421,10 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   expect(panelRequests).toEqual([]);
 
   await page.getByRole('button', { name: 'Share' }).click();
+  await page
+    .getByRole('dialog', { name: 'Share artifact' })
+    .getByRole('button', { name: 'Create new link' })
+    .click();
   const shareDialog = page.getByRole('dialog', { name: 'Create share link' });
   await shareDialog.getByRole('radio', { name: /Pinned/u }).click();
   await shareDialog.getByRole('button', { name: 'Create link' }).click();

@@ -112,29 +112,7 @@ export function createShareFingerprint(input: {
   return `share-create-request/v1:sha256:${createHash('sha256').update(canonical).digest('hex')}`;
 }
 
-function summary(stored: StoredShare): ShareManagementSummary {
-  return {
-    apiVersion: 'v1',
-    workspaceId: stored.workspaceId,
-    shareId: stored.shareId,
-    artifactId: stored.artifactId,
-    visibility: 'unlisted',
-    target:
-      stored.target.mode === 'pinned'
-        ? { mode: 'pinned', revisionId: stored.target.revisionId }
-        : { mode: 'latest' },
-    createdAt: stored.createdAt,
-    expiresAt: stored.expiresAt,
-    revokedAt: stored.revokedAt,
-  };
-}
-
-function createResult(
-  stored: StoredShare,
-  requestId: string,
-  replayed: boolean,
-  capabilityCodec: ShareCapabilityCodec,
-): ShareCreateResult {
+function capabilityUrl(stored: StoredShare, capabilityCodec: ShareCapabilityCodec): string {
   let secret: string;
   try {
     secret = capabilityCodec.deriveSecret(stored.shareId);
@@ -148,10 +126,64 @@ function createResult(
       new Error('The share capability codec returned an invalid secret.'),
     );
   }
+  return `/s/${stored.shareId}#${secret}`;
+}
+
+function summary(
+  stored: StoredShare,
+  capabilityCodec: ShareCapabilityCodec,
+  pinnedRevisionNumber?: number,
+): ShareManagementSummary {
+  if (stored.target.mode === 'pinned' && pinnedRevisionNumber === undefined) {
+    throw boundaryFailure(
+      'SERVICE_UNAVAILABLE',
+      'Pinned share revision lookup failed.',
+      new Error('The pinned share revision number is unavailable.'),
+    );
+  }
+  const target =
+    stored.target.mode === 'pinned' && pinnedRevisionNumber !== undefined
+      ? {
+          mode: 'pinned' as const,
+          revisionId: stored.target.revisionId,
+          revisionNumber: pinnedRevisionNumber,
+        }
+      : { mode: 'latest' as const };
   return {
-    ...summary(stored),
+    apiVersion: 'v1',
+    workspaceId: stored.workspaceId,
+    shareId: stored.shareId,
+    artifactId: stored.artifactId,
+    visibility: 'unlisted',
+    target,
+    createdAt: stored.createdAt,
+    expiresAt: stored.expiresAt,
+    revokedAt: stored.revokedAt,
+    url: capabilityUrl(stored, capabilityCodec),
+  };
+}
+
+function createResult(
+  stored: StoredShare,
+  requestId: string,
+  replayed: boolean,
+  capabilityCodec: ShareCapabilityCodec,
+): ShareCreateResult {
+  return {
+    apiVersion: 'v1',
+    workspaceId: stored.workspaceId,
+    shareId: stored.shareId,
+    artifactId: stored.artifactId,
+    visibility: 'unlisted',
+    target:
+      stored.target.mode === 'pinned'
+        ? { mode: 'pinned', revisionId: stored.target.revisionId }
+        : { mode: 'latest' },
+    createdAt: stored.createdAt,
+    expiresAt: stored.expiresAt,
+    revokedAt: stored.revokedAt,
     requestId,
-    url: `/s/${stored.shareId}#${secret}`,
+    url: capabilityUrl(stored, capabilityCodec),
     replayed,
   };
 }
@@ -194,6 +226,29 @@ export function createShareLifecycleService(dependencies: {
 }) {
   const clock = dependencies.clock ?? defaultClock;
   const generateShareId = dependencies.generateShareId ?? defaultShareId;
+  const pinnedRevisionNumber = async (stored: StoredShare): Promise<number | undefined> => {
+    if (stored.target.mode !== 'pinned') return undefined;
+    let pinned: StoredShareRevision | undefined;
+    try {
+      pinned = await dependencies.shares.findRevisionForShare(stored.target.revisionId);
+    } catch (error) {
+      throw boundaryFailure('SERVICE_UNAVAILABLE', 'Pinned share revision lookup failed.', error);
+    }
+    if (
+      pinned === undefined ||
+      pinned.installationId !== stored.installationId ||
+      pinned.workspaceId !== stored.workspaceId ||
+      pinned.artifactId !== stored.artifactId ||
+      pinned.revision.revisionId !== stored.target.revisionId
+    ) {
+      throw boundaryFailure(
+        'SERVICE_UNAVAILABLE',
+        'Pinned share revision lookup failed.',
+        new Error('The pinned share revision is unavailable or crossed its stored scope.'),
+      );
+    }
+    return pinned.revision.revisionNumber;
+  };
 
   return {
     async createShare(request: {
@@ -399,7 +454,11 @@ export function createShareLifecycleService(dependencies: {
       return {
         apiVersion: 'v1',
         workspaceId: request.workspaceId,
-        items: page.items.map(summary),
+        items: await Promise.all(
+          page.items.map(async (item) =>
+            summary(item, dependencies.capabilityCodec, await pinnedRevisionNumber(item)),
+          ),
+        ),
         nextCursor: page.next === undefined ? null : encodeCursor(page.next),
       };
     },
@@ -451,7 +510,11 @@ export function createShareLifecycleService(dependencies: {
         throw boundaryFailure('SERVICE_UNAVAILABLE', 'Share revocation failed.', error);
       }
       if (outcome.status === 'not-found') throw new ShareNotFoundError();
-      return summary(outcome.result);
+      return summary(
+        outcome.result,
+        dependencies.capabilityCodec,
+        await pinnedRevisionNumber(outcome.result),
+      );
     },
   };
 }

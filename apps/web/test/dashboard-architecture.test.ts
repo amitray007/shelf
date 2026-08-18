@@ -119,7 +119,8 @@ describe('dashboard architecture', () => {
 
     expect(detail).toContain("searchParams.get('panel')");
     expect(detail).toContain('defaultShouldRevalidate: false');
-    expect(detail).toContain("useState(searchParams.has('panel'))");
+    expect(detail).toContain('useState(true)');
+    expect(detail.match(/aria-label="Hide inspector"/gu) ?? []).toHaveLength(0);
     expect(detail).not.toContain("value: 'compare'");
     expect(detail).not.toContain('{history.items.length}');
   });

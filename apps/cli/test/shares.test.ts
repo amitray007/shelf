@@ -20,6 +20,7 @@ const summary = {
   createdAt: '2026-08-17T12:00:00.000Z',
   expiresAt: null,
   revokedAt: null,
+  url: capabilityUrl,
 };
 
 function capture() {
@@ -210,7 +211,7 @@ describe('shelf shares', () => {
     expect(output.stdout.value()).toBe('');
   });
 
-  it('lists a bounded page without exposing a capability URL', async () => {
+  it('lists a bounded page with its reusable capability URL', async () => {
     const page = {
       apiVersion: 'v1',
       workspaceId: 'workspace-main',
@@ -240,13 +241,13 @@ describe('shelf shares', () => {
 
     expect(exitCode).toBe(0);
     expect(JSON.parse(output.stdout.value())).toEqual(page);
-    expect(output.stdout.value()).not.toContain('#');
+    expect(output.stdout.value()).toContain(capabilityUrl);
     expect(fetch.mock.calls[0]?.[0].toString()).toBe(
       'https://shelf.example/api/v1/workspaces/workspace-main/shares?limit=25&cursor=current-page',
     );
   });
 
-  it('revokes one share without printing capability material', async () => {
+  it('revokes one share while returning its canonical management URL', async () => {
     const revoked = { ...summary, revokedAt: '2026-08-17T12:05:00.000Z' };
     const fetch = vi.fn(async () => Response.json(revoked));
     const output = runtime(fetch);
@@ -269,7 +270,7 @@ describe('shelf shares', () => {
 
     expect(exitCode).toBe(0);
     expect(JSON.parse(output.stdout.value())).toEqual(revoked);
-    expect(output.stdout.value()).not.toContain('#');
+    expect(output.stdout.value()).toContain(capabilityUrl);
     expect(fetch.mock.calls[0]?.[0].toString()).toBe(
       `https://shelf.example/api/v1/workspaces/workspace-main/shares/${ids.share}`,
     );

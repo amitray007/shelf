@@ -27,6 +27,7 @@ import {
   type RestoreResult,
   type RevisionComparison,
   type ShareCreateResult,
+  type ShareManagementSummary,
   type SharePage,
   type ShareTarget,
   type WorkspaceCreateResult,
@@ -209,6 +210,32 @@ export async function loadWorkspaceShares(
     throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
   }
   return value;
+}
+
+export async function loadLatestActiveArtifactShare(
+  workspaceId: string,
+  artifactId: string,
+  signal?: AbortSignal,
+): Promise<ShareManagementSummary | undefined> {
+  let cursor: string | undefined;
+  const visited = new Set<string>();
+  do {
+    const page = await loadWorkspaceShares(workspaceId, cursor, signal);
+    const now = Date.now();
+    const share = page.items.find(
+      (candidate) =>
+        candidate.artifactId === artifactId &&
+        candidate.revokedAt === null &&
+        (candidate.expiresAt === null || new Date(candidate.expiresAt).getTime() > now),
+    );
+    if (share !== undefined) return share;
+    cursor = page.nextCursor ?? undefined;
+    if (cursor !== undefined && visited.has(cursor)) {
+      throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned a repeated share cursor.');
+    }
+    if (cursor !== undefined) visited.add(cursor);
+  } while (cursor !== undefined);
+  return undefined;
 }
 
 export async function loadFolderEntries(

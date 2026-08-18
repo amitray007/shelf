@@ -258,7 +258,7 @@ describe('share HTTP boundary', () => {
     expect(recovery.json()).toMatchObject({ error: { code: 'ARTIFACT_NOT_FOUND' } });
   });
 
-  it('creates, replays, lists, and revokes without exposing capability material in management data', async () => {
+  it('creates, replays, lists, and revokes a reusable management link', async () => {
     const app = await fixture();
     const published = await publishFile(app, '<h1>launch</h1>', 'publish-launch');
     const artifactId = published.json().artifactId as string;
@@ -289,8 +289,8 @@ describe('share HTTP boundary', () => {
     expect(replayed.json()).toMatchObject({ replayed: true, url: created.json().url });
     expect(listed.statusCode).toBe(200);
     expect(listed.json().items).toHaveLength(1);
-    expect(JSON.stringify(listed.json())).not.toContain(secret);
-    expect(JSON.stringify(listed.json())).not.toContain('url');
+    expect(listed.json().items[0]).toMatchObject({ url: created.json().url });
+    expect(JSON.stringify(listed.json())).toContain(secret);
     expect(revoked.statusCode).toBe(200);
     expect(revoked.json().revokedAt).toBeTruthy();
     expect(revokedAgain.statusCode).toBe(200);

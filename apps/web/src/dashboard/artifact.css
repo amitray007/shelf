@@ -141,8 +141,7 @@
   white-space: nowrap;
 }
 
-.inspector-toggle,
-.inspector-hide-action {
+.inspector-toggle {
   min-width: 30px;
   min-height: 30px;
   color: var(--text-muted);
@@ -209,10 +208,7 @@
 }
 
 .artifact-inspector-nav {
-  display: grid;
   flex: 0 0 auto;
-  grid-template-columns: minmax(0, 1fr) 36px;
-  align-items: end;
   border-bottom: 1px solid var(--rule);
 }
 
@@ -220,10 +216,6 @@
   min-width: 0;
   padding: 8px 8px 0;
   border-bottom: 0;
-}
-
-.inspector-hide-action {
-  margin: 6px 6px 6px 0;
 }
 
 .artifact-inspector-tabs [role="tab"] {
@@ -412,6 +404,23 @@
 .share-row-heading > code {
   white-space: normal;
   word-break: break-all;
+}
+
+.pinned-share-target {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.pinned-share-target strong {
+  color: var(--text-subtle);
+  font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.share-url-copy {
+  max-width: 100%;
 }
 
 .revision-row:last-child,

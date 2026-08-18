@@ -22,8 +22,8 @@ import {
 import { ordinal } from '../components/revision-label.js';
 import { DashboardApiError, loadArtifact, recoverArtifact } from './api.js';
 import { ArtifactIcon } from './artifact-icon.js';
+import { ArtifactShareDialog } from './artifact-share-dialog.js';
 import { DeleteArtifactDialog } from './delete-artifact-dialog.js';
-import { ShareDialog } from './share-dialog.js';
 import './artifact.css';
 import './artifact-index.css';
 
@@ -334,14 +334,12 @@ export function ArtifactsPage() {
         </footer>
       )}
       {shareArtifact === undefined ? null : (
-        <ShareDialog
-          artifactId={shareArtifact.artifactId}
+        <ArtifactShareDialog
+          artifact={shareArtifact}
           onOpenChange={(open) => {
             if (!open) setShareArtifact(undefined);
           }}
           open
-          revisions={[shareArtifact.latestRevision]}
-          workspaceId={workspaceId}
         />
       )}
       <DeleteArtifactDialog

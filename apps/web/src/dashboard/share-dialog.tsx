@@ -142,7 +142,7 @@ export function ShareDialog({
       ) : (
         <div className="dialog-form">
           <SecretReveal
-            hint="Copy this now. Shelf never includes the capability in share listings."
+            hint="You can copy this link again later from the artifact's Links tab."
             label="Share URL"
             value={shareUrl}
           />

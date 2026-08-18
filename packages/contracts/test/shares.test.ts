@@ -23,18 +23,19 @@ const summary = {
   shareId,
   artifactId,
   visibility: 'unlisted',
-  target: { mode: 'pinned', revisionId },
+  target: { mode: 'pinned', revisionId, revisionNumber: 3 },
   createdAt: '2026-08-17T12:00:00.000Z',
   expiresAt: '2026-08-24T12:00:00.000Z',
   revokedAt: null,
+  url: `/s/${shareId}#${'s'.repeat(43)}`,
 };
 
 describe('share contracts', () => {
-  it('keeps capability URLs confined to the authorized create result', () => {
+  it('returns reusable capability URLs only in authorized management contracts', () => {
     const result = {
       ...summary,
+      target: { mode: 'pinned', revisionId },
       requestId: 'request-create-share',
-      url: `/s/${shareId}#${'s'.repeat(43)}`,
       replayed: false,
     };
     const page = {
@@ -46,10 +47,10 @@ describe('share contracts', () => {
 
     expect(Check(ShareCreateResultSchema, result)).toBe(true);
     expect(isShareCreateResult(result)).toBe(true);
-    expect(Check(ShareManagementSummarySchema, { ...summary, url: result.url })).toBe(false);
+    expect(Check(ShareManagementSummarySchema, summary)).toBe(true);
     expect(Check(SharePageSchema, page)).toBe(true);
     expect(isSharePage(page)).toBe(true);
-    expect(isSharePage({ ...page, items: [{ ...summary, url: result.url }] })).toBe(false);
+    expect(isSharePage({ ...page, items: [{ ...summary, url: undefined }] })).toBe(false);
   });
 
   it('accepts a sanitized public file projection with a content action', () => {

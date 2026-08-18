@@ -38,24 +38,41 @@ const ShareManagementFields = {
   shareId: OpaqueShareIdSchema,
   artifactId: OpaqueArtifactIdSchema,
   visibility: Type.Literal('unlisted'),
-  target: ShareTargetSchema,
   createdAt: IsoInstantSchema,
   expiresAt: NullableIsoInstantSchema,
   revokedAt: NullableIsoInstantSchema,
 };
 
-export const ShareManagementSummarySchema = Type.Object(ShareManagementFields, {
-  additionalProperties: false,
-  $id: 'ShareManagementSummary',
+const ShareUrlSchema = Type.String({
+  pattern: '^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$',
 });
+
+const ShareManagementTargetSchema = Type.Union([
+  LatestShareTargetSchema,
+  Type.Object(
+    {
+      mode: Type.Literal('pinned'),
+      revisionId: OpaqueRevisionIdSchema,
+      revisionNumber: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+export const ShareManagementSummarySchema = Type.Object(
+  { ...ShareManagementFields, target: ShareManagementTargetSchema, url: ShareUrlSchema },
+  {
+    additionalProperties: false,
+    $id: 'ShareManagementSummary',
+  },
+);
 
 export const ShareCreateResultSchema = Type.Object(
   {
     ...ShareManagementFields,
+    target: ShareTargetSchema,
     requestId: Type.String({ minLength: 1, maxLength: 128 }),
-    url: Type.String({
-      pattern: '^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$',
-    }),
+    url: ShareUrlSchema,
     replayed: Type.Boolean(),
   },
   { additionalProperties: false, $id: 'ShareCreateResult' },

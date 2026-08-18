@@ -251,7 +251,7 @@ export async function registerShareRoutes(
     {
       schema: {
         operationId: 'listSharesV1',
-        summary: 'List share management records without capability material',
+        summary: 'List reusable share links for authorized workspace management',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         tags: ['shares'],
         params: WorkspaceParamsSchema,

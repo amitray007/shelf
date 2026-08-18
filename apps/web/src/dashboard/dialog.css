@@ -148,6 +148,69 @@
   gap: 9px;
 }
 
+.artifact-share-overview {
+  gap: 16px;
+}
+
+.share-dialog-status,
+.share-dialog-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+}
+
+.share-dialog-empty {
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 5px;
+  background: var(--canvas);
+}
+
+.share-dialog-empty strong {
+  color: var(--text);
+  font-size: var(--font-body);
+  font-weight: 580;
+}
+
+.latest-share-card {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--canvas);
+}
+
+.latest-share-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.latest-share-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.latest-share-heading span,
+.latest-share-heading time {
+  color: var(--text-muted);
+  font-size: var(--font-machine);
+}
+
+.latest-share-heading strong {
+  color: var(--text);
+  font-size: var(--font-body);
+  font-weight: 580;
+}
+
+.latest-share-heading time {
+  flex: 0 0 auto;
+}
+
 @media (max-width: 680px) {
   .shelf-dialog {
     top: auto;

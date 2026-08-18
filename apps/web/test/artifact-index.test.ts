@@ -21,10 +21,10 @@ describe('artifact index presentation', () => {
     );
 
     expect(source).toContain('Created on');
-    expect(source).toContain('Last updated on');
+    expect(source).toContain('Last Updated');
     expect(source).not.toContain('>Size<');
     expect(source).toContain('Share artifact');
     expect(source).toContain('Delete artifact');
-    expect(source).toContain('<ShareDialog');
+    expect(source).toContain('<ArtifactShareDialog');
   });
 });
