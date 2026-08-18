@@ -4,12 +4,16 @@ import {
   FOLDER_LIMITS,
   OpaqueArtifactIdSchema,
   OpaqueShareIdSchema,
-  type ShareTarget,
+  type ProtectedSessionEstablishInput,
+  PublicShareCodeSchema,
+  type ShareCreateInput,
 } from '@shelf/contracts';
 import {
+  createProtectedSessionEstablishmentService,
   createShareAccessService,
   createShareLifecycleService,
   createShareResolutionService,
+  ShareNotFoundError,
 } from '@shelf/core';
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
@@ -18,9 +22,8 @@ import type { ShelfAppDependencies } from '../app.js';
 import { authenticate } from '../authenticate.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
 
-const PUBLIC_SHARE_PREFIX = '/api/v1/public/shares/';
-const FORM_CAPABILITY_CONTENT_TYPE = 'application/x-www-form-urlencoded';
-const MAX_FORM_CAPABILITY_BYTES = 1_024;
+const PUBLIC_API_PREFIX = '/api/v1/public/';
+const AUTHORIZATION_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 const WorkspaceArtifactParamsSchema = Type.Object(
   {
@@ -41,7 +44,11 @@ const WorkspaceShareParamsSchema = Type.Object(
   { additionalProperties: false },
 );
 const PublicShareParamsSchema = Type.Object(
-  { shareId: Type.String({ minLength: 1, maxLength: 128 }) },
+  { shareId: OpaqueShareIdSchema },
+  { additionalProperties: false },
+);
+const PublicLinkParamsSchema = Type.Object(
+  { publicCode: PublicShareCodeSchema },
   { additionalProperties: false },
 );
 const IdempotencyHeadersSchema = Type.Object(
@@ -51,38 +58,42 @@ const IdempotencyHeadersSchema = Type.Object(
   },
   { additionalProperties: true },
 );
-// A conditional object avoids Ajv's removeAdditional mutation across union branches.
-const HttpShareTargetSchema = Type.Unsafe<ShareTarget>({
+// Keep one object schema here: Ajv removeAdditional mutates discriminated union branches before
+// later branches can validate mode-specific expiry and session fields.
+const HttpShareCreateBodySchema = Type.Unsafe<ShareCreateInput>({
   type: 'object',
   properties: {
-    mode: { type: 'string', enum: ['latest', 'pinned'] },
-    revisionId: { type: 'string', pattern: '^rev_[A-Za-z0-9_-]{22}$' },
-  },
-  required: ['mode'],
-  additionalProperties: false,
-  allOf: [
-    {
-      if: { properties: { mode: { const: 'pinned' } }, required: ['mode'] },
-      // biome-ignore lint/suspicious/noThenProperty: JSON Schema conditionals use the standard then keyword.
-      then: { required: ['revisionId'] },
-      else: { not: { required: ['revisionId'] } },
+    accessType: { type: 'string', enum: ['protected', 'public'] },
+    target: {
+      type: 'object',
+      properties: {
+        mode: { type: 'string', enum: ['latest', 'pinned'] },
+        revisionId: { type: 'string', pattern: '^rev_[A-Za-z0-9_-]{22}$' },
+      },
+      required: ['mode'],
+      additionalProperties: false,
+      allOf: [
+        {
+          if: { properties: { mode: { const: 'pinned' } }, required: ['mode'] },
+          // biome-ignore lint/suspicious/noThenProperty: JSON Schema conditionals use then.
+          then: { required: ['revisionId'] },
+          else: { not: { required: ['revisionId'] } },
+        },
+      ],
     },
-  ],
-});
-const ShareCreateBodySchema = Type.Object(
-  {
-    target: HttpShareTargetSchema,
-    expiresAt: Type.Optional(
-      Type.Union([
-        Type.String({
-          pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$',
-        }),
-        Type.Null(),
-      ]),
-    ),
+    expiresIn: {
+      type: 'string',
+      enum: ['never', '5m', '30m', '2hr', '6hr', '24hr', '3d', '7d', '15d', '30d'],
+    },
+    expiresAt: {
+      type: 'string',
+      pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$',
+    },
+    maxSessions: { type: 'integer', minimum: 1, maximum: 1_000_000 },
   },
-  { additionalProperties: false },
-);
+  required: ['accessType', 'target'],
+  additionalProperties: false,
+});
 const SharePageQuerySchema = Type.Object(
   {
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
@@ -90,9 +101,9 @@ const SharePageQuerySchema = Type.Object(
   },
   { additionalProperties: false },
 );
-const CapabilityBodySchema = Type.Object(
+const ViewerTokenBodySchema = Type.Object(
   {
-    secret: Type.String({ maxLength: 512 }),
+    token: Type.String({ minLength: 24, maxLength: 4096, pattern: '^[A-Za-z0-9._-]+$' }),
   },
   { additionalProperties: false },
 );
@@ -114,12 +125,25 @@ const managementErrors = {
   500: Type.Ref('ErrorEnvelope'),
   503: Type.Ref('ErrorEnvelope'),
 };
+const anonymousResponseHeaders = {
+  'Cache-Control': { type: 'string', description: 'Always no-store.' },
+  'Referrer-Policy': { type: 'string', description: 'Always no-referrer.' },
+  'X-Content-Type-Options': { type: 'string', description: 'Always nosniff.' },
+  'X-Robots-Tag': { type: 'string', description: 'Always noindex, nofollow, noarchive.' },
+};
+
+function anonymousResponse<T extends object>(
+  schema: T,
+): T & { headers: typeof anonymousResponseHeaders } {
+  return { ...schema, headers: anonymousResponseHeaders };
+}
+
 const publicErrors = {
-  400: Type.Ref('ErrorEnvelope'),
-  404: Type.Ref('ErrorEnvelope'),
-  499: Type.Ref('ErrorEnvelope'),
-  500: Type.Ref('ErrorEnvelope'),
-  503: Type.Ref('ErrorEnvelope'),
+  400: anonymousResponse(Type.Ref('ErrorEnvelope')),
+  404: anonymousResponse(Type.Ref('ErrorEnvelope')),
+  499: anonymousResponse(Type.Ref('ErrorEnvelope')),
+  500: anonymousResponse(Type.Ref('ErrorEnvelope')),
+  503: anonymousResponse(Type.Ref('ErrorEnvelope')),
 };
 
 const PublicContentResponseSchema = {
@@ -128,11 +152,9 @@ const PublicContentResponseSchema = {
     description: 'Exact immutable file bytes, always delivered as an attachment.',
   }),
   headers: {
-    'Cache-Control': { type: 'string', description: 'Always no-store.' },
+    ...anonymousResponseHeaders,
     'Content-Disposition': { type: 'string', description: 'Safe attachment file name.' },
     'Content-Length': { type: 'integer', description: 'Complete immutable byte count.' },
-    'Referrer-Policy': { type: 'string', description: 'Always no-referrer.' },
-    'X-Content-Type-Options': { type: 'string', description: 'Always nosniff.' },
   },
 };
 
@@ -167,21 +189,6 @@ export async function registerShareRoutes(
   app: FastifyInstance,
   dependencies: ShelfAppDependencies,
 ): Promise<void> {
-  app.addContentTypeParser(
-    FORM_CAPABILITY_CONTENT_TYPE,
-    { parseAs: 'string', bodyLimit: MAX_FORM_CAPABILITY_BYTES },
-    (_request, body, done) => {
-      const parameters = new URLSearchParams(
-        typeof body === 'string' ? body : body.toString('utf8'),
-      );
-      const secrets = parameters.getAll('secret');
-      if (secrets.length !== 1 || Array.from(parameters.keys()).some((key) => key !== 'secret')) {
-        done(null, {});
-        return;
-      }
-      done(null, { secret: secrets[0] });
-    },
-  );
   const lifecycle = createShareLifecycleService({
     authorizer: dependencies.authorizer,
     shares: dependencies.shareRepository,
@@ -190,26 +197,65 @@ export async function registerShareRoutes(
     ...(dependencies.generateShareId === undefined
       ? {}
       : { generateShareId: dependencies.generateShareId }),
+    ...(dependencies.generatePublicCode === undefined
+      ? {}
+      : { generatePublicCode: dependencies.generatePublicCode }),
   });
   const resolution = createShareResolutionService({
+    shares: dependencies.shareRepository,
+    ...(dependencies.shareClock === undefined ? {} : { clock: dependencies.shareClock }),
+  });
+  const establish = createProtectedSessionEstablishmentService({
     shares: dependencies.shareRepository,
     capabilityCodec: dependencies.shareCapabilityCodec,
     ...(dependencies.shareClock === undefined ? {} : { clock: dependencies.shareClock }),
   });
   const access = createShareAccessService({
     shares: dependencies.shareRepository,
-    capabilityCodec: dependencies.shareCapabilityCodec,
     revisions: dependencies.revisionRepository,
     folders: dependencies.revisionRepository,
     contentReader: dependencies.contentReader,
     ...(dependencies.shareClock === undefined ? {} : { clock: dependencies.shareClock }),
   });
+  const clock = dependencies.shareClock ?? (() => new Date());
+
+  function protectedAuthority(shareId: string, token: string) {
+    const claims = dependencies.viewerSessionTokenCodec.verify(token, {
+      now: clock(),
+      shareId,
+    });
+    if (claims === undefined) throw new ShareNotFoundError();
+    return { type: 'protected-session' as const, shareId, sessionId: claims.sessionId };
+  }
+
+  function issueAuthority(authorization: {
+    shareId: string;
+    sessionId: string;
+    issuedAt: string;
+    expiresAt: string;
+  }) {
+    const token = dependencies.viewerSessionTokenCodec.issue({
+      shareId: authorization.shareId,
+      sessionId: authorization.sessionId,
+      issuedAt: authorization.issuedAt,
+      accessExpiresAt: authorization.expiresAt,
+    });
+    return {
+      apiVersion: 'v1' as const,
+      shareId: authorization.shareId,
+      sessionId: authorization.sessionId,
+      token,
+      issuedAt: authorization.issuedAt,
+      expiresAt: authorization.expiresAt,
+    };
+  }
 
   app.addHook('onRequest', async (request, reply) => {
-    if (!request.url.startsWith(PUBLIC_SHARE_PREFIX)) return;
+    if (!request.url.startsWith(PUBLIC_API_PREFIX)) return;
     void reply.header('Cache-Control', 'no-store');
     void reply.header('Referrer-Policy', 'no-referrer');
     void reply.header('X-Content-Type-Options', 'nosniff');
+    void reply.header('X-Robots-Tag', 'noindex, nofollow, noarchive');
   });
 
   app.post(
@@ -222,7 +268,7 @@ export async function registerShareRoutes(
         tags: ['shares'],
         params: WorkspaceArtifactParamsSchema,
         headers: IdempotencyHeadersSchema,
-        body: ShareCreateBodySchema,
+        body: HttpShareCreateBodySchema,
         response: { 201: Type.Ref('ShareCreateResult'), ...managementErrors },
       },
     },
@@ -230,14 +276,19 @@ export async function registerShareRoutes(
       const identity = await authenticate(request, dependencies.authenticator);
       const params = request.params as { workspaceId: string; artifactId: string };
       const headers = request.headers as { 'idempotency-key': string };
-      const body = request.body as { target: ShareTarget; expiresAt?: string | null };
+      const body = request.body as ShareCreateInput;
       const result = await lifecycle.createShare({
         installationId: identity.installationId,
         workspaceId: params.workspaceId,
         actorId: identity.actorId,
         artifactId: params.artifactId,
         target: body.target,
-        ...(body.expiresAt === undefined ? {} : { expiresAt: body.expiresAt }),
+        accessType: body.accessType,
+        ...('expiresIn' in body ? { expiresIn: body.expiresIn } : {}),
+        ...('expiresAt' in body ? { expiresAt: body.expiresAt } : {}),
+        ...('maxSessions' in body && body.maxSessions !== undefined
+          ? { maxSessions: body.maxSessions }
+          : {}),
         idempotencyKey: headers['idempotency-key'],
         requestId: request.id,
         signal: requestCancellationSignal(request, reply),
@@ -300,23 +351,83 @@ export async function registerShareRoutes(
   );
 
   app.post(
-    '/api/v1/public/shares/:shareId/resolve',
+    '/api/v1/public/shares/:shareId/sessions',
     {
       schema: {
-        operationId: 'resolvePublicShareV1',
-        summary: 'Resolve an unlisted share capability',
+        operationId: 'establishProtectedShareSessionV1',
+        summary: 'Establish or renew one bounded Protected viewer session',
         tags: ['public shares'],
         params: PublicShareParamsSchema,
-        body: CapabilityBodySchema,
-        response: { 200: Type.Ref('PublicShareResolution'), ...publicErrors },
+        body: Type.Ref('ProtectedSessionEstablishInput'),
+        response: {
+          200: anonymousResponse(Type.Ref('ProtectedSessionAuthority')),
+          ...publicErrors,
+        },
       },
     },
     async (request, reply) => {
       const params = request.params as { shareId: string };
-      const body = request.body as { secret: string };
-      return resolution({
+      const body = request.body as ProtectedSessionEstablishInput;
+      if ('secret' in body) {
+        return issueAuthority(
+          await establish({
+            shareId: params.shareId,
+            sessionId: body.sessionId,
+            secret: body.secret,
+            signal: requestCancellationSignal(request, reply),
+          }),
+        );
+      }
+      const now = clock();
+      const claims = dependencies.viewerSessionTokenCodec.verify(body.token, {
+        now,
         shareId: params.shareId,
-        secret: body.secret,
+        sessionId: body.sessionId,
+        allowExpired: true,
+      });
+      if (claims === undefined) throw new ShareNotFoundError();
+      const resolved = await resolution({
+        authority: {
+          type: 'protected-session',
+          shareId: claims.shareId,
+          sessionId: claims.sessionId,
+        },
+        signal: requestCancellationSignal(request, reply),
+      });
+      const policyExpiry =
+        resolved.expiresAt === null ? Number.POSITIVE_INFINITY : Date.parse(resolved.expiresAt);
+      const expiresAt = new Date(
+        Math.min(now.getTime() + AUTHORIZATION_LIFETIME_MS, policyExpiry),
+      ).toISOString();
+      return issueAuthority({
+        shareId: claims.shareId,
+        sessionId: claims.sessionId,
+        issuedAt: now.toISOString(),
+        expiresAt,
+      });
+    },
+  );
+
+  app.post(
+    '/api/v1/public/shares/:shareId/resolve',
+    {
+      schema: {
+        operationId: 'resolveProtectedShareV1',
+        summary: 'Resolve a Protected share with established viewer authority',
+        tags: ['public shares'],
+        params: PublicShareParamsSchema,
+        body: ViewerTokenBodySchema,
+        response: {
+          200: anonymousResponse(Type.Ref('PublicShareResolution')),
+          ...publicErrors,
+        },
+      },
+    },
+    async (request, reply) => {
+      const params = request.params as { shareId: string };
+      const body = request.body as { token: string };
+      return resolution({
+        authority: protectedAuthority(params.shareId, body.token),
         signal: requestCancellationSignal(request, reply),
       });
     },
@@ -326,22 +437,20 @@ export async function registerShareRoutes(
     '/api/v1/public/shares/:shareId/content',
     {
       schema: {
-        operationId: 'downloadPublicShareContentV1',
-        summary: 'Download exact shared file bytes as an attachment',
-        consumes: ['application/json', FORM_CAPABILITY_CONTENT_TYPE],
+        operationId: 'downloadProtectedShareContentV1',
+        summary: 'Download Protected shared file bytes with established viewer authority',
         produces: ['application/octet-stream'],
         tags: ['public shares'],
         params: PublicShareParamsSchema,
-        body: CapabilityBodySchema,
+        body: ViewerTokenBodySchema,
         response: { 200: PublicContentResponseSchema, ...publicErrors },
       },
     },
     async (request, reply) => {
       const params = request.params as { shareId: string };
-      const body = request.body as { secret: string };
+      const body = request.body as { token: string };
       const file = await access.readFile({
-        shareId: params.shareId,
-        secret: body.secret,
+        authority: protectedAuthority(params.shareId, body.token),
         signal: requestCancellationSignal(request, reply),
       });
       return reply
@@ -359,22 +468,97 @@ export async function registerShareRoutes(
     '/api/v1/public/shares/:shareId/tree',
     {
       schema: {
-        operationId: 'getPublicShareTreeV1',
-        summary: 'Page the exact shared folder tree',
+        operationId: 'getProtectedShareTreeV1',
+        summary: 'Page a Protected shared folder tree with established viewer authority',
         tags: ['public shares'],
         params: PublicShareParamsSchema,
         querystring: PublicTreeQuerySchema,
-        body: CapabilityBodySchema,
-        response: { 200: Type.Ref('FolderTreePage'), ...publicErrors },
+        body: ViewerTokenBodySchema,
+        response: { 200: anonymousResponse(Type.Ref('FolderTreePage')), ...publicErrors },
       },
     },
     async (request, reply) => {
       const params = request.params as { shareId: string };
-      const body = request.body as { secret: string };
+      const body = request.body as { token: string };
       const query = request.query as { limit?: number; cursor?: string };
       return access.readTree({
-        shareId: params.shareId,
-        secret: body.secret,
+        authority: protectedAuthority(params.shareId, body.token),
+        limit: query.limit ?? FOLDER_LIMITS.treePageSize,
+        ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+        signal: requestCancellationSignal(request, reply),
+      });
+    },
+  );
+
+  app.get(
+    '/api/v1/public/links/:publicCode/resolve',
+    {
+      schema: {
+        operationId: 'resolvePublicLinkV1',
+        summary: 'Resolve a secret-free Public share link',
+        tags: ['public links'],
+        params: PublicLinkParamsSchema,
+        response: {
+          200: anonymousResponse(Type.Ref('PublicShareResolution')),
+          ...publicErrors,
+        },
+      },
+    },
+    async (request, reply) => {
+      const params = request.params as { publicCode: string };
+      return resolution({
+        authority: { type: 'public', publicCode: params.publicCode },
+        signal: requestCancellationSignal(request, reply),
+      });
+    },
+  );
+
+  app.get(
+    '/api/v1/public/links/:publicCode/content',
+    {
+      schema: {
+        operationId: 'downloadPublicLinkContentV1',
+        summary: 'Download secret-free Public shared file bytes',
+        produces: ['application/octet-stream'],
+        tags: ['public links'],
+        params: PublicLinkParamsSchema,
+        response: { 200: PublicContentResponseSchema, ...publicErrors },
+      },
+    },
+    async (request, reply) => {
+      const params = request.params as { publicCode: string };
+      const file = await access.readFile({
+        authority: { type: 'public', publicCode: params.publicCode },
+        signal: requestCancellationSignal(request, reply),
+      });
+      return reply
+        .type('application/octet-stream')
+        .header(
+          'Content-Disposition',
+          attachmentDisposition(file.originalFileName, file.revisionId),
+        )
+        .header('Content-Length', file.byteCount)
+        .send(Readable.from(await file.read()));
+    },
+  );
+
+  app.get(
+    '/api/v1/public/links/:publicCode/tree',
+    {
+      schema: {
+        operationId: 'getPublicLinkTreeV1',
+        summary: 'Page a secret-free Public shared folder tree',
+        tags: ['public links'],
+        params: PublicLinkParamsSchema,
+        querystring: PublicTreeQuerySchema,
+        response: { 200: anonymousResponse(Type.Ref('FolderTreePage')), ...publicErrors },
+      },
+    },
+    async (request, reply) => {
+      const params = request.params as { publicCode: string };
+      const query = request.query as { limit?: number; cursor?: string };
+      return access.readTree({
+        authority: { type: 'public', publicCode: params.publicCode },
         limit: query.limit ?? FOLDER_LIMITS.treePageSize,
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         signal: requestCancellationSignal(request, reply),

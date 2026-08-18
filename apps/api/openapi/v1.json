@@ -1198,225 +1198,1259 @@
         "title": "RevisionComparison"
       },
       "def-8": {
-        "type": "object",
-        "required": [
-          "apiVersion",
-          "workspaceId",
-          "shareId",
-          "artifactId",
-          "visibility",
-          "createdAt",
-          "expiresAt",
-          "revokedAt",
-          "target",
-          "url"
-        ],
-        "properties": {
-          "apiVersion": {
-            "type": "string",
-            "enum": ["v1"]
-          },
-          "workspaceId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128
-          },
-          "shareId": {
-            "type": "string",
-            "pattern": "^shr_[A-Za-z0-9_-]{22}$"
-          },
-          "artifactId": {
-            "type": "string",
-            "pattern": "^art_[A-Za-z0-9_-]{22}$",
-            "description": "Opaque artifact identifier containing 128 bits of entropy."
-          },
-          "visibility": {
-            "type": "string",
-            "enum": ["unlisted"]
-          },
-          "createdAt": {
-            "type": "string",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-          },
-          "expiresAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "revokedAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "target": {
+        "anyOf": [
+          {
             "anyOf": [
               {
                 "type": "object",
-                "required": ["mode"],
+                "required": [
+                  "apiVersion",
+                  "workspaceId",
+                  "shareId",
+                  "artifactId",
+                  "visibility",
+                  "createdAt",
+                  "revokedAt",
+                  "status",
+                  "accessType",
+                  "maxSessions",
+                  "sessionsUsed",
+                  "sessionsRemaining",
+                  "target",
+                  "expiresAt",
+                  "url"
+                ],
                 "properties": {
-                  "mode": {
+                  "apiVersion": {
                     "type": "string",
-                    "enum": ["latest"]
-                  }
-                },
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "required": ["mode", "revisionId", "revisionNumber"],
-                "properties": {
-                  "mode": {
-                    "type": "string",
-                    "enum": ["pinned"]
+                    "enum": ["v1"]
                   },
-                  "revisionId": {
+                  "workspaceId": {
                     "type": "string",
-                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
-                    "description": "Opaque revision identifier containing 128 bits of entropy."
+                    "minLength": 1,
+                    "maxLength": 128
                   },
-                  "revisionNumber": {
+                  "shareId": {
+                    "type": "string",
+                    "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+                  },
+                  "artifactId": {
+                    "type": "string",
+                    "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque artifact identifier containing 128 bits of entropy."
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": ["unlisted"]
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                  },
+                  "revokedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["active"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["session-limit-reached"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["expired"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["revoked"]
+                      }
+                    ]
+                  },
+                  "accessType": {
+                    "type": "string",
+                    "enum": ["protected"]
+                  },
+                  "maxSessions": {
                     "type": "integer",
                     "minimum": 1,
+                    "maximum": 1000000
+                  },
+                  "sessionsUsed": {
+                    "type": "integer",
+                    "minimum": 0,
                     "maximum": 9007199254740991
+                  },
+                  "sessionsRemaining": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": ["mode"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["latest"]
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "required": ["mode", "revisionId", "revisionNumber"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["pinned"]
+                          },
+                          "revisionId": {
+                            "type": "string",
+                            "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                            "description": "Opaque revision identifier containing 128 bits of entropy."
+                          },
+                          "revisionNumber": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "expiresAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "url": {
+                    "type": "string",
+                    "pattern": "^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": [
+                  "apiVersion",
+                  "workspaceId",
+                  "shareId",
+                  "artifactId",
+                  "visibility",
+                  "createdAt",
+                  "revokedAt",
+                  "status",
+                  "accessType",
+                  "maxSessions",
+                  "sessionsUsed",
+                  "sessionsRemaining",
+                  "target",
+                  "expiresAt",
+                  "url"
+                ],
+                "properties": {
+                  "apiVersion": {
+                    "type": "string",
+                    "enum": ["v1"]
+                  },
+                  "workspaceId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "shareId": {
+                    "type": "string",
+                    "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+                  },
+                  "artifactId": {
+                    "type": "string",
+                    "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque artifact identifier containing 128 bits of entropy."
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": ["unlisted"]
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                  },
+                  "revokedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["active"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["session-limit-reached"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["expired"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["revoked"]
+                      }
+                    ]
+                  },
+                  "accessType": {
+                    "type": "string",
+                    "enum": ["protected"]
+                  },
+                  "maxSessions": {
+                    "type": "null"
+                  },
+                  "sessionsUsed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "sessionsRemaining": {
+                    "type": "null"
+                  },
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": ["mode"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["latest"]
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "required": ["mode", "revisionId", "revisionNumber"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["pinned"]
+                          },
+                          "revisionId": {
+                            "type": "string",
+                            "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                            "description": "Opaque revision identifier containing 128 bits of entropy."
+                          },
+                          "revisionNumber": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "expiresAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "url": {
+                    "type": "string",
+                    "pattern": "^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$"
                   }
                 },
                 "additionalProperties": false
               }
             ]
           },
-          "url": {
-            "type": "string",
-            "pattern": "^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$"
+          {
+            "type": "object",
+            "required": [
+              "apiVersion",
+              "workspaceId",
+              "shareId",
+              "artifactId",
+              "visibility",
+              "createdAt",
+              "revokedAt",
+              "status",
+              "accessType",
+              "publicCode",
+              "target",
+              "expiresAt",
+              "url"
+            ],
+            "properties": {
+              "apiVersion": {
+                "type": "string",
+                "enum": ["v1"]
+              },
+              "workspaceId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "shareId": {
+                "type": "string",
+                "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+              },
+              "artifactId": {
+                "type": "string",
+                "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                "description": "Opaque artifact identifier containing 128 bits of entropy."
+              },
+              "visibility": {
+                "type": "string",
+                "enum": ["unlisted"]
+              },
+              "createdAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              },
+              "revokedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["active"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["session-limit-reached"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["expired"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["revoked"]
+                  }
+                ]
+              },
+              "accessType": {
+                "type": "string",
+                "enum": ["public"]
+              },
+              "publicCode": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{12}$"
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": ["mode"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["latest"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": ["mode", "revisionId", "revisionNumber"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["pinned"]
+                      },
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      },
+                      "revisionNumber": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "expiresAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^/s/[A-Za-z0-9_-]{12}$"
+              }
+            },
+            "additionalProperties": false
           }
-        },
-        "additionalProperties": false,
+        ],
         "title": "ShareManagementSummary"
       },
       "def-9": {
-        "type": "object",
-        "required": [
-          "apiVersion",
-          "workspaceId",
-          "shareId",
-          "artifactId",
-          "visibility",
-          "createdAt",
-          "expiresAt",
-          "revokedAt",
-          "target",
-          "requestId",
-          "url",
-          "replayed"
-        ],
-        "properties": {
-          "apiVersion": {
-            "type": "string",
-            "enum": ["v1"]
-          },
-          "workspaceId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128
-          },
-          "shareId": {
-            "type": "string",
-            "pattern": "^shr_[A-Za-z0-9_-]{22}$"
-          },
-          "artifactId": {
-            "type": "string",
-            "pattern": "^art_[A-Za-z0-9_-]{22}$",
-            "description": "Opaque artifact identifier containing 128 bits of entropy."
-          },
-          "visibility": {
-            "type": "string",
-            "enum": ["unlisted"]
-          },
-          "createdAt": {
-            "type": "string",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-          },
-          "expiresAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "revokedAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "target": {
+        "anyOf": [
+          {
             "anyOf": [
               {
                 "type": "object",
-                "required": ["mode"],
+                "required": [
+                  "apiVersion",
+                  "workspaceId",
+                  "shareId",
+                  "artifactId",
+                  "visibility",
+                  "createdAt",
+                  "revokedAt",
+                  "status",
+                  "accessType",
+                  "maxSessions",
+                  "sessionsUsed",
+                  "sessionsRemaining",
+                  "requestId",
+                  "replayed",
+                  "target",
+                  "expiresAt",
+                  "url"
+                ],
                 "properties": {
-                  "mode": {
+                  "apiVersion": {
                     "type": "string",
-                    "enum": ["latest"]
-                  }
-                },
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "required": ["mode", "revisionId"],
-                "properties": {
-                  "mode": {
-                    "type": "string",
-                    "enum": ["pinned"]
+                    "enum": ["v1"]
                   },
-                  "revisionId": {
+                  "workspaceId": {
                     "type": "string",
-                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
-                    "description": "Opaque revision identifier containing 128 bits of entropy."
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "shareId": {
+                    "type": "string",
+                    "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+                  },
+                  "artifactId": {
+                    "type": "string",
+                    "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque artifact identifier containing 128 bits of entropy."
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": ["unlisted"]
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                  },
+                  "revokedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["active"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["session-limit-reached"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["expired"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["revoked"]
+                      }
+                    ]
+                  },
+                  "accessType": {
+                    "type": "string",
+                    "enum": ["protected"]
+                  },
+                  "maxSessions": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
+                  },
+                  "sessionsUsed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "sessionsRemaining": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "replayed": {
+                    "type": "boolean"
+                  },
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": ["mode"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["latest"]
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "required": ["mode", "revisionId"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["pinned"]
+                          },
+                          "revisionId": {
+                            "type": "string",
+                            "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                            "description": "Opaque revision identifier containing 128 bits of entropy."
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "expiresAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "url": {
+                    "type": "string",
+                    "pattern": "^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": [
+                  "apiVersion",
+                  "workspaceId",
+                  "shareId",
+                  "artifactId",
+                  "visibility",
+                  "createdAt",
+                  "revokedAt",
+                  "status",
+                  "accessType",
+                  "maxSessions",
+                  "sessionsUsed",
+                  "sessionsRemaining",
+                  "requestId",
+                  "replayed",
+                  "target",
+                  "expiresAt",
+                  "url"
+                ],
+                "properties": {
+                  "apiVersion": {
+                    "type": "string",
+                    "enum": ["v1"]
+                  },
+                  "workspaceId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "shareId": {
+                    "type": "string",
+                    "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+                  },
+                  "artifactId": {
+                    "type": "string",
+                    "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque artifact identifier containing 128 bits of entropy."
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": ["unlisted"]
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                  },
+                  "revokedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["active"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["session-limit-reached"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["expired"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["revoked"]
+                      }
+                    ]
+                  },
+                  "accessType": {
+                    "type": "string",
+                    "enum": ["protected"]
+                  },
+                  "maxSessions": {
+                    "type": "null"
+                  },
+                  "sessionsUsed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "sessionsRemaining": {
+                    "type": "null"
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "replayed": {
+                    "type": "boolean"
+                  },
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": ["mode"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["latest"]
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "required": ["mode", "revisionId"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["pinned"]
+                          },
+                          "revisionId": {
+                            "type": "string",
+                            "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                            "description": "Opaque revision identifier containing 128 bits of entropy."
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "expiresAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "url": {
+                    "type": "string",
+                    "pattern": "^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$"
                   }
                 },
                 "additionalProperties": false
               }
             ]
           },
-          "requestId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128
-          },
-          "url": {
-            "type": "string",
-            "pattern": "^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$"
-          },
-          "replayed": {
-            "type": "boolean"
+          {
+            "type": "object",
+            "required": [
+              "apiVersion",
+              "workspaceId",
+              "shareId",
+              "artifactId",
+              "visibility",
+              "createdAt",
+              "revokedAt",
+              "status",
+              "accessType",
+              "publicCode",
+              "requestId",
+              "replayed",
+              "target",
+              "expiresAt",
+              "url"
+            ],
+            "properties": {
+              "apiVersion": {
+                "type": "string",
+                "enum": ["v1"]
+              },
+              "workspaceId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "shareId": {
+                "type": "string",
+                "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+              },
+              "artifactId": {
+                "type": "string",
+                "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                "description": "Opaque artifact identifier containing 128 bits of entropy."
+              },
+              "visibility": {
+                "type": "string",
+                "enum": ["unlisted"]
+              },
+              "createdAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              },
+              "revokedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["active"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["session-limit-reached"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["expired"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["revoked"]
+                  }
+                ]
+              },
+              "accessType": {
+                "type": "string",
+                "enum": ["public"]
+              },
+              "publicCode": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{12}$"
+              },
+              "requestId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "replayed": {
+                "type": "boolean"
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": ["mode"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["latest"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": ["mode", "revisionId"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["pinned"]
+                      },
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "expiresAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^/s/[A-Za-z0-9_-]{12}$"
+              }
+            },
+            "additionalProperties": false
           }
-        },
-        "additionalProperties": false,
+        ],
         "title": "ShareCreateResult"
       },
       "def-10": {
+        "anyOf": [
+          {
+            "type": "object",
+            "required": ["accessType", "target"],
+            "properties": {
+              "accessType": {
+                "type": "string",
+                "enum": ["protected"]
+              },
+              "maxSessions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": ["mode"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["latest"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": ["mode", "revisionId"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["pinned"]
+                      },
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["accessType", "target", "expiresIn"],
+            "properties": {
+              "accessType": {
+                "type": "string",
+                "enum": ["protected"]
+              },
+              "maxSessions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": ["mode"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["latest"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": ["mode", "revisionId"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["pinned"]
+                      },
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "expiresIn": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["never"]
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["5m"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["30m"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["2hr"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["6hr"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["24hr"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["3d"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["7d"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["15d"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["30d"]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["accessType", "target", "expiresAt"],
+            "properties": {
+              "accessType": {
+                "type": "string",
+                "enum": ["protected"]
+              },
+              "maxSessions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": ["mode"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["latest"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": ["mode", "revisionId"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["pinned"]
+                      },
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "expiresAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["accessType", "target"],
+            "properties": {
+              "accessType": {
+                "type": "string",
+                "enum": ["public"]
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": ["mode"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["latest"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": ["mode", "revisionId"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["pinned"]
+                      },
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["accessType", "target", "expiresIn"],
+            "properties": {
+              "accessType": {
+                "type": "string",
+                "enum": ["public"]
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": ["mode"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["latest"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": ["mode", "revisionId"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["pinned"]
+                      },
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "expiresIn": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["5m"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["30m"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["2hr"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["6hr"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["24hr"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["3d"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["7d"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["15d"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["30d"]
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["accessType", "target", "expiresAt"],
+            "properties": {
+              "accessType": {
+                "type": "string",
+                "enum": ["public"]
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": ["mode"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["latest"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": ["mode", "revisionId"],
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": ["pinned"]
+                      },
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "expiresAt": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              }
+            },
+            "additionalProperties": false
+          }
+        ],
+        "title": "ShareCreateInput"
+      },
+      "def-11": {
         "type": "object",
         "required": ["apiVersion", "workspaceId", "items", "nextCursor"],
         "properties": {
@@ -1432,110 +2466,438 @@
           "items": {
             "type": "array",
             "items": {
-              "type": "object",
-              "required": [
-                "apiVersion",
-                "workspaceId",
-                "shareId",
-                "artifactId",
-                "visibility",
-                "createdAt",
-                "expiresAt",
-                "revokedAt",
-                "target",
-                "url"
-              ],
-              "properties": {
-                "apiVersion": {
-                  "type": "string",
-                  "enum": ["v1"]
-                },
-                "workspaceId": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 128
-                },
-                "shareId": {
-                  "type": "string",
-                  "pattern": "^shr_[A-Za-z0-9_-]{22}$"
-                },
-                "artifactId": {
-                  "type": "string",
-                  "pattern": "^art_[A-Za-z0-9_-]{22}$",
-                  "description": "Opaque artifact identifier containing 128 bits of entropy."
-                },
-                "visibility": {
-                  "type": "string",
-                  "enum": ["unlisted"]
-                },
-                "createdAt": {
-                  "type": "string",
-                  "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-                },
-                "expiresAt": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "revokedAt": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "target": {
+              "anyOf": [
+                {
                   "anyOf": [
                     {
                       "type": "object",
-                      "required": ["mode"],
+                      "required": [
+                        "apiVersion",
+                        "workspaceId",
+                        "shareId",
+                        "artifactId",
+                        "visibility",
+                        "createdAt",
+                        "revokedAt",
+                        "status",
+                        "accessType",
+                        "maxSessions",
+                        "sessionsUsed",
+                        "sessionsRemaining",
+                        "target",
+                        "expiresAt",
+                        "url"
+                      ],
                       "properties": {
-                        "mode": {
+                        "apiVersion": {
                           "type": "string",
-                          "enum": ["latest"]
-                        }
-                      },
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "required": ["mode", "revisionId", "revisionNumber"],
-                      "properties": {
-                        "mode": {
-                          "type": "string",
-                          "enum": ["pinned"]
+                          "enum": ["v1"]
                         },
-                        "revisionId": {
+                        "workspaceId": {
                           "type": "string",
-                          "pattern": "^rev_[A-Za-z0-9_-]{22}$",
-                          "description": "Opaque revision identifier containing 128 bits of entropy."
+                          "minLength": 1,
+                          "maxLength": 128
                         },
-                        "revisionNumber": {
+                        "shareId": {
+                          "type": "string",
+                          "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+                        },
+                        "artifactId": {
+                          "type": "string",
+                          "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                          "description": "Opaque artifact identifier containing 128 bits of entropy."
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": ["unlisted"]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                        },
+                        "revokedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["active"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["session-limit-reached"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["expired"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["revoked"]
+                            }
+                          ]
+                        },
+                        "accessType": {
+                          "type": "string",
+                          "enum": ["protected"]
+                        },
+                        "maxSessions": {
                           "type": "integer",
                           "minimum": 1,
+                          "maximum": 1000000
+                        },
+                        "sessionsUsed": {
+                          "type": "integer",
+                          "minimum": 0,
                           "maximum": 9007199254740991
+                        },
+                        "sessionsRemaining": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 1000000
+                        },
+                        "target": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "required": ["mode"],
+                              "properties": {
+                                "mode": {
+                                  "type": "string",
+                                  "enum": ["latest"]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "required": ["mode", "revisionId", "revisionNumber"],
+                              "properties": {
+                                "mode": {
+                                  "type": "string",
+                                  "enum": ["pinned"]
+                                },
+                                "revisionId": {
+                                  "type": "string",
+                                  "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                                  "description": "Opaque revision identifier containing 128 bits of entropy."
+                                },
+                                "revisionNumber": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "expiresAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "url": {
+                          "type": "string",
+                          "pattern": "^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "apiVersion",
+                        "workspaceId",
+                        "shareId",
+                        "artifactId",
+                        "visibility",
+                        "createdAt",
+                        "revokedAt",
+                        "status",
+                        "accessType",
+                        "maxSessions",
+                        "sessionsUsed",
+                        "sessionsRemaining",
+                        "target",
+                        "expiresAt",
+                        "url"
+                      ],
+                      "properties": {
+                        "apiVersion": {
+                          "type": "string",
+                          "enum": ["v1"]
+                        },
+                        "workspaceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "shareId": {
+                          "type": "string",
+                          "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+                        },
+                        "artifactId": {
+                          "type": "string",
+                          "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                          "description": "Opaque artifact identifier containing 128 bits of entropy."
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": ["unlisted"]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                        },
+                        "revokedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["active"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["session-limit-reached"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["expired"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["revoked"]
+                            }
+                          ]
+                        },
+                        "accessType": {
+                          "type": "string",
+                          "enum": ["protected"]
+                        },
+                        "maxSessions": {
+                          "type": "null"
+                        },
+                        "sessionsUsed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "sessionsRemaining": {
+                          "type": "null"
+                        },
+                        "target": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "required": ["mode"],
+                              "properties": {
+                                "mode": {
+                                  "type": "string",
+                                  "enum": ["latest"]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "required": ["mode", "revisionId", "revisionNumber"],
+                              "properties": {
+                                "mode": {
+                                  "type": "string",
+                                  "enum": ["pinned"]
+                                },
+                                "revisionId": {
+                                  "type": "string",
+                                  "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                                  "description": "Opaque revision identifier containing 128 bits of entropy."
+                                },
+                                "revisionNumber": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "expiresAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "url": {
+                          "type": "string",
+                          "pattern": "^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$"
                         }
                       },
                       "additionalProperties": false
                     }
                   ]
                 },
-                "url": {
-                  "type": "string",
-                  "pattern": "^/s/shr_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{32,128}$"
+                {
+                  "type": "object",
+                  "required": [
+                    "apiVersion",
+                    "workspaceId",
+                    "shareId",
+                    "artifactId",
+                    "visibility",
+                    "createdAt",
+                    "revokedAt",
+                    "status",
+                    "accessType",
+                    "publicCode",
+                    "target",
+                    "expiresAt",
+                    "url"
+                  ],
+                  "properties": {
+                    "apiVersion": {
+                      "type": "string",
+                      "enum": ["v1"]
+                    },
+                    "workspaceId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "shareId": {
+                      "type": "string",
+                      "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+                    },
+                    "artifactId": {
+                      "type": "string",
+                      "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                      "description": "Opaque artifact identifier containing 128 bits of entropy."
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "enum": ["unlisted"]
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                    },
+                    "revokedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["active"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["session-limit-reached"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["expired"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["revoked"]
+                        }
+                      ]
+                    },
+                    "accessType": {
+                      "type": "string",
+                      "enum": ["public"]
+                    },
+                    "publicCode": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{12}$"
+                    },
+                    "target": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "required": ["mode"],
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": ["latest"]
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "required": ["mode", "revisionId", "revisionNumber"],
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": ["pinned"]
+                            },
+                            "revisionId": {
+                              "type": "string",
+                              "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                              "description": "Opaque revision identifier containing 128 bits of entropy."
+                            },
+                            "revisionNumber": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                    },
+                    "url": {
+                      "type": "string",
+                      "pattern": "^/s/[A-Za-z0-9_-]{12}$"
+                    }
+                  },
+                  "additionalProperties": false
                 }
-              },
-              "additionalProperties": false
+              ]
             },
             "maxItems": 100
           },
@@ -1555,310 +2917,705 @@
         "additionalProperties": false,
         "title": "SharePage"
       },
-      "def-11": {
+      "def-12": {
         "anyOf": [
           {
-            "type": "object",
-            "required": [
-              "apiVersion",
-              "shareId",
-              "target",
-              "expiresAt",
-              "artifact",
-              "revision",
-              "action"
-            ],
-            "properties": {
-              "apiVersion": {
-                "type": "string",
-                "enum": ["v1"]
-              },
-              "shareId": {
-                "type": "string",
-                "pattern": "^shr_[A-Za-z0-9_-]{22}$"
-              },
-              "target": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "required": ["mode"],
-                    "properties": {
-                      "mode": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "apiVersion",
+                  "shareId",
+                  "target",
+                  "expiresAt",
+                  "accessType",
+                  "artifact",
+                  "revision",
+                  "action"
+                ],
+                "properties": {
+                  "apiVersion": {
+                    "type": "string",
+                    "enum": ["v1"]
+                  },
+                  "shareId": {
+                    "type": "string",
+                    "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+                  },
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": ["mode"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["latest"]
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "required": ["mode", "revisionId"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["pinned"]
+                          },
+                          "revisionId": {
+                            "type": "string",
+                            "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                            "description": "Opaque revision identifier containing 128 bits of entropy."
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "expiresAt": {
+                    "anyOf": [
+                      {
                         "type": "string",
-                        "enum": ["latest"]
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "accessType": {
+                    "type": "string",
+                    "enum": ["protected"]
+                  },
+                  "artifact": {
+                    "type": "object",
+                    "required": ["artifactId", "name", "kind"],
+                    "properties": {
+                      "artifactId": {
+                        "type": "string",
+                        "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque artifact identifier containing 128 bits of entropy."
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": ["file"]
                       }
                     },
                     "additionalProperties": false
                   },
-                  {
+                  "revision": {
                     "type": "object",
-                    "required": ["mode", "revisionId"],
+                    "required": [
+                      "revisionId",
+                      "revisionNumber",
+                      "createdAt",
+                      "kind",
+                      "originalFileName",
+                      "mediaType",
+                      "byteCount"
+                    ],
                     "properties": {
-                      "mode": {
-                        "type": "string",
-                        "enum": ["pinned"]
-                      },
                       "revisionId": {
                         "type": "string",
                         "pattern": "^rev_[A-Za-z0-9_-]{22}$",
                         "description": "Opaque revision identifier containing 128 bits of entropy."
+                      },
+                      "revisionNumber": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": ["file"]
+                      },
+                      "originalFileName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "mediaType": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "byteCount": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "action": {
+                    "type": "object",
+                    "required": ["type", "path"],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["content"]
+                      },
+                      "path": {
+                        "type": "string",
+                        "pattern": "^/api/v1/public/shares/shr_[A-Za-z0-9_-]{22}/content$"
                       }
                     },
                     "additionalProperties": false
                   }
-                ]
-              },
-              "expiresAt": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "artifact": {
-                "type": "object",
-                "required": ["artifactId", "name", "kind"],
-                "properties": {
-                  "artifactId": {
-                    "type": "string",
-                    "pattern": "^art_[A-Za-z0-9_-]{22}$",
-                    "description": "Opaque artifact identifier containing 128 bits of entropy."
-                  },
-                  "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 255
-                  },
-                  "kind": {
-                    "type": "string",
-                    "enum": ["file"]
-                  }
                 },
                 "additionalProperties": false
               },
-              "revision": {
+              {
                 "type": "object",
                 "required": [
-                  "revisionId",
-                  "revisionNumber",
-                  "createdAt",
-                  "kind",
-                  "originalFileName",
-                  "mediaType",
-                  "byteCount"
+                  "apiVersion",
+                  "shareId",
+                  "target",
+                  "expiresAt",
+                  "accessType",
+                  "publicCode",
+                  "artifact",
+                  "revision",
+                  "action"
                 ],
                 "properties": {
-                  "revisionId": {
+                  "apiVersion": {
                     "type": "string",
-                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
-                    "description": "Opaque revision identifier containing 128 bits of entropy."
+                    "enum": ["v1"]
                   },
-                  "revisionNumber": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 9007199254740991
+                  "shareId": {
+                    "type": "string",
+                    "pattern": "^shr_[A-Za-z0-9_-]{22}$"
                   },
-                  "createdAt": {
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": ["mode"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["latest"]
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "required": ["mode", "revisionId"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["pinned"]
+                          },
+                          "revisionId": {
+                            "type": "string",
+                            "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                            "description": "Opaque revision identifier containing 128 bits of entropy."
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "expiresAt": {
                     "type": "string",
                     "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
                   },
-                  "kind": {
+                  "accessType": {
                     "type": "string",
-                    "enum": ["file"]
+                    "enum": ["public"]
                   },
-                  "originalFileName": {
+                  "publicCode": {
                     "type": "string",
-                    "minLength": 1,
-                    "maxLength": 255
+                    "pattern": "^[A-Za-z0-9_-]{12}$"
                   },
-                  "mediaType": {
+                  "artifact": {
+                    "type": "object",
+                    "required": ["artifactId", "name", "kind"],
+                    "properties": {
+                      "artifactId": {
+                        "type": "string",
+                        "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque artifact identifier containing 128 bits of entropy."
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": ["file"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "revision": {
+                    "type": "object",
+                    "required": [
+                      "revisionId",
+                      "revisionNumber",
+                      "createdAt",
+                      "kind",
+                      "originalFileName",
+                      "mediaType",
+                      "byteCount"
+                    ],
+                    "properties": {
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      },
+                      "revisionNumber": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": ["file"]
+                      },
+                      "originalFileName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "mediaType": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "byteCount": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "action": {
+                    "type": "object",
+                    "required": ["type", "path"],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["content"]
+                      },
+                      "path": {
+                        "type": "string",
+                        "pattern": "^/api/v1/public/links/[A-Za-z0-9_-]{12}/content$"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "apiVersion",
+                  "shareId",
+                  "target",
+                  "expiresAt",
+                  "accessType",
+                  "artifact",
+                  "revision",
+                  "action"
+                ],
+                "properties": {
+                  "apiVersion": {
                     "type": "string",
-                    "minLength": 1,
-                    "maxLength": 255
+                    "enum": ["v1"]
                   },
-                  "byteCount": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 9007199254740991
+                  "shareId": {
+                    "type": "string",
+                    "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+                  },
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": ["mode"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["latest"]
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "required": ["mode", "revisionId"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["pinned"]
+                          },
+                          "revisionId": {
+                            "type": "string",
+                            "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                            "description": "Opaque revision identifier containing 128 bits of entropy."
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "expiresAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "accessType": {
+                    "type": "string",
+                    "enum": ["protected"]
+                  },
+                  "artifact": {
+                    "type": "object",
+                    "required": ["artifactId", "name", "kind"],
+                    "properties": {
+                      "artifactId": {
+                        "type": "string",
+                        "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque artifact identifier containing 128 bits of entropy."
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": ["folder"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "revision": {
+                    "type": "object",
+                    "required": [
+                      "revisionId",
+                      "revisionNumber",
+                      "createdAt",
+                      "kind",
+                      "rootName",
+                      "byteCount",
+                      "fileCount"
+                    ],
+                    "properties": {
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      },
+                      "revisionNumber": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": ["folder"]
+                      },
+                      "rootName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "byteCount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "fileCount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "action": {
+                    "type": "object",
+                    "required": ["type", "path"],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["tree"]
+                      },
+                      "path": {
+                        "type": "string",
+                        "pattern": "^/api/v1/public/shares/shr_[A-Za-z0-9_-]{22}/tree$"
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
               },
-              "action": {
+              {
                 "type": "object",
-                "required": ["type", "path"],
+                "required": [
+                  "apiVersion",
+                  "shareId",
+                  "target",
+                  "expiresAt",
+                  "accessType",
+                  "publicCode",
+                  "artifact",
+                  "revision",
+                  "action"
+                ],
                 "properties": {
-                  "type": {
+                  "apiVersion": {
                     "type": "string",
-                    "enum": ["content"]
+                    "enum": ["v1"]
                   },
-                  "path": {
+                  "shareId": {
                     "type": "string",
-                    "pattern": "^/api/v1/public/shares/shr_[A-Za-z0-9_-]{22}/content$"
+                    "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+                  },
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": ["mode"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["latest"]
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "required": ["mode", "revisionId"],
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": ["pinned"]
+                          },
+                          "revisionId": {
+                            "type": "string",
+                            "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                            "description": "Opaque revision identifier containing 128 bits of entropy."
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                  },
+                  "accessType": {
+                    "type": "string",
+                    "enum": ["public"]
+                  },
+                  "publicCode": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{12}$"
+                  },
+                  "artifact": {
+                    "type": "object",
+                    "required": ["artifactId", "name", "kind"],
+                    "properties": {
+                      "artifactId": {
+                        "type": "string",
+                        "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque artifact identifier containing 128 bits of entropy."
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": ["folder"]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "revision": {
+                    "type": "object",
+                    "required": [
+                      "revisionId",
+                      "revisionNumber",
+                      "createdAt",
+                      "kind",
+                      "rootName",
+                      "byteCount",
+                      "fileCount"
+                    ],
+                    "properties": {
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      },
+                      "revisionNumber": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": ["folder"]
+                      },
+                      "rootName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      },
+                      "byteCount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "fileCount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "action": {
+                    "type": "object",
+                    "required": ["type", "path"],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["tree"]
+                      },
+                      "path": {
+                        "type": "string",
+                        "pattern": "^/api/v1/public/links/[A-Za-z0-9_-]{12}/tree$"
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
+              }
+            ]
+          }
+        ],
+        "title": "PublicShareResolution"
+      },
+      "def-13": {
+        "anyOf": [
+          {
+            "type": "object",
+            "required": ["sessionId", "secret"],
+            "properties": {
+              "sessionId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "secret": {
+                "type": "string",
+                "minLength": 32,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_-]+$"
               }
             },
             "additionalProperties": false
           },
           {
             "type": "object",
-            "required": [
-              "apiVersion",
-              "shareId",
-              "target",
-              "expiresAt",
-              "artifact",
-              "revision",
-              "action"
-            ],
+            "required": ["sessionId", "token"],
             "properties": {
-              "apiVersion": {
+              "sessionId": {
                 "type": "string",
-                "enum": ["v1"]
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
               },
-              "shareId": {
+              "token": {
                 "type": "string",
-                "pattern": "^shr_[A-Za-z0-9_-]{22}$"
-              },
-              "target": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "required": ["mode"],
-                    "properties": {
-                      "mode": {
-                        "type": "string",
-                        "enum": ["latest"]
-                      }
-                    },
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "required": ["mode", "revisionId"],
-                    "properties": {
-                      "mode": {
-                        "type": "string",
-                        "enum": ["pinned"]
-                      },
-                      "revisionId": {
-                        "type": "string",
-                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
-                        "description": "Opaque revision identifier containing 128 bits of entropy."
-                      }
-                    },
-                    "additionalProperties": false
-                  }
-                ]
-              },
-              "expiresAt": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "artifact": {
-                "type": "object",
-                "required": ["artifactId", "name", "kind"],
-                "properties": {
-                  "artifactId": {
-                    "type": "string",
-                    "pattern": "^art_[A-Za-z0-9_-]{22}$",
-                    "description": "Opaque artifact identifier containing 128 bits of entropy."
-                  },
-                  "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 255
-                  },
-                  "kind": {
-                    "type": "string",
-                    "enum": ["folder"]
-                  }
-                },
-                "additionalProperties": false
-              },
-              "revision": {
-                "type": "object",
-                "required": [
-                  "revisionId",
-                  "revisionNumber",
-                  "createdAt",
-                  "kind",
-                  "rootName",
-                  "byteCount",
-                  "fileCount"
-                ],
-                "properties": {
-                  "revisionId": {
-                    "type": "string",
-                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
-                    "description": "Opaque revision identifier containing 128 bits of entropy."
-                  },
-                  "revisionNumber": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 9007199254740991
-                  },
-                  "createdAt": {
-                    "type": "string",
-                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-                  },
-                  "kind": {
-                    "type": "string",
-                    "enum": ["folder"]
-                  },
-                  "rootName": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 255
-                  },
-                  "byteCount": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  "fileCount": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 1000
-                  }
-                },
-                "additionalProperties": false
-              },
-              "action": {
-                "type": "object",
-                "required": ["type", "path"],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["tree"]
-                  },
-                  "path": {
-                    "type": "string",
-                    "pattern": "^/api/v1/public/shares/shr_[A-Za-z0-9_-]{22}/tree$"
-                  }
-                },
-                "additionalProperties": false
+                "minLength": 24,
+                "maxLength": 4096,
+                "pattern": "^[A-Za-z0-9._-]+$"
               }
             },
             "additionalProperties": false
           }
         ],
-        "title": "PublicShareResolution"
+        "title": "ProtectedSessionEstablishInput"
       },
-      "def-12": {
+      "def-14": {
+        "type": "object",
+        "required": ["apiVersion", "shareId", "sessionId", "token", "issuedAt", "expiresAt"],
+        "properties": {
+          "apiVersion": {
+            "type": "string",
+            "enum": ["v1"]
+          },
+          "shareId": {
+            "type": "string",
+            "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+          },
+          "sessionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "token": {
+            "type": "string",
+            "minLength": 24,
+            "maxLength": 4096,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "issuedAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          },
+          "expiresAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          }
+        },
+        "additionalProperties": false,
+        "title": "ProtectedSessionAuthority"
+      },
+      "def-15": {
         "type": "object",
         "required": ["apiVersion", "actorId", "workspaces"],
         "properties": {
@@ -1909,7 +3666,7 @@
         "additionalProperties": false,
         "title": "DashboardSession"
       },
-      "def-13": {
+      "def-16": {
         "type": "object",
         "required": ["apiVersion", "items", "nextCursor"],
         "properties": {
@@ -2033,7 +3790,7 @@
         "additionalProperties": false,
         "title": "DashboardCredentialPage"
       },
-      "def-14": {
+      "def-17": {
         "type": "object",
         "required": [
           "apiVersion",
@@ -2111,7 +3868,7 @@
         "additionalProperties": false,
         "title": "DashboardCredentialIssue"
       },
-      "def-15": {
+      "def-18": {
         "type": "object",
         "required": ["apiVersion", "credentialId", "revoked", "alreadyRevoked"],
         "properties": {
@@ -2134,7 +3891,7 @@
         "additionalProperties": false,
         "title": "DashboardCredentialRevoke"
       },
-      "def-16": {
+      "def-19": {
         "type": "object",
         "required": ["apiVersion", "workspaceId", "actions"],
         "properties": {
@@ -6775,8 +8532,11 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["target"],
                 "properties": {
+                  "accessType": {
+                    "type": "string",
+                    "enum": ["protected", "public"]
+                  },
                   "target": {
                     "type": "object",
                     "properties": {
@@ -6812,18 +8572,21 @@
                       }
                     ]
                   },
+                  "expiresIn": {
+                    "type": "string",
+                    "enum": ["never", "5m", "30m", "2hr", "6hr", "24hr", "3d", "7d", "15d", "30d"]
+                  },
                   "expiresAt": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                  },
+                  "maxSessions": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
                   }
                 },
+                "required": ["accessType", "target"],
                 "additionalProperties": false
               }
             }
@@ -7014,7 +8777,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-10"
+                  "$ref": "#/components/schemas/def-11"
                 }
               }
             }
@@ -7230,10 +8993,256 @@
         }
       }
     },
+    "/api/v1/public/shares/{shareId}/sessions": {
+      "post": {
+        "operationId": "establishProtectedShareSessionV1",
+        "summary": "Establish or renew one bounded Protected viewer session",
+        "tags": ["public shares"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/def-13"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "shareId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-14"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/public/shares/{shareId}/resolve": {
       "post": {
-        "operationId": "resolvePublicShareV1",
-        "summary": "Resolve an unlisted share capability",
+        "operationId": "resolveProtectedShareV1",
+        "summary": "Resolve a Protected share with established viewer authority",
         "tags": ["public shares"],
         "requestBody": {
           "required": true,
@@ -7241,11 +9250,13 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["secret"],
+                "required": ["token"],
                 "properties": {
-                  "secret": {
+                  "token": {
                     "type": "string",
-                    "maxLength": 512
+                    "minLength": 24,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9._-]+$"
                   }
                 },
                 "additionalProperties": false
@@ -7257,8 +9268,7 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 128
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
             },
             "in": "path",
             "name": "shareId",
@@ -7268,16 +9278,68 @@
         "responses": {
           "200": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-11"
+                  "$ref": "#/components/schemas/def-12"
                 }
               }
             }
           },
           "400": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7288,6 +9350,32 @@
           },
           "404": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7298,6 +9386,32 @@
           },
           "499": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7308,6 +9422,32 @@
           },
           "500": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7318,6 +9458,32 @@
           },
           "503": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7331,8 +9497,8 @@
     },
     "/api/v1/public/shares/{shareId}/content": {
       "post": {
-        "operationId": "downloadPublicShareContentV1",
-        "summary": "Download exact shared file bytes as an attachment",
+        "operationId": "downloadProtectedShareContentV1",
+        "summary": "Download Protected shared file bytes with established viewer authority",
         "tags": ["public shares"],
         "requestBody": {
           "required": true,
@@ -7340,24 +9506,13 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["secret"],
+                "required": ["token"],
                 "properties": {
-                  "secret": {
+                  "token": {
                     "type": "string",
-                    "maxLength": 512
-                  }
-                },
-                "additionalProperties": false
-              }
-            },
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "type": "object",
-                "required": ["secret"],
-                "properties": {
-                  "secret": {
-                    "type": "string",
-                    "maxLength": 512
+                    "minLength": 24,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9._-]+$"
                   }
                 },
                 "additionalProperties": false
@@ -7369,8 +9524,7 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 128
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
             },
             "in": "path",
             "name": "shareId",
@@ -7387,18 +9541,6 @@
                 },
                 "description": "Always no-store."
               },
-              "Content-Disposition": {
-                "schema": {
-                  "type": "string"
-                },
-                "description": "Safe attachment file name."
-              },
-              "Content-Length": {
-                "schema": {
-                  "type": "integer"
-                },
-                "description": "Complete immutable byte count."
-              },
               "Referrer-Policy": {
                 "schema": {
                   "type": "string"
@@ -7410,6 +9552,24 @@
                   "type": "string"
                 },
                 "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Safe attachment file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Complete immutable byte count."
               }
             },
             "content": {
@@ -7424,6 +9584,32 @@
           },
           "400": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -7434,6 +9620,32 @@
           },
           "404": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -7444,6 +9656,32 @@
           },
           "499": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -7454,6 +9692,32 @@
           },
           "500": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -7464,6 +9728,32 @@
           },
           "503": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -7477,8 +9767,8 @@
     },
     "/api/v1/public/shares/{shareId}/tree": {
       "post": {
-        "operationId": "getPublicShareTreeV1",
-        "summary": "Page the exact shared folder tree",
+        "operationId": "getProtectedShareTreeV1",
+        "summary": "Page a Protected shared folder tree with established viewer authority",
         "tags": ["public shares"],
         "requestBody": {
           "required": true,
@@ -7486,11 +9776,13 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["secret"],
+                "required": ["token"],
                 "properties": {
-                  "secret": {
+                  "token": {
                     "type": "string",
-                    "maxLength": 512
+                    "minLength": 24,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9._-]+$"
                   }
                 },
                 "additionalProperties": false
@@ -7522,8 +9814,7 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 128
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
             },
             "in": "path",
             "name": "shareId",
@@ -7533,6 +9824,32 @@
         "responses": {
           "200": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7543,6 +9860,32 @@
           },
           "400": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7553,6 +9896,32 @@
           },
           "404": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7563,6 +9932,32 @@
           },
           "499": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7573,6 +9968,32 @@
           },
           "500": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7583,6 +10004,774 @@
           },
           "503": {
             "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/links/{publicCode}/resolve": {
+      "get": {
+        "operationId": "resolvePublicLinkV1",
+        "summary": "Resolve a secret-free Public share link",
+        "tags": ["public links"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{12}$"
+            },
+            "in": "path",
+            "name": "publicCode",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-12"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/links/{publicCode}/content": {
+      "get": {
+        "operationId": "downloadPublicLinkContentV1",
+        "summary": "Download secret-free Public shared file bytes",
+        "tags": ["public links"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{12}$"
+            },
+            "in": "path",
+            "name": "publicCode",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exact immutable file bytes, always delivered as an attachment.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Safe attachment file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Complete immutable byte count."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Exact immutable file bytes, always delivered as an attachment."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/links/{publicCode}/tree": {
+      "get": {
+        "operationId": "getPublicLinkTreeV1",
+        "summary": "Page a secret-free Public shared folder tree",
+        "tags": ["public links"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{12}$"
+            },
+            "in": "path",
+            "name": "publicCode",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-2"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7610,7 +10799,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-12"
+                  "$ref": "#/components/schemas/def-15"
                 }
               }
             }
@@ -7714,7 +10903,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-16"
+                  "$ref": "#/components/schemas/def-19"
                 }
               }
             }
@@ -7830,7 +11019,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-13"
+                  "$ref": "#/components/schemas/def-16"
                 }
               }
             }
@@ -7973,7 +11162,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-14"
+                  "$ref": "#/components/schemas/def-17"
                 }
               }
             }
@@ -8068,7 +11257,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-15"
+                  "$ref": "#/components/schemas/def-18"
                 }
               }
             }

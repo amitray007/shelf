@@ -12,9 +12,12 @@ import {
   ErrorEnvelopeSchema,
   FolderPublishResultSchema,
   FolderTreePageSchema,
+  ProtectedSessionAuthoritySchema,
+  ProtectedSessionEstablishInputSchema,
   PublicShareResolutionSchema,
   PublishResultSchema,
   RevisionComparisonSchema,
+  ShareCreateInputSchema,
   ShareCreateResultSchema,
   ShareManagementSummarySchema,
   SharePageSchema,
@@ -29,6 +32,7 @@ import type {
   ContentReader,
   ContentStore,
   FolderRevisionRepository,
+  PublicShareCodeGenerator,
   RevisionComparisonRepository,
   RevisionRepository,
   ShareCapabilityCodec,
@@ -36,7 +40,7 @@ import type {
   ShareIdGenerator,
   ShareRepository,
 } from '@shelf/core';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import { MemoryArtifactDeletionRepository } from './adapters/memory-artifact-deletion-repository.js';
 import { MemoryRevisionRepository } from './adapters/memory-revision-repository.js';
 import { MemoryShareRepository } from './adapters/memory-share-repository.js';
@@ -52,7 +56,7 @@ import { registerPublicConfigRoute } from './routes/public-config.js';
 import { PublishMultipartOpenApiSchema, registerPublishRoute } from './routes/publish.js';
 import { registerRevisionRoutes } from './routes/revisions.js';
 import { registerShareRoutes } from './routes/shares.js';
-import { createHmacShareCapabilityCodec } from './share-capability.js';
+import { createHmacShareSecurityCodecs, type ViewerSessionTokenCodec } from './share-capability.js';
 import { registerWebApp } from './web-app.js';
 
 declare module 'fastify' {
@@ -109,8 +113,10 @@ export interface ShelfAppDependencies {
   artifactDeletionRepository: ArtifactDeletionRepository;
   artifactClock?: () => Date;
   shareCapabilityCodec: ShareCapabilityCodec;
+  viewerSessionTokenCodec: ViewerSessionTokenCodec;
   shareClock?: ShareClock;
   generateShareId?: ShareIdGenerator;
+  generatePublicCode?: PublicShareCodeGenerator;
 }
 
 export interface CreateShelfAppOptions {
@@ -129,10 +135,12 @@ export interface CreateShelfAppOptions {
   artifactDeletionRepository?: ArtifactDeletionRepository;
   artifactClock?: () => Date;
   shareCapabilityCodec?: ShareCapabilityCodec;
+  viewerSessionTokenCodec?: ViewerSessionTokenCodec;
   shareClock?: ShareClock;
   generateShareId?: ShareIdGenerator;
+  generatePublicCode?: PublicShareCodeGenerator;
   multipartLimits?: Partial<ShelfMultipartLimits>;
-  logger?: boolean;
+  logger?: FastifyServerOptions['logger'];
   humanAuth?: HumanAuth;
   health?: ReadinessState;
   rendererPublicOrigin?: string;
@@ -194,6 +202,7 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
       'Shelf requires artifactDeletionRepository when the revision repository does not implement artifact deletion.',
     );
   }
+  const defaultSecurityCodecs = createHmacShareSecurityCodecs(randomBytes(32));
   const dependencies: ShelfAppDependencies = {
     authenticator: options.authenticator,
     authorizer: options.authorizer,
@@ -203,10 +212,13 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
     shareRepository,
     artifactDeletionRepository,
     ...(options.artifactClock === undefined ? {} : { artifactClock: options.artifactClock }),
-    shareCapabilityCodec:
-      options.shareCapabilityCodec ?? createHmacShareCapabilityCodec(randomBytes(32)),
+    shareCapabilityCodec: options.shareCapabilityCodec ?? defaultSecurityCodecs.capability,
+    viewerSessionTokenCodec: options.viewerSessionTokenCodec ?? defaultSecurityCodecs.viewerSession,
     ...(options.shareClock === undefined ? {} : { shareClock: options.shareClock }),
     ...(options.generateShareId === undefined ? {} : { generateShareId: options.generateShareId }),
+    ...(options.generatePublicCode === undefined
+      ? {}
+      : { generatePublicCode: options.generatePublicCode }),
   };
 
   await app.register(swagger, {
@@ -241,8 +253,11 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   app.addSchema(RevisionComparisonSchema);
   app.addSchema(withoutNestedSchemaIds(ShareManagementSummarySchema));
   app.addSchema(withoutNestedSchemaIds(ShareCreateResultSchema));
+  app.addSchema(withoutNestedSchemaIds(ShareCreateInputSchema));
   app.addSchema(withoutNestedSchemaIds(SharePageSchema));
   app.addSchema(withoutNestedSchemaIds(PublicShareResolutionSchema));
+  app.addSchema(withoutNestedSchemaIds(ProtectedSessionEstablishInputSchema));
+  app.addSchema(withoutNestedSchemaIds(ProtectedSessionAuthoritySchema));
   app.addSchema(withoutNestedSchemaIds(DashboardSessionSchema));
   app.addSchema(withoutNestedSchemaIds(DashboardCredentialPageSchema));
   app.addSchema(withoutNestedSchemaIds(DashboardCredentialIssueSchema));

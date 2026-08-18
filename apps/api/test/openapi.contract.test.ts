@@ -162,6 +162,13 @@ describe('OpenAPI v1', () => {
       ],
       'createShareV1',
     );
+    const createShareBody = JSON.stringify(
+      document.paths?.['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/shares']?.post
+        ?.requestBody,
+    );
+    for (const field of ['accessType', 'target', 'expiresIn', 'expiresAt', 'maxSessions']) {
+      expect(createShareBody).toContain(field);
+    }
     expect(document).toHaveProperty(
       ['paths', '/api/v1/workspaces/{workspaceId}/shares', 'get', 'operationId'],
       'listSharesV1',
@@ -175,19 +182,55 @@ describe('OpenAPI v1', () => {
       'getPublicClientConfigV1',
     );
     for (const [path, operationId] of [
-      ['/api/v1/public/shares/{shareId}/resolve', 'resolvePublicShareV1'],
-      ['/api/v1/public/shares/{shareId}/content', 'downloadPublicShareContentV1'],
-      ['/api/v1/public/shares/{shareId}/tree', 'getPublicShareTreeV1'],
+      ['/api/v1/public/shares/{shareId}/sessions', 'establishProtectedShareSessionV1'],
+      ['/api/v1/public/shares/{shareId}/resolve', 'resolveProtectedShareV1'],
+      ['/api/v1/public/shares/{shareId}/content', 'downloadProtectedShareContentV1'],
+      ['/api/v1/public/shares/{shareId}/tree', 'getProtectedShareTreeV1'],
     ] as const) {
       expect(document).toHaveProperty(['paths', path, 'post', 'operationId'], operationId);
       const operation = document.paths?.[path]?.post;
       expect(operation?.security).toBeUndefined();
       expect(JSON.stringify(operation?.parameters ?? [])).not.toContain('secret');
-      expect(JSON.stringify(operation?.requestBody ?? {})).toContain('secret');
+      expect(operation?.requestBody).toBeDefined();
+    }
+    for (const [path, operationId] of [
+      ['/api/v1/public/links/{publicCode}/resolve', 'resolvePublicLinkV1'],
+      ['/api/v1/public/links/{publicCode}/content', 'downloadPublicLinkContentV1'],
+      ['/api/v1/public/links/{publicCode}/tree', 'getPublicLinkTreeV1'],
+    ] as const) {
+      expect(document).toHaveProperty(['paths', path, 'get', 'operationId'], operationId);
+      const operation = document.paths?.[path]?.get;
+      expect(operation?.security).toBeUndefined();
+      expect(operation?.requestBody).toBeUndefined();
+      expect(JSON.stringify(operation?.parameters ?? [])).not.toContain('secret');
     }
     expect(
-      document.paths?.['/api/v1/public/shares/{shareId}/content']?.post?.requestBody?.content,
-    ).toHaveProperty('application/x-www-form-urlencoded');
+      JSON.stringify(
+        document.paths?.['/api/v1/public/shares/{shareId}/content']?.post?.requestBody,
+      ),
+    ).toContain('token');
+    for (const [path, method] of [
+      ['/api/v1/public/shares/{shareId}/sessions', 'post'],
+      ['/api/v1/public/shares/{shareId}/resolve', 'post'],
+      ['/api/v1/public/shares/{shareId}/content', 'post'],
+      ['/api/v1/public/shares/{shareId}/tree', 'post'],
+      ['/api/v1/public/links/{publicCode}/resolve', 'get'],
+      ['/api/v1/public/links/{publicCode}/content', 'get'],
+      ['/api/v1/public/links/{publicCode}/tree', 'get'],
+    ] as const) {
+      const responses = document.paths?.[path]?.[method]?.responses ?? {};
+      for (const response of Object.values(responses)) {
+        const serializedResponse = JSON.stringify(response);
+        for (const header of [
+          'Cache-Control',
+          'Referrer-Policy',
+          'X-Content-Type-Options',
+          'X-Robots-Tag',
+        ]) {
+          expect(serializedResponse).toContain(header);
+        }
+      }
+    }
     expect(document).toHaveProperty(
       ['paths', '/api/v1/dashboard/session', 'get', 'operationId'],
       'getDashboardSessionV1',

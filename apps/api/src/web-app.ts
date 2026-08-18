@@ -31,6 +31,7 @@ function applyDocumentHeaders(reply: FastifyReply, rendererOrigin: string | unde
   void reply.header('Cross-Origin-Opener-Policy', 'same-origin');
   void reply.header('Referrer-Policy', 'no-referrer');
   void reply.header('X-Content-Type-Options', 'nosniff');
+  void reply.header('X-Robots-Tag', 'noindex, nofollow, noarchive');
 }
 
 export async function registerWebApp(app: FastifyInstance, options: WebAppOptions): Promise<void> {

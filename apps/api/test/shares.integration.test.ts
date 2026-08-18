@@ -1,12 +1,16 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Writable } from 'node:stream';
 
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { type CreateShelfAppOptions, createShelfApp } from '../src/app.js';
-import { createHmacShareCapabilityCodec } from '../src/share-capability.js';
+import {
+  createHmacShareCapabilityCodec,
+  createHmacViewerSessionTokenCodec,
+} from '../src/share-capability.js';
 
 const roots: string[] = [];
 const apps: FastifyInstance[] = [];
@@ -87,7 +91,20 @@ async function createShare(
     method: 'POST',
     url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/shares`,
     headers: { authorization: 'Bearer test', 'idempotency-key': key },
-    payload: { target, expiresAt },
+    payload: { accessType: 'protected', target, ...(expiresAt === null ? {} : { expiresAt }) },
+  });
+}
+
+async function establishSession(
+  app: FastifyInstance,
+  shareId: string,
+  secret: string,
+  sessionId = '11111111-1111-4111-8111-111111111111',
+) {
+  return app.inject({
+    method: 'POST',
+    url: `/api/v1/public/shares/${shareId}/sessions`,
+    payload: { sessionId, secret },
   });
 }
 
@@ -95,6 +112,7 @@ function publicHeaders(response: { headers: Record<string, string | string[] | u
   expect(response.headers['cache-control']).toBe('no-store');
   expect(response.headers['referrer-policy']).toBe('no-referrer');
   expect(response.headers['x-content-type-options']).toBe('nosniff');
+  expect(response.headers['x-robots-tag']).toBe('noindex, nofollow, noarchive');
 }
 
 describe('share HTTP boundary', () => {
@@ -162,8 +180,8 @@ describe('share HTTP boundary', () => {
     const rejectedShare = await createShare(app, artifactId, 'share-after-delete');
     const publicMiss = await app.inject({
       method: 'POST',
-      url: `/api/v1/public/shares/${shareId}/resolve`,
-      payload: { secret },
+      url: `/api/v1/public/shares/${shareId}/sessions`,
+      payload: { sessionId: '11111111-1111-4111-8111-111111111111', secret },
     });
     const [recovered, replayedRecovery] = await Promise.all([
       app.inject({
@@ -184,8 +202,8 @@ describe('share HTTP boundary', () => {
     });
     const stillRevoked = await app.inject({
       method: 'POST',
-      url: `/api/v1/public/shares/${shareId}/resolve`,
-      payload: { secret },
+      url: `/api/v1/public/shares/${shareId}/sessions`,
+      payload: { sessionId: '11111111-1111-4111-8111-111111111111', secret },
     });
 
     expect(deleted.statusCode, deleted.body).toBe(200);
@@ -305,8 +323,8 @@ describe('share HTTP boundary', () => {
 
     const publicMiss = await app.inject({
       method: 'POST',
-      url: `/api/v1/public/shares/${created.json().shareId as string}/resolve`,
-      payload: { secret },
+      url: `/api/v1/public/shares/${created.json().shareId as string}/sessions`,
+      payload: { sessionId: '11111111-1111-4111-8111-111111111111', secret },
     });
     expect(publicMiss.statusCode).toBe(404);
     expect(publicMiss.json()).toMatchObject({ error: { code: 'SHARE_NOT_FOUND' } });
@@ -351,17 +369,20 @@ describe('share HTTP boundary', () => {
     ] as const) {
       const secret = (share.url as string).split('#')[1] as string;
       const shareId = share.shareId as string;
+      const established = await establishSession(app, shareId, secret);
+      const token = established.json().token as string;
       const resolved = await app.inject({
         method: 'POST',
         url: `/api/v1/public/shares/${shareId}/resolve`,
-        payload: { secret },
+        payload: { token },
       });
       const content = await app.inject({
         method: 'POST',
         url: `/api/v1/public/shares/${shareId}/content`,
-        payload: { secret },
+        payload: { token },
       });
 
+      expect(established.statusCode, established.body).toBe(200);
       expect(resolved.statusCode).toBe(200);
       if (expectedRevision !== undefined) {
         expect(resolved.json().revision.revisionId).toBe(expectedRevision);
@@ -377,36 +398,250 @@ describe('share HTTP boundary', () => {
     }
   });
 
-  it('accepts one bounded form capability for browser-initiated attachment downloads', async () => {
+  it('establishes once, reuses the same session, and keeps its token valid at the limit', async () => {
     const app = await fixture();
     const published = await publishFile(app, 'browser download', 'publish-browser-download');
-    const created = await createShare(
-      app,
-      published.json().artifactId as string,
-      'share-browser-download',
-    );
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/workspace-main/artifacts/${published.json().artifactId as string}/shares`,
+      headers: { authorization: 'Bearer test', 'idempotency-key': 'share-browser-download' },
+      payload: { accessType: 'protected', target: { mode: 'latest' }, maxSessions: 1 },
+    });
     const shareId = created.json().shareId as string;
     const secret = (created.json().url as string).split('#')[1] as string;
 
+    const unfurl = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/resolve`,
+      payload: {},
+    });
+    const beforeEstablishment = await app.inject({
+      method: 'GET',
+      url: '/api/v1/workspaces/workspace-main/shares',
+      headers: { authorization: 'Bearer test' },
+    });
+    const established = await establishSession(app, shareId, secret);
+    const reused = await establishSession(app, shareId, secret);
+    const blocked = await establishSession(
+      app,
+      shareId,
+      secret,
+      '22222222-2222-4222-8222-222222222222',
+    );
     const downloaded = await app.inject({
       method: 'POST',
       url: `/api/v1/public/shares/${shareId}/content`,
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      payload: new URLSearchParams({ secret }).toString(),
-    });
-    const polluted = await app.inject({
-      method: 'POST',
-      url: `/api/v1/public/shares/${shareId}/content`,
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      payload: `secret=${encodeURIComponent(secret)}&secret=${encodeURIComponent(secret)}`,
+      payload: { token: established.json().token },
     });
 
+    expect(unfurl.statusCode).toBe(400);
+    expect(beforeEstablishment.json().items[0]).toMatchObject({ sessionsUsed: 0 });
+    expect(established.statusCode, established.body).toBe(200);
+    expect(created.json()).toMatchObject({ accessType: 'protected', maxSessions: 1 });
+    expect(reused.statusCode, reused.body).toBe(200);
+    expect(reused.json()).toMatchObject({
+      shareId,
+      sessionId: established.json().sessionId,
+    });
+    expect(blocked.statusCode).toBe(404);
     expect(downloaded.statusCode).toBe(200);
     expect(downloaded.body).toBe('browser download');
     expect(downloaded.headers['content-disposition']).toMatch(/^attachment;/u);
-    expect(polluted.statusCode).toBe(400);
     publicHeaders(downloaded);
-    publicHeaders(polluted);
+  });
+
+  it('renews the same expired authority without consuming another session', async () => {
+    let now = new Date('2026-08-18T12:00:00.000Z');
+    const app = await fixture({ shareClock: () => now });
+    const published = await publishFile(app, 'renewed bytes', 'publish-renewal');
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/workspace-main/artifacts/${published.json().artifactId as string}/shares`,
+      headers: { authorization: 'Bearer test', 'idempotency-key': 'share-renewal' },
+      payload: {
+        accessType: 'protected',
+        target: { mode: 'latest' },
+        expiresIn: '3d',
+        maxSessions: 1,
+      },
+    });
+    const shareId = created.json().shareId as string;
+    const secret = (created.json().url as string).split('#')[1] as string;
+    const established = await establishSession(app, shareId, secret);
+    const expiredToken = established.json().token as string;
+    now = new Date('2026-08-19T12:00:00.000Z');
+
+    const denied = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/content`,
+      payload: { token: expiredToken },
+    });
+    const renewed = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/sessions`,
+      payload: { sessionId: established.json().sessionId, token: expiredToken },
+    });
+    const downloaded = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/content`,
+      payload: { token: renewed.json().token },
+    });
+    const listed = await app.inject({
+      method: 'GET',
+      url: '/api/v1/workspaces/workspace-main/shares',
+      headers: { authorization: 'Bearer test' },
+    });
+
+    expect(denied.statusCode).toBe(404);
+    expect(renewed.statusCode, renewed.body).toBe(200);
+    expect(renewed.json().token).not.toBe(expiredToken);
+    expect(downloaded.statusCode, downloaded.body).toBe(200);
+    expect(listed.json().items[0]).toMatchObject({ sessionsUsed: 1, sessionsRemaining: 0 });
+  });
+
+  it('collapses tampered, future-issued, and cross-share viewer authority', async () => {
+    const now = new Date('2026-08-18T12:00:00.000Z');
+    const tokenCodec = createHmacViewerSessionTokenCodec(Buffer.alloc(32, 7));
+    const app = await fixture({ shareClock: () => now, viewerSessionTokenCodec: tokenCodec });
+    const first = await publishFile(app, 'first private', 'publish-token-first');
+    const second = await publishFile(app, 'second private', 'publish-token-second');
+    const firstShare = await createShare(app, first.json().artifactId, 'share-token-first');
+    const secondShare = await createShare(app, second.json().artifactId, 'share-token-second');
+    const shareId = firstShare.json().shareId as string;
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    const established = await establishSession(
+      app,
+      shareId,
+      (firstShare.json().url as string).split('#')[1] as string,
+      sessionId,
+    );
+    const token = established.json().token as string;
+    const replacement = token.endsWith('x') ? 'y' : 'x';
+    const future = tokenCodec.issue({
+      shareId,
+      sessionId,
+      issuedAt: '2026-08-18T12:00:00.001Z',
+      accessExpiresAt: '2026-08-18T12:01:00.000Z',
+    });
+    const requests = [
+      app.inject({
+        method: 'POST',
+        url: `/api/v1/public/shares/${shareId}/resolve`,
+        payload: { token: `${token.slice(0, -1)}${replacement}` },
+      }),
+      app.inject({
+        method: 'POST',
+        url: `/api/v1/public/shares/${shareId}/resolve`,
+        payload: { token: future },
+      }),
+      app.inject({
+        method: 'POST',
+        url: `/api/v1/public/shares/${secondShare.json().shareId as string}/resolve`,
+        payload: { token },
+      }),
+    ];
+    const responses = await Promise.all(requests);
+    const malformed = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/resolve`,
+      payload: { token: 'malformed' },
+    });
+
+    for (const response of responses) {
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({ error: { code: 'SHARE_NOT_FOUND' } });
+      publicHeaders(response);
+    }
+    expect(malformed.statusCode).toBe(400);
+    publicHeaders(malformed);
+  });
+
+  it('serves a Public share through secret-free link routes with its preset preserved', async () => {
+    let now = new Date('2026-08-18T12:00:00.000Z');
+    const app = await fixture({
+      shareClock: () => now,
+      generatePublicCode: () => 'PubCode_1234',
+    });
+    const published = await publishFile(app, 'public bytes', 'publish-public');
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/workspace-main/artifacts/${published.json().artifactId as string}/shares`,
+      headers: { authorization: 'Bearer test', 'idempotency-key': 'share-public' },
+      payload: { accessType: 'public', target: { mode: 'latest' }, expiresIn: '30m' },
+    });
+    const resolved = await app.inject({
+      method: 'GET',
+      url: '/api/v1/public/links/PubCode_1234/resolve',
+    });
+    const content = await app.inject({
+      method: 'GET',
+      url: '/api/v1/public/links/PubCode_1234/content',
+    });
+
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json()).toMatchObject({
+      accessType: 'public',
+      publicCode: 'PubCode_1234',
+      expiresAt: '2026-08-18T12:30:00.000Z',
+      url: '/s/PubCode_1234',
+    });
+    expect(resolved.statusCode, resolved.body).toBe(200);
+    expect(content.statusCode, content.body).toBe(200);
+    expect(content.body).toBe('public bytes');
+    publicHeaders(resolved);
+    publicHeaders(content);
+    now = new Date('2026-08-18T12:30:00.000Z');
+    const expired = await app.inject({
+      method: 'GET',
+      url: '/api/v1/public/links/PubCode_1234/resolve',
+    });
+    expect(expired.statusCode).toBe(404);
+    publicHeaders(expired);
+  });
+
+  it('keeps Protected capability and viewer-token values out of production request logs', async () => {
+    const chunks: string[] = [];
+    const stream = new Writable({
+      write(chunk, _encoding, callback) {
+        chunks.push(chunk.toString());
+        callback();
+      },
+    });
+    const sentinelCapability = `${'C'.repeat(42)}_`;
+    const app = await fixture({
+      logger: { level: 'info', stream },
+      shareCapabilityCodec: {
+        deriveSecret: () => sentinelCapability,
+        validateSecret: (_shareId, secret) => secret === sentinelCapability,
+      },
+      generatePublicCode: () => 'LoggedPub123',
+    });
+    const published = await publishFile(app, 'logged bytes', 'publish-logged');
+    const protectedShare = await createShare(app, published.json().artifactId, 'share-logged');
+    const established = await establishSession(
+      app,
+      protectedShare.json().shareId,
+      sentinelCapability,
+    );
+    const viewerToken = established.json().token as string;
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${protectedShare.json().shareId as string}/resolve`,
+      payload: { token: viewerToken },
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/workspace-main/artifacts/${published.json().artifactId as string}/shares`,
+      headers: { authorization: 'Bearer test', 'idempotency-key': 'share-public-logged' },
+      payload: { accessType: 'public', target: { mode: 'latest' } },
+    });
+    await app.inject({ method: 'GET', url: '/api/v1/public/links/LoggedPub123/resolve' });
+    await new Promise<void>((resolve) => stream.write('', resolve));
+    const logs = chunks.join('');
+
+    expect(logs).toContain('LoggedPub123');
+    expect(logs).not.toContain(sentinelCapability);
+    expect(logs).not.toContain(viewerToken);
   });
 
   it('collapses wrong, missing, revoked, and expired shares to one public miss without echoing secrets', async () => {
@@ -423,36 +658,39 @@ describe('share HTTP boundary', () => {
     const shareId = created.json().shareId as string;
     const secret = (created.json().url as string).split('#')[1] as string;
     const canary = `${'z'.repeat(42)}Y`;
+    const established = await establishSession(app, shareId, secret);
 
     const wrong = await app.inject({
       method: 'POST',
-      url: `/api/v1/public/shares/${shareId}/resolve`,
-      payload: { secret: canary },
+      url: `/api/v1/public/shares/${shareId}/sessions`,
+      payload: { sessionId: '22222222-2222-4222-8222-222222222222', secret: canary },
     });
     const missing = await app.inject({
       method: 'POST',
-      url: '/api/v1/public/shares/shr_ZZZZZZZZZZZZZZZZZZZZZZ/resolve',
-      payload: { secret },
+      url: '/api/v1/public/shares/shr_ZZZZZZZZZZZZZZZZZZZZZZ/sessions',
+      payload: { sessionId: '22222222-2222-4222-8222-222222222222', secret },
     });
     const malformed = await app.inject({
       method: 'POST',
       url: '/api/v1/public/shares/not-a-share/resolve',
-      payload: { secret: 'malformed' },
+      payload: { token: established.json().token },
     });
     now = new Date('2026-08-17T12:01:00.000Z');
     const expired = await app.inject({
       method: 'POST',
       url: `/api/v1/public/shares/${shareId}/content`,
-      payload: { secret },
+      payload: { token: established.json().token },
     });
 
-    for (const response of [wrong, missing, malformed, expired]) {
+    for (const response of [wrong, missing, expired]) {
       expect(response.statusCode).toBe(404);
       expect(response.json()).toMatchObject({ error: { code: 'SHARE_NOT_FOUND' } });
       expect(response.body).not.toContain(secret);
       expect(response.body).not.toContain(canary);
       publicHeaders(response);
     }
+    expect(malformed.statusCode).toBe(400);
+    publicHeaders(malformed);
   });
 
   it('returns a bounded, sanitized public folder tree and rejects file content access', async () => {
@@ -481,16 +719,18 @@ describe('share HTTP boundary', () => {
     const created = await createShare(app, published.json().artifactId as string, 'share-folder');
     const shareId = created.json().shareId as string;
     const secret = (created.json().url as string).split('#')[1] as string;
+    const established = await establishSession(app, shareId, secret);
+    const token = established.json().token as string;
 
     const tree = await app.inject({
       method: 'POST',
       url: `/api/v1/public/shares/${shareId}/tree?limit=1`,
-      payload: { secret },
+      payload: { token },
     });
     const content = await app.inject({
       method: 'POST',
       url: `/api/v1/public/shares/${shareId}/content`,
-      payload: { secret },
+      payload: { token },
     });
 
     expect(tree.statusCode).toBe(200);
