@@ -77,6 +77,31 @@ describe('dashboard architecture', () => {
     expect(source).not.toContain('Open your artifact shelf');
   });
 
+  it('composes the artifact workbench from the accepted managed primitives', async () => {
+    const detail = await readFile(path.join(sourceRoot, 'dashboard/artifact-page.tsx'), 'utf8');
+    const index = await readFile(path.join(sourceRoot, 'dashboard/artifacts-page.tsx'), 'utf8');
+    const manifest = await readFile(path.resolve(sourceRoot, '../package.json'), 'utf8');
+
+    expect(detail).toContain("from 'react-resizable-panels'");
+    expect(detail).toContain("from '@cloudflare/kumo/components/dropdown'");
+    expect(detail).toContain("from '@cloudflare/kumo/components/input'");
+    expect(detail).toContain("from '@cloudflare/kumo/components/radio'");
+    expect(detail).toContain("from '@cloudflare/kumo/components/select'");
+    expect(detail).toContain("from '@cloudflare/kumo/components/tabs'");
+    expect(index).toContain("from '@cloudflare/kumo/components/clipboard-text'");
+    expect(index).toContain("from '@cloudflare/kumo/components/table'");
+    expect(detail).not.toMatch(/<(?:button|input|select)\b/u);
+    expect(`${detail}\n${index}`).not.toContain("from '@cloudflare/kumo'");
+    expect(JSON.parse(manifest).dependencies['react-resizable-panels']).toBe('4.12.3');
+  });
+
+  it('keeps the inspector URL-addressable without presenting a loaded-page revision total', async () => {
+    const detail = await readFile(path.join(sourceRoot, 'dashboard/artifact-page.tsx'), 'utf8');
+
+    expect(detail).toContain("searchParams.get('panel')");
+    expect(detail).not.toContain('{history.items.length}');
+  });
+
   it('keeps Access and sign-out in the workspace menu without a mobile tab bar', async () => {
     const layout = await readFile(path.join(sourceRoot, 'dashboard/layout.tsx'), 'utf8');
     const shell = await readFile(path.join(sourceRoot, 'dashboard/shell.css'), 'utf8');

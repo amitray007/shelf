@@ -1,4 +1,7 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable previews must be keyboard reachable.
+
+import { LinkButton } from '@cloudflare/kumo/components/button';
+import { FileArrowDownIcon } from '@phosphor-icons/react/FileArrowDown';
 import type { Artifact, FolderEntry } from '@shelf/contracts';
 import { useEffect, useMemo } from 'react';
 
@@ -11,13 +14,13 @@ function DownloadOnly({ artifact }: { readonly artifact: Artifact }) {
   if (revision.kind !== 'file') return null;
   return (
     <section className="empty-state managed-download" aria-labelledby="managed-download-title">
-      <span className="file-glyph" aria-hidden="true" />
-      <p className="eyebrow">{revision.mediaType}</p>
+      <FileArrowDownIcon aria-hidden="true" className="managed-download-icon" size={30} />
+      <p className="managed-download-type">{revision.mediaType}</p>
       <h2 id="managed-download-title">Download-only format</h2>
       <p>Active or unsupported content is not executed on the authenticated Shelf origin.</p>
-      <a className="control control-primary" href={revision.paths.content}>
+      <LinkButton href={revision.paths.content} icon={FileArrowDownIcon} variant="primary">
         Download {revision.originalFileName}
-      </a>
+      </LinkButton>
     </section>
   );
 }

@@ -1,9 +1,21 @@
+import { Button } from '@cloudflare/kumo/components/button';
+import { ClipboardText } from '@cloudflare/kumo/components/clipboard-text';
+import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
+import { Input } from '@cloudflare/kumo/components/input';
+import { Radio } from '@cloudflare/kumo/components/radio';
+import { Select } from '@cloudflare/kumo/components/select';
+import { Tabs } from '@cloudflare/kumo/components/tabs';
+import { DotsThreeIcon } from '@phosphor-icons/react/DotsThree';
+import { LinkIcon } from '@phosphor-icons/react/Link';
+import { PencilSimpleIcon } from '@phosphor-icons/react/PencilSimple';
+import { ShareNetworkIcon } from '@phosphor-icons/react/ShareNetwork';
 import type {
   ArtifactRevision,
   RevisionComparison,
   ShareManagementSummary,
 } from '@shelf/contracts';
 import { type FormEvent, useMemo, useRef, useState } from 'react';
+import { Group, Panel, Separator } from 'react-resizable-panels';
 import { Link, useLoaderData, useRevalidator, useSearchParams } from 'react-router';
 
 import { formatBytes } from '../components/artifact-content.js';
@@ -29,6 +41,13 @@ function dateTime(value: string): string {
 
 function revisionLabel(revision: ArtifactRevision): string {
   return revision.kind === 'file' ? revision.originalFileName : revision.rootName;
+}
+
+const inspectorPanels = ['history', 'details', 'compare', 'links'] as const;
+type InspectorPanel = (typeof inspectorPanels)[number];
+
+function inspectorPanel(value: string | null): InspectorPanel {
+  return inspectorPanels.includes(value as InspectorPanel) ? (value as InspectorPanel) : 'history';
 }
 
 function RenameDialog({
@@ -71,29 +90,22 @@ function RenameDialog({
       title="Rename artifact"
     >
       <form className="dialog-form" onSubmit={submit}>
-        <label className="field">
-          <span className="field-label">Display name</span>
-          <input
-            maxLength={255}
-            onChange={(event) => setName(event.currentTarget.value)}
-            ref={nameRef}
-            required
-            value={name}
-          />
-        </label>
+        <Input
+          label="Display name"
+          maxLength={255}
+          onChange={(event) => setName(event.currentTarget.value)}
+          ref={nameRef}
+          required
+          value={name}
+        />
         {error === undefined ? null : <p className="form-error">{error}</p>}
         <div className="dialog-actions">
-          <button
-            className="control"
-            disabled={busy}
-            onClick={() => onOpenChange(false)}
-            type="button"
-          >
+          <Button disabled={busy} onClick={() => onOpenChange(false)} type="button">
             Cancel
-          </button>
-          <button className="control control-primary" disabled={busy} type="submit">
+          </Button>
+          <Button disabled={busy} loading={busy} type="submit" variant="primary">
             {busy ? 'Saving…' : 'Save name'}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>
@@ -161,17 +173,12 @@ function RestoreDialog({
         </div>
         {error === undefined ? null : <p className="form-error">{error}</p>}
         <div className="dialog-actions">
-          <button className="control" disabled={busy} onClick={close} type="button">
+          <Button disabled={busy} onClick={close} type="button">
             Cancel
-          </button>
-          <button
-            className="control control-primary"
-            disabled={busy}
-            onClick={restore}
-            type="button"
-          >
+          </Button>
+          <Button disabled={busy} loading={busy} onClick={restore} type="button" variant="primary">
             {busy ? 'Restoring…' : 'Restore as latest'}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
@@ -245,64 +252,60 @@ function ShareDialog({
     >
       {shareUrl === undefined ? (
         <form className="dialog-form" onSubmit={create}>
-          <fieldset className="choice-group">
-            <legend className="field-label">Link target</legend>
-            <label>
-              <input
-                checked={mode === 'latest'}
-                name="share-mode"
-                onChange={() => setMode('latest')}
-                type="radio"
-              />
-              <span>
-                <strong>Latest</strong>
-                <small>Follows the artifact as new revisions arrive.</small>
-              </span>
-            </label>
-            <label>
-              <input
-                checked={mode === 'pinned'}
-                name="share-mode"
-                onChange={() => setMode('pinned')}
-                type="radio"
-              />
-              <span>
-                <strong>Pinned</strong>
-                <small>Always opens one exact immutable revision.</small>
-              </span>
-            </label>
-          </fieldset>
-          {mode === 'pinned' ? (
-            <label className="field">
-              <span className="field-label">Revision</span>
-              <select
-                value={revisionId}
-                onChange={(event) => setRevisionId(event.currentTarget.value)}
-              >
-                {revisions.map((revision) => (
-                  <option key={revision.revisionId} value={revision.revisionId}>
-                    r{revision.revisionNumber} — {revisionLabel(revision)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <label className="field">
-            <span className="field-label">Expires (optional)</span>
-            <input
-              onChange={(event) => setExpiresAt(event.currentTarget.value)}
-              type="datetime-local"
-              value={expiresAt}
+          <Radio.Group
+            className="choice-group"
+            legend="Link target"
+            name="share-mode"
+            onValueChange={(value) => setMode(value)}
+            value={mode}
+          >
+            <Radio.Item
+              label={
+                <span>
+                  <strong>Latest</strong>
+                  <small>Follows the artifact as new revisions arrive.</small>
+                </span>
+              }
+              value="latest"
             />
-          </label>
+            <Radio.Item
+              label={
+                <span>
+                  <strong>Pinned</strong>
+                  <small>Always opens one exact immutable revision.</small>
+                </span>
+              }
+              value="pinned"
+            />
+          </Radio.Group>
+          {mode === 'pinned' ? (
+            <Select<string>
+              label="Revision"
+              onValueChange={(value) => setRevisionId(value ?? '')}
+              value={revisionId}
+            >
+              {revisions.map((revision) => (
+                <Select.Option key={revision.revisionId} value={revision.revisionId}>
+                  r{revision.revisionNumber} — {revisionLabel(revision)}
+                </Select.Option>
+              ))}
+            </Select>
+          ) : null}
+          <Input
+            label="Expires"
+            onChange={(event) => setExpiresAt(event.currentTarget.value)}
+            required={false}
+            type="datetime-local"
+            value={expiresAt}
+          />
           {error === undefined ? null : <p className="form-error">{error}</p>}
           <div className="dialog-actions">
-            <button className="control" disabled={busy} onClick={() => close(false)} type="button">
+            <Button disabled={busy} onClick={() => close(false)} type="button">
               Cancel
-            </button>
-            <button className="control control-primary" disabled={busy} type="submit">
+            </Button>
+            <Button disabled={busy} loading={busy} type="submit" variant="primary">
               {busy ? 'Creating…' : 'Create link'}
-            </button>
+            </Button>
           </div>
         </form>
       ) : (
@@ -313,9 +316,9 @@ function ShareDialog({
             value={shareUrl}
           />
           <div className="dialog-actions">
-            <button className="control control-primary" onClick={() => close(false)} type="button">
+            <Button onClick={() => close(false)} type="button" variant="primary">
               Done
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -334,7 +337,11 @@ function ComparisonPanel({ revisions }: { readonly revisions: readonly ArtifactR
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   if (revisions.length < 2) {
-    return <p className="section-empty">Publish another revision to compare immutable states.</p>;
+    return (
+      <p className="section-empty">
+        At least two revisions on the loaded history page are needed to compare.
+      </p>
+    );
   }
   const run = async () => {
     const requested = { base, target };
@@ -374,43 +381,49 @@ function ComparisonPanel({ revisions }: { readonly revisions: readonly ArtifactR
   return (
     <div className="comparison-panel">
       <div className="comparison-controls">
-        <label className="field compact-field">
-          <span className="field-label">Base</span>
-          <select
-            disabled={busy}
-            value={base}
-            onChange={(event) => {
-              setBase(event.currentTarget.value);
-              setComparison(undefined);
-            }}
-          >
-            {revisions.map((revision) => (
-              <option key={revision.revisionId} value={revision.revisionId}>
-                r{revision.revisionNumber}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field compact-field">
-          <span className="field-label">Target</span>
-          <select
-            disabled={busy}
-            value={target}
-            onChange={(event) => {
-              setTarget(event.currentTarget.value);
-              setComparison(undefined);
-            }}
-          >
-            {revisions.map((revision) => (
-              <option key={revision.revisionId} value={revision.revisionId}>
-                r{revision.revisionNumber}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="control" disabled={busy || base === target} onClick={run} type="button">
+        <Select<string>
+          className="compact-field"
+          disabled={busy}
+          label="Base"
+          onValueChange={(value) => {
+            setBase(value ?? '');
+            setComparison(undefined);
+          }}
+          size="sm"
+          value={base}
+        >
+          {revisions.map((revision) => (
+            <Select.Option key={revision.revisionId} value={revision.revisionId}>
+              r{revision.revisionNumber}
+            </Select.Option>
+          ))}
+        </Select>
+        <Select<string>
+          className="compact-field"
+          disabled={busy}
+          label="Target"
+          onValueChange={(value) => {
+            setTarget(value ?? '');
+            setComparison(undefined);
+          }}
+          size="sm"
+          value={target}
+        >
+          {revisions.map((revision) => (
+            <Select.Option key={revision.revisionId} value={revision.revisionId}>
+              r{revision.revisionNumber}
+            </Select.Option>
+          ))}
+        </Select>
+        <Button
+          disabled={busy || base === target}
+          loading={busy}
+          onClick={run}
+          size="sm"
+          type="button"
+        >
           {busy ? 'Comparing…' : 'Compare'}
-        </button>
+        </Button>
       </div>
       {error === undefined ? null : <p className="form-error">{error}</p>}
       {visibleComparison === undefined ? null : visibleComparison.kind === 'file' ? (
@@ -449,9 +462,9 @@ function ComparisonPanel({ revisions }: { readonly revisions: readonly ArtifactR
             ))}
           </ul>
           {visibleComparison.nextCursor === null ? null : (
-            <button className="control" disabled={busy} onClick={loadMore} type="button">
+            <Button disabled={busy} loading={busy} onClick={loadMore} size="sm" type="button">
               {busy ? 'Loading…' : 'Load more changes'}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -487,20 +500,24 @@ function ShareRow({
   };
   return (
     <li className="share-row">
-      <div>
+      <div className="share-row-identity">
         <strong>{share.target.mode === 'latest' ? 'Latest link' : 'Pinned link'}</strong>
         <code>{share.shareId}</code>
       </div>
-      <span className={active ? 'status-pill' : 'status-pill is-muted'}>{status}</span>
+      <span className="ledger-status" data-active={active}>
+        {status}
+      </span>
       <time dateTime={share.createdAt}>{dateTime(share.createdAt)}</time>
       {active ? (
-        <button
+        <Button
           className="quiet-button danger-text"
           onClick={() => setConfirming(true)}
+          size="sm"
           type="button"
+          variant="ghost"
         >
           Revoke
-        </button>
+        </Button>
       ) : null}
       <Modal
         canClose={!busy}
@@ -512,22 +529,18 @@ function ShareRow({
         <div className="dialog-form">
           {error === undefined ? null : <p className="form-error">{error}</p>}
           <div className="dialog-actions">
-            <button
-              className="control"
-              disabled={busy}
-              onClick={() => setConfirming(false)}
-              type="button"
-            >
+            <Button disabled={busy} onClick={() => setConfirming(false)} type="button">
               Cancel
-            </button>
-            <button
-              className="control control-danger"
+            </Button>
+            <Button
               disabled={busy}
+              loading={busy}
               onClick={revoke}
               type="button"
+              variant="destructive"
             >
               {busy ? 'Revoking…' : 'Revoke link'}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -538,152 +551,309 @@ function ShareRow({
 export function ArtifactPage() {
   const payload = useLoaderData() as ArtifactDetailPayload;
   const { artifact, history } = payload;
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [renameOpen, setRenameOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [restoreRevision, setRestoreRevision] = useState<ArtifactRevision | null>(null);
+  const activePanel = inspectorPanel(searchParams.get('panel'));
   const artifactShares = useMemo(
     () => payload.shares.items.filter((share) => share.artifactId === artifact.artifactId),
     [artifact.artifactId, payload.shares.items],
   );
+  const selectPanel = (panel: InspectorPanel) => {
+    const next = new URLSearchParams(searchParams);
+    if (panel === 'history') next.delete('panel');
+    else next.set('panel', panel);
+    setSearchParams(next, { replace: true });
+  };
   const pageLink = (name: 'historyCursor' | 'shareCursor', cursor: string): string => {
     const next = new URLSearchParams(searchParams);
     next.set(name, cursor);
     return `?${next}`;
   };
+  const latest = artifact.latestRevision;
 
   return (
     <div className="dashboard-page artifact-detail">
-      <header className="artifact-heading">
-        <div className="artifact-heading-copy">
-          <Link
-            className="back-link"
-            to={`/app/w/${encodeURIComponent(artifact.workspaceId)}/artifacts`}
-          >
-            Artifacts
+      <header className="artifact-heading artifact-map-bar">
+        <nav aria-label="Artifact location" className="artifact-breadcrumbs">
+          <Link className="wordmark" to="/app">
+            shelf
           </Link>
-          <p className="eyebrow">{artifact.kind} artifact</p>
-          <h1>{artifact.name}</h1>
-          <div className="artifact-facts">
-            <span>r{artifact.latestRevision.revisionNumber}</span>
-            <span>{formatBytes(artifact.latestRevision.byteCount)}</span>
-            <span>{artifact.latestRevision.contentHash.slice(0, 19)}…</span>
-          </div>
-        </div>
+          <span aria-hidden="true">/</span>
+          <span className="artifact-workspace" title={artifact.workspaceId}>
+            {artifact.workspaceId}
+          </span>
+          <span aria-hidden="true">/</span>
+          <Link to={`/app/w/${encodeURIComponent(artifact.workspaceId)}/artifacts`}>Artifacts</Link>
+          <span aria-hidden="true">/</span>
+          <h1 title={artifact.name}>{artifact.name}</h1>
+        </nav>
         <div className="heading-actions">
-          <button className="control" onClick={() => setRenameOpen(true)} type="button">
-            Rename
-          </button>
-          <button
-            className="control control-primary"
+          <Button
+            className="artifact-share-action"
+            icon={ShareNetworkIcon}
             onClick={() => setShareOpen(true)}
+            size="sm"
             type="button"
+            variant="primary"
           >
             Share
-          </button>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={
+                <Button
+                  aria-label="Artifact actions"
+                  className="artifact-actions-trigger"
+                  icon={DotsThreeIcon}
+                  shape="square"
+                  size="sm"
+                  variant="secondary"
+                />
+              }
+            />
+            <DropdownMenu.Content align="end" className="artifact-actions-menu">
+              <DropdownMenu.Item icon={PencilSimpleIcon} onClick={() => setRenameOpen(true)}>
+                Rename
+              </DropdownMenu.Item>
+              <DropdownMenu.Item icon={LinkIcon} onClick={() => selectPanel('links')}>
+                Manage links
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item onClick={() => selectPanel('compare')}>
+                Compare revisions
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu>
         </div>
       </header>
 
-      <section className="managed-stage" aria-labelledby="preview-heading">
-        <header className="managed-stage-bar">
-          <div>
-            <span className="trust-dot" aria-hidden="true" />
-            <span id="preview-heading">User-generated content</span>
-          </div>
-          <span>{revisionLabel(artifact.latestRevision)} · latest</span>
-        </header>
-        <ManagedArtifactContent
-          artifact={artifact}
-          bytes={payload.bytes}
-          entries={payload.entries}
-        />
-      </section>
+      <Group className="artifact-workbench" id="artifact-workbench" orientation="horizontal">
+        <Panel
+          className="artifact-preview-panel"
+          defaultSize="70%"
+          id="artifact-preview"
+          minSize={480}
+        >
+          <section className="managed-stage" aria-labelledby="preview-heading">
+            <header className="managed-stage-bar">
+              <span id="preview-heading">Artifact preview</span>
+              <span>
+                r{latest.revisionNumber} · {formatBytes(latest.byteCount)} · {revisionLabel(latest)}
+              </span>
+            </header>
+            <ManagedArtifactContent
+              artifact={artifact}
+              bytes={payload.bytes}
+              entries={payload.entries}
+            />
+          </section>
+        </Panel>
 
-      <div className="artifact-management-grid">
-        <section className="utility-section revision-section">
-          <header className="section-heading">
-            <div>
-              <p className="eyebrow">Immutable history</p>
-              <h2>Revisions</h2>
-            </div>
-            <span>{history.items.length}</span>
-          </header>
-          <ol className="revision-list">
-            {history.items.map((revision) => (
-              <li key={revision.revisionId}>
-                <span className="revision-index">r{revision.revisionNumber}</span>
-                <div className="revision-copy">
-                  <strong>{revisionLabel(revision)}</strong>
-                  <span>{dateTime(revision.createdAt)}</span>
-                  <code>{revision.revisionId}</code>
-                </div>
-                {revision.revisionId === artifact.latestRevision.revisionId ? (
-                  <span className="status-pill">Latest</span>
-                ) : (
-                  <button
-                    className="quiet-button"
-                    onClick={() => setRestoreRevision(revision)}
-                    type="button"
-                  >
-                    Restore
-                  </button>
-                )}
-              </li>
-            ))}
-          </ol>
-          {history.nextCursor === null ? null : (
-            <Link
-              className="control section-page-control"
-              to={pageLink('historyCursor', history.nextCursor)}
-            >
-              Next history page
-            </Link>
-          )}
-        </section>
+        <Separator className="artifact-resize-handle" id="artifact-inspector-resize">
+          <span aria-hidden="true" />
+        </Separator>
 
-        <section className="utility-section compare-section">
-          <header className="section-heading">
-            <div>
-              <p className="eyebrow">Descriptor diff</p>
-              <h2>Compare</h2>
-            </div>
-          </header>
-          <ComparisonPanel revisions={history.items} />
-        </section>
+        <Panel
+          className="artifact-inspector-panel"
+          defaultSize={340}
+          groupResizeBehavior="preserve-pixel-size"
+          id="artifact-inspector"
+          maxSize={360}
+          minSize={300}
+        >
+          <aside aria-label="Artifact inspector" className="artifact-inspector">
+            <Tabs
+              activateOnFocus={false}
+              className="artifact-inspector-tabs"
+              onValueChange={(value) => selectPanel(inspectorPanel(value))}
+              size="sm"
+              tabs={[
+                { value: 'history', label: 'History' },
+                { value: 'details', label: 'Details' },
+                { value: 'compare', label: 'Compare' },
+                { value: 'links', label: 'Links' },
+              ]}
+              value={activePanel}
+              variant="underline"
+            />
 
-        <section className="utility-section share-section">
-          <header className="section-heading">
-            <div>
-              <p className="eyebrow">Unlisted access</p>
-              <h2>Share links</h2>
+            <div className="artifact-inspector-content">
+              {activePanel === 'history' ? (
+                <section aria-labelledby="history-panel-heading" className="inspector-section">
+                  <header className="inspector-section-heading">
+                    <div>
+                      <p className="inspector-kicker">Immutable lineage</p>
+                      <h2 id="history-panel-heading">Revision history</h2>
+                    </div>
+                    <span>{history.nextCursor === null ? 'Newest first' : 'More available'}</span>
+                  </header>
+                  <ol className="revision-list">
+                    {history.items.map((revision) => (
+                      <li className="revision-row" key={revision.revisionId}>
+                        <span className="revision-index">r{revision.revisionNumber}</span>
+                        <div className="revision-copy">
+                          <strong>{revisionLabel(revision)}</strong>
+                          <span>{dateTime(revision.createdAt)}</span>
+                          <code title={revision.revisionId}>{revision.revisionId}</code>
+                        </div>
+                        {revision.revisionId === latest.revisionId ? (
+                          <span className="ledger-status" data-active="true">
+                            Latest
+                          </span>
+                        ) : (
+                          <Button
+                            className="quiet-button"
+                            onClick={() => setRestoreRevision(revision)}
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            Restore
+                          </Button>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                  {history.nextCursor === null ? null : (
+                    <Link
+                      className="control section-page-control"
+                      to={pageLink('historyCursor', history.nextCursor)}
+                    >
+                      Next history page
+                    </Link>
+                  )}
+                </section>
+              ) : null}
+
+              {activePanel === 'details' ? (
+                <section aria-labelledby="details-panel-heading" className="inspector-section">
+                  <header className="inspector-section-heading">
+                    <div>
+                      <p className="inspector-kicker">Latest immutable state</p>
+                      <h2 id="details-panel-heading">Details</h2>
+                    </div>
+                  </header>
+                  <dl className="artifact-detail-ledger">
+                    <div>
+                      <dt>Artifact ID</dt>
+                      <dd>
+                        <ClipboardText
+                          labels={{ copyAction: 'Copy artifact ID' }}
+                          size="sm"
+                          text={artifact.artifactId}
+                        />
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Revision ID</dt>
+                      <dd>
+                        <ClipboardText
+                          labels={{ copyAction: 'Copy revision ID' }}
+                          size="sm"
+                          text={latest.revisionId}
+                        />
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Content hash</dt>
+                      <dd>
+                        <ClipboardText
+                          labels={{ copyAction: 'Copy content hash' }}
+                          size="sm"
+                          text={latest.contentHash}
+                        />
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Source</dt>
+                      <dd>{revisionLabel(latest)}</dd>
+                    </div>
+                    <div>
+                      <dt>Kind</dt>
+                      <dd>{latest.kind}</dd>
+                    </div>
+                    {latest.kind === 'file' ? (
+                      <div>
+                        <dt>Media type</dt>
+                        <dd>{latest.mediaType}</dd>
+                      </div>
+                    ) : null}
+                    <div>
+                      <dt>Size</dt>
+                      <dd>{formatBytes(latest.byteCount)}</dd>
+                    </div>
+                    <div>
+                      <dt>Files</dt>
+                      <dd>{latest.fileCount}</dd>
+                    </div>
+                    <div>
+                      <dt>Published</dt>
+                      <dd>{dateTime(latest.createdAt)}</dd>
+                    </div>
+                    <div>
+                      <dt>Provenance</dt>
+                      <dd>{latest.provenance.classification}</dd>
+                    </div>
+                  </dl>
+                </section>
+              ) : null}
+
+              {activePanel === 'compare' ? (
+                <section aria-labelledby="compare-panel-heading" className="inspector-section">
+                  <header className="inspector-section-heading">
+                    <div>
+                      <p className="inspector-kicker">Immutable descriptors</p>
+                      <h2 id="compare-panel-heading">Compare revisions</h2>
+                    </div>
+                  </header>
+                  <ComparisonPanel revisions={history.items} />
+                </section>
+              ) : null}
+
+              {activePanel === 'links' ? (
+                <section aria-labelledby="links-panel-heading" className="inspector-section">
+                  <header className="inspector-section-heading">
+                    <div>
+                      <p className="inspector-kicker">Unlisted access</p>
+                      <h2 id="links-panel-heading">Share links</h2>
+                    </div>
+                    <Button onClick={() => setShareOpen(true)} size="sm" variant="secondary">
+                      New link
+                    </Button>
+                  </header>
+                  {artifactShares.length === 0 ? (
+                    <p className="section-empty">
+                      {payload.shares.nextCursor === null
+                        ? 'No share links for this artifact.'
+                        : 'No links for this artifact on this loaded page.'}
+                    </p>
+                  ) : (
+                    <ul className="share-list">
+                      {artifactShares.map((share) => (
+                        <ShareRow
+                          key={share.shareId}
+                          share={share}
+                          workspaceId={artifact.workspaceId}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                  {payload.shares.nextCursor === null ? null : (
+                    <Link
+                      className="control section-page-control"
+                      to={pageLink('shareCursor', payload.shares.nextCursor)}
+                    >
+                      Next share page
+                    </Link>
+                  )}
+                </section>
+              ) : null}
             </div>
-            <button className="quiet-button" onClick={() => setShareOpen(true)} type="button">
-              New link
-            </button>
-          </header>
-          {artifactShares.length === 0 ? (
-            <p className="section-empty">
-              {payload.shares.nextCursor === null
-                ? 'No share links for this artifact.'
-                : 'No links for this artifact on this page.'}
-            </p>
-          ) : (
-            <ul className="share-list">
-              {artifactShares.map((share) => (
-                <ShareRow key={share.shareId} share={share} workspaceId={artifact.workspaceId} />
-              ))}
-            </ul>
-          )}
-          {payload.shares.nextCursor === null ? null : (
-            <Link
-              className="control section-page-control"
-              to={pageLink('shareCursor', payload.shares.nextCursor)}
-            >
-              Next share page
-            </Link>
-          )}
-        </section>
-      </div>
+          </aside>
+        </Panel>
+      </Group>
 
       <RenameDialog
         artifactId={artifact.artifactId}
