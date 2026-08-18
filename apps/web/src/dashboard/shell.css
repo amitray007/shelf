@@ -193,7 +193,7 @@
   width: min(100%, 1360px);
   min-width: 0;
   margin: 0 auto;
-  padding: clamp(28px, 3.5vw, 48px) clamp(20px, 4vw, 48px) 64px;
+  padding: clamp(16px, 1.75vw, 24px) clamp(20px, 4vw, 48px) 64px;
 }
 
 .page-heading,

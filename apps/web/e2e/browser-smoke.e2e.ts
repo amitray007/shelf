@@ -129,6 +129,15 @@ for (const viewport of densityViewports) {
     await page.goto(`/app/w/${workspaceId}/artifacts`);
     const applicationBar = page.getByRole('navigation', { name: 'Current location' });
     await expect(applicationBar).toBeVisible();
+    const dashboardBar = page.locator('.dashboard-bar');
+    const listPageHeading = page.locator('.page-heading');
+    const dashboardBarBox = await dashboardBar.boundingBox();
+    const listPageHeadingBox = await listPageHeading.boundingBox();
+    expect(dashboardBarBox).not.toBeNull();
+    expect(listPageHeadingBox).not.toBeNull();
+    const listTopGap =
+      (listPageHeadingBox?.y ?? 0) - ((dashboardBarBox?.y ?? 0) + (dashboardBarBox?.height ?? 0));
+    expect(listTopGap).toBeLessThanOrEqual(24);
     const listHeading = page.getByRole('heading', { level: 1, name: 'Artifacts' });
     const listHeadingSize = await listHeading.evaluate(
       (element) => getComputedStyle(element).fontSize,
@@ -151,6 +160,11 @@ for (const viewport of densityViewports) {
     expect(await detailHeading.evaluate((element) => getComputedStyle(element).fontSize)).toBe(
       listHeadingSize,
     );
+    const detailPageHeadingBox = await page.locator('.page-heading').boundingBox();
+    expect(detailPageHeadingBox).not.toBeNull();
+    const detailTopGap =
+      (detailPageHeadingBox?.y ?? 0) - ((dashboardBarBox?.y ?? 0) + (dashboardBarBox?.height ?? 0));
+    expect(detailTopGap).toBeCloseTo(listTopGap, 1);
     if (viewport.width > 900) {
       expect(
         await page.locator('.artifact-workbench').evaluate((element) => element.clientHeight),

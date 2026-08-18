@@ -499,10 +499,6 @@
 }
 
 @media (max-width: 900px) {
-  .artifact-detail {
-    padding-top: 8px;
-  }
-
   .artifact-workbench {
     display: block !important;
     height: auto !important;
