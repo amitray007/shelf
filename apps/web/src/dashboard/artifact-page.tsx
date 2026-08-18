@@ -335,10 +335,7 @@ export function ArtifactPage() {
     [artifact.artifactId, payload.shares.items],
   );
   const metadataEntries = useMemo(() => {
-    const priority: readonly string[] = [
-      PUBLISHER_METADATA_KEYS.title,
-      PUBLISHER_METADATA_KEYS.description,
-    ];
+    const priority: readonly string[] = Object.values(PUBLISHER_METADATA_KEYS);
     return Object.entries(viewedRevision.publisherMetadata).sort(([left], [right]) => {
       const leftPriority = priority.indexOf(left);
       const rightPriority = priority.indexOf(right);

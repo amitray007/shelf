@@ -56,12 +56,22 @@ describe('managed dashboard status', () => {
   });
 
   it('formats Protected session use without implying Public viewer tracking', () => {
-    expect(shareSessionUsage({ accessType: 'protected', maxSessions: null, sessionsUsed: 4 })).toBe(
-      'Unlimited · 4 established',
-    );
-    expect(shareSessionUsage({ accessType: 'protected', maxSessions: 5, sessionsUsed: 2 })).toBe(
-      '2 of 5 used · 3 remaining',
-    );
+    expect(
+      shareSessionUsage({
+        accessType: 'protected',
+        maxSessions: null,
+        sessionsUsed: 4,
+        sessionsRemaining: null,
+      }),
+    ).toBe('Unlimited · 4 established');
+    expect(
+      shareSessionUsage({
+        accessType: 'protected',
+        maxSessions: 5,
+        sessionsUsed: 2,
+        sessionsRemaining: 3,
+      }),
+    ).toBe('2 of 5 used · 3 remaining');
     expect(shareSessionUsage({ accessType: 'public' })).toBeNull();
   });
 

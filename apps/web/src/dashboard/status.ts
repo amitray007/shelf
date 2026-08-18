@@ -1,20 +1,13 @@
-import type { ShareCreateInput, ShareExpiryPreset, ShareLifecycleStatus } from '@shelf/contracts';
+import {
+  SHARE_EXPIRY_DURATION_MS,
+  type ShareCreateInput,
+  type ShareExpiryPreset,
+  type ShareLifecycleStatus,
+} from '@shelf/contracts';
 import { useEffect, useState } from 'react';
 
 export type ManagedStatus = 'Active' | 'Session limit reached' | 'Expired' | 'Revoked';
 export type ShareExpiryChoice = 'never' | ShareExpiryPreset | 'custom';
-
-const expiryDurationMs: Record<ShareExpiryPreset, number> = {
-  '5m': 5 * 60 * 1_000,
-  '30m': 30 * 60 * 1_000,
-  '2hr': 2 * 60 * 60 * 1_000,
-  '6hr': 6 * 60 * 60 * 1_000,
-  '24hr': 24 * 60 * 60 * 1_000,
-  '3d': 3 * 24 * 60 * 60 * 1_000,
-  '7d': 7 * 24 * 60 * 60 * 1_000,
-  '15d': 15 * 24 * 60 * 60 * 1_000,
-  '30d': 30 * 24 * 60 * 60 * 1_000,
-};
 
 export type ResolvedShareExpiry =
   | { expiresIn: 'never' }
@@ -55,7 +48,7 @@ export function resolveShareExpiry(
   if (choice !== 'custom') {
     return {
       expiresIn: choice,
-      previewAt: new Date(now.getTime() + expiryDurationMs[choice]).toISOString(),
+      previewAt: new Date(now.getTime() + SHARE_EXPIRY_DURATION_MS[choice]).toISOString(),
     };
   }
   if (customValue === '') return { error: 'Choose an expiry.' };
@@ -63,7 +56,10 @@ export function resolveShareExpiry(
   if (!Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= now.getTime()) {
     return { error: 'Choose a future expiry.' };
   }
-  if (accessType === 'public' && expiresAt.getTime() - now.getTime() > expiryDurationMs['30d']) {
+  if (
+    accessType === 'public' &&
+    expiresAt.getTime() - now.getTime() > SHARE_EXPIRY_DURATION_MS['30d']
+  ) {
     return { error: 'Public links must expire within 30 days.' };
   }
   return { expiresAt: expiresAt.toISOString(), previewAt: expiresAt.toISOString() };
@@ -72,11 +68,16 @@ export function resolveShareExpiry(
 export function shareSessionUsage(
   share:
     | { accessType: 'public' }
-    | { accessType: 'protected'; maxSessions: number | null; sessionsUsed: number },
+    | {
+        accessType: 'protected';
+        maxSessions: number | null;
+        sessionsUsed: number;
+        sessionsRemaining: number | null;
+      },
 ): string | null {
   if (share.accessType === 'public') return null;
   if (share.maxSessions === null) return `Unlimited · ${share.sessionsUsed} established`;
-  return `${share.sessionsUsed} of ${share.maxSessions} used · ${Math.max(0, share.maxSessions - share.sessionsUsed)} remaining`;
+  return `${share.sessionsUsed} of ${share.maxSessions} used · ${share.sessionsRemaining ?? 0} remaining`;
 }
 
 export function buildShareCreateInput(

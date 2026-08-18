@@ -9,7 +9,6 @@ import {
   protectedViewerTokenStorageKey,
   readOrCreateProtectedSessionId,
   saveProtectedSessionAuthority,
-  shareIdFromViewerPath,
   shareReferenceFromViewerPath,
 } from '../src/capability.js';
 
@@ -91,12 +90,6 @@ describe('share capability capture', () => {
     expect(isShareCapability(SECRET)).toBe(true);
     expect(isShareCapability('A'.repeat(31))).toBe(false);
     expect(isShareCapability(`${'A'.repeat(31)}+`)).toBe(false);
-  });
-
-  it('extracts a share id only from the anonymous viewer route', () => {
-    expect(shareIdFromViewerPath(`/s/${SHARE_ID}`)).toBe(SHARE_ID);
-    expect(shareIdFromViewerPath(`/s/${SHARE_ID}/`)).toBe(SHARE_ID);
-    expect(shareIdFromViewerPath(`/dashboard/s/${SHARE_ID}`)).toBeNull();
   });
 
   it('parses the complete legacy grammar before the exact Public selector grammar', () => {

@@ -30,8 +30,8 @@ export function ArtifactShareDialog({
   const [error, setError] = useState<string>();
   const [retry, setRetry] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retry is an explicit reload trigger.
   useEffect(() => {
-    void retry;
     if (!open || creating) return;
     const controller = new AbortController();
     setLoading(true);

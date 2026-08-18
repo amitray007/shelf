@@ -4,7 +4,11 @@ import { Checkbox } from '@cloudflare/kumo/components/checkbox';
 import { Input } from '@cloudflare/kumo/components/input';
 import { Radio } from '@cloudflare/kumo/components/radio';
 import { Select } from '@cloudflare/kumo/components/select';
-import type { ArtifactRevision, ShareExpiryPreset } from '@shelf/contracts';
+import {
+  type ArtifactRevision,
+  PROTECTED_SHARE_EXPIRY_OPTIONS,
+  PUBLIC_SHARE_EXPIRY_OPTIONS,
+} from '@shelf/contracts';
 import { type FormEvent, useRef, useState } from 'react';
 import { useRevalidator } from 'react-router';
 
@@ -18,17 +22,6 @@ import {
   type ShareExpiryChoice,
 } from './status.js';
 
-const expiryPresets: readonly ShareExpiryPreset[] = [
-  '5m',
-  '30m',
-  '2hr',
-  '6hr',
-  '24hr',
-  '3d',
-  '7d',
-  '15d',
-  '30d',
-];
 const expiryLabels: Record<ShareExpiryChoice, string> = {
   never: 'Never',
   '5m': '5 minutes',
@@ -147,9 +140,7 @@ export function ShareDialog({
     }
   };
   const options: readonly ShareExpiryChoice[] =
-    accessType === 'protected'
-      ? ['never', ...expiryPresets, 'custom']
-      : [...expiryPresets, 'custom'];
+    accessType === 'protected' ? PROTECTED_SHARE_EXPIRY_OPTIONS : PUBLIC_SHARE_EXPIRY_OPTIONS;
   return (
     <Modal
       canClose={!busy}

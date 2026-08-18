@@ -29,16 +29,17 @@ async function readExactUtf8(
   maximumBytes: number,
 ): Promise<string | undefined> {
   if (expectedBytes < 0 || expectedBytes > maximumBytes) return undefined;
-  const chunks: Uint8Array[] = [];
+  const bytes = new Uint8Array(expectedBytes);
   let byteCount = 0;
   for await (const chunk of content) {
-    byteCount += chunk.byteLength;
-    if (byteCount > expectedBytes || byteCount > maximumBytes) return undefined;
-    chunks.push(chunk);
+    const nextByteCount = byteCount + chunk.byteLength;
+    if (nextByteCount > expectedBytes || nextByteCount > maximumBytes) return undefined;
+    bytes.set(chunk, byteCount);
+    byteCount = nextByteCount;
   }
   if (byteCount !== expectedBytes) return undefined;
   try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
     return undefined;
   }

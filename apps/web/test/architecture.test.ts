@@ -48,13 +48,14 @@ describe('anonymous viewer architecture', () => {
     expect(source).toContain('readyRef.current');
   });
 
-  it('streams download-only content through a user-initiated transient POST', async () => {
+  it('streams downloads through the access-type-specific anonymous route', async () => {
     const source = await readFile(
       path.resolve(import.meta.dirname, '../src/components/artifact-content.tsx'),
       'utf8',
     );
-    expect(source).toContain("form.method = 'post'");
-    expect(source).toContain("input.name = 'secret'");
+    expect(source).toContain("authority.accessType === 'protected' ? 'post' : 'get'");
+    expect(source).toContain("input.name = 'token'");
+    expect(source).not.toContain("input.name = 'secret'");
     expect(source).toContain('form.remove()');
     expect(source).not.toContain('URL.createObjectURL');
   });

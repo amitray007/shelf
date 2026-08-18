@@ -17,11 +17,19 @@ export const SHARE_EXPIRY_PRESETS = [
   '30d',
 ] as const;
 
-export const PROTECTED_SHARE_EXPIRY_OPTIONS = [
-  'never',
-  ...SHARE_EXPIRY_PRESETS,
-  'custom',
-] as const;
+export const SHARE_EXPIRY_DURATION_MS = {
+  '5m': 5 * 60 * 1_000,
+  '30m': 30 * 60 * 1_000,
+  '2hr': 2 * 60 * 60 * 1_000,
+  '6hr': 6 * 60 * 60 * 1_000,
+  '24hr': 24 * 60 * 60 * 1_000,
+  '3d': 3 * 24 * 60 * 60 * 1_000,
+  '7d': 7 * 24 * 60 * 60 * 1_000,
+  '15d': 15 * 24 * 60 * 60 * 1_000,
+  '30d': 30 * 24 * 60 * 60 * 1_000,
+} as const;
+
+export const PROTECTED_SHARE_EXPIRY_OPTIONS = ['never', ...SHARE_EXPIRY_PRESETS, 'custom'] as const;
 export const PUBLIC_SHARE_EXPIRY_OPTIONS = [...SHARE_EXPIRY_PRESETS, 'custom'] as const;
 
 export const SHARE_SESSION_LIMITS = {
@@ -371,10 +379,7 @@ export const PublicFileShareResolutionSchema = Type.Union([
       ...ProtectedResolutionFields,
       artifact: FileArtifactSchema,
       revision: FileRevisionSchema,
-      action: resolutionAction(
-        'content',
-        '^/api/v1/public/shares/shr_[A-Za-z0-9_-]{22}/content$',
-      ),
+      action: resolutionAction('content', '^/api/v1/public/shares/shr_[A-Za-z0-9_-]{22}/content$'),
     },
     { additionalProperties: false },
   ),

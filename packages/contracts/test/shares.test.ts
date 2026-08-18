@@ -197,12 +197,10 @@ describe('share contracts', () => {
         sessionsRemaining: null,
       }),
     ).toBe(true);
-    expect(
-      Check(ShareManagementSummarySchema, { ...summary, maxSessions: null }),
-    ).toBe(false);
-    expect(
-      Check(ShareManagementSummarySchema, { ...summary, sessionsRemaining: null }),
-    ).toBe(false);
+    expect(Check(ShareManagementSummarySchema, { ...summary, maxSessions: null })).toBe(false);
+    expect(Check(ShareManagementSummarySchema, { ...summary, sessionsRemaining: null })).toBe(
+      false,
+    );
     expect(
       Check(ShareManagementSummarySchema, { ...summary, status: 'session-limit-reached' }),
     ).toBe(true);
@@ -227,7 +225,9 @@ describe('share contracts', () => {
 
     expect(Check(ShareManagementSummarySchema, valid)).toBe(true);
     expect(Check(ShareManagementSummarySchema, { ...valid, publicCode: 'too-short' })).toBe(false);
-    expect(Check(ShareManagementSummarySchema, { ...valid, publicCode: 'AbCdEf0123+/' })).toBe(false);
+    expect(Check(ShareManagementSummarySchema, { ...valid, publicCode: 'AbCdEf0123+/' })).toBe(
+      false,
+    );
     expect(Check(ShareManagementSummarySchema, { ...valid, url: `/s/${publicCode}#secret` })).toBe(
       false,
     );

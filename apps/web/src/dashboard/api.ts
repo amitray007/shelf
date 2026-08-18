@@ -221,13 +221,8 @@ export async function loadLatestActiveArtifactShare(
   const visited = new Set<string>();
   do {
     const page = await loadWorkspaceShares(workspaceId, cursor, signal);
-    const now = Date.now();
     const share = page.items.find(
-      (candidate) =>
-        candidate.artifactId === artifactId &&
-        candidate.status === 'active' &&
-        candidate.revokedAt === null &&
-        (candidate.expiresAt === null || new Date(candidate.expiresAt).getTime() > now),
+      (candidate) => candidate.artifactId === artifactId && candidate.status === 'active',
     );
     if (share !== undefined) return share;
     cursor = page.nextCursor ?? undefined;

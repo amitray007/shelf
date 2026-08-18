@@ -1,3 +1,5 @@
+import type { ProtectedSessionAuthority } from '@shelf/contracts';
+
 const SHARE_ID_PATTERN = /^shr_[A-Za-z0-9_-]{22}$/;
 const PUBLIC_CODE_PATTERN = /^[A-Za-z0-9_-]{12}$/;
 const CAPABILITY_PATTERN = /^[A-Za-z0-9_-]{32,128}$/;
@@ -6,15 +8,6 @@ const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]
 export type ViewerShareReference =
   | { readonly accessType: 'protected'; readonly shareId: string }
   | { readonly accessType: 'public'; readonly publicCode: string };
-
-export interface ProtectedSessionAuthority {
-  readonly apiVersion: 'v1';
-  readonly shareId: string;
-  readonly sessionId: string;
-  readonly token: string;
-  readonly issuedAt: string;
-  readonly expiresAt: string;
-}
 
 interface CapabilityLocation {
   readonly hash: string;
@@ -48,11 +41,6 @@ export function isPublicCode(value: string): boolean {
 
 export function isProtectedSessionId(value: string): boolean {
   return SESSION_ID_PATTERN.test(value);
-}
-
-export function shareIdFromViewerPath(pathname: string): string | null {
-  const match = /^\/s\/(shr_[A-Za-z0-9_-]{22})\/?$/.exec(pathname);
-  return match?.[1] ?? null;
 }
 
 export function shareReferenceFromViewerPath(pathname: string): ViewerShareReference | null {
