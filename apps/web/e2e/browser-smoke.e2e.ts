@@ -314,6 +314,15 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
 
   await page.getByRole('link', { name: 'Artifacts', exact: true }).click();
   await page.getByRole('button', { name: /Workspace menu/u }).click();
+  await page.getByRole('menuitem', { name: 'New workspace' }).click();
+  const createWorkspace = page.getByRole('dialog', { name: 'New workspace' });
+  await createWorkspace.getByRole('textbox', { name: 'Workspace ID' }).fill('workspace-work');
+  await createWorkspace.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Artifacts' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Workspace menu, workspace-work/u })).toBeVisible();
+  await expect(page.getByText('Nothing here yet')).toBeVisible();
+
+  await page.getByRole('button', { name: /Workspace menu/u }).click();
   await page.getByRole('menuitem', { name: 'Access' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Access' })).toBeVisible();
   const issue = page.locator('.page-heading').getByRole('button', { name: 'Issue credential' });

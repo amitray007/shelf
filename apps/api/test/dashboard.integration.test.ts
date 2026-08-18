@@ -45,6 +45,10 @@ function accessService(): DashboardAccessService {
       revoked: true as const,
       alreadyRevoked: false,
     })),
+    createWorkspace: vi.fn(async (input) => ({
+      workspaceId: input.workspaceId,
+      actions: ['file.publish', 'revision.read'] as const,
+    })),
   };
 }
 
@@ -72,6 +76,15 @@ describe('dashboard HTTP API', () => {
     expect(
       (await anonymous.app.inject({ method: 'GET', url: '/api/v1/dashboard/session' })).statusCode,
     ).toBe(401);
+    expect(
+      (
+        await anonymous.app.inject({
+          method: 'POST',
+          url: '/api/v1/workspaces',
+          payload: { workspaceId: 'workspace-work' },
+        })
+      ).statusCode,
+    ).toBe(401);
 
     const bearer = await fixture({
       installationId: 'installation-main',
@@ -90,6 +103,11 @@ describe('dashboard HTTP API', () => {
         },
       },
       { method: 'DELETE' as const, url: `/api/v1/access-credentials/crd_${'a'.repeat(22)}` },
+      {
+        method: 'POST' as const,
+        url: '/api/v1/workspaces',
+        payload: { workspaceId: 'workspace-work' },
+      },
     ]) {
       const response = await bearer.app.inject(request);
       expect(response.statusCode).toBe(403);
@@ -98,6 +116,7 @@ describe('dashboard HTTP API', () => {
     expect(bearer.dashboardAccess.issue).not.toHaveBeenCalled();
     expect(bearer.dashboardAccess.list).not.toHaveBeenCalled();
     expect(bearer.dashboardAccess.revoke).not.toHaveBeenCalled();
+    expect(bearer.dashboardAccess.createWorkspace).not.toHaveBeenCalled();
   });
 
   it('discovers workspaces and manages credentials with no-store responses', async () => {
@@ -113,6 +132,23 @@ describe('dashboard HTTP API', () => {
       apiVersion: 'v1',
       actorId: 'act_owner',
       workspaces: [{ workspaceId: 'workspace-main', actions: ['file.publish', 'revision.read'] }],
+    });
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/workspaces',
+      payload: { workspaceId: 'workspace-work' },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toEqual({
+      apiVersion: 'v1',
+      workspaceId: 'workspace-work',
+      actions: ['file.publish', 'revision.read'],
+    });
+    expect(dashboardAccess.createWorkspace).toHaveBeenCalledWith({
+      installationId: 'installation-main',
+      actorId: 'act_owner',
+      workspaceId: 'workspace-work',
     });
 
     const issued = await app.inject({

@@ -24,6 +24,9 @@ beforeAll(async () => {
       async revoke() {
         throw new Error('OpenAPI fixture does not revoke credentials.');
       },
+      async createWorkspace() {
+        throw new Error('OpenAPI fixture does not create workspaces.');
+      },
     },
   });
 });
@@ -201,6 +204,11 @@ describe('OpenAPI v1', () => {
       ['paths', '/api/v1/access-credentials/{credentialId}', 'delete', 'operationId'],
       'revokeDashboardCredentialV1',
     );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/workspaces', 'post', 'operationId'],
+      'createWorkspaceV1',
+    );
+    expect(document.paths?.['/api/v1/workspaces']?.post?.security).toEqual([{ cookieAuth: [] }]);
     for (const [path, method] of [
       ['/api/v1/workspaces/{workspaceId}/artifacts', 'get'],
       ['/api/v1/artifacts/{artifactId}', 'get'],

@@ -40,6 +40,19 @@ function fixture(overrides: Partial<CredentialAdministrationRepository> = {}) {
     async findInstallationCredential(_installationId, credentialId) {
       return credentialId === active.credentialId ? active : undefined;
     },
+    async createOwnedWorkspace(input) {
+      return {
+        workspaceId: input.workspaceId,
+        actions: ['file.publish', 'revision.read'],
+      };
+    },
+    async workspaceExists() {
+      return true;
+    },
+    async grantOwnerAction() {},
+    async hasGrant() {
+      return true;
+    },
     ...overrides,
   };
   const credentials: AccessCredentialService = {
@@ -69,6 +82,32 @@ describe('dashboard access service', () => {
       actorId: 'act_owner',
       workspaces: [{ workspaceId: 'workspace-main', actions: ['file.publish', 'revision.read'] }],
     });
+  });
+
+  it('creates a workspace only when the identifier is durable', async () => {
+    const created = vi.fn(async (input: { workspaceId: string }) => ({
+      workspaceId: input.workspaceId,
+      actions: ['file.publish', 'revision.read'] as const,
+    }));
+    const { service } = fixture({ createOwnedWorkspace: created });
+    await expect(
+      service.createWorkspace({
+        installationId: 'installation-main',
+        actorId: 'act_owner',
+        workspaceId: 'workspace-work',
+      }),
+    ).resolves.toEqual({
+      workspaceId: 'workspace-work',
+      actions: ['file.publish', 'revision.read'],
+    });
+    await expect(
+      service.createWorkspace({
+        installationId: 'installation-main',
+        actorId: 'act_owner',
+        workspaceId: 'workspace/work',
+      }),
+    ).rejects.toThrow('workspace ID is invalid');
+    expect(created).toHaveBeenCalledTimes(1);
   });
 
   it('issues only grants already held by the human actor', async () => {

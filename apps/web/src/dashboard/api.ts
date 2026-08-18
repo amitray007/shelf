@@ -23,11 +23,13 @@ import {
   isRevisionComparison,
   isShareCreateResult,
   isSharePage,
+  isWorkspaceCreateResult,
   type RestoreResult,
   type RevisionComparison,
   type ShareCreateResult,
   type SharePage,
   type ShareTarget,
+  type WorkspaceCreateResult,
 } from '@shelf/contracts';
 
 export class DashboardAuthenticationError extends Error {
@@ -123,6 +125,14 @@ export async function signIn(email: string, password: string): Promise<void> {
 export async function signOut(): Promise<void> {
   const response = await dashboardFetch('/api/auth/sign-out', requestOptions({ method: 'POST' }));
   if (!response.ok) throw new DashboardApiError('SIGN_OUT_FAILED', 'Sign out failed.');
+}
+
+export async function createWorkspace(workspaceId: string): Promise<WorkspaceCreateResult> {
+  const value = await requestJson('/api/v1/workspaces', jsonRequest('POST', { workspaceId }));
+  if (!isWorkspaceCreateResult(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
+  }
+  return value;
 }
 
 export async function loadDashboardSession(signal?: AbortSignal): Promise<DashboardSession> {

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createArtifactShare,
   createDashboardCredential,
+  createWorkspace,
   DashboardApiError,
   DashboardAuthenticationError,
   deleteArtifact,
@@ -43,6 +44,29 @@ describe('dashboard API client', () => {
     expect(fetch).toHaveBeenCalledWith(
       '/api/v1/dashboard/session',
       expect.objectContaining({ cache: 'no-store', credentials: 'same-origin' }),
+    );
+  });
+
+  it('creates a workspace through the owner session API', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      json(
+        {
+          apiVersion: 'v1',
+          workspaceId: 'workspace-work',
+          actions: ['file.publish', 'revision.read'],
+        },
+        201,
+      ),
+    );
+    globalThis.fetch = fetch;
+    await expect(createWorkspace('workspace-work')).resolves.toEqual({
+      apiVersion: 'v1',
+      workspaceId: 'workspace-work',
+      actions: ['file.publish', 'revision.read'],
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/v1/workspaces',
+      expect.objectContaining({ method: 'POST', credentials: 'same-origin' }),
     );
   });
 

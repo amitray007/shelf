@@ -387,6 +387,7 @@
                   "REVISION_NOT_FOUND",
                   "SHARE_NOT_FOUND",
                   "ACCESS_CREDENTIAL_NOT_FOUND",
+                  "WORKSPACE_ALREADY_EXISTS",
                   "RANGE_NOT_SATISFIABLE",
                   "MULTI_RANGE_UNSUPPORTED",
                   "REQUEST_CANCELLED",
@@ -450,6 +451,7 @@
           "REVISION_NOT_FOUND",
           "SHARE_NOT_FOUND",
           "ACCESS_CREDENTIAL_NOT_FOUND",
+          "WORKSPACE_ALREADY_EXISTS",
           "RANGE_NOT_SATISFIABLE",
           "MULTI_RANGE_UNSUPPORTED",
           "REQUEST_CANCELLED",
@@ -2111,6 +2113,42 @@
         },
         "additionalProperties": false,
         "title": "DashboardCredentialRevoke"
+      },
+      "def-16": {
+        "type": "object",
+        "required": ["apiVersion", "workspaceId", "actions"],
+        "properties": {
+          "apiVersion": {
+            "type": "string",
+            "enum": ["v1"]
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["file.publish"]
+                },
+                {
+                  "type": "string",
+                  "enum": ["revision.read"]
+                }
+              ]
+            },
+            "minItems": 2,
+            "maxItems": 2,
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false,
+        "title": "WorkspaceCreateResult"
       }
     }
   },
@@ -7519,6 +7557,110 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/def-12"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces": {
+      "post": {
+        "operationId": "createWorkspaceV1",
+        "summary": "Create an isolated workspace and grant the owner publish and read actions",
+        "tags": ["dashboard"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["workspaceId"],
+                "properties": {
+                  "workspaceId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-16"
                 }
               }
             }

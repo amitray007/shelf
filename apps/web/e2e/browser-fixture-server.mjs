@@ -30,6 +30,7 @@ const artifactsById = new Map(
 );
 const historiesByArtifactId = new Map(historyPages.map((page) => [page.artifactId, page]));
 const deletedArtifacts = new Set();
+const createdWorkspaces = new Set();
 const latestFilesByRevisionId = new Map(
   artifactPage.items.flatMap((artifact) =>
     artifact.latestRevision.kind === 'file'
@@ -104,7 +105,46 @@ async function api(request, response, url) {
       response.end('Authentication required.');
       return;
     }
-    json(response, 200, dashboardSession);
+    json(response, 200, {
+      ...dashboardSession,
+      workspaces: [
+        ...dashboardSession.workspaces,
+        ...[...createdWorkspaces].map((createdWorkspaceId) => ({
+          workspaceId: createdWorkspaceId,
+          actions: ['file.publish', 'revision.read'],
+        })),
+      ],
+    });
+    return;
+  }
+  if (request.method === 'POST' && path === '/api/v1/workspaces') {
+    const value = JSON.parse(await body(request));
+    if (
+      typeof value.workspaceId !== 'string' ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(value.workspaceId)
+    ) {
+      json(response, 400, {
+        apiVersion: 'v1',
+        error: { code: 'INVALID_REQUEST', message: 'The workspace ID is invalid.' },
+      });
+      return;
+    }
+    if (value.workspaceId === workspaceId || createdWorkspaces.has(value.workspaceId)) {
+      json(response, 409, {
+        apiVersion: 'v1',
+        error: {
+          code: 'WORKSPACE_ALREADY_EXISTS',
+          message: 'A workspace with this ID already exists.',
+        },
+      });
+      return;
+    }
+    createdWorkspaces.add(value.workspaceId);
+    json(response, 201, {
+      apiVersion: 'v1',
+      workspaceId: value.workspaceId,
+      actions: ['file.publish', 'revision.read'],
+    });
     return;
   }
   if (path === `/api/v1/workspaces/${workspaceId}/artifacts`) {
@@ -114,6 +154,11 @@ async function api(request, response, url) {
         (artifact) => !deletedArtifacts.has(deletedArtifactKey(request, artifact.artifactId)),
       ),
     });
+    return;
+  }
+  const createdWorkspaceArtifacts = /^\/api\/v1\/workspaces\/([^/]+)\/artifacts$/u.exec(path);
+  if (createdWorkspaceArtifacts !== null && createdWorkspaces.has(createdWorkspaceArtifacts[1])) {
+    json(response, 200, { apiVersion: 'v1', items: [], nextCursor: null });
     return;
   }
   const recoveryMatch = /^\/api\/v1\/artifacts\/(art_[A-Za-z0-9_-]{22})\/recovery$/u.exec(path);

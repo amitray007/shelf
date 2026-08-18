@@ -1,6 +1,7 @@
 import { Button } from '@cloudflare/kumo/components/button';
 import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
 import { KeyIcon } from '@phosphor-icons/react/Key';
+import { PlusIcon } from '@phosphor-icons/react/Plus';
 import { SignOutIcon } from '@phosphor-icons/react/SignOut';
 import { StackIcon } from '@phosphor-icons/react/Stack';
 import type { DashboardSession } from '@shelf/contracts';
@@ -13,10 +14,12 @@ import {
   useLocation,
   useNavigate,
   useParams,
+  useRevalidator,
   useRouteError,
 } from 'react-router';
 
 import { signOut } from './api.js';
+import { CreateWorkspaceDialog } from './workspace-dialog.js';
 import './shell.css';
 import './responsive.css';
 
@@ -25,6 +28,8 @@ export function DashboardLayout() {
   const params = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
+  const [createOpen, setCreateOpen] = useState(false);
   const [signOutFailed, setSignOutFailed] = useState(false);
   const readableWorkspaces = session.workspaces.filter((workspace) =>
     workspace.actions.includes('revision.read'),
@@ -40,6 +45,11 @@ export function DashboardLayout() {
 
   const changeWorkspace = (workspaceId: string) => {
     void navigate(`/app/w/${encodeURIComponent(workspaceId)}/artifacts`);
+  };
+  const createdWorkspace = (workspaceId: string) => {
+    setCreateOpen(false);
+    void revalidator.revalidate();
+    changeWorkspace(workspaceId);
   };
   const leave = async () => {
     setSignOutFailed(false);
@@ -96,6 +106,9 @@ export function DashboardLayout() {
                   </DropdownMenu.Group>
                 )}
                 <DropdownMenu.Separator />
+                <DropdownMenu.Item icon={PlusIcon} onClick={() => setCreateOpen(true)}>
+                  New workspace
+                </DropdownMenu.Item>
                 <DropdownMenu.Item icon={KeyIcon} onClick={() => void navigate('/app/access')}>
                   Access
                 </DropdownMenu.Item>
@@ -125,6 +138,11 @@ export function DashboardLayout() {
       <main className="dashboard-main" key={location.pathname}>
         <Outlet />
       </main>
+      <CreateWorkspaceDialog
+        onCreated={createdWorkspace}
+        onOpenChange={setCreateOpen}
+        open={createOpen}
+      />
     </div>
   );
 }

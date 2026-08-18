@@ -3,9 +3,14 @@ import {
   type DashboardAccessService,
   DashboardGrantDeniedError,
   InvalidCredentialPageError,
+  InvalidWorkspaceIdError,
   type ManagedAccessCredentialSummary,
+  WorkspaceAlreadyExistsError,
 } from '@shelf/auth';
-import { DashboardCredentialIssueRequestSchema } from '@shelf/contracts';
+import {
+  DashboardCredentialIssueRequestSchema,
+  WorkspaceCreateRequestSchema,
+} from '@shelf/contracts';
 import { AuthorizationDeniedError, ShelfCoreError } from '@shelf/core';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { Type } from 'typebox';
@@ -55,6 +60,22 @@ function summary(value: ManagedAccessCredentialSummary) {
 }
 
 function mapDashboardError(error: unknown): never {
+  if (error instanceof InvalidWorkspaceIdError) {
+    throw new ShelfCoreError('INVALID_REQUEST', 'The workspace ID is invalid.', {
+      retryable: false,
+      details: [{ field: 'workspaceId', reason: 'invalid' }],
+    });
+  }
+  if (error instanceof WorkspaceAlreadyExistsError) {
+    throw new ShelfCoreError(
+      'WORKSPACE_ALREADY_EXISTS',
+      'A workspace with this ID already exists.',
+      {
+        retryable: false,
+        details: [{ field: 'workspaceId', reason: 'duplicate' }],
+      },
+    );
+  }
   if (error instanceof DashboardGrantDeniedError) throw new AuthorizationDeniedError();
   if (error instanceof InvalidCredentialPageError) {
     throw new ShelfCoreError('INVALID_REQUEST', 'The credential page cursor is invalid.', {
@@ -107,6 +128,37 @@ export function registerDashboardRoutes(
         actorId: identity.actorId,
       });
       return { apiVersion: 'v1' as const, ...session };
+    },
+  );
+
+  app.post(
+    '/api/v1/workspaces',
+    {
+      schema: {
+        operationId: 'createWorkspaceV1',
+        summary: 'Create an isolated workspace and grant the owner publish and read actions',
+        security: [{ cookieAuth: [] }],
+        tags: ['dashboard'],
+        body: WorkspaceCreateRequestSchema,
+        response: { 201: Type.Ref('WorkspaceCreateResult'), ...errors },
+      },
+    },
+    async (request, reply) => {
+      noStore(reply);
+      const identity = await authenticateHumanSession(request, dependencies.authenticator);
+      const body = request.body as { workspaceId: string };
+      try {
+        return reply.status(201).send({
+          apiVersion: 'v1',
+          ...(await dependencies.access.createWorkspace({
+            installationId: identity.installationId,
+            actorId: identity.actorId,
+            workspaceId: body.workspaceId,
+          })),
+        });
+      } catch (error) {
+        mapDashboardError(error);
+      }
     },
   );
 

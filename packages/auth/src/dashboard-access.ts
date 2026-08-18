@@ -3,6 +3,7 @@ import type {
   DashboardCredentialGrant,
   DashboardWorkspace,
 } from '@shelf/contracts';
+import { isWorkspaceId } from '@shelf/contracts';
 
 import {
   AccessCredentialNotFoundError,
@@ -10,13 +11,14 @@ import {
   type AccessCredentialSummary,
   type CredentialGrant,
 } from './access-credentials.js';
+import { InvalidWorkspaceIdError, type WorkspaceAdministrationRepository } from './workspaces.js';
 
 export interface ManagedAccessCredentialSummary extends AccessCredentialSummary {
   actorName: string;
   grants: DashboardCredentialGrant[];
 }
 
-export interface CredentialAdministrationRepository {
+export interface CredentialAdministrationRepository extends WorkspaceAdministrationRepository {
   listActorGrants(input: { installationId: string; actorId: string }): Promise<CredentialGrant[]>;
   listInstallationCredentialPage(input: {
     installationId: string;
@@ -106,6 +108,19 @@ export function createDashboardAccessService(options: {
         limit: input.limit,
         ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
       });
+    },
+
+    async createWorkspace(input: {
+      installationId: string;
+      actorId: string;
+      workspaceId: string;
+    }): Promise<{ workspaceId: string; actions: DashboardCredentialAction[] }> {
+      if (!isWorkspaceId(input.workspaceId)) throw new InvalidWorkspaceIdError();
+      const created = await options.repository.createOwnedWorkspace({
+        ...input,
+        createdAt: new Date(),
+      });
+      return { workspaceId: created.workspaceId, actions: [...created.actions] };
     },
 
     async revoke(input: {

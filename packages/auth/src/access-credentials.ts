@@ -80,7 +80,8 @@ export type AuthEventType =
   | 'human-actor.created'
   | 'access-credential.issued'
   | 'access-credential.rotated'
-  | 'access-credential.revoked';
+  | 'access-credential.revoked'
+  | 'workspace.created';
 
 export interface AuthEvent {
   eventType: AuthEventType;

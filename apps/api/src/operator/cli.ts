@@ -164,6 +164,26 @@ export async function runShelfAdmin(
         }
       },
     );
+  owner
+    .command('grant')
+    .requiredOption('--workspace <workspace-id>')
+    .requiredOption('--action <action>', 'repeatable workspace action', collect, [])
+    .action(async (options: { workspace: string; action: string[] }) => {
+      const parsed = grants(options.action.map((action) => `${options.workspace}:${action}`));
+      result = {
+        grants: await Promise.all(
+          parsed.map((grant) => withOperator(runtime.env, (service) => service.grantOwner(grant))),
+        ),
+      };
+    });
+
+  const workspace = program.command('workspace');
+  workspace
+    .command('create')
+    .requiredOption('--id <workspace-id>')
+    .action(async (options: { id: string }) => {
+      result = await withOperator(runtime.env, (service) => service.createWorkspace(options.id));
+    });
 
   const credential = program.command('credential');
   credential

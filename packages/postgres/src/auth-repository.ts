@@ -11,14 +11,35 @@ import {
   type HumanActorIdentity,
   InvalidCredentialPageError,
   type ManagedAccessCredentialSummary,
+  OWNER_WORKSPACE_ACTIONS,
   type RevokeCredentialInput,
   type RotatedCredentialActor,
+  WorkspaceAlreadyExistsError,
 } from '@shelf/auth';
 import { sql, type Transaction } from 'kysely';
 
 import type { ShelfPostgresDatabase, ShelfPostgresSchema } from './database.js';
 
 type DatabaseExecutor = ShelfPostgresDatabase | Transaction<ShelfPostgresSchema>;
+
+function isUniqueViolation(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (
+      typeof current === 'object' &&
+      current !== null &&
+      'code' in current &&
+      current.code === '23505'
+    ) {
+      return true;
+    }
+    current =
+      typeof current === 'object' && current !== null && 'cause' in current
+        ? current.cause
+        : undefined;
+  }
+  return false;
+}
 
 export interface InstallationCredentialSummary extends ManagedAccessCredentialSummary {}
 
@@ -139,6 +160,21 @@ export class PostgresAuthRepository implements AccessCredentialRepository {
         occurredAt: input.createdAt,
       });
       if (input.grants !== undefined && input.grants.length > 0) {
+        const workspaceIds = [...new Set(input.grants.map((grant) => grant.workspaceId))];
+        await transaction
+          .insertInto('shelf_workspaces')
+          .values(
+            workspaceIds.map((workspaceId) => ({
+              installation_id: input.installationId,
+              workspace_id: workspaceId,
+              created_by_actor_id: input.actorId,
+              created_at: input.createdAt,
+            })),
+          )
+          .onConflict((conflict) =>
+            conflict.columns(['installation_id', 'workspace_id']).doNothing(),
+          )
+          .execute();
         await transaction
           .insertInto('shelf_actor_grants')
           .values(
@@ -309,6 +345,87 @@ export class PostgresAuthRepository implements AccessCredentialRepository {
       workspaceId: row.workspace_id,
       action: row.action,
     }));
+  }
+
+  async workspaceExists(input: { installationId: string; workspaceId: string }): Promise<boolean> {
+    const found = await this.#database
+      .selectFrom('shelf_workspaces')
+      .select('workspace_id')
+      .where('installation_id', '=', input.installationId)
+      .where('workspace_id', '=', input.workspaceId)
+      .executeTakeFirst();
+    return found !== undefined;
+  }
+
+  async createOwnedWorkspace(input: {
+    installationId: string;
+    actorId: string;
+    workspaceId: string;
+    createdAt: Date;
+  }): Promise<{ workspaceId: string; actions: typeof OWNER_WORKSPACE_ACTIONS }> {
+    try {
+      await this.#database.transaction().execute(async (transaction) => {
+        await transaction
+          .insertInto('shelf_workspaces')
+          .values({
+            installation_id: input.installationId,
+            workspace_id: input.workspaceId,
+            created_by_actor_id: input.actorId,
+            created_at: input.createdAt,
+          })
+          .execute();
+        await transaction
+          .insertInto('shelf_actor_grants')
+          .values(
+            OWNER_WORKSPACE_ACTIONS.map((action) => ({
+              installation_id: input.installationId,
+              actor_id: input.actorId,
+              workspace_id: input.workspaceId,
+              action,
+              granted_by_actor_id: input.actorId,
+              granted_at: input.createdAt,
+            })),
+          )
+          .onConflict((conflict) =>
+            conflict.columns(['installation_id', 'actor_id', 'workspace_id', 'action']).doNothing(),
+          )
+          .execute();
+        await appendEvent(transaction, {
+          eventType: 'workspace.created',
+          installationId: input.installationId,
+          actorId: input.actorId,
+          performedByActorId: input.actorId,
+          occurredAt: input.createdAt,
+        });
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new WorkspaceAlreadyExistsError();
+      throw error;
+    }
+    return { workspaceId: input.workspaceId, actions: OWNER_WORKSPACE_ACTIONS };
+  }
+
+  async grantOwnerAction(input: {
+    installationId: string;
+    actorId: string;
+    workspaceId: string;
+    action: CredentialGrant['action'];
+    grantedAt: Date;
+  }): Promise<void> {
+    await this.#database
+      .insertInto('shelf_actor_grants')
+      .values({
+        installation_id: input.installationId,
+        actor_id: input.actorId,
+        workspace_id: input.workspaceId,
+        action: input.action,
+        granted_by_actor_id: input.actorId,
+        granted_at: input.grantedAt,
+      })
+      .onConflict((conflict) =>
+        conflict.columns(['installation_id', 'actor_id', 'workspace_id', 'action']).doNothing(),
+      )
+      .execute();
   }
 
   async createRotatedCredential(

@@ -20,6 +20,9 @@ const app = await createShelfApp({
     async revoke() {
       throw new Error('OpenAPI fixture does not revoke credentials.');
     },
+    async createWorkspace() {
+      throw new Error('OpenAPI fixture does not create workspaces.');
+    },
   },
 });
 

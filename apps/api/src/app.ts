@@ -18,6 +18,7 @@ import {
   ShareCreateResultSchema,
   ShareManagementSummarySchema,
   SharePageSchema,
+  WorkspaceCreateResultSchema,
 } from '@shelf/contracts';
 import type {
   ArtifactCatalogRepository,
@@ -246,6 +247,7 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   app.addSchema(withoutNestedSchemaIds(DashboardCredentialPageSchema));
   app.addSchema(withoutNestedSchemaIds(DashboardCredentialIssueSchema));
   app.addSchema(withoutNestedSchemaIds(DashboardCredentialRevokeSchema));
+  app.addSchema(WorkspaceCreateResultSchema);
   registerErrorHandler(app);
   await registerPublishRoute(app, dependencies, limits);
   await registerFolderRoutes(app, dependencies);

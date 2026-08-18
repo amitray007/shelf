@@ -6,3 +6,4 @@ export * from './folders.js';
 export * from './publish.js';
 export * from './revisions.js';
 export * from './shares.js';
+export * from './workspaces.js';

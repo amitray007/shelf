@@ -11,6 +11,7 @@ export const ERROR_CODES = [
   'REVISION_NOT_FOUND',
   'SHARE_NOT_FOUND',
   'ACCESS_CREDENTIAL_NOT_FOUND',
+  'WORKSPACE_ALREADY_EXISTS',
   'RANGE_NOT_SATISFIABLE',
   'MULTI_RANGE_UNSUPPORTED',
   'REQUEST_CANCELLED',
@@ -83,6 +84,7 @@ export function exitCodeForError(code: ErrorCode): CliExitCode {
     case 'REVISION_NOT_FOUND':
     case 'SHARE_NOT_FOUND':
     case 'ACCESS_CREDENTIAL_NOT_FOUND':
+    case 'WORKSPACE_ALREADY_EXISTS':
     case 'RANGE_NOT_SATISFIABLE':
     case 'MULTI_RANGE_UNSUPPORTED':
       return CLI_EXIT_CODES.validation;

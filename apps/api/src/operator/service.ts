@@ -2,13 +2,18 @@ import {
   type AccessCredentialService,
   bootstrapShelfOwner,
   type CredentialAction,
+  createWorkspaceAdministrationService,
   type HumanActorIdentity,
   type HumanAuth,
   type OwnerActorRepository,
+  OwnerGrantDeniedError,
+  type WorkspaceAdministrationRepository,
 } from '@shelf/auth';
 import type { InstallationCredentialSummary } from '@shelf/postgres';
 
-export interface OperatorRepository extends OwnerActorRepository {
+export interface OperatorRepository
+  extends OwnerActorRepository,
+    WorkspaceAdministrationRepository {
   findHumanOwnerByInstallationId(installationId: string): Promise<HumanActorIdentity | undefined>;
   listInstallationCredentials(installationId: string): Promise<InstallationCredentialSummary[]>;
   findInstallationCredential(
@@ -34,6 +39,8 @@ export function createOperatorService(options: {
     return found;
   }
 
+  const workspaces = createWorkspaceAdministrationService({ repository: options.repository });
+
   return {
     bootstrap(input: {
       humanAuth: HumanAuth;
@@ -53,12 +60,37 @@ export function createOperatorService(options: {
         grants: input.grants,
       });
     },
+    async createWorkspace(workspaceId: string) {
+      const installedOwner = await owner();
+      return workspaces.create({
+        installationId: options.installationId,
+        actorId: installedOwner.actorId,
+        workspaceId,
+      });
+    },
+    async grantOwner(input: OperatorGrant) {
+      const installedOwner = await owner();
+      await workspaces.grantOwner({
+        owner: installedOwner,
+        workspaceId: input.workspaceId,
+        action: input.action,
+      });
+      return { workspaceId: input.workspaceId, action: input.action, granted: true as const };
+    },
     async issue(input: { actorName: string; grants: OperatorGrant[] }) {
       if (input.actorName.length === 0 || input.actorName.length > 200) {
         throw new Error('The agent name is invalid.');
       }
       if (input.grants.length === 0) throw new Error('At least one explicit grant is required.');
       const installedOwner = await owner();
+      try {
+        await workspaces.assertOwnerHolds({ owner: installedOwner, grants: input.grants });
+      } catch (error) {
+        if (error instanceof OwnerGrantDeniedError) {
+          throw new Error('The owner does not hold that workspace action.');
+        }
+        throw error;
+      }
       return options.credentials.issueAgent({
         installationId: options.installationId,
         actorName: input.actorName,

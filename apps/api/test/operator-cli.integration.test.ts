@@ -88,6 +88,25 @@ describePostgres('host-local operator CLI', () => {
     expect(bootstrap.code).toBe(0);
     expect(bootstrap.combined).not.toContain(password);
 
+    const createdWorkspace = await command(env, ['workspace', 'create', '--id', 'workspace-work']);
+    expect(JSON.parse(createdWorkspace.stdout)).toEqual({
+      workspaceId: 'workspace-work',
+      actions: ['file.publish', 'revision.read'],
+    });
+    expect((await command(env, ['workspace', 'create', '--id', 'workspace-work'])).code).toBe(1);
+    expect(
+      (
+        await command(env, [
+          'credential',
+          'issue',
+          '--name',
+          'foreign-agent',
+          '--grant',
+          'workspace-other:file.publish',
+        ])
+      ).code,
+    ).toBe(1);
+
     const issued = await command(env, [
       'credential',
       'issue',

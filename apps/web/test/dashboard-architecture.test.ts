@@ -31,9 +31,14 @@ describe('dashboard architecture', () => {
     const dialogs = await readFile(path.join(sourceRoot, 'dashboard/dialogs.tsx'), 'utf8');
     const layout = await readFile(path.join(sourceRoot, 'dashboard/layout.tsx'), 'utf8');
     const dashboardSource = await Promise.all(
-      ['api.ts', 'dialogs.tsx', 'access-page.tsx', 'artifact-page.tsx', 'share-dialog.tsx'].map(
-        (file) => readFile(path.join(sourceRoot, 'dashboard', file), 'utf8'),
-      ),
+      [
+        'api.ts',
+        'dialogs.tsx',
+        'access-page.tsx',
+        'artifact-page.tsx',
+        'share-dialog.tsx',
+        'workspace-dialog.tsx',
+      ].map((file) => readFile(path.join(sourceRoot, 'dashboard', file), 'utf8')),
     );
     expect(dialogs).toContain("from '@cloudflare/kumo/components/dialog'");
     expect(dialogs).toContain("from '@cloudflare/kumo/components/clipboard-text'");
@@ -86,6 +91,10 @@ describe('dashboard architecture', () => {
     const detail = await readFile(path.join(sourceRoot, 'dashboard/artifact-page.tsx'), 'utf8');
     const index = await readFile(path.join(sourceRoot, 'dashboard/artifacts-page.tsx'), 'utf8');
     const shareDialog = await readFile(path.join(sourceRoot, 'dashboard/share-dialog.tsx'), 'utf8');
+    const workspaceDialog = await readFile(
+      path.join(sourceRoot, 'dashboard/workspace-dialog.tsx'),
+      'utf8',
+    );
     const manifest = await readFile(path.resolve(sourceRoot, '../package.json'), 'utf8');
 
     expect(detail).toContain("from 'react-resizable-panels'");
@@ -98,8 +107,12 @@ describe('dashboard architecture', () => {
     expect(shareDialog).toContain("from '@cloudflare/kumo/components/select'");
     expect(index).toContain("from '@cloudflare/kumo/components/clipboard-text'");
     expect(index).toContain("from '@cloudflare/kumo/components/table'");
+    expect(workspaceDialog).toContain("from '@cloudflare/kumo/components/input'");
     expect(detail).not.toMatch(/<(?:button|input|select)\b/u);
-    expect(`${detail}\n${index}\n${shareDialog}`).not.toContain("from '@cloudflare/kumo'");
+    expect(workspaceDialog).not.toMatch(/<(?:button|input)\b/u);
+    expect(`${detail}\n${index}\n${shareDialog}\n${workspaceDialog}`).not.toContain(
+      "from '@cloudflare/kumo'",
+    );
     expect(JSON.parse(manifest).dependencies['react-resizable-panels']).toBe('4.12.3');
   });
 
@@ -116,6 +129,7 @@ describe('dashboard architecture', () => {
     const shell = await readFile(path.join(sourceRoot, 'dashboard/shell.css'), 'utf8');
     const responsive = await readFile(path.join(sourceRoot, 'dashboard/responsive.css'), 'utf8');
     expect(layout).toContain('Workspace menu');
+    expect(layout).toContain('New workspace');
     expect(layout).toContain('Access');
     expect(layout).toContain('Sign out');
     expect(layout).not.toContain('dashboard-nav');

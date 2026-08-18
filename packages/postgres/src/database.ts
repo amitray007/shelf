@@ -111,6 +111,13 @@ export interface ActorTable {
   disabled_at: Date | null;
 }
 
+export interface WorkspaceTable {
+  installation_id: string;
+  workspace_id: string;
+  created_by_actor_id: string;
+  created_at: Date;
+}
+
 export interface ActorGrantTable {
   installation_id: string;
   actor_id: string;
@@ -139,7 +146,8 @@ export interface AuthEventTable {
     | 'human-actor.created'
     | 'access-credential.issued'
     | 'access-credential.rotated'
-    | 'access-credential.revoked';
+    | 'access-credential.revoked'
+    | 'workspace.created';
   installation_id: string;
   actor_id: string;
   credential_id: string | null;
@@ -159,6 +167,7 @@ export interface ShelfPostgresSchema {
   shelf_idempotency: IdempotencyTable;
   shelf_shares: ShareTable;
   shelf_share_idempotency: ShareIdempotencyTable;
+  shelf_workspaces: WorkspaceTable;
 }
 
 export type ShelfPostgresDatabase = Kysely<ShelfPostgresSchema>;

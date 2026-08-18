@@ -16,6 +16,13 @@ function fixture(owner: HumanActorIdentity | false | null = null) {
     findInstallationCredential: vi.fn(async () => undefined),
     withOwnerBootstrapLock: vi.fn(),
     createHumanActor: vi.fn(),
+    createOwnedWorkspace: vi.fn(async (input) => ({
+      workspaceId: input.workspaceId,
+      actions: ['file.publish', 'revision.read'] as const,
+    })),
+    workspaceExists: vi.fn(async () => true),
+    grantOwnerAction: vi.fn(),
+    hasGrant: vi.fn(async () => true),
   };
   const credentials: AccessCredentialService = {
     issueAgent: vi.fn(async (request) => ({
@@ -56,6 +63,32 @@ describe('operator service', () => {
       createdByActorId: 'actor-owner',
       grants,
     });
+  });
+
+  it('creates a workspace for the resolved owner', async () => {
+    const { service, repository } = fixture();
+    await expect(service.createWorkspace('workspace-work')).resolves.toEqual({
+      workspaceId: 'workspace-work',
+      actions: ['file.publish', 'revision.read'],
+    });
+    expect(repository.createOwnedWorkspace).toHaveBeenCalledWith({
+      installationId: 'installation-main',
+      actorId: 'actor-owner',
+      workspaceId: 'workspace-work',
+      createdAt: expect.any(Date),
+    });
+  });
+
+  it('refuses to issue a grant the owner does not hold', async () => {
+    const { service, repository, credentials } = fixture();
+    vi.mocked(repository.hasGrant).mockResolvedValue(false);
+    await expect(
+      service.issue({
+        actorName: 'release-agent',
+        grants: [{ workspaceId: 'workspace-other', action: 'file.publish' }],
+      }),
+    ).rejects.toThrow('does not hold that workspace action');
+    expect(credentials.issueAgent).not.toHaveBeenCalled();
   });
 
   it('rejects administration when the installation owner is absent', async () => {
