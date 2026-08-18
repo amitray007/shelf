@@ -7,8 +7,8 @@
 
 .artifact-map-bar {
   display: flex;
-  min-height: 48px;
-  height: 48px;
+  min-height: var(--bar-size);
+  height: var(--bar-size);
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -23,7 +23,7 @@
   align-items: center;
   gap: 8px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-meta);
   white-space: nowrap;
 }
 
@@ -39,7 +39,7 @@
 
 .artifact-breadcrumbs .wordmark {
   color: var(--text);
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .artifact-workspace,
@@ -52,7 +52,7 @@
 .artifact-map-bar .artifact-breadcrumbs h1 {
   margin: 0;
   color: var(--text-subtle);
-  font-size: 13px;
+  font-size: var(--font-body);
   font-weight: 600;
   letter-spacing: -0.015em;
   line-height: 1.2;
@@ -67,7 +67,7 @@
 
 .artifact-share-action,
 .artifact-actions-trigger {
-  min-height: 32px;
+  min-height: 36px;
 }
 
 .artifact-actions-menu {
@@ -268,7 +268,7 @@
 .inspector-section-heading h2 {
   margin: 3px 0 0;
   color: var(--text);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -329,7 +329,7 @@
 .share-row strong {
   overflow: hidden;
   color: var(--text-subtle);
-  font-size: 12px;
+  font-size: var(--font-meta);
   font-weight: 570;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -342,7 +342,7 @@
   overflow: hidden;
   color: var(--text-muted);
   font:
-    450 11px / 1.35 "Geist Mono Variable",
+    450 var(--font-machine) / 1.35 "Geist Mono Variable",
     ui-monospace,
     monospace;
   text-overflow: ellipsis;
@@ -351,7 +351,7 @@
 
 .ledger-status {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-machine);
   font-weight: 550;
 }
 
@@ -396,7 +396,7 @@
 
 .artifact-detail-ledger dt {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-machine);
 }
 
 .artifact-detail-ledger dd {

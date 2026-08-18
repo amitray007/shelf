@@ -11,7 +11,7 @@
   display: grid;
   min-width: 320px;
   min-height: 100dvh;
-  grid-template-rows: 48px 1fr;
+  grid-template-rows: var(--bar-size) 1fr;
   padding: 0 24px;
 }
 
@@ -31,9 +31,9 @@
   position: relative;
   z-index: 10;
   display: flex;
-  height: 48px;
-  min-height: 48px;
-  flex: 0 0 48px;
+  height: var(--bar-size);
+  min-height: var(--bar-size);
+  flex: 0 0 var(--bar-size);
   align-items: center;
   padding: 0;
   border-bottom: 1px solid var(--rule);
@@ -42,12 +42,12 @@
 
 .dashboard-location {
   display: flex;
-  width: min(100%, 1240px);
+  width: min(100%, 1360px);
   min-width: 0;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   margin: 0 auto;
-  padding-inline: clamp(18px, 4vw, 48px);
+  padding-inline: clamp(20px, 4vw, 48px);
 }
 
 .dashboard-wordmark {
@@ -59,7 +59,7 @@
   flex: 0 0 auto;
   color: var(--text-muted);
   font:
-    500 12px / 1 "Geist Mono Variable",
+    500 var(--font-machine) / 1 "Geist Mono Variable",
     ui-monospace,
     monospace;
 }
@@ -67,7 +67,7 @@
 .dashboard-current {
   overflow: hidden;
   color: var(--text-subtle);
-  font-size: 12px;
+  font-size: var(--font-meta);
   font-weight: 560;
   text-decoration: none;
   text-overflow: ellipsis;
@@ -76,18 +76,18 @@
 
 .workspace-menu-trigger {
   min-width: 0;
-  min-height: 28px;
-  max-width: min(42vw, 280px);
+  min-height: 36px;
+  max-width: min(42vw, 320px);
   color: var(--text-subtle);
   font-family: "Geist Mono Variable", ui-monospace, monospace;
-  font-size: 11px;
+  font-size: var(--font-machine);
   font-weight: 500;
-  padding-inline: 6px;
+  padding-inline: 8px;
 }
 
 .workspace-menu-trigger > svg {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
   color: var(--text-muted);
 }
 
@@ -108,35 +108,35 @@
 }
 
 .workspace-menu-content {
-  width: min(220px, calc(100vw - 24px));
-  padding: 4px;
+  width: min(260px, calc(100vw - 24px));
+  padding: 6px;
   border: 1px solid var(--rule);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--elevated);
   box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
   color: var(--text-subtle);
-  font-size: 12px;
+  font-size: var(--font-meta);
   animation-duration: 140ms;
 }
 
 .workspace-menu-content [role="presentation"] {
-  padding: 6px 8px 4px;
+  padding: 8px 10px 6px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-machine);
   font-weight: 500;
 }
 
 .workspace-menu-content [role="menuitem"] {
-  min-height: 32px;
-  padding: 6px 8px;
-  border-radius: 4px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 6px;
   color: var(--text-subtle);
-  font-size: 12px;
+  font-size: var(--font-meta);
 }
 
 .workspace-menu-content [role="menuitem"] > svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   margin-right: 8px;
   color: var(--text-muted);
 }
@@ -164,14 +164,14 @@
 }
 
 .quiet-button {
-  min-height: 32px;
-  padding: 0 8px;
+  min-height: 36px;
+  padding: 0 10px;
   border: 0;
   border-radius: 4px;
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-meta);
   cursor: pointer;
 }
 
@@ -190,10 +190,10 @@
 }
 
 .dashboard-page {
-  width: min(100%, 1240px);
+  width: min(100%, 1360px);
   min-width: 0;
   margin: 0 auto;
-  padding: clamp(22px, 3vw, 36px) clamp(18px, 4vw, 48px) 56px;
+  padding: clamp(28px, 3.5vw, 48px) clamp(20px, 4vw, 48px) 64px;
 }
 
 .page-heading,
@@ -208,20 +208,20 @@
 .page-heading h1,
 .artifact-heading h1,
 .dashboard-error h1 {
-  margin: 2px 0 6px;
+  margin: 2px 0 8px;
   color: var(--text);
-  font-size: 20px;
+  font-size: var(--font-title);
   font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 26px;
+  letter-spacing: -0.025em;
+  line-height: var(--font-title-line);
 }
 
 .page-heading p:not(.eyebrow),
 .artifact-heading p:not(.eyebrow) {
-  max-width: 580px;
+  max-width: 640px;
   margin: 0;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--font-body);
   line-height: 1.5;
 }
 
@@ -250,7 +250,7 @@
   background: var(--surface);
   color: var(--text-subtle);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-meta);
   font-weight: 570;
   text-decoration: none;
   cursor: pointer;

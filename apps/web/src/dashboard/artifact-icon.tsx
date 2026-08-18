@@ -36,5 +36,5 @@ export function ArtifactIcon({
   readonly name: string;
 }) {
   const Icon = kind === 'folder' ? FolderIcon : fileIcons[artifactFileType(name)];
-  return <Icon aria-hidden="true" size={18} weight="regular" />;
+  return <Icon aria-hidden="true" size={20} weight="regular" />;
 }

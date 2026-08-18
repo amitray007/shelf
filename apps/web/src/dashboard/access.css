@@ -29,9 +29,9 @@
 }
 
 .credential-table td {
-  height: 56px;
+  height: 64px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-machine);
 }
 
 .credential-column-identity {
@@ -63,7 +63,7 @@
 
 .credential-identity strong {
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-body);
   font-weight: 590;
 }
 
@@ -71,14 +71,14 @@
   max-width: 100%;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-machine);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .credential-status {
   color: var(--proof);
-  font-size: 11px;
+  font-size: var(--font-machine);
   font-weight: 560;
 }
 
@@ -113,7 +113,7 @@
   overflow: hidden;
   color: var(--text-muted);
   font:
-    470 11px / 1.35 "Geist Mono Variable",
+    470 var(--font-machine) / 1.35 "Geist Mono Variable",
     ui-monospace,
     monospace;
   text-overflow: ellipsis;
@@ -145,7 +145,7 @@
 .grant-workspace > code {
   overflow: hidden;
   color: var(--text-subtle);
-  font-size: 10px;
+  font-size: var(--font-machine);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -158,7 +158,7 @@
 
 .grant-workspace label {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-machine);
 }
 
 .credential-details dl {
@@ -180,7 +180,7 @@
   min-width: 0;
   margin: 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-meta);
 }
 
 .credential-details dd {
@@ -216,7 +216,7 @@
 }
 
 .signin-panel {
-  width: min(100%, 360px);
+  width: min(100%, 420px);
   overflow: hidden;
   background: transparent;
 }
@@ -231,19 +231,19 @@
 }
 
 .signin-copy h1 {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   color: var(--text);
-  font-size: 20px;
+  font-size: var(--font-title);
   font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 26px;
+  letter-spacing: -0.025em;
+  line-height: var(--font-title-line);
 }
 
 .signin-copy > p:last-child {
   margin: 0;
   color: var(--text-muted);
-  font-size: 13px;
-  line-height: 18px;
+  font-size: var(--font-body);
+  line-height: 22px;
 }
 
 .signin-form {
@@ -261,8 +261,8 @@
 .signin-footnote {
   padding: 18px 0 0;
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--font-meta);
+  line-height: 20px;
 }
 
 @media (max-width: 680px) {
