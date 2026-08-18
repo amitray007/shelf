@@ -33,17 +33,17 @@ export function ArtifactsPage() {
           <p>Published files and folders, newest update first.</p>
         </div>
         <div className="cli-publish-hint">
-          <TerminalWindowIcon aria-hidden="true" size={18} />
-          <div>
+          <div className="cli-publish-label">
+            <TerminalWindowIcon aria-hidden="true" size={15} />
             <span>Publish from a terminal</span>
-            <ClipboardText
-              className="cli-clipboard"
-              labels={{ copyAction: 'Copy publish command' }}
-              size="sm"
-              text="shelf publish ./path --share"
-              tooltip={{ copiedText: 'Command copied', text: 'Copy command' }}
-            />
           </div>
+          <ClipboardText
+            className="cli-clipboard"
+            labels={{ copyAction: 'Copy publish command' }}
+            size="sm"
+            text="shelf publish ./path --share"
+            tooltip={{ copiedText: 'Command copied', text: 'Copy command' }}
+          />
         </div>
       </header>
 
