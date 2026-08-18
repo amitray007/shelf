@@ -1,6 +1,7 @@
 import type {
   Artifact,
   ArtifactPage,
+  ArtifactRevision,
   ArtifactRevisionPage,
   DashboardCredentialPage,
   DashboardSession,
@@ -27,6 +28,7 @@ import {
 
 export interface ArtifactDetailPayload {
   artifact: Artifact;
+  revision: ArtifactRevision;
   history: ArtifactRevisionPage;
   shares: SharePage;
   bytes: ArrayBuffer | null;
@@ -127,16 +129,22 @@ export async function artifactLoader({
       loadArtifactHistory(artifactId, historyOrder, historyCursor, request.signal),
       loadWorkspaceShares(workspaceId, shareCursor, request.signal),
     ]);
+    const requestedRevisionId = query.get('revision');
+    const revision =
+      requestedRevisionId === null
+        ? artifact.latestRevision
+        : (history.items.find((candidate) => candidate.revisionId === requestedRevisionId) ??
+          artifact.latestRevision);
     let bytes: ArrayBuffer | null = null;
     let entries: readonly FolderEntry[] = [];
-    if (artifact.latestRevision.kind === 'folder') {
-      entries = await loadFolderEntries(artifact.latestRevision.revisionId, request.signal);
+    if (revision.kind === 'folder') {
+      entries = await loadFolderEntries(revision.revisionId, request.signal);
     } else {
-      const renderer = selectRenderer(artifact.latestRevision.mediaType, undefined);
+      const renderer = selectRenderer(revision.mediaType, undefined);
       if (['text', 'json', 'markdown', 'image'].includes(renderer.kind)) {
-        bytes = await loadRevisionBytes(artifact.latestRevision.revisionId, request.signal);
+        bytes = await loadRevisionBytes(revision.revisionId, request.signal);
       }
     }
-    return { artifact, history, shares, bytes, entries };
+    return { artifact, revision, history, shares, bytes, entries };
   });
 }

@@ -2,15 +2,14 @@
 
 import { LinkButton } from '@cloudflare/kumo/components/button';
 import { FileArrowDownIcon } from '@phosphor-icons/react/FileArrowDown';
-import type { Artifact, FolderEntry } from '@shelf/contracts';
+import type { Artifact, ArtifactRevision, FolderEntry } from '@shelf/contracts';
 import { memo, useEffect, useMemo } from 'react';
 
 import { FolderTree, formatJson } from '../components/artifact-content.js';
 import { MarkdownView } from '../components/markdown-view.js';
 import { selectRenderer } from '../rendering.js';
 
-function DownloadOnly({ artifact }: { readonly artifact: Artifact }) {
-  const revision = artifact.latestRevision;
+function DownloadOnly({ revision }: { readonly revision: ArtifactRevision }) {
   if (revision.kind !== 'file') return null;
   return (
     <section className="empty-state managed-download" aria-labelledby="managed-download-title">
@@ -27,14 +26,15 @@ function DownloadOnly({ artifact }: { readonly artifact: Artifact }) {
 
 export const ManagedArtifactContent = memo(function ManagedArtifactContent({
   artifact,
+  revision,
   bytes,
   entries,
 }: {
   readonly artifact: Artifact;
+  readonly revision: ArtifactRevision;
   readonly bytes: ArrayBuffer | null;
   readonly entries: readonly FolderEntry[];
 }) {
-  const revision = artifact.latestRevision;
   const renderer =
     revision.kind === 'file'
       ? selectRenderer(revision.mediaType, undefined)
@@ -67,7 +67,7 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
   if (renderer.kind === 'download' || bytes === null) {
     return (
       <div className="artifact-surface artifact-download">
-        <DownloadOnly artifact={artifact} />
+        <DownloadOnly revision={revision} />
       </div>
     );
   }
@@ -84,7 +84,7 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
   } catch {
     return (
       <div className="artifact-surface artifact-download">
-        <DownloadOnly artifact={artifact} />
+        <DownloadOnly revision={revision} />
       </div>
     );
   }

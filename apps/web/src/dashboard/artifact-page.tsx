@@ -2,6 +2,7 @@ import { Button } from '@cloudflare/kumo/components/button';
 import { ClipboardText } from '@cloudflare/kumo/components/clipboard-text';
 import { Input } from '@cloudflare/kumo/components/input';
 import { Tabs } from '@cloudflare/kumo/components/tabs';
+import { GitForkIcon } from '@phosphor-icons/react/GitFork';
 import { PencilSimpleIcon } from '@phosphor-icons/react/PencilSimple';
 import { ShareNetworkIcon } from '@phosphor-icons/react/ShareNetwork';
 import { SidebarSimpleIcon } from '@phosphor-icons/react/SidebarSimple';
@@ -107,11 +108,13 @@ function RestoreDialog({
   artifactId,
   revision,
   onClose,
+  onRestored,
 }: {
   readonly workspaceId: string;
   readonly artifactId: string;
   readonly revision: ArtifactRevision | null;
   readonly onClose: () => void;
+  readonly onRestored: () => void;
 }) {
   const revalidator = useRevalidator();
   const [busy, setBusy] = useState(false);
@@ -138,6 +141,7 @@ function RestoreDialog({
       );
       idempotencyRef.current = undefined;
       onClose();
+      onRestored();
       void revalidator.revalidate();
     } catch (caught) {
       setError(caught instanceof DashboardApiError ? caught.message : 'Restore failed.');
@@ -284,6 +288,7 @@ function ShareRow({ share }: { readonly share: ShareManagementSummary }) {
 export function ArtifactPage() {
   const payload = useLoaderData() as ArtifactDetailPayload;
   const { artifact, history } = payload;
+  const viewedRevision = payload.revision;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [renameOpen, setRenameOpen] = useState(false);
@@ -307,16 +312,25 @@ export function ArtifactPage() {
   const pageLink = (name: 'historyCursor' | 'shareCursor', cursor: string): string => {
     const next = new URLSearchParams(searchParams);
     next.set(name, cursor);
+    if (name === 'historyCursor') next.delete('revision');
     return `?${next}`;
   };
   const toggleHistoryOrder = () => {
     const next = new URLSearchParams(searchParams);
     next.delete('historyCursor');
+    next.delete('revision');
     if (historyOrder === 'newest') next.set('historyOrder', 'oldest');
     else next.delete('historyOrder');
     setSearchParams(next, { replace: true });
   };
+  const viewRevision = (revision: ArtifactRevision) => {
+    const next = new URLSearchParams(searchParams);
+    if (revision.revisionId === artifact.latestRevision.revisionId) next.delete('revision');
+    else next.set('revision', revision.revisionId);
+    setSearchParams(next, { replace: true });
+  };
   const latest = artifact.latestRevision;
+  const viewingLatest = viewedRevision.revisionId === latest.revisionId;
 
   return (
     <div className="dashboard-page artifact-detail">
@@ -375,7 +389,21 @@ export function ArtifactPage() {
             <header className="managed-stage-bar">
               <span id="preview-heading">Artifact preview</span>
               <div className="managed-stage-actions">
-                <span>{ordinal(latest.revisionNumber)}</span>
+                <span>
+                  {viewingLatest
+                    ? ordinal(viewedRevision.revisionNumber)
+                    : `Viewing ${ordinal(viewedRevision.revisionNumber)}`}
+                </span>
+                {viewingLatest ? null : (
+                  <Button
+                    onClick={() => viewRevision(latest)}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    View latest
+                  </Button>
+                )}
                 <Button
                   aria-label={inspectorOpen ? 'Hide inspector' : 'Show inspector'}
                   className="inspector-toggle"
@@ -393,6 +421,7 @@ export function ArtifactPage() {
               artifact={artifact}
               bytes={payload.bytes}
               entries={payload.entries}
+              revision={viewedRevision}
             />
           </section>
         </Panel>
@@ -461,51 +490,97 @@ export function ArtifactPage() {
                         />
                       </header>
                       <ol className="revision-list">
-                        {history.items.map((revision) => (
-                          <li
-                            className="revision-row"
-                            data-current={revision.revisionId === latest.revisionId}
-                            key={revision.revisionId}
-                          >
-                            <header className="revision-row-heading">
-                              <strong className="revision-index">
-                                {ordinal(revision.revisionNumber)}
-                              </strong>
-                              {revision.revisionId === latest.revisionId ? (
-                                <span className="ledger-status" data-active="true">
-                                  <span aria-hidden="true" className="status-dot" />
-                                  Latest
-                                </span>
-                              ) : (
-                                <Button
-                                  onClick={() => setRestoreRevision(revision)}
-                                  size="sm"
-                                  type="button"
-                                  variant="ghost"
-                                >
-                                  Restore
-                                </Button>
+                        {history.items.map((revision) => {
+                          const isLatest = revision.revisionId === latest.revisionId;
+                          const isViewed = revision.revisionId === viewedRevision.revisionId;
+                          const restoreSourceId =
+                            revision.provenance.classification === 'restore'
+                              ? revision.provenance.source.revisionId
+                              : undefined;
+                          const sourceRevision =
+                            restoreSourceId === undefined
+                              ? undefined
+                              : history.items.find(
+                                  (candidate) => candidate.revisionId === restoreSourceId,
+                                );
+                          return (
+                            <li
+                              className="revision-row"
+                              data-current={isLatest}
+                              data-viewed={isViewed}
+                              key={revision.revisionId}
+                            >
+                              <header className="revision-row-heading">
+                                <strong className="revision-index">
+                                  {ordinal(revision.revisionNumber)}
+                                </strong>
+                                <div className="revision-row-actions">
+                                  {isLatest ? (
+                                    <span className="ledger-status" data-active="true">
+                                      <span aria-hidden="true" className="status-dot" />
+                                      Latest
+                                    </span>
+                                  ) : isViewed ? (
+                                    <span className="ledger-status" data-viewed="true">
+                                      <span aria-hidden="true" className="status-dot" />
+                                      Viewing
+                                    </span>
+                                  ) : (
+                                    <Button
+                                      onClick={() => viewRevision(revision)}
+                                      size="sm"
+                                      type="button"
+                                      variant="ghost"
+                                    >
+                                      View
+                                    </Button>
+                                  )}
+                                  {isLatest ? null : (
+                                    <Button
+                                      onClick={() => setRestoreRevision(revision)}
+                                      size="sm"
+                                      type="button"
+                                      variant="ghost"
+                                    >
+                                      Restore
+                                    </Button>
+                                  )}
+                                </div>
+                              </header>
+                              <p className="revision-source">{revisionSourceName(revision)}</p>
+                              {restoreSourceId === undefined ? null : (
+                                <div className="revision-lineage">
+                                  <GitForkIcon aria-hidden="true" size={15} />
+                                  <div>
+                                    <strong>
+                                      Restored from{' '}
+                                      {sourceRevision === undefined
+                                        ? 'an earlier revision'
+                                        : ordinal(sourceRevision.revisionNumber)}
+                                    </strong>
+                                    <code>{restoreSourceId}</code>
+                                  </div>
+                                </div>
                               )}
-                            </header>
-                            <p className="revision-source">{revisionSourceName(revision)}</p>
-                            <dl className="revision-metadata">
-                              <div>
-                                <dt>Published</dt>
-                                <dd>
-                                  <time dateTime={revision.createdAt}>
-                                    {dateTime(revision.createdAt)}
-                                  </time>
-                                </dd>
-                              </div>
-                              <div>
-                                <dt>Revision ID</dt>
-                                <dd>
-                                  <code title={revision.revisionId}>{revision.revisionId}</code>
-                                </dd>
-                              </div>
-                            </dl>
-                          </li>
-                        ))}
+                              <dl className="revision-metadata">
+                                <div>
+                                  <dt>Published</dt>
+                                  <dd>
+                                    <time dateTime={revision.createdAt}>
+                                      {dateTime(revision.createdAt)}
+                                    </time>
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt>Revision ID</dt>
+                                  <dd>
+                                    <code title={revision.revisionId}>{revision.revisionId}</code>
+                                  </dd>
+                                </div>
+                              </dl>
+                            </li>
+                          );
+                        })}
                       </ol>
                       {history.nextCursor === null ? null : (
                         <Link
@@ -522,6 +597,9 @@ export function ArtifactPage() {
                     <section aria-labelledby="details-panel-heading" className="inspector-section">
                       <header className="inspector-section-heading">
                         <h2 id="details-panel-heading">Details</h2>
+                        {viewingLatest ? null : (
+                          <span>Viewing {ordinal(viewedRevision.revisionNumber)}</span>
+                        )}
                       </header>
                       <dl className="artifact-detail-ledger">
                         <div>
@@ -540,7 +618,7 @@ export function ArtifactPage() {
                             <ClipboardText
                               labels={{ copyAction: 'Copy revision ID' }}
                               size="sm"
-                              text={latest.revisionId}
+                              text={viewedRevision.revisionId}
                             />
                           </dd>
                         </div>
@@ -550,39 +628,39 @@ export function ArtifactPage() {
                             <ClipboardText
                               labels={{ copyAction: 'Copy content hash' }}
                               size="sm"
-                              text={latest.contentHash}
+                              text={viewedRevision.contentHash}
                             />
                           </dd>
                         </div>
                         <div>
                           <dt>Source</dt>
-                          <dd>{revisionSourceName(latest)}</dd>
+                          <dd>{revisionSourceName(viewedRevision)}</dd>
                         </div>
                         <div>
                           <dt>Kind</dt>
-                          <dd>{latest.kind}</dd>
+                          <dd>{viewedRevision.kind}</dd>
                         </div>
-                        {latest.kind === 'file' ? (
+                        {viewedRevision.kind === 'file' ? (
                           <div>
                             <dt>Media type</dt>
-                            <dd>{latest.mediaType}</dd>
+                            <dd>{viewedRevision.mediaType}</dd>
                           </div>
                         ) : null}
                         <div>
                           <dt>Size</dt>
-                          <dd>{formatBytes(latest.byteCount)}</dd>
+                          <dd>{formatBytes(viewedRevision.byteCount)}</dd>
                         </div>
                         <div>
                           <dt>Files</dt>
-                          <dd>{latest.fileCount}</dd>
+                          <dd>{viewedRevision.fileCount}</dd>
                         </div>
                         <div>
                           <dt>Published</dt>
-                          <dd>{dateTime(latest.createdAt)}</dd>
+                          <dd>{dateTime(viewedRevision.createdAt)}</dd>
                         </div>
                         <div>
                           <dt>Provenance</dt>
-                          <dd>{latest.provenance.classification}</dd>
+                          <dd>{viewedRevision.provenance.classification}</dd>
                         </div>
                       </dl>
                     </section>
@@ -635,6 +713,7 @@ export function ArtifactPage() {
       <RestoreDialog
         artifactId={artifact.artifactId}
         onClose={() => setRestoreRevision(null)}
+        onRestored={() => viewRevision(latest)}
         revision={restoreRevision}
         workspaceId={artifact.workspaceId}
       />

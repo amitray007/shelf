@@ -44,16 +44,24 @@ function fileRevision(input: {
   mediaType?: string;
   bytes?: number;
   hashCharacter: string;
+  restoredFrom?: string;
 }): FileRevision {
   return {
     revisionId: input.id,
     revisionNumber: input.number,
     contentHash: `sha256:${input.hashCharacter.repeat(64)}`,
     createdAt: input.createdAt,
-    provenance: {
-      classification: 'direct-publish',
-      observed: { actorId: 'actor-browser-owner', operation: 'file.publish' },
-    },
+    provenance:
+      input.restoredFrom === undefined
+        ? {
+            classification: 'direct-publish',
+            observed: { actorId: 'actor-browser-owner', operation: 'file.publish' },
+          }
+        : {
+            classification: 'restore',
+            observed: { actorId: 'actor-browser-owner', operation: 'revision.restore' },
+            source: { revisionId: input.restoredFrom },
+          },
     publisherMetadata: { source: 'browser-density-qualification' },
     kind: 'file',
     originalFileName: input.name,
@@ -109,6 +117,7 @@ const revision11 = fileRevision({
   createdAt: '2026-08-17T16:30:00.000Z',
   name: 'research-synthesis.md',
   hashCharacter: 'a',
+  restoredFrom: `rev_${'m'.repeat(22)}`,
 });
 const revision10 = fileRevision({
   id: `rev_${'l'.repeat(22)}`,

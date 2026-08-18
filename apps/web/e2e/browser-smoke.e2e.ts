@@ -188,10 +188,7 @@ for (const viewport of densityViewports) {
   });
 }
 
-test('artifact detail keeps revision and share controls compact and explicit', async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== 'chromium', 'The focused workbench interaction runs once.');
+test('artifact detail keeps revision and share controls compact and explicit', async ({ page }) => {
   const diagnostics = trackPageErrors(page);
 
   await page.goto(`/app/w/${workspaceId}/artifacts/${artifactId}`);
@@ -218,6 +215,28 @@ test('artifact detail keeps revision and share controls compact and explicit', a
   await page.getByRole('tab', { name: 'History' }).click();
   const revisions = page.locator('.revision-row');
   await expect(revisions.first().locator('.revision-index')).toHaveText('12th');
+  const restoredRevision = revisions.filter({
+    has: page.locator('.revision-index', { hasText: '11th' }),
+  });
+  await expect(restoredRevision.locator('.revision-lineage')).toContainText('Restored from 9th');
+  await expect(restoredRevision.locator('.revision-lineage code')).toHaveText(
+    `rev_${'m'.repeat(22)}`,
+  );
+
+  const previousRevision = revisions.filter({
+    has: page.locator('.revision-index', { hasText: '10th' }),
+  });
+  await previousRevision.getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`revision=rev_${'l'.repeat(22)}`, 'u'));
+  await expect(previewBar).toContainText('Viewing 10th');
+  await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
+    'notes.md',
+  );
+  await expect(previousRevision).toHaveAttribute('data-viewed', 'true');
+  await page.getByRole('button', { name: 'View latest' }).click();
+  await expect(page).not.toHaveURL(/[?&]revision=/u);
+  await expect(previewBar).toContainText('12th');
+
   const sort = page.getByRole('button', {
     name: 'Revision order: newest first. Show oldest first',
   });

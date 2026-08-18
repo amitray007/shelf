@@ -293,6 +293,12 @@
   border-top: 1px solid var(--rule);
 }
 
+.revision-row[data-viewed="true"] {
+  padding-right: 6px;
+  padding-left: 12px;
+  box-shadow: inset 2px 0 var(--accent);
+}
+
 .revision-index {
   color: var(--text);
   font:
@@ -316,11 +322,55 @@
   gap: 12px;
 }
 
+.revision-row-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
 .revision-source {
   margin: 8px 0 12px;
   color: var(--text-subtle);
   font-size: 13px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.revision-lineage {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px;
+  border-radius: 5px;
+  background: var(--elevated);
+  color: var(--text-muted);
+}
+
+.revision-lineage > svg {
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+.revision-lineage strong,
+.revision-lineage code {
+  display: block;
+  min-width: 0;
+}
+
+.revision-lineage strong {
+  color: var(--text-subtle);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.revision-lineage code {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
   overflow-wrap: anywhere;
 }
 
@@ -392,6 +442,10 @@
 
 .ledger-status[data-active="true"] .status-dot {
   color: var(--proof);
+}
+
+.ledger-status[data-viewed="true"] .status-dot {
+  color: var(--accent);
 }
 
 .quiet-button {

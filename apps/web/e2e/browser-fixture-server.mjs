@@ -31,11 +31,11 @@ const artifactsById = new Map(
 const historiesByArtifactId = new Map(historyPages.map((page) => [page.artifactId, page]));
 const deletedArtifacts = new Set();
 const createdWorkspaces = new Set();
-const latestFilesByRevisionId = new Map(
-  artifactPage.items.flatMap((artifact) =>
-    artifact.latestRevision.kind === 'file'
-      ? [[artifact.latestRevision.revisionId, artifact.latestRevision]]
-      : [],
+const filesByRevisionId = new Map(
+  historyPages.flatMap((page) =>
+    page.items.flatMap((revision) =>
+      revision.kind === 'file' ? [[revision.revisionId, revision]] : [],
+    ),
   ),
 );
 
@@ -281,8 +281,7 @@ async function api(request, response, url) {
     return;
   }
   const contentMatch = /^\/api\/v1\/revisions\/(rev_[A-Za-z0-9_-]{22})\/content$/u.exec(path);
-  const fileRevision =
-    contentMatch === null ? undefined : latestFilesByRevisionId.get(contentMatch[1]);
+  const fileRevision = contentMatch === null ? undefined : filesByRevisionId.get(contentMatch[1]);
   if (fileRevision !== undefined) {
     const contentType =
       fileRevision.mediaType.startsWith('text/') || fileRevision.mediaType === 'application/json'
