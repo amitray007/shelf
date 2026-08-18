@@ -133,6 +133,8 @@ describe('dashboard architecture', () => {
     expect(styles).not.toMatch(
       /color-scheme:\s*light|prefers-color-scheme|linear-gradient|radial-gradient/,
     );
+    expect(styles).toContain('--color-kumo-brand: var(--action)');
+    expect(styles).not.toMatch(/--color-kumo-brand:\s*#(?:d4d4d4|ededed|ffffff)/u);
   });
 
   it('provides route-level loading fallbacks instead of flashing an empty document', async () => {

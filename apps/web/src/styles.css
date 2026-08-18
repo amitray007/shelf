@@ -4,22 +4,38 @@
   color-scheme: dark;
   font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   font-synthesis: none;
-  --ink: #0a0a0a;
-  --canvas: #0a0a0a;
-  --raised: #171717;
-  --rule: #262626;
-  --rule-strong: #333333;
-  --text: #ededed;
-  --text-subtle: #a1a1a1;
-  --text-muted: #8a8a8a;
-  --accent: #ededed;
-  --accent-strong: #ffffff;
-  --trust: #d5a95a;
-  --color-kumo-brand: #d4d4d4;
-  --color-kumo-brand-hover: #ffffff;
-  --color-kumo-focus: var(--accent-strong);
-  --text-color-kumo-link: var(--accent);
-  background: var(--ink);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --canvas: #121518;
+  --surface: #181c20;
+  --elevated: #1e2328;
+  --line: #2c3339;
+  --line-strong: #3d454c;
+  --ink: #121518;
+  --raised: var(--surface);
+  --rule: var(--line);
+  --rule-strong: var(--line-strong);
+  --text: #eceff1;
+  --text-subtle: #b7bec4;
+  --text-muted: #8b939a;
+  --action: #215f6d;
+  --action-hover: #287384;
+  --action-ink: #8ebbc7;
+  --proof: #86b598;
+  --warning: #c4a05c;
+  --danger: #c98986;
+  --accent: var(--action-ink);
+  --accent-strong: #c3dce2;
+  --trust: var(--warning);
+  /* Kumo primary buttons mix brand with 30% white and paint white labels. Brand must stay dark. */
+  --color-kumo-brand: var(--action);
+  --color-kumo-brand-hover: var(--action-hover);
+  --color-kumo-focus: var(--action-ink);
+  --color-kumo-canvas: var(--canvas);
+  --color-kumo-base: var(--surface);
+  --color-kumo-elevated: var(--elevated);
+  --color-kumo-line: var(--line);
+  --text-color-kumo-link: var(--action-ink);
+  background: var(--canvas);
   color: var(--text);
 }
 
@@ -38,7 +54,7 @@ body,
 
 body {
   overflow: hidden;
-  background: var(--ink);
+  background: var(--canvas);
   text-rendering: optimizeLegibility;
 }
 
@@ -58,7 +74,7 @@ a {
 }
 
 ::selection {
-  background: #333333;
+  background: color-mix(in oklch, var(--action) 42%, var(--canvas));
   color: var(--text);
 }
 
@@ -81,7 +97,7 @@ a {
   gap: 20px;
   padding: 0 18px;
   border-bottom: 1px solid var(--rule);
-  background: var(--ink);
+  background: var(--canvas);
 }
 
 .rail-title-group,
@@ -228,7 +244,7 @@ a {
 .markdown-body code {
   border: 1px solid var(--rule);
   border-radius: 4px;
-  background: var(--ink);
+  background: var(--surface);
   color: #dce6ee;
   font:
     450 0.86em / 1.5 "Geist Mono Variable",
@@ -246,7 +262,7 @@ a {
   padding: 16px;
   border: 1px solid var(--rule);
   border-radius: 6px;
-  background: var(--ink);
+  background: var(--surface);
 }
 
 .markdown-body pre code {
@@ -304,7 +320,7 @@ a {
   display: grid;
   place-items: center;
   padding: clamp(12px, 3vw, 36px);
-  background: #0e1115;
+  background: var(--canvas);
 }
 
 .artifact-image img {
@@ -332,13 +348,13 @@ a {
   align-items: center;
   gap: 9px;
   padding: 0 20px 0 calc(20px + min(var(--tree-depth), 12) * 18px);
-  border-bottom: 1px solid #20262d;
+  border-bottom: 1px solid var(--rule);
   color: var(--text-subtle);
   font-size: 13px;
 }
 
 .tree-row:hover {
-  background: #15191e;
+  background: var(--surface);
   color: var(--text);
 }
 
@@ -350,7 +366,7 @@ a {
 }
 
 .tree-entry-icon {
-  color: #71889c;
+  color: var(--text-muted);
 }
 
 .tree-name {
@@ -457,7 +473,7 @@ a {
 
 .renderer-stage {
   flex: 1;
-  background: var(--ink);
+  background: var(--canvas);
 }
 
 .renderer-frame {
@@ -494,7 +510,7 @@ a {
   justify-content: flex-end;
   padding: 0 14px;
   border-top: 1px solid var(--rule);
-  background: var(--ink);
+  background: var(--canvas);
 }
 
 .renderer-download button {
@@ -589,10 +605,9 @@ a {
 .eyebrow,
 .field-label {
   color: var(--text-muted);
-  font:
-    550 11px / 1.25 "Geist Mono Variable",
-    ui-monospace,
-    monospace;
-  letter-spacing: 0.045em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 16px;
+  text-transform: none;
 }

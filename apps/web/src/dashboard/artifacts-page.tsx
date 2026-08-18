@@ -155,7 +155,6 @@ export function ArtifactsPage() {
     <div className="dashboard-page artifact-index">
       <header className="page-heading">
         <div>
-          <p className="workspace-label">{workspaceId}</p>
           <h1>Artifacts</h1>
           <p>Published files and folders, newest update first.</p>
         </div>

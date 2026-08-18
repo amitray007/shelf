@@ -91,7 +91,7 @@
 }
 
 .artifact-revision-column {
-  width: 104px;
+  width: 128px;
 }
 
 .artifact-created-column {
@@ -108,7 +108,7 @@
 
 .artifact-table th {
   border-color: var(--rule);
-  background: var(--raised);
+  background: transparent;
   color: var(--text-muted);
   font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   font-size: 11px;
@@ -121,7 +121,7 @@
 }
 
 .artifact-ledger-row {
-  height: 52px;
+  height: 48px;
 }
 
 .artifact-ledger-name {
@@ -286,7 +286,7 @@
   }
 
   .artifact-revision-column {
-    width: 104px;
+    width: 112px;
   }
 
   .artifact-actions-column {

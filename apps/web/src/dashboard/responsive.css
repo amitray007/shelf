@@ -1,14 +1,16 @@
 @media (hover: hover) and (pointer: fine) {
   .quiet-button,
-  .control {
+  .control,
+  button.group {
     transition-property: color, background-color, border-color, transform;
-    transition-duration: 120ms;
-    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition-duration: 160ms;
+    transition-timing-function: var(--ease-out);
   }
 
   .control:active,
-  .quiet-button:active {
-    transform: scale(0.98);
+  .quiet-button:active,
+  button.group:active:not(:disabled) {
+    transform: scale(0.97);
   }
 }
 
@@ -83,12 +85,10 @@
 
   .signin-page {
     align-items: stretch;
-    padding: 0;
+    padding: 28px 18px;
   }
 
   .signin-panel {
-    min-height: 100dvh;
-    border: 0;
-    border-radius: 0;
+    width: 100%;
   }
 }

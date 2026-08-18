@@ -8,7 +8,7 @@
 .shelf-secret-copy {
   width: 100%;
   min-width: 0;
-  color: #e2c98e;
+  color: var(--warning);
 }
 
 .secret-hint {
@@ -21,15 +21,15 @@
 .inline-notice,
 .form-error {
   margin: 0;
-  color: #e0a8ac;
+  color: var(--danger);
   font-size: 12px;
   line-height: 1.45;
 }
 
 .inline-notice {
   padding: 9px 20px;
-  border-bottom: 1px solid #633a3e;
-  background: #251719;
+  border-bottom: 1px solid color-mix(in oklch, var(--danger) 35%, var(--line));
+  background: color-mix(in oklch, var(--danger) 12%, var(--canvas));
   text-align: right;
 }
 
@@ -92,8 +92,8 @@
 }
 
 .choice-group > label:has(input:checked) {
-  border-color: #456984;
-  background: #15202a;
+  border-color: color-mix(in oklch, var(--action) 55%, var(--line));
+  background: color-mix(in oklch, var(--action) 14%, var(--surface));
 }
 
 .choice-group input {
@@ -129,7 +129,7 @@
   padding: 12px;
   border: 1px solid var(--rule);
   border-radius: 5px;
-  background: var(--ink);
+  background: var(--canvas);
 }
 
 .confirmation-block span,

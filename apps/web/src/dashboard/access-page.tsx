@@ -472,7 +472,7 @@ export function AccessPage() {
         description="Issue only the workspace actions an agent needs. Shelf stores a one-way digest and never returns token material in this ledger."
         size="sm"
         title="Tokens are reveal-once"
-        variant="alert"
+        variant="secondary"
       />
       {page.items.length === 0 ? (
         <Empty

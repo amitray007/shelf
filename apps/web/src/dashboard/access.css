@@ -1,5 +1,5 @@
 .access-principle {
-  margin: -10px 0 22px;
+  margin: -4px 0 20px;
 }
 
 .access-page {
@@ -16,6 +16,10 @@
 
 .credential-table {
   min-width: 820px;
+}
+
+.credential-table th {
+  background: transparent;
 }
 
 .credential-table :is(th, td) {
@@ -73,7 +77,7 @@
 }
 
 .credential-status {
-  color: #95c8a5;
+  color: var(--proof);
   font-size: 11px;
   font-weight: 560;
 }
@@ -207,66 +211,58 @@
   min-width: 320px;
   min-height: 100dvh;
   padding: 24px;
-  background: var(--ink);
+  background: var(--canvas);
   place-items: center;
 }
 
 .signin-panel {
-  width: min(100%, 392px);
+  width: min(100%, 360px);
   overflow: hidden;
-  border: 1px solid var(--rule-strong);
-  border-radius: 8px;
-  background: var(--canvas);
-  box-shadow: none;
+  background: transparent;
 }
 
-.signin-header {
-  display: flex;
-  min-height: 52px;
-  align-items: center;
-  padding: 0 18px;
-  border-bottom: 1px solid var(--rule);
-  background: #0d1014;
+.signin-panel > .wordmark {
+  display: inline-block;
+  margin-bottom: 28px;
 }
 
 .signin-copy {
-  padding: 25px 24px 0;
+  padding: 0;
 }
 
 .signin-copy h1 {
-  margin: 0 0 7px;
+  margin: 0 0 6px;
   color: var(--text);
-  font-size: 22px;
-  font-weight: 620;
-  letter-spacing: -0.03em;
-  line-height: 1.2;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 26px;
 }
 
 .signin-copy > p:last-child {
   margin: 0;
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 .signin-form {
   display: grid;
-  gap: 15px;
-  padding: 22px 24px 24px;
+  gap: 14px;
+  padding: 22px 0 0;
 }
 
 .signin-submit {
   width: 100%;
-  margin-top: 2px;
+  max-width: 100%;
+  margin-top: 4px;
 }
 
 .signin-footnote {
-  padding: 14px 18px;
-  border-top: 1px solid var(--rule);
+  padding: 18px 0 0;
   color: var(--text-muted);
-  font-size: 10px;
-  line-height: 1.45;
-  text-align: center;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 @media (max-width: 680px) {

@@ -14,9 +14,7 @@ export function SignInPage() {
   return (
     <main className="signin-page">
       <section className="signin-panel" aria-labelledby="signin-title">
-        <header className="signin-header">
-          <span className="wordmark">shelf</span>
-        </header>
+        <span className="wordmark">shelf</span>
         <div className="signin-copy">
           <h1 id="signin-title">Sign in</h1>
           <p>Use your installation owner account.</p>
