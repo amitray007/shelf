@@ -44,7 +44,7 @@ export function Modal({
           ? { style: { transitionDuration: '100ms', transitionProperty: 'opacity' } }
           : {})}
       >
-        <header className="dialog-header">
+        <div className="dialog-header">
           <div>
             <Dialog.Title className="dialog-title">{title}</Dialog.Title>
             <Dialog.Description className="dialog-description">{description}</Dialog.Description>
@@ -61,7 +61,7 @@ export function Modal({
               />
             }
           />
-        </header>
+        </div>
         {children}
       </Dialog>
     </Dialog.Root>

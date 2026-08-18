@@ -21,6 +21,9 @@ export const folderRevisionId = `rev_${'g'.repeat(22)}`;
 export const markdownShareId = `shr_${'c'.repeat(22)}`;
 export const htmlShareId = `shr_${'d'.repeat(22)}`;
 export const shareSecret = 's'.repeat(43);
+export const createdShareId = `shr_${'r'.repeat(22)}`;
+export const createdCredentialId = `crd_${'u'.repeat(22)}`;
+export const createdCredentialToken = `shf_v1.${'u'.repeat(22)}.${'v'.repeat(43)}`;
 export const rendererOrigin = 'http://localhost:43874';
 
 export const longArtifactName =
@@ -401,6 +404,16 @@ export const credentialPage = {
         { workspaceId, action: 'file.publish' },
         { workspaceId, action: 'revision.read' },
       ],
+    },
+    {
+      credentialId: `crd_${'x'.repeat(22)}`,
+      actorId: 'actor-browser-expired-agent',
+      actorName: 'expired-agent',
+      createdAt: '2026-08-16T10:00:00.000Z',
+      expiresAt: '2026-08-17T10:00:00.000Z',
+      revokedAt: null,
+      lastUsedAt: '2026-08-16T12:00:00.000Z',
+      grants: [{ workspaceId, action: 'revision.read' }],
     },
   ],
   nextCursor: null,

@@ -4,6 +4,8 @@ import type { AxeResults } from 'axe-core';
 
 import {
   artifactId,
+  createdCredentialToken,
+  createdShareId,
   folderArtifactId,
   htmlShareId,
   longArtifactName,
@@ -57,7 +59,7 @@ async function expectNoAxeViolations(page: Page): Promise<void> {
     results.violations.map((violation) => ({
       id: violation.id,
       impact: violation.impact,
-      nodes: violation.nodes.length,
+      nodes: violation.nodes.map((node) => ({ html: node.html, target: node.target })),
     })),
   ).toEqual([]);
 }
@@ -185,7 +187,16 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   });
   await page.getByRole('tab', { name: 'Details' }).click();
   await expect(page).toHaveURL(/[?&]panel=details(?:&|$)/u);
+  await page.waitForTimeout(100);
   expect(panelRequests).toEqual([]);
+
+  await page.getByRole('button', { name: 'Share' }).click();
+  const shareDialog = page.getByRole('dialog', { name: 'Create share link' });
+  await shareDialog.getByRole('radio', { name: /Pinned/u }).click();
+  await shareDialog.getByRole('button', { name: 'Create link' }).click();
+  await expect(shareDialog).toContainText(`/s/${createdShareId}#${shareSecret}`);
+  await shareDialog.getByRole('button', { name: 'Done' }).click();
+  await expect(page.locator('.shelf-dialog')).toHaveCount(0);
 
   await page.getByRole('link', { name: 'Artifacts', exact: true }).click();
   await page.getByRole('button', { name: /Workspace menu/u }).click();
@@ -200,10 +211,27 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await page.keyboard.press('Enter');
   const name = page.getByRole('textbox', { name: 'Agent name' });
   await expect(name).toBeFocused();
-  await expect(page.getByRole('dialog', { name: 'Issue access credential' })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const issueDialog = page.getByRole('dialog', { name: 'Issue access credential' });
+  await expect(issueDialog).toBeVisible();
+  await name.fill('browser-agent');
+  await issueDialog.getByRole('checkbox', { name: 'file.publish' }).check();
+  await issueDialog.getByRole('button', { name: 'Issue credential' }).click();
+  await expect(issueDialog).toContainText(createdCredentialToken);
+  await issueDialog.getByRole('button', { name: 'I saved it' }).click();
+  await expect(page.locator('.shelf-dialog')).toHaveCount(0);
+  await expect(page.locator('body')).not.toContainText(createdCredentialToken);
   await expect(issue).toBeFocused();
+
+  const mobileLedger = page.locator('.credential-mobile-list');
+  const expiredRow = (await mobileLedger.isVisible())
+    ? mobileLedger.locator('.credential-mobile-row').filter({ hasText: 'expired-agent' })
+    : page.locator('.credential-table tr').filter({ hasText: 'expired-agent' });
+  await expiredRow.getByRole('button', { name: 'Actions for expired-agent' }).click();
+  await page.getByRole('menuitem', { name: 'View details' }).click();
+  const detailsDialog = page.getByRole('dialog', { name: 'expired-agent' });
+  await expect(detailsDialog.getByText('Expired', { exact: true })).toBeVisible();
+  await detailsDialog.getByRole('button', { name: 'Done' }).click();
+  await expect(page.locator('.shelf-dialog')).toHaveCount(0);
   await expectNoHorizontalOverflow(page, [page.locator('.dashboard-main')]);
   await expectNoAxeViolations(page);
   diagnostics.assertClean();

@@ -16,16 +16,16 @@ export function useManagedStatus(
   revokedAt: string | null,
   expiresAt: string | null,
 ): ManagedStatus {
-  const [now, setNow] = useState(Date.now());
+  const [, refresh] = useState(0);
   useEffect(() => {
     if (revokedAt !== null || expiresAt === null) return;
-    const remaining = new Date(expiresAt).valueOf() - now;
+    const remaining = new Date(expiresAt).valueOf() - Date.now();
     if (remaining <= 0) return;
     const timeout = globalThis.setTimeout(
-      () => setNow(Date.now()),
+      () => refresh((value) => value + 1),
       Math.min(remaining + 1, 2_147_483_647),
     );
     return () => globalThis.clearTimeout(timeout);
-  }, [expiresAt, now, revokedAt]);
-  return managedStatus(revokedAt, expiresAt, now);
+  }, [expiresAt, revokedAt]);
+  return managedStatus(revokedAt, expiresAt);
 }

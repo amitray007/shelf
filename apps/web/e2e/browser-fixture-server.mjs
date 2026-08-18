@@ -6,7 +6,11 @@ import { fileURLToPath } from 'node:url';
 import axe from 'axe-core';
 
 import {
+  artifactId,
   artifactPage,
+  createdCredentialId,
+  createdCredentialToken,
+  createdShareId,
   credentialPage,
   dashboardSession,
   folderTreePage,
@@ -112,7 +116,40 @@ async function api(request, response, url) {
       return;
     }
   }
-  if (path === `/api/v1/workspaces/${workspaceId}/shares`) {
+  if (
+    request.method === 'POST' &&
+    path === `/api/v1/workspaces/${workspaceId}/artifacts/${artifactId}/shares`
+  ) {
+    const value = JSON.parse(await body(request));
+    if (
+      request.headers['idempotency-key'] === undefined ||
+      value.expiresAt !== null ||
+      value.target?.mode !== 'pinned' ||
+      typeof value.target.revisionId !== 'string'
+    ) {
+      json(response, 400, {
+        apiVersion: 'v1',
+        error: { code: 'INVALID_REQUEST', message: 'Unexpected fixture share request.' },
+      });
+      return;
+    }
+    json(response, 201, {
+      apiVersion: 'v1',
+      requestId: 'request-browser-share',
+      workspaceId,
+      shareId: createdShareId,
+      artifactId,
+      visibility: 'unlisted',
+      target: value.target,
+      createdAt: '2026-08-18T10:10:00.000Z',
+      expiresAt: null,
+      revokedAt: null,
+      url: `/s/${createdShareId}#${shareSecret}`,
+      replayed: false,
+    });
+    return;
+  }
+  if (request.method === 'GET' && path === `/api/v1/workspaces/${workspaceId}/shares`) {
     json(response, 200, sharePage);
     return;
   }
@@ -141,7 +178,34 @@ async function api(request, response, url) {
     );
     return;
   }
-  if (path === '/api/v1/access-credentials') {
+  if (request.method === 'POST' && path === '/api/v1/access-credentials') {
+    const value = JSON.parse(await body(request));
+    if (
+      value.actorName !== 'browser-agent' ||
+      value.expiresAt !== undefined ||
+      !Array.isArray(value.grants) ||
+      value.grants.length !== 1 ||
+      value.grants[0]?.workspaceId !== workspaceId ||
+      value.grants[0]?.action !== 'file.publish'
+    ) {
+      json(response, 400, {
+        apiVersion: 'v1',
+        error: { code: 'INVALID_REQUEST', message: 'Unexpected fixture credential request.' },
+      });
+      return;
+    }
+    json(response, 201, {
+      apiVersion: 'v1',
+      credentialId: createdCredentialId,
+      actorId: 'actor-browser-created-agent',
+      actorName: value.actorName,
+      token: createdCredentialToken,
+      expiresAt: null,
+      grants: value.grants,
+    });
+    return;
+  }
+  if (request.method === 'GET' && path === '/api/v1/access-credentials') {
     json(response, 200, credentialPage);
     return;
   }
