@@ -1,3 +1,11 @@
+import { Banner } from '@cloudflare/kumo/components/banner';
+import { Button } from '@cloudflare/kumo/components/button';
+import { Checkbox } from '@cloudflare/kumo/components/checkbox';
+import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
+import { Empty } from '@cloudflare/kumo/components/empty';
+import { Input } from '@cloudflare/kumo/components/input';
+import { Table } from '@cloudflare/kumo/components/table';
+import { DotsThreeIcon } from '@phosphor-icons/react/DotsThree';
 import type {
   DashboardCredentialAction,
   DashboardCredentialIssue,
@@ -48,12 +56,16 @@ function IssueCredentialDialog({
     }
     onOpenChange(next);
   };
-  const toggle = (workspaceId: string, action: DashboardCredentialAction) => {
+  const selectGrant = (
+    workspaceId: string,
+    action: DashboardCredentialAction,
+    checked: boolean,
+  ) => {
     const key = `${workspaceId}\u0000${action}`;
     setSelected((current) => {
       const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (checked) next.add(key);
+      else next.delete(key);
       return next;
     });
   };
@@ -96,68 +108,77 @@ function IssueCredentialDialog({
     >
       {issued === undefined ? (
         <form className="dialog-form" onSubmit={submit}>
-          <label className="field">
-            <span className="field-label">Agent name</span>
-            <input
-              aria-label="Agent name"
-              maxLength={128}
-              onChange={(event) => setActorName(event.currentTarget.value)}
-              placeholder="release-agent"
-              ref={agentNameRef}
-              required
-              value={actorName}
-            />
-          </label>
+          <Input
+            label="Agent name"
+            maxLength={128}
+            onChange={(event) => setActorName(event.currentTarget.value)}
+            placeholder="release-agent"
+            ref={agentNameRef}
+            required
+            value={actorName}
+          />
           <fieldset className="grant-fieldset">
             <legend className="field-label">Workspace grants</legend>
             {session.workspaces.map((workspace) => (
               <div className="grant-workspace" key={workspace.workspaceId}>
-                <code>{workspace.workspaceId}</code>
+                <code title={workspace.workspaceId}>{workspace.workspaceId}</code>
                 <div>
                   {workspace.actions.map((action) => (
-                    <label key={action}>
-                      <input
-                        checked={selected.has(`${workspace.workspaceId}\u0000${action}`)}
-                        onChange={() => toggle(workspace.workspaceId, action)}
-                        type="checkbox"
-                      />
-                      <span>{action}</span>
-                    </label>
+                    <Checkbox
+                      checked={selected.has(`${workspace.workspaceId}\u0000${action}`)}
+                      controlFirst
+                      key={action}
+                      label={action}
+                      onCheckedChange={(checked) =>
+                        selectGrant(workspace.workspaceId, action, checked)
+                      }
+                    />
                   ))}
                 </div>
               </div>
             ))}
           </fieldset>
-          <label className="field">
-            <span className="field-label">Expires (optional)</span>
-            <input
-              aria-label="Expiration date and time"
-              onChange={(event) => setExpiresAt(event.currentTarget.value)}
-              type="datetime-local"
-              value={expiresAt}
+          <Input
+            label="Expires (optional)"
+            onChange={(event) => setExpiresAt(event.currentTarget.value)}
+            type="datetime-local"
+            value={expiresAt}
+          />
+          {error === undefined ? null : (
+            <Banner
+              description={error}
+              role="alert"
+              size="sm"
+              title="Credential wasn't issued"
+              variant="error"
             />
-          </label>
-          {error === undefined ? null : <p className="form-error">{error}</p>}
+          )}
           <div className="dialog-actions">
-            <button className="control" disabled={busy} onClick={() => close(false)} type="button">
+            <Button disabled={busy} onClick={() => close(false)} type="button">
               Cancel
-            </button>
-            <button className="control control-primary" disabled={busy} type="submit">
+            </Button>
+            <Button disabled={busy} loading={busy} type="submit" variant="primary">
               {busy ? 'Issuing…' : 'Issue credential'}
-            </button>
+            </Button>
           </div>
         </form>
       ) : (
         <div className="dialog-form">
+          <Banner
+            description="Put it in a keyring or an explicitly named environment variable. Shelf cannot show it again."
+            size="sm"
+            title="Copy this token now"
+            variant="alert"
+          />
           <SecretReveal
-            hint="This token is shown once. Put it in a keyring or an explicitly named environment variable."
+            hint="This value exists only in this reveal-once response."
             label="Access token"
             value={issued.token}
           />
           <div className="dialog-actions">
-            <button className="control control-primary" onClick={() => close(false)} type="button">
+            <Button onClick={() => close(false)} type="button" variant="primary">
               I saved it
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -165,19 +186,201 @@ function IssueCredentialDialog({
   );
 }
 
-function CredentialRow({ credential }: { readonly credential: DashboardCredentialSummary }) {
+function CredentialActions({
+  credential,
+  onDetails,
+  onRevoke,
+}: {
+  readonly credential: DashboardCredentialSummary;
+  readonly onDetails: () => void;
+  readonly onRevoke: () => void;
+}) {
+  const active = useManagedStatus(credential.revokedAt, credential.expiresAt) === 'Active';
+  return (
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        render={
+          <Button
+            aria-label={`Actions for ${credential.actorName}`}
+            className="credential-actions-trigger"
+            icon={DotsThreeIcon}
+            shape="square"
+            size="sm"
+            variant="ghost"
+          />
+        }
+      />
+      <DropdownMenu.Content align="end">
+        <DropdownMenu.Item onClick={onDetails}>View details</DropdownMenu.Item>
+        {active ? (
+          <DropdownMenu.Item onClick={onRevoke} variant="danger">
+            Revoke credential
+          </DropdownMenu.Item>
+        ) : null}
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  );
+}
+
+function CredentialDetailsDialog({
+  credential,
+  onOpenChange,
+}: {
+  readonly credential: DashboardCredentialSummary | undefined;
+  readonly onOpenChange: (open: boolean) => void;
+}) {
+  const status = useManagedStatus(credential?.revokedAt ?? null, credential?.expiresAt ?? null);
+  return (
+    <Modal
+      description="Credential identity, grants, and lifecycle state. Token material is never returned here."
+      onOpenChange={onOpenChange}
+      open={credential !== undefined}
+      title={credential?.actorName ?? 'Credential details'}
+    >
+      {credential === undefined ? null : (
+        <div className="dialog-form credential-details">
+          <dl>
+            <div>
+              <dt>Credential ID</dt>
+              <dd>
+                <code>{credential.credentialId}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>{status}</dd>
+            </div>
+            <div>
+              <dt>Created</dt>
+              <dd>{dateTime(credential.createdAt)}</dd>
+            </div>
+            <div>
+              <dt>Last used</dt>
+              <dd>{dateTime(credential.lastUsedAt)}</dd>
+            </div>
+            <div>
+              <dt>Expires</dt>
+              <dd>{dateTime(credential.expiresAt)}</dd>
+            </div>
+            <div>
+              <dt>Revoked</dt>
+              <dd>{dateTime(credential.revokedAt)}</dd>
+            </div>
+          </dl>
+          <section aria-labelledby="credential-grants-title" className="credential-details-grants">
+            <h3 id="credential-grants-title">Workspace grants</h3>
+            <div className="grant-list">
+              {credential.grants.map((grant) => (
+                <span
+                  key={`${grant.workspaceId}:${grant.action}`}
+                  title={`${grant.workspaceId} / ${grant.action}`}
+                >
+                  {grant.workspaceId} / {grant.action}
+                </span>
+              ))}
+            </div>
+          </section>
+          <div className="dialog-actions">
+            <Button onClick={() => onOpenChange(false)} type="button" variant="primary">
+              Done
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function CredentialTableRow({
+  credential,
+  onDetails,
+  onRevoke,
+}: {
+  readonly credential: DashboardCredentialSummary;
+  readonly onDetails: () => void;
+  readonly onRevoke: () => void;
+}) {
+  const status = useManagedStatus(credential.revokedAt, credential.expiresAt);
+  return (
+    <Table.Row>
+      <Table.Cell>
+        <div className="credential-identity">
+          <strong>{credential.actorName}</strong>
+          <code title={credential.credentialId}>{credential.credentialId}</code>
+        </div>
+      </Table.Cell>
+      <Table.Cell>
+        <div className="grant-list">
+          {credential.grants.map((grant) => (
+            <span
+              key={`${grant.workspaceId}:${grant.action}`}
+              title={`${grant.workspaceId} / ${grant.action}`}
+            >
+              {grant.workspaceId} / {grant.action}
+            </span>
+          ))}
+        </div>
+      </Table.Cell>
+      <Table.Cell>{dateTime(credential.lastUsedAt)}</Table.Cell>
+      <Table.Cell>{dateTime(credential.expiresAt)}</Table.Cell>
+      <Table.Cell>
+        <span className={status === 'Active' ? 'credential-status' : 'credential-status is-muted'}>
+          {status}
+        </span>
+      </Table.Cell>
+      <Table.Cell>
+        <CredentialActions credential={credential} onDetails={onDetails} onRevoke={onRevoke} />
+      </Table.Cell>
+    </Table.Row>
+  );
+}
+
+function CredentialMobileRow({
+  credential,
+  onDetails,
+  onRevoke,
+}: {
+  readonly credential: DashboardCredentialSummary;
+  readonly onDetails: () => void;
+  readonly onRevoke: () => void;
+}) {
+  const status = useManagedStatus(credential.revokedAt, credential.expiresAt);
+  return (
+    <li className="credential-mobile-row">
+      <div className="credential-identity">
+        <strong>{credential.actorName}</strong>
+        <code title={credential.credentialId}>{credential.credentialId}</code>
+      </div>
+      <span className={status === 'Active' ? 'credential-status' : 'credential-status is-muted'}>
+        {status}
+      </span>
+      <CredentialActions credential={credential} onDetails={onDetails} onRevoke={onRevoke} />
+    </li>
+  );
+}
+
+function RevokeCredentialDialog({
+  credential,
+  onOpenChange,
+}: {
+  readonly credential: DashboardCredentialSummary | undefined;
+  readonly onOpenChange: (open: boolean) => void;
+}) {
   const revalidator = useRevalidator();
-  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const status = useManagedStatus(credential.revokedAt, credential.expiresAt);
-  const active = status === 'Active';
+  const close = (open: boolean) => {
+    if (!open && busy) return;
+    if (!open) setError(undefined);
+    onOpenChange(open);
+  };
   const revoke = async () => {
+    if (credential === undefined) return;
     setBusy(true);
     setError(undefined);
     try {
       await revokeDashboardCredential(credential.credentialId);
-      setConfirming(false);
+      onOpenChange(false);
       void revalidator.revalidate();
     } catch (caught) {
       setError(caught instanceof DashboardApiError ? caught.message : 'Revocation failed.');
@@ -186,73 +389,39 @@ function CredentialRow({ credential }: { readonly credential: DashboardCredentia
     }
   };
   return (
-    <li className="credential-row">
-      <div className="credential-identity">
-        <strong>{credential.actorName}</strong>
-        <code>{credential.credentialId}</code>
+    <Modal
+      canClose={!busy}
+      description="The token stops authenticating immediately. Existing artifacts and provenance stay intact."
+      onOpenChange={close}
+      open={credential !== undefined}
+      title={credential === undefined ? 'Revoke credential' : `Revoke ${credential.actorName}?`}
+    >
+      <div className="dialog-form">
+        {error === undefined ? null : (
+          <Banner
+            description={error}
+            role="alert"
+            size="sm"
+            title="Credential wasn't revoked"
+            variant="error"
+          />
+        )}
+        <div className="dialog-actions">
+          <Button disabled={busy} onClick={() => close(false)} type="button">
+            Cancel
+          </Button>
+          <Button
+            disabled={busy}
+            loading={busy}
+            onClick={() => void revoke()}
+            type="button"
+            variant="destructive"
+          >
+            {busy ? 'Revoking…' : 'Revoke credential'}
+          </Button>
+        </div>
       </div>
-      <div className="grant-list">
-        {credential.grants.map((grant) => (
-          <span key={`${grant.workspaceId}:${grant.action}`}>
-            {grant.workspaceId} / {grant.action}
-          </span>
-        ))}
-      </div>
-      <dl className="credential-dates">
-        <div>
-          <dt>Last used</dt>
-          <dd>{dateTime(credential.lastUsedAt)}</dd>
-        </div>
-        <div>
-          <dt>Expires</dt>
-          <dd>{dateTime(credential.expiresAt)}</dd>
-        </div>
-      </dl>
-      <span className={active ? 'status-pill' : 'status-pill is-muted'}>{status}</span>
-      {active ? (
-        <button
-          className="quiet-button danger-text"
-          onClick={() => setConfirming(true)}
-          type="button"
-        >
-          Revoke
-        </button>
-      ) : null}
-      <Modal
-        canClose={!busy}
-        description="The token will stop authenticating immediately. Existing artifacts and provenance stay intact."
-        onOpenChange={setConfirming}
-        open={confirming}
-        title={`Revoke ${credential.actorName}?`}
-      >
-        <div className="dialog-form">
-          {error === undefined ? null : <p className="form-error">{error}</p>}
-          <div className="dialog-actions">
-            <button
-              className="control"
-              disabled={busy}
-              onClick={() => setConfirming(false)}
-              type="button"
-            >
-              Cancel
-            </button>
-            <button
-              className="control control-danger"
-              disabled={busy}
-              onClick={revoke}
-              type="button"
-            >
-              {busy ? 'Revoking…' : 'Revoke credential'}
-            </button>
-          </div>
-        </div>
-      </Modal>
-      {!confirming && error !== undefined ? (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </li>
+    </Modal>
   );
 }
 
@@ -260,40 +429,85 @@ export function AccessPage() {
   const page = useLoaderData() as DashboardCredentialPage;
   const session = useRouteLoaderData('dashboard') as DashboardSession;
   const [issueOpen, setIssueOpen] = useState(false);
+  const [detailsCredential, setDetailsCredential] = useState<DashboardCredentialSummary>();
+  const [revokeCredential, setRevokeCredential] = useState<DashboardCredentialSummary>();
   return (
     <div className="dashboard-page access-page">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">Agent authority</p>
           <h1>Access</h1>
           <p>Scoped credentials for CLI and non-interactive agent workflows.</p>
         </div>
-        <button
-          className="control control-primary"
+        <Button
           disabled={session.workspaces.length === 0}
           onClick={() => setIssueOpen(true)}
           type="button"
+          variant="primary"
         >
           Issue credential
-        </button>
+        </Button>
       </header>
-      <aside className="access-principle">
-        <strong>Tokens are reveal-once.</strong>
-        <span>
-          Shelf stores only a one-way digest and never returns token material in this list.
-        </span>
-      </aside>
+      <Banner
+        className="access-principle"
+        description="Issue only the workspace actions an agent needs. Shelf stores a one-way digest and never returns token material in this ledger."
+        size="sm"
+        title="Tokens are reveal-once"
+        variant="alert"
+      />
       {page.items.length === 0 ? (
-        <section className="dashboard-empty">
-          <p className="eyebrow">No agent access</p>
-          <h2>Issue a scoped credential when an agent needs Shelf.</h2>
-        </section>
+        <Empty
+          className="credential-empty"
+          description="Create one only when a CLI or agent needs scoped workspace access."
+          size="sm"
+          title="No access credentials"
+        />
       ) : (
-        <ul className="credential-list" aria-label="Access credentials">
-          {page.items.map((credential) => (
-            <CredentialRow credential={credential} key={credential.credentialId} />
-          ))}
-        </ul>
+        <>
+          <div className="credential-table-shell">
+            <Table aria-label="Access credentials" className="credential-table" layout="fixed">
+              <colgroup>
+                <col className="credential-column-identity" />
+                <col className="credential-column-grants" />
+                <col className="credential-column-date" />
+                <col className="credential-column-date" />
+                <col className="credential-column-status" />
+                <col className="credential-column-action" />
+              </colgroup>
+              <Table.Header variant="compact">
+                <Table.Row>
+                  <Table.Head>Identity</Table.Head>
+                  <Table.Head>Grants</Table.Head>
+                  <Table.Head>Last used</Table.Head>
+                  <Table.Head>Expires</Table.Head>
+                  <Table.Head>Status</Table.Head>
+                  <Table.Head>
+                    <span className="visually-hidden">Actions</span>
+                  </Table.Head>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {page.items.map((credential) => (
+                  <CredentialTableRow
+                    credential={credential}
+                    key={credential.credentialId}
+                    onDetails={() => setDetailsCredential(credential)}
+                    onRevoke={() => setRevokeCredential(credential)}
+                  />
+                ))}
+              </Table.Body>
+            </Table>
+          </div>
+          <ul aria-label="Access credentials" className="credential-mobile-list">
+            {page.items.map((credential) => (
+              <CredentialMobileRow
+                credential={credential}
+                key={credential.credentialId}
+                onDetails={() => setDetailsCredential(credential)}
+                onRevoke={() => setRevokeCredential(credential)}
+              />
+            ))}
+          </ul>
+        </>
       )}
       {page.nextCursor === null ? null : (
         <footer className="pagination">
@@ -303,6 +517,18 @@ export function AccessPage() {
         </footer>
       )}
       <IssueCredentialDialog onOpenChange={setIssueOpen} open={issueOpen} session={session} />
+      <CredentialDetailsDialog
+        credential={detailsCredential}
+        onOpenChange={(open) => {
+          if (!open) setDetailsCredential(undefined);
+        }}
+      />
+      <RevokeCredentialDialog
+        credential={revokeCredential}
+        onOpenChange={(open) => {
+          if (!open) setRevokeCredential(undefined);
+        }}
+      />
     </div>
   );
 }

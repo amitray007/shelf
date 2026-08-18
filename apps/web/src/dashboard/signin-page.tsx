@@ -1,3 +1,7 @@
+import { Banner } from '@cloudflare/kumo/components/banner';
+import { Button } from '@cloudflare/kumo/components/button';
+import { Input } from '@cloudflare/kumo/components/input';
+import { SensitiveInput } from '@cloudflare/kumo/components/sensitive-input';
 import { Form, useActionData, useNavigation } from 'react-router';
 
 export function SignInPage() {
@@ -10,34 +14,44 @@ export function SignInPage() {
       <section className="signin-panel" aria-labelledby="signin-title">
         <header className="signin-header">
           <span className="wordmark">shelf</span>
-          <span className="signin-status">owner access</span>
         </header>
         <div className="signin-copy">
-          <p className="eyebrow">Self-hosted workspace</p>
-          <h1 id="signin-title">Open your artifact shelf</h1>
-          <p>Browse revisions, manage share links, and issue scoped agent access.</p>
+          <h1 id="signin-title">Sign in</h1>
+          <p>Use your installation owner account.</p>
         </div>
         <Form className="signin-form" method="post" replace>
-          <label className="field">
-            <span className="field-label">Email</span>
-            <input autoComplete="email" inputMode="email" name="email" required type="email" />
-          </label>
-          <label className="field">
-            <span className="field-label">Password</span>
-            <input autoComplete="current-password" name="password" required type="password" />
-          </label>
+          <Input
+            autoComplete="email"
+            inputMode="email"
+            label="Email"
+            name="email"
+            required
+            type="email"
+          />
+          <SensitiveInput
+            autoComplete="current-password"
+            label="Password"
+            name="password"
+            required
+          />
           {action?.error === undefined ? null : (
-            <p className="form-error" role="alert">
-              {action.error}
-            </p>
+            <Banner
+              description={action.error}
+              role="alert"
+              size="sm"
+              title="Sign-in failed"
+              variant="error"
+            />
           )}
-          <button
-            className="control control-primary signin-submit"
+          <Button
+            className="signin-submit"
             disabled={submitting}
+            loading={submitting}
             type="submit"
+            variant="primary"
           >
             {submitting ? 'Signing in…' : 'Sign in'}
-          </button>
+          </Button>
         </Form>
         <footer className="signin-footnote">
           Registration is closed. The installation owner is created by the operator.

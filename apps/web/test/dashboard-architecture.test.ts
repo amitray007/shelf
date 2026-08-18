@@ -38,6 +38,45 @@ describe('dashboard architecture', () => {
     expect(dashboardSource.join('\n')).not.toMatch(/localStorage|sessionStorage|console\./);
   });
 
+  it('composes Access as a responsive Kumo credential ledger', async () => {
+    const access = await readFile(path.join(sourceRoot, 'dashboard/access-page.tsx'), 'utf8');
+    const styles = await readFile(path.join(sourceRoot, 'dashboard/access.css'), 'utf8');
+
+    expect(access).toContain("from '@cloudflare/kumo/components/banner'");
+    expect(access).toContain("from '@cloudflare/kumo/components/button'");
+    expect(access).toContain("from '@cloudflare/kumo/components/checkbox'");
+    expect(access).toContain("from '@cloudflare/kumo/components/dropdown'");
+    expect(access).toContain("from '@cloudflare/kumo/components/empty'");
+    expect(access).toContain("from '@cloudflare/kumo/components/input'");
+    expect(access).toContain("from '@cloudflare/kumo/components/table'");
+    expect(access).toContain('<Table');
+    expect(access).toContain('CredentialDetailsDialog');
+    expect(access).toContain('<SecretReveal');
+    expect(access).not.toMatch(/<(?:button|input)\b/);
+    expect(access).not.toContain('eyebrow');
+    expect(styles).toMatch(
+      /\.credential-actions-trigger\s*\{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/su,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*680px\)[\s\S]*\.credential-table-shell\s*\{[^}]*display:\s*none/su,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*680px\)[\s\S]*\.credential-mobile-list\s*\{[^}]*display:\s*grid/su,
+    );
+  });
+
+  it('keeps sign-in a restrained Kumo utility form', async () => {
+    const source = await readFile(path.join(sourceRoot, 'dashboard/signin-page.tsx'), 'utf8');
+
+    expect(source).toContain("from '@cloudflare/kumo/components/banner'");
+    expect(source).toContain("from '@cloudflare/kumo/components/button'");
+    expect(source).toContain("from '@cloudflare/kumo/components/input'");
+    expect(source).toContain("from '@cloudflare/kumo/components/sensitive-input'");
+    expect(source).not.toMatch(/<(?:button|input)\b/);
+    expect(source).not.toContain('eyebrow');
+    expect(source).not.toContain('Open your artifact shelf');
+  });
+
   it('keeps Access and sign-out in the workspace menu without a mobile tab bar', async () => {
     const layout = await readFile(path.join(sourceRoot, 'dashboard/layout.tsx'), 'utf8');
     const shell = await readFile(path.join(sourceRoot, 'dashboard/shell.css'), 'utf8');
