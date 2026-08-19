@@ -30,7 +30,7 @@ export const SHARE_EXPIRY_DURATION_MS = {
 } as const;
 
 export const PROTECTED_SHARE_EXPIRY_OPTIONS = ['never', ...SHARE_EXPIRY_PRESETS, 'custom'] as const;
-export const PUBLIC_SHARE_EXPIRY_OPTIONS = [...SHARE_EXPIRY_PRESETS, 'custom'] as const;
+export const PUBLIC_SHARE_EXPIRY_OPTIONS = PROTECTED_SHARE_EXPIRY_OPTIONS;
 
 export const SHARE_SESSION_LIMITS = {
   minimum: 1,
@@ -62,10 +62,11 @@ export const ShareExpiryPresetSchema = Type.Union([
   Type.Literal('30d'),
 ]);
 
-export const ProtectedShareExpiryPresetSchema = Type.Union([
+export const ShareExpiryPresetWithNeverSchema = Type.Union([
   Type.Literal('never'),
   ShareExpiryPresetSchema,
 ]);
+export const ProtectedShareExpiryPresetSchema = ShareExpiryPresetWithNeverSchema;
 
 export const ShareLifecycleStatusSchema = Type.Union([
   Type.Literal('active'),
@@ -116,7 +117,7 @@ const PublicPolicyFields = { accessType: Type.Literal('public') };
 export const ProtectedShareAccessPolicyInputSchema = Type.Union([
   Type.Object(ProtectedPolicyFields, { additionalProperties: false }),
   Type.Object(
-    { ...ProtectedPolicyFields, expiresIn: ProtectedShareExpiryPresetSchema },
+    { ...ProtectedPolicyFields, expiresIn: ShareExpiryPresetWithNeverSchema },
     { additionalProperties: false },
   ),
   Type.Object(
@@ -128,7 +129,7 @@ export const ProtectedShareAccessPolicyInputSchema = Type.Union([
 export const PublicShareAccessPolicyInputSchema = Type.Union([
   Type.Object(PublicPolicyFields, { additionalProperties: false }),
   Type.Object(
-    { ...PublicPolicyFields, expiresIn: ShareExpiryPresetSchema },
+    { ...PublicPolicyFields, expiresIn: ShareExpiryPresetWithNeverSchema },
     { additionalProperties: false },
   ),
   Type.Object(
@@ -149,7 +150,7 @@ export const ShareCreateInputSchema = Type.Union(
   [
     Type.Object(ProtectedCreateFields, { additionalProperties: false }),
     Type.Object(
-      { ...ProtectedCreateFields, expiresIn: ProtectedShareExpiryPresetSchema },
+      { ...ProtectedCreateFields, expiresIn: ShareExpiryPresetWithNeverSchema },
       { additionalProperties: false },
     ),
     Type.Object(
@@ -158,7 +159,7 @@ export const ShareCreateInputSchema = Type.Union(
     ),
     Type.Object(PublicCreateFields, { additionalProperties: false }),
     Type.Object(
-      { ...PublicCreateFields, expiresIn: ShareExpiryPresetSchema },
+      { ...PublicCreateFields, expiresIn: ShareExpiryPresetWithNeverSchema },
       { additionalProperties: false },
     ),
     Type.Object(
@@ -218,7 +219,7 @@ const publicManagementFields = {
   ...ShareManagementFields,
   ...PublicAccessFields,
   target: ShareManagementTargetSchema,
-  expiresAt: IsoInstantSchema,
+  expiresAt: NullableIsoInstantSchema,
   url: PublicShareUrlSchema,
 };
 
@@ -250,6 +251,17 @@ export const PublicShareManagementSummarySchema = Type.Object(publicManagementFi
 export const ShareManagementSummarySchema = Type.Union(
   [ProtectedShareManagementSummarySchema, PublicShareManagementSummarySchema],
   { $id: 'ShareManagementSummary' },
+);
+
+export const ArtifactDefaultSharesSchema = Type.Object(
+  {
+    apiVersion: Type.Literal('v1'),
+    workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
+    artifactId: OpaqueArtifactIdSchema,
+    protected: ProtectedShareManagementSummarySchema,
+    public: PublicShareManagementSummarySchema,
+  },
+  { additionalProperties: false, $id: 'ArtifactDefaultShares' },
 );
 
 const ShareCreateResultFields = {
@@ -287,7 +299,7 @@ export const PublicShareCreateResultSchema = Type.Object(
     ...PublicAccessFields,
     ...ShareCreateResultFields,
     target: ShareTargetSchema,
-    expiresAt: IsoInstantSchema,
+    expiresAt: NullableIsoInstantSchema,
     url: PublicShareUrlSchema,
   },
   { additionalProperties: false },
@@ -334,7 +346,7 @@ const PublicResolutionFields = {
   ...PublicShareFields,
   accessType: Type.Literal('public'),
   publicCode: PublicShareCodeSchema,
-  expiresAt: IsoInstantSchema,
+  expiresAt: NullableIsoInstantSchema,
 };
 
 const FileArtifactSchema = Type.Object(
@@ -448,11 +460,13 @@ export const ProtectedSessionAuthoritySchema = Type.Object(
 
 export type ShareTarget = Static<typeof ShareTargetSchema>;
 export type ShareExpiryPreset = Static<typeof ShareExpiryPresetSchema>;
-export type ProtectedShareExpiryPreset = Static<typeof ProtectedShareExpiryPresetSchema>;
+export type ShareExpiryPresetWithNever = Static<typeof ShareExpiryPresetWithNeverSchema>;
+export type ProtectedShareExpiryPreset = ShareExpiryPresetWithNever;
 export type ShareLifecycleStatus = Static<typeof ShareLifecycleStatusSchema>;
 export type ShareAccessPolicyInput = Static<typeof ShareAccessPolicyInputSchema>;
 export type ShareCreateInput = Static<typeof ShareCreateInputSchema>;
 export type ShareManagementSummary = Static<typeof ShareManagementSummarySchema>;
+export type ArtifactDefaultShares = Static<typeof ArtifactDefaultSharesSchema>;
 export type ShareCreateResult = Static<typeof ShareCreateResultSchema>;
 export type SharePage = Static<typeof SharePageSchema>;
 export type PublicShareResolution = Static<typeof PublicShareResolutionSchema>;
@@ -465,6 +479,10 @@ export function isShareCreateInput(value: unknown): value is ShareCreateInput {
 
 export function isShareCreateResult(value: unknown): value is ShareCreateResult {
   return Check(ShareCreateResultSchema, value);
+}
+
+export function isArtifactDefaultShares(value: unknown): value is ArtifactDefaultShares {
+  return Check(ArtifactDefaultSharesSchema, value);
 }
 
 export function isSharePage(value: unknown): value is SharePage {

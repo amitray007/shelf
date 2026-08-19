@@ -4,6 +4,7 @@ import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import type { DashboardAccessService, HumanAuth } from '@shelf/auth';
 import {
+  ArtifactDefaultSharesSchema,
   ArtifactDeletionResultSchema,
   DashboardCredentialIssueSchema,
   DashboardCredentialPageSchema,
@@ -252,6 +253,7 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   app.addSchema(ArtifactDeletionResultSchema);
   app.addSchema(RevisionComparisonSchema);
   app.addSchema(withoutNestedSchemaIds(ShareManagementSummarySchema));
+  app.addSchema(withoutNestedSchemaIds(ArtifactDefaultSharesSchema));
   app.addSchema(withoutNestedSchemaIds(ShareCreateResultSchema));
   app.addSchema(withoutNestedSchemaIds(ShareCreateInputSchema));
   app.addSchema(withoutNestedSchemaIds(SharePageSchema));

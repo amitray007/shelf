@@ -105,6 +105,8 @@ describe('dashboard architecture', () => {
     expect(shareDialog).toContain("from '@cloudflare/kumo/components/radio'");
     expect(shareDialog).toContain("from '@cloudflare/kumo/components/select'");
     expect(index).toContain("from '@cloudflare/kumo/components/clipboard-text'");
+    expect(index).toContain('<search className="artifact-search">');
+    expect(index).toContain('Title, description, or filename');
     expect(index).toContain("from '@cloudflare/kumo/components/table'");
     expect(workspaceDialog).toContain("from '@cloudflare/kumo/components/input'");
     expect(detail).not.toMatch(/<(?:button|input|select)\b/u);
@@ -119,6 +121,11 @@ describe('dashboard architecture', () => {
     const detail = await readFile(path.join(sourceRoot, 'dashboard/artifact-page.tsx'), 'utf8');
 
     expect(detail).toContain("searchParams.get('panel')");
+    expect(detail).toContain(
+      "return inspectorPanels.includes(value as InspectorPanel) ? (value as InspectorPanel) : 'details'",
+    );
+    expect(detail).toContain("if (panel === 'details') next.delete('panel');");
+    expect(detail).toContain("else next.set('panel', panel);");
     expect(detail).toContain('defaultShouldRevalidate: false');
     expect(detail).toContain('useState(true)');
     expect(detail.match(/aria-label="Hide inspector"/gu) ?? []).toHaveLength(0);

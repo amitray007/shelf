@@ -10,6 +10,8 @@ import { sharesMigration } from './migrations/0006_shares.js';
 import { artifactDeletionMigration } from './migrations/0007_artifact_deletion.js';
 import { workspacesMigration } from './migrations/0008_workspaces.js';
 import { shareAccessPoliciesMigration } from './migrations/0009_share_access_policies.js';
+import { permanentPublicSharesMigration } from './migrations/0010_permanent_public_shares.js';
+import { artifactDefaultSharesMigration } from './migrations/0011_artifact_default_shares.js';
 
 const migrations = Object.freeze<Record<string, Migration>>({
   '0001_initial': initialMigration,
@@ -21,6 +23,8 @@ const migrations = Object.freeze<Record<string, Migration>>({
   '0007_artifact_deletion': artifactDeletionMigration,
   '0008_workspaces': workspacesMigration,
   '0009_share_access_policies': shareAccessPoliciesMigration,
+  '0010_permanent_public_shares': permanentPublicSharesMigration,
+  '0011_artifact_default_shares': artifactDefaultSharesMigration,
 });
 
 const provider: MigrationProvider = {

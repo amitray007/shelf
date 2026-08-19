@@ -37,6 +37,7 @@ describe('managed dashboard status', () => {
   it('resolves every preset and validates custom Protected and Public expiry', () => {
     const now = new Date('2026-08-18T12:00:00.000Z');
     expect(resolveShareExpiry('protected', 'never', '', now)).toEqual({ expiresIn: 'never' });
+    expect(resolveShareExpiry('public', 'never', '', now)).toEqual({ expiresIn: 'never' });
     expect(resolveShareExpiry('public', '24hr', '', now)).toEqual({
       expiresIn: '24hr',
       previewAt: '2026-08-19T12:00:00.000Z',
@@ -69,7 +70,7 @@ describe('managed dashboard status', () => {
       error: 'Choose a future expiry.',
     });
     expect(resolveShareExpiry('public', 'custom', '2026-09-18T12:01', now)).toMatchObject({
-      error: 'Public links must expire within 30 days.',
+      error: 'A finite Public link cannot exceed 30 days.',
     });
   });
 
@@ -95,17 +96,15 @@ describe('managed dashboard status', () => {
 
   it('applies mode defaults and validates semantic share creation drafts', () => {
     const now = new Date('2026-08-18T12:00:00.000Z');
-    expect(defaultSharePolicy('protected')).toEqual({
+    expect(defaultSharePolicy()).toEqual({
       expiryChoice: 'never',
       customExpiresAt: '',
       maxSessions: '',
-      publicAcknowledged: false,
     });
-    expect(defaultSharePolicy('public')).toEqual({
-      expiryChoice: '24hr',
+    expect(defaultSharePolicy()).toEqual({
+      expiryChoice: 'never',
       customExpiresAt: '',
       maxSessions: '',
-      publicAcknowledged: false,
     });
     expect(
       buildShareCreateInput(
@@ -113,14 +112,19 @@ describe('managed dashboard status', () => {
           accessType: 'public',
           targetMode: 'latest',
           revisionId: '',
-          expiryChoice: '24hr',
+          expiryChoice: 'never',
           customExpiresAt: '',
           maxSessions: '',
-          publicAcknowledged: false,
         },
         now,
       ),
-    ).toEqual({ error: 'Confirm that anyone with this URL may access the content.' });
+    ).toEqual({
+      input: {
+        accessType: 'public',
+        target: { mode: 'latest' },
+        expiresIn: 'never',
+      },
+    });
     expect(
       buildShareCreateInput(
         {
@@ -130,7 +134,6 @@ describe('managed dashboard status', () => {
           expiryChoice: '7d',
           customExpiresAt: '',
           maxSessions: '5',
-          publicAcknowledged: false,
         },
         now,
       ),

@@ -1,12 +1,13 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import {
-  type ProtectedShareExpiryPreset,
+  type ArtifactDefaultShares,
   PUBLISH_OPERATION,
   READ_REVISION_OPERATION,
   SHARE_CREATE_OPERATION,
   SHARE_SESSION_LIMITS,
   type ShareCreateResult,
+  type ShareExpiryPresetWithNever,
   type ShareLifecycleStatus,
   type ShareManagementSummary,
   type SharePage,
@@ -18,6 +19,7 @@ import type { Authorizer } from '../publishing/ports.js';
 import { ArtifactNotFoundError, IdempotencyConflictError } from '../publishing/publish.js';
 import { RevisionNotFoundError } from '../revisions/read.js';
 import type {
+  ArtifactDefaultShareState,
   CommitShareCreateOutcome,
   PublicShareCodeGenerator,
   RevokeShareOutcome,
@@ -38,7 +40,7 @@ const CURSOR_PATTERN = /^[A-Za-z0-9_-]{1,2048}$/u;
 const CAPABILITY_PATTERN = /^[A-Za-z0-9_-]{32,128}$/u;
 const PUBLIC_CODE_PATTERN = /^[A-Za-z0-9_-]{12}$/u;
 const PUBLIC_MAX_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
-const SESSION_PRESET_MS: Record<Exclude<ProtectedShareExpiryPreset, 'never'>, number> = {
+const SESSION_PRESET_MS: Record<Exclude<ShareExpiryPresetWithNever, 'never'>, number> = {
   '5m': 5 * 60 * 1000,
   '30m': 30 * 60 * 1000,
   '2hr': 2 * 60 * 60 * 1000,
@@ -137,8 +139,9 @@ export function createSharePolicyFingerprint(input: {
   artifactId: string;
   target: ShareTarget;
   accessType: 'protected' | 'public';
-  expiry: { expiresIn: ProtectedShareExpiryPreset } | { expiresAt: string | null };
+  expiry: { expiresIn: ShareExpiryPresetWithNever } | { expiresAt: string | null };
   maxSessions: number | null;
+  purpose?: 'artifact-default';
 }): string {
   const canonical = JSON.stringify({ version: 2, ...input });
   return `share-create-request/v2:sha256:${createHash('sha256').update(canonical).digest('hex')}`;
@@ -219,11 +222,11 @@ function summary(
     url: capabilityUrl(stored, capabilityCodec),
   };
   if (stored.accessType === 'public') {
-    if (stored.publicCode === null || stored.expiresAt === null) {
+    if (stored.publicCode === null) {
       throw boundaryFailure(
         'SERVICE_UNAVAILABLE',
         'Share listing returned invalid policy state.',
-        new Error('A Public share is missing its selector or expiry.'),
+        new Error('A Public share is missing its selector.'),
       );
     }
     return {
@@ -249,6 +252,35 @@ function summary(
     sessionsUsed: stored.sessionsUsed,
     sessionsRemaining: Math.max(0, stored.maxSessions - stored.sessionsUsed),
   };
+}
+
+function defaultSummary(
+  stored: StoredShare,
+  expectedAccessType: 'protected',
+  capabilityCodec: ShareCapabilityCodec,
+  now: Date,
+): ArtifactDefaultShares['protected'];
+function defaultSummary(
+  stored: StoredShare,
+  expectedAccessType: 'public',
+  capabilityCodec: ShareCapabilityCodec,
+  now: Date,
+): ArtifactDefaultShares['public'];
+function defaultSummary(
+  stored: StoredShare,
+  expectedAccessType: 'protected' | 'public',
+  capabilityCodec: ShareCapabilityCodec,
+  now: Date,
+): ArtifactDefaultShares['protected'] | ArtifactDefaultShares['public'] {
+  const projected = summary(stored, capabilityCodec, now);
+  if (projected.accessType !== expectedAccessType) {
+    throw boundaryFailure(
+      'SERVICE_UNAVAILABLE',
+      'Default share lookup returned invalid policy state.',
+      new Error(`Expected ${expectedAccessType} default, received ${projected.accessType}.`),
+    );
+  }
+  return projected;
 }
 
 function createResult(
@@ -277,11 +309,11 @@ function createResult(
     replayed,
   };
   if (stored.accessType === 'public') {
-    if (stored.publicCode === null || stored.expiresAt === null) {
+    if (stored.publicCode === null) {
       throw boundaryFailure(
         'SERVICE_UNAVAILABLE',
         'Share creation returned invalid policy state.',
-        new Error('A Public share is missing its selector or expiry.'),
+        new Error('A Public share is missing its selector.'),
       );
     }
     return {
@@ -373,74 +405,283 @@ export function createShareLifecycleService(dependencies: {
     return pinned.revision.revisionNumber;
   };
 
+  const createShare = async (request: {
+    installationId: string;
+    workspaceId: string;
+    actorId: string;
+    artifactId: string;
+    target?: ShareTarget;
+    accessType?: 'protected' | 'public';
+    expiresIn?: ShareExpiryPresetWithNever;
+    expiresAt?: string | null;
+    maxSessions?: number;
+    idempotencyKey: string;
+    requestId: string;
+    signal?: AbortSignal;
+    purpose?: 'artifact-default';
+  }): Promise<ShareCreateResult> => {
+    validateIdentity(request, { requestId: true, idempotencyKey: true });
+    const target = request.target ?? { mode: 'latest' as const };
+    const accessType = request.accessType ?? 'protected';
+    validateTarget(target);
+    if (!ARTIFACT_ID_PATTERN.test(request.artifactId)) {
+      throw new InvalidShareRequestError([
+        { field: 'artifactId', reason: 'must be a valid opaque artifact ID' },
+      ]);
+    }
+    const details: Array<{ field: string; reason: string }> = [];
+    if (request.expiresIn !== undefined && request.expiresAt !== undefined) {
+      details.push({ field: 'expiresAt', reason: 'cannot be combined with expiresIn' });
+    }
+    if (
+      request.maxSessions !== undefined &&
+      (!Number.isInteger(request.maxSessions) ||
+        request.maxSessions < SHARE_SESSION_LIMITS.minimum ||
+        request.maxSessions > SHARE_SESSION_LIMITS.maximum)
+    ) {
+      details.push({ field: 'maxSessions', reason: 'must be an integer from 1 through 1000000' });
+    }
+    if (accessType === 'public' && request.maxSessions !== undefined) {
+      details.push({ field: 'maxSessions', reason: 'is not supported for Public shares' });
+    }
+    if (details.length > 0) throw new InvalidShareRequestError(details);
+
+    const semanticExpiry =
+      request.expiresIn !== undefined
+        ? ({ expiresIn: request.expiresIn } as const)
+        : ({ expiresAt: request.expiresAt ?? null } as const);
+    const legacyEquivalent =
+      accessType === 'protected' &&
+      request.purpose === undefined &&
+      request.expiresIn === undefined &&
+      request.maxSessions === undefined;
+    const fingerprint = legacyEquivalent
+      ? createShareFingerprint({
+          artifactId: request.artifactId,
+          target,
+          expiresAt: request.expiresAt ?? null,
+        })
+      : createSharePolicyFingerprint({
+          artifactId: request.artifactId,
+          target,
+          accessType,
+          expiry: semanticExpiry,
+          maxSessions: request.maxSessions ?? null,
+          ...(request.purpose === undefined ? {} : { purpose: request.purpose }),
+        });
+
+    let artifact: StoredArtifact | undefined;
+    try {
+      request.signal?.throwIfAborted();
+      artifact = await dependencies.shares.findArtifactForShare(request.artifactId);
+    } catch (error) {
+      throw boundaryFailure('SERVICE_UNAVAILABLE', 'Artifact lookup failed.', error);
+    }
+    if (
+      artifact === undefined ||
+      artifact.artifactId !== request.artifactId ||
+      artifact.installationId !== request.installationId ||
+      artifact.workspaceId !== request.workspaceId
+    ) {
+      throw new ArtifactNotFoundError();
+    }
+
+    await dependencies.authorizer.authorize(
+      {
+        installationId: request.installationId,
+        workspaceId: request.workspaceId,
+        actorId: request.actorId,
+        action: PUBLISH_OPERATION,
+      },
+      request.signal,
+    );
+    await dependencies.authorizer.authorize(
+      {
+        installationId: request.installationId,
+        workspaceId: request.workspaceId,
+        actorId: request.actorId,
+        action: READ_REVISION_OPERATION,
+      },
+      request.signal,
+    );
+    request.signal?.throwIfAborted();
+
+    if (target.mode === 'pinned') {
+      let pinned: StoredShareRevision | undefined;
+      try {
+        pinned = await dependencies.shares.findRevisionForShare(target.revisionId);
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Revision lookup failed.', error);
+      }
+      if (
+        pinned === undefined ||
+        pinned.revision.revisionId !== target.revisionId ||
+        pinned.installationId !== request.installationId ||
+        pinned.workspaceId !== request.workspaceId ||
+        pinned.artifactId !== request.artifactId ||
+        (pinned.revision.kind ?? 'file') !== (artifact.kind ?? 'file')
+      ) {
+        throw new RevisionNotFoundError();
+      }
+    }
+
+    const namespace: ShareCreateIdempotencyNamespace = {
+      installationId: request.installationId,
+      workspaceId: request.workspaceId,
+      actorId: request.actorId,
+      operation: SHARE_CREATE_OPERATION,
+      key: request.idempotencyKey,
+    };
+    let existing: ShareCreateIdempotencyRecord | undefined;
+    try {
+      existing = await dependencies.shares.findCreateIdempotency(namespace);
+    } catch (error) {
+      throw boundaryFailure('SERVICE_UNAVAILABLE', 'Share idempotency lookup failed.', error);
+    }
+    if (existing !== undefined) {
+      if (existing.fingerprint !== fingerprint) throw new IdempotencyConflictError();
+      return createResult(
+        existing.result,
+        request.requestId,
+        true,
+        dependencies.capabilityCodec,
+        clock(),
+      );
+    }
+
+    const now = clock();
+    let expiresAt: string | null;
+    if ('expiresIn' in semanticExpiry) {
+      expiresAt =
+        semanticExpiry.expiresIn === 'never'
+          ? null
+          : new Date(now.getTime() + SESSION_PRESET_MS[semanticExpiry.expiresIn]).toISOString();
+    } else {
+      expiresAt = semanticExpiry.expiresAt;
+    }
+    if (
+      expiresAt !== null &&
+      (!validInstant(expiresAt) || Date.parse(expiresAt) <= now.getTime())
+    ) {
+      throw new InvalidShareRequestError([
+        { field: 'expiresAt', reason: 'must be a future ISO instant or null' },
+      ]);
+    }
+    if (
+      accessType === 'public' &&
+      expiresAt !== null &&
+      Date.parse(expiresAt) - now.getTime() > PUBLIC_MAX_LIFETIME_MS
+    ) {
+      throw new InvalidShareRequestError([
+        { field: 'expiresAt', reason: 'finite Public shares cannot exceed 30 days' },
+      ]);
+    }
+
+    const shareId = generateShareId();
+    if (!SHARE_ID_PATTERN.test(shareId)) {
+      throw boundaryFailure(
+        'SERVICE_UNAVAILABLE',
+        'Share ID generation failed.',
+        new Error('The share ID generator returned an invalid ID.'),
+      );
+    }
+    const baseStored: Omit<StoredShare, 'publicCode'> = {
+      apiVersion: 'v1',
+      installationId: request.installationId,
+      workspaceId: request.workspaceId,
+      shareId,
+      artifactId: request.artifactId,
+      visibility: 'unlisted',
+      accessType,
+      target:
+        target.mode === 'pinned'
+          ? { mode: 'pinned', revisionId: target.revisionId }
+          : { mode: 'latest' },
+      createdByActorId: request.actorId,
+      createdAt: now.toISOString(),
+      expiresAt,
+      maxSessions: accessType === 'protected' ? (request.maxSessions ?? null) : null,
+      sessionsUsed: 0,
+      revokedAt: null,
+      revokedByActorId: null,
+    };
+    const attempts = accessType === 'public' ? 3 : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const publicCode = accessType === 'public' ? generatePublicCode() : null;
+      if (publicCode !== null && !PUBLIC_CODE_PATTERN.test(publicCode)) {
+        throw boundaryFailure(
+          'SERVICE_UNAVAILABLE',
+          'Public share selector generation failed.',
+          new Error('The Public selector generator returned an invalid selector.'),
+        );
+      }
+      const stored: StoredShare = { ...baseStored, publicCode };
+      let outcome: CommitShareCreateOutcome;
+      try {
+        outcome = await dependencies.shares.commitCreate({
+          namespace,
+          fingerprint,
+          result: stored,
+          purpose: request.purpose ?? 'user-created',
+        });
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Share creation failed.', error);
+      }
+      if (outcome.status === 'conflict') throw new IdempotencyConflictError();
+      if (outcome.status === 'public-code-conflict') continue;
+      if (outcome.status === 'default-conflict') {
+        let defaults: ArtifactDefaultShareState;
+        try {
+          defaults = await dependencies.shares.findArtifactDefaultShares({
+            installationId: request.installationId,
+            workspaceId: request.workspaceId,
+            artifactId: request.artifactId,
+          });
+        } catch (error) {
+          throw boundaryFailure('SERVICE_UNAVAILABLE', 'Default share lookup failed.', error);
+        }
+        const winner = defaults[accessType];
+        if (request.purpose === 'artifact-default' && winner !== undefined) {
+          return createResult(winner, request.requestId, true, dependencies.capabilityCodec, now);
+        }
+        throw boundaryFailure(
+          'SERVICE_UNAVAILABLE',
+          'Default share provisioning failed.',
+          new Error('The active default uniqueness winner is unavailable.'),
+        );
+      }
+      return createResult(
+        outcome.result,
+        request.requestId,
+        outcome.status === 'replayed',
+        dependencies.capabilityCodec,
+        now,
+      );
+    }
+    throw boundaryFailure(
+      'SERVICE_UNAVAILABLE',
+      'Public share selector generation failed.',
+      new Error('Public selector uniqueness retries were exhausted.'),
+    );
+  };
+
   return {
-    async createShare(request: {
+    createShare,
+
+    async ensureDefaultShares(request: {
       installationId: string;
       workspaceId: string;
       actorId: string;
       artifactId: string;
-      target?: ShareTarget;
-      accessType?: 'protected' | 'public';
-      expiresIn?: ProtectedShareExpiryPreset;
-      expiresAt?: string | null;
-      maxSessions?: number;
-      idempotencyKey: string;
       requestId: string;
       signal?: AbortSignal;
-    }): Promise<ShareCreateResult> {
-      validateIdentity(request, { requestId: true, idempotencyKey: true });
-      const target = request.target ?? { mode: 'latest' as const };
-      const accessType = request.accessType ?? 'protected';
-      validateTarget(target);
+    }): Promise<ArtifactDefaultShares> {
+      validateIdentity(request, { requestId: true, idempotencyKey: false });
       if (!ARTIFACT_ID_PATTERN.test(request.artifactId)) {
         throw new InvalidShareRequestError([
           { field: 'artifactId', reason: 'must be a valid opaque artifact ID' },
         ]);
       }
-      const details: Array<{ field: string; reason: string }> = [];
-      if (request.expiresIn !== undefined && request.expiresAt !== undefined) {
-        details.push({ field: 'expiresAt', reason: 'cannot be combined with expiresIn' });
-      }
-      if (
-        request.maxSessions !== undefined &&
-        (!Number.isInteger(request.maxSessions) ||
-          request.maxSessions < SHARE_SESSION_LIMITS.minimum ||
-          request.maxSessions > SHARE_SESSION_LIMITS.maximum)
-      ) {
-        details.push({ field: 'maxSessions', reason: 'must be an integer from 1 through 1000000' });
-      }
-      if (accessType === 'public' && request.maxSessions !== undefined) {
-        details.push({ field: 'maxSessions', reason: 'is not supported for Public shares' });
-      }
-      if (accessType === 'public' && request.expiresIn === 'never') {
-        details.push({ field: 'expiresIn', reason: 'Public shares must expire' });
-      }
-      if (details.length > 0) throw new InvalidShareRequestError(details);
-
-      const semanticExpiry =
-        request.expiresIn !== undefined
-          ? ({ expiresIn: request.expiresIn } as const)
-          : accessType === 'public' && request.expiresAt === undefined
-            ? ({ expiresIn: '24hr' } as const)
-            : ({ expiresAt: request.expiresAt ?? null } as const);
-      const legacyEquivalent =
-        accessType === 'protected' &&
-        request.expiresIn === undefined &&
-        request.maxSessions === undefined;
-      const fingerprint = legacyEquivalent
-        ? createShareFingerprint({
-            artifactId: request.artifactId,
-            target,
-            expiresAt: request.expiresAt ?? null,
-          })
-        : createSharePolicyFingerprint({
-            artifactId: request.artifactId,
-            target,
-            accessType,
-            expiry: semanticExpiry,
-            maxSessions: request.maxSessions ?? null,
-          });
-
       let artifact: StoredArtifact | undefined;
       try {
         request.signal?.throwIfAborted();
@@ -456,7 +697,6 @@ export function createShareLifecycleService(dependencies: {
       ) {
         throw new ArtifactNotFoundError();
       }
-
       await dependencies.authorizer.authorize(
         {
           installationId: request.installationId,
@@ -475,142 +715,43 @@ export function createShareLifecycleService(dependencies: {
         },
         request.signal,
       );
-      request.signal?.throwIfAborted();
-
-      if (target.mode === 'pinned') {
-        let pinned: StoredShareRevision | undefined;
-        try {
-          pinned = await dependencies.shares.findRevisionForShare(target.revisionId);
-        } catch (error) {
-          throw boundaryFailure('SERVICE_UNAVAILABLE', 'Revision lookup failed.', error);
-        }
-        if (
-          pinned === undefined ||
-          pinned.revision.revisionId !== target.revisionId ||
-          pinned.installationId !== request.installationId ||
-          pinned.workspaceId !== request.workspaceId ||
-          pinned.artifactId !== request.artifactId ||
-          (pinned.revision.kind ?? 'file') !== (artifact.kind ?? 'file')
-        ) {
-          throw new RevisionNotFoundError();
-        }
-      }
-
-      const namespace: ShareCreateIdempotencyNamespace = {
-        installationId: request.installationId,
-        workspaceId: request.workspaceId,
-        actorId: request.actorId,
-        operation: SHARE_CREATE_OPERATION,
-        key: request.idempotencyKey,
-      };
-      let existing: ShareCreateIdempotencyRecord | undefined;
+      let state: ArtifactDefaultShareState;
       try {
-        existing = await dependencies.shares.findCreateIdempotency(namespace);
+        state = await dependencies.shares.findArtifactDefaultShares(request);
       } catch (error) {
-        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Share idempotency lookup failed.', error);
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Default share lookup failed.', error);
       }
-      if (existing !== undefined) {
-        if (existing.fingerprint !== fingerprint) throw new IdempotencyConflictError();
-        return createResult(
-          existing.result,
-          request.requestId,
-          true,
-          dependencies.capabilityCodec,
-          clock(),
-        );
+      for (const accessType of ['protected', 'public'] as const) {
+        if (state[accessType] !== undefined) continue;
+        await createShare({
+          ...request,
+          accessType,
+          target: { mode: 'latest' },
+          expiresIn: 'never',
+          purpose: 'artifact-default',
+          idempotencyKey: `default-${accessType}-${request.artifactId}-v${state.generations[accessType] + 1}`,
+        });
       }
-
-      const now = clock();
-      let expiresAt: string | null;
-      if ('expiresIn' in semanticExpiry) {
-        expiresAt =
-          semanticExpiry.expiresIn === 'never'
-            ? null
-            : new Date(now.getTime() + SESSION_PRESET_MS[semanticExpiry.expiresIn]).toISOString();
-      } else {
-        expiresAt = semanticExpiry.expiresAt;
+      try {
+        state = await dependencies.shares.findArtifactDefaultShares(request);
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Default share lookup failed.', error);
       }
-      if (
-        expiresAt !== null &&
-        (!validInstant(expiresAt) || Date.parse(expiresAt) <= now.getTime())
-      ) {
-        throw new InvalidShareRequestError([
-          { field: 'expiresAt', reason: 'must be a future ISO instant or null' },
-        ]);
-      }
-      if (
-        accessType === 'public' &&
-        (expiresAt === null || Date.parse(expiresAt) - now.getTime() > PUBLIC_MAX_LIFETIME_MS)
-      ) {
-        throw new InvalidShareRequestError([
-          { field: 'expiresAt', reason: 'Public shares must expire within 30 days' },
-        ]);
-      }
-
-      const shareId = generateShareId();
-      if (!SHARE_ID_PATTERN.test(shareId)) {
+      if (state.protected === undefined || state.public === undefined) {
         throw boundaryFailure(
           'SERVICE_UNAVAILABLE',
-          'Share ID generation failed.',
-          new Error('The share ID generator returned an invalid ID.'),
+          'Default share provisioning failed.',
+          new Error('The repository did not return both active default shares.'),
         );
       }
-      const baseStored: Omit<StoredShare, 'publicCode'> = {
+      const now = clock();
+      return {
         apiVersion: 'v1',
-        installationId: request.installationId,
         workspaceId: request.workspaceId,
-        shareId,
         artifactId: request.artifactId,
-        visibility: 'unlisted',
-        accessType,
-        target:
-          target.mode === 'pinned'
-            ? { mode: 'pinned', revisionId: target.revisionId }
-            : { mode: 'latest' },
-        createdByActorId: request.actorId,
-        createdAt: now.toISOString(),
-        expiresAt,
-        maxSessions: accessType === 'protected' ? (request.maxSessions ?? null) : null,
-        sessionsUsed: 0,
-        revokedAt: null,
-        revokedByActorId: null,
+        protected: defaultSummary(state.protected, 'protected', dependencies.capabilityCodec, now),
+        public: defaultSummary(state.public, 'public', dependencies.capabilityCodec, now),
       };
-      const attempts = accessType === 'public' ? 3 : 1;
-      for (let attempt = 0; attempt < attempts; attempt += 1) {
-        const publicCode = accessType === 'public' ? generatePublicCode() : null;
-        if (publicCode !== null && !PUBLIC_CODE_PATTERN.test(publicCode)) {
-          throw boundaryFailure(
-            'SERVICE_UNAVAILABLE',
-            'Public share selector generation failed.',
-            new Error('The Public selector generator returned an invalid selector.'),
-          );
-        }
-        const stored: StoredShare = { ...baseStored, publicCode };
-        let outcome: CommitShareCreateOutcome;
-        try {
-          outcome = await dependencies.shares.commitCreate({
-            namespace,
-            fingerprint,
-            result: stored,
-          });
-        } catch (error) {
-          throw boundaryFailure('SERVICE_UNAVAILABLE', 'Share creation failed.', error);
-        }
-        if (outcome.status === 'conflict') throw new IdempotencyConflictError();
-        if (outcome.status === 'public-code-conflict') continue;
-        return createResult(
-          outcome.result,
-          request.requestId,
-          outcome.status === 'replayed',
-          dependencies.capabilityCodec,
-          now,
-        );
-      }
-      throw boundaryFailure(
-        'SERVICE_UNAVAILABLE',
-        'Public share selector generation failed.',
-        new Error('Public selector uniqueness retries were exhausted.'),
-      );
     },
 
     async listShares(request: {

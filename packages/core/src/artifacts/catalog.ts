@@ -61,6 +61,7 @@ export interface ArtifactCatalogRepository {
     limit: number;
     sort: ArtifactSort;
     order: ArtifactSortOrder;
+    search?: string;
     after?: { timestamp: string; artifactId: string };
   }): Promise<{ items: StoredArtifact[]; next?: { timestamp: string; artifactId: string } }>;
   listArtifactRevisions(request: {
@@ -73,7 +74,7 @@ export interface ArtifactCatalogRepository {
 }
 
 export class InvalidArtifactCatalogRequestError extends ShelfCoreError {
-  constructor(field: 'cursor' | 'limit') {
+  constructor(field: 'cursor' | 'limit' | 'search') {
     super('INVALID_REQUEST', 'The artifact catalog request is invalid.', {
       retryable: false,
       details: [{ field, reason: `must be a valid ${field}` }],
@@ -112,13 +113,19 @@ function limit(value: number): number {
   return value;
 }
 
-function artifactCursor(value: string | undefined, sort: ArtifactSort, order: ArtifactSortOrder) {
+function artifactCursor(
+  value: string | undefined,
+  sort: ArtifactSort,
+  order: ArtifactSortOrder,
+  search: string | undefined,
+) {
   if (value === undefined) return undefined;
   const cursor = decodeCursor(value, 'artifacts');
   const timestamp = typeof cursor.timestamp === 'string' ? Date.parse(cursor.timestamp) : NaN;
   if (
     cursor.sort !== sort ||
     cursor.order !== order ||
+    cursor.search !== search ||
     typeof cursor.timestamp !== 'string' ||
     !Number.isFinite(timestamp) ||
     new Date(timestamp).toISOString() !== cursor.timestamp ||
@@ -136,6 +143,14 @@ function artifactSort(value: ArtifactSort | undefined): ArtifactSort {
 
 function artifactSortOrder(value: ArtifactSortOrder | undefined): ArtifactSortOrder {
   return value ?? 'desc';
+}
+
+function artifactSearch(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  if (normalized.length > 200) throw new InvalidArtifactCatalogRequestError('search');
+  return normalized;
 }
 
 function revisionCursor(
@@ -266,13 +281,15 @@ export function createArtifactCatalogService(dependencies: {
       limit: number;
       sort?: ArtifactSort;
       order?: ArtifactSortOrder;
+      search?: string;
       cursor?: string;
       signal?: AbortSignal;
     }): Promise<ArtifactPage> {
       const pageLimit = limit(request.limit);
       const sort = artifactSort(request.sort);
       const order = artifactSortOrder(request.order);
-      const after = artifactCursor(request.cursor, sort, order);
+      const search = artifactSearch(request.search);
+      const after = artifactCursor(request.cursor, sort, order, search);
       await dependencies.authorizer.authorize(
         {
           installationId: request.installationId,
@@ -294,6 +311,7 @@ export function createArtifactCatalogService(dependencies: {
           limit: pageLimit,
           sort,
           order,
+          ...(search === undefined ? {} : { search }),
           ...(after === undefined ? {} : { after }),
         });
       } catch (error) {
@@ -318,7 +336,13 @@ export function createArtifactCatalogService(dependencies: {
         nextCursor:
           page.next === undefined
             ? null
-            : encodeCursor({ kind: 'artifacts', sort, order, ...page.next }),
+            : encodeCursor({
+                kind: 'artifacts',
+                sort,
+                order,
+                ...(search === undefined ? {} : { search }),
+                ...page.next,
+              }),
       };
     },
 

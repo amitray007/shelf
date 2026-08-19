@@ -24,12 +24,14 @@ interface ArtifactContentProps {
   readonly authority: ViewerAuthority;
 }
 
-function DownloadAction({
+export function DownloadAction({
   resolution,
   authority,
+  compact = false,
 }: {
   readonly resolution: Extract<PublicShareResolution, { artifact: { kind: 'file' } }>;
   readonly authority: ViewerAuthority;
+  readonly compact?: boolean;
 }) {
   const download = () => {
     let action: string;
@@ -57,8 +59,14 @@ function DownloadAction({
     }
   };
   return (
-    <Button icon={DownloadSimpleIcon} onClick={download} type="button" variant="primary">
-      Download {resolution.revision.originalFileName}
+    <Button
+      icon={DownloadSimpleIcon}
+      onClick={download}
+      {...(compact ? { size: 'sm' as const } : {})}
+      type="button"
+      variant="primary"
+    >
+      {compact ? 'Download' : `Download ${resolution.revision.originalFileName}`}
     </Button>
   );
 }
@@ -155,9 +163,6 @@ export function ArtifactContent({
     return (
       <div className="artifact-surface artifact-html">
         <RendererFrame authority={authority} renderer={renderer} resolution={resolution} />
-        <div className="renderer-download">
-          <DownloadAction authority={authority} resolution={resolution} />
-        </div>
       </div>
     );
   }

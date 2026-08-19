@@ -35,7 +35,7 @@ describe('artifact index presentation', () => {
       'utf8',
     );
 
-    expect(source).toContain('setShare(undefined)');
-    expect(source).toContain('if (!controller.signal.aborted) setShare(latest)');
+    expect(source).toContain('setShares(undefined)');
+    expect(source).toContain('if (!controller.signal.aborted) setShares(defaults)');
   });
 });

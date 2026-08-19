@@ -1,6 +1,5 @@
 import { Banner } from '@cloudflare/kumo/components/banner';
 import { Button } from '@cloudflare/kumo/components/button';
-import { Checkbox } from '@cloudflare/kumo/components/checkbox';
 import { Input } from '@cloudflare/kumo/components/input';
 import { Radio } from '@cloudflare/kumo/components/radio';
 import { Select } from '@cloudflare/kumo/components/select';
@@ -64,7 +63,6 @@ export function ShareDialog({
   const [expiryChoice, setExpiryChoice] = useState<ShareExpiryChoice>('never');
   const [customExpiresAt, setCustomExpiresAt] = useState('');
   const [maxSessions, setMaxSessions] = useState('');
-  const [publicAcknowledged, setPublicAcknowledged] = useState(false);
   const [shareUrl, setShareUrl] = useState<string>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -73,14 +71,13 @@ export function ShareDialog({
   const close = (next: boolean) => {
     if (!next && busyRef.current) return;
     if (!next) {
-      const defaults = defaultSharePolicy('protected');
+      const defaults = defaultSharePolicy();
       setAccessType('protected');
       setMode('latest');
       setRevisionId(revisions[0]?.revisionId ?? '');
       setExpiryChoice(defaults.expiryChoice);
       setCustomExpiresAt(defaults.customExpiresAt);
       setMaxSessions(defaults.maxSessions);
-      setPublicAcknowledged(defaults.publicAcknowledged);
       setShareUrl(undefined);
       setError(undefined);
       idempotencyRef.current = undefined;
@@ -88,12 +85,11 @@ export function ShareDialog({
     onOpenChange(next);
   };
   const changeAccessType = (next: 'protected' | 'public') => {
-    const defaults = defaultSharePolicy(next);
+    const defaults = defaultSharePolicy();
     setAccessType(next);
     setExpiryChoice(defaults.expiryChoice);
     setCustomExpiresAt(defaults.customExpiresAt);
     setMaxSessions(defaults.maxSessions);
-    setPublicAcknowledged(defaults.publicAcknowledged);
     setError(undefined);
     idempotencyRef.current = undefined;
   };
@@ -108,7 +104,6 @@ export function ShareDialog({
       expiryChoice,
       customExpiresAt,
       maxSessions,
-      publicAcknowledged,
     });
     if ('error' in built) {
       setError(built.error);
@@ -147,7 +142,7 @@ export function ShareDialog({
       description={
         accessType === 'protected'
           ? 'Protected links require their private capability before a viewer session can begin.'
-          : 'Public links are unlisted, time-limited, and accessible to anyone with the URL.'
+          : 'Public links are unlisted and accessible to anyone with the URL.'
       }
       onOpenChange={close}
       open={open}
@@ -175,7 +170,7 @@ export function ShareDialog({
               label={
                 <span>
                   <strong>Public</strong>
-                  <small>Short unlisted URL. Not confidential and always expires.</small>
+                  <small>Short unlisted URL with optional expiry.</small>
                 </span>
               }
               value="public"
@@ -215,7 +210,7 @@ export function ShareDialog({
           <Select<ShareExpiryChoice>
             label="Expiry"
             onValueChange={(value) => {
-              setExpiryChoice(value ?? (accessType === 'protected' ? 'never' : '24hr'));
+              setExpiryChoice(value ?? 'never');
               setError(undefined);
             }}
             renderValue={(value) => (value === null ? null : expiryLabels[value])}
@@ -255,17 +250,7 @@ export function ShareDialog({
               type="number"
               value={maxSessions}
             />
-          ) : (
-            <div className="public-share-warning">
-              <p>Anyone with this URL can access the content until the link expires.</p>
-              <Checkbox
-                checked={publicAcknowledged}
-                controlFirst
-                label="I understand this link is not confidential."
-                onCheckedChange={setPublicAcknowledged}
-              />
-            </div>
-          )}
+          ) : null}
 
           {error === undefined ? null : (
             <Banner

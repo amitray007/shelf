@@ -53,7 +53,7 @@ function publicResolution(value: ResolvedStoredShare): PublicShareResolution {
       ? {
           accessType: 'public' as const,
           publicCode: share.publicCode as string,
-          expiresAt: share.expiresAt as string,
+          expiresAt: share.expiresAt,
           basePath: `/api/v1/public/links/${share.publicCode}`,
         }
       : {
@@ -169,7 +169,7 @@ export function createShareResolutionService(dependencies: {
     if (authority.type === 'public' && status !== 'active') throw new ShareNotFoundError();
     if (
       share.accessType === 'public' &&
-      (share.publicCode === null || share.expiresAt === null || share.maxSessions !== null)
+      (share.publicCode === null || share.maxSessions !== null)
     ) {
       throw new ShareNotFoundError();
     }

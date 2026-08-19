@@ -45,11 +45,13 @@ export interface CommitShareCreateInput {
   namespace: ShareCreateIdempotencyNamespace;
   fingerprint: string;
   result: StoredShare;
+  purpose: 'user-created' | 'artifact-default';
 }
 
 export type CommitShareCreateOutcome =
   | { status: 'committed' | 'replayed'; result: StoredShare }
   | { status: 'conflict' }
+  | { status: 'default-conflict' }
   | { status: 'public-code-conflict' };
 
 export interface ProtectedSessionEstablishment {
@@ -72,6 +74,12 @@ export interface ResolvedStoredShare {
   revision: StoredShareRevision;
 }
 
+export interface ArtifactDefaultShareState {
+  protected?: StoredShare;
+  public?: StoredShare;
+  generations: { protected: number; public: number };
+}
+
 export type RevokeShareOutcome =
   | { status: 'revoked' | 'already-revoked'; result: StoredShare }
   | { status: 'not-found' };
@@ -90,6 +98,12 @@ export interface ShareRepository {
     limit: number;
     after?: { createdAt: string; shareId: string };
   }): Promise<{ items: StoredShare[]; next?: { createdAt: string; shareId: string } }>;
+  /** Return the active permanent Latest defaults and bounded generation counts for one artifact. */
+  findArtifactDefaultShares(request: {
+    installationId: string;
+    workspaceId: string;
+    artifactId: string;
+  }): Promise<ArtifactDefaultShareState>;
   findShare(shareId: string): Promise<StoredShare | undefined>;
   /** Linearize concurrent revocations and return the canonical persisted result. */
   revokeShare(request: {

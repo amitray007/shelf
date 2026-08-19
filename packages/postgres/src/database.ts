@@ -79,6 +79,7 @@ export interface ShareTable {
   sessions_used: string;
   revoked_at: Date | null;
   revoked_by_actor_id: string | null;
+  is_default: boolean;
 }
 
 export interface ShareSessionReceiptTable {

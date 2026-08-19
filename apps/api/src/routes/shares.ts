@@ -11,7 +11,6 @@ import {
 import {
   createProtectedSessionEstablishmentService,
   createShareAccessService,
-  createShareLifecycleService,
   createShareResolutionService,
   ShareNotFoundError,
 } from '@shelf/core';
@@ -21,6 +20,7 @@ import { Type } from 'typebox';
 import type { ShelfAppDependencies } from '../app.js';
 import { authenticate } from '../authenticate.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
+import { createAuthenticatedShareLifecycle } from '../share-lifecycle.js';
 
 const PUBLIC_API_PREFIX = '/api/v1/public/';
 const AUTHORIZATION_LIFETIME_MS = 24 * 60 * 60 * 1000;
@@ -203,18 +203,7 @@ export async function registerShareRoutes(
       );
     },
   );
-  const lifecycle = createShareLifecycleService({
-    authorizer: dependencies.authorizer,
-    shares: dependencies.shareRepository,
-    capabilityCodec: dependencies.shareCapabilityCodec,
-    ...(dependencies.shareClock === undefined ? {} : { clock: dependencies.shareClock }),
-    ...(dependencies.generateShareId === undefined
-      ? {}
-      : { generateShareId: dependencies.generateShareId }),
-    ...(dependencies.generatePublicCode === undefined
-      ? {}
-      : { generatePublicCode: dependencies.generatePublicCode }),
-  });
+  const lifecycle = createAuthenticatedShareLifecycle(dependencies);
   const resolution = createShareResolutionService({
     shares: dependencies.shareRepository,
     ...(dependencies.shareClock === undefined ? {} : { clock: dependencies.shareClock }),
@@ -308,6 +297,33 @@ export async function registerShareRoutes(
         signal: requestCancellationSignal(request, reply),
       });
       return reply.status(201).send(result);
+    },
+  );
+
+  app.post(
+    '/api/v1/workspaces/:workspaceId/artifacts/:artifactId/shares/defaults',
+    {
+      schema: {
+        operationId: 'ensureArtifactDefaultSharesV1',
+        summary: 'Return or provision the permanent Latest Protected and Public links',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        tags: ['shares'],
+        params: WorkspaceArtifactParamsSchema,
+        response: { 200: Type.Ref('ArtifactDefaultShares'), ...managementErrors },
+      },
+    },
+    async (request, reply) => {
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { workspaceId: string; artifactId: string };
+      const result = await lifecycle.ensureDefaultShares({
+        installationId: identity.installationId,
+        workspaceId: params.workspaceId,
+        actorId: identity.actorId,
+        artifactId: params.artifactId,
+        requestId: request.id,
+        signal: requestCancellationSignal(request, reply),
+      });
+      return reply.status(200).send(result);
     },
   );
 

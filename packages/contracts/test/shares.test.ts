@@ -98,6 +98,7 @@ describe('share contracts', () => {
         target: { mode: 'pinned', revisionId },
         expiresAt: '2026-08-24T12:00:00.000Z',
       },
+      { accessType: 'public', target: { mode: 'latest' }, expiresIn: 'never' },
       { accessType: 'public', target: { mode: 'latest' }, expiresIn: '30d' },
     ];
 
@@ -113,7 +114,6 @@ describe('share contracts', () => {
         expiresAt: '2026-08-24T12:00:00.000Z',
       },
       { accessType: 'public', target: { mode: 'latest' }, maxSessions: 1 },
-      { accessType: 'public', target: { mode: 'latest' }, expiresIn: 'never' },
       { accessType: 'public', target: { mode: 'latest' }, expiresIn: '31d' },
       { accessType: 'protected', target: { mode: 'latest' }, maxSessions: 0 },
       { accessType: 'protected', target: { mode: 'latest' }, maxSessions: 1_000_001 },
@@ -163,6 +163,7 @@ describe('share contracts', () => {
     delete (publicSummary as Partial<typeof summary>).sessionsRemaining;
 
     expect(Check(ShareManagementSummarySchema, publicSummary)).toBe(true);
+    expect(Check(ShareManagementSummarySchema, { ...publicSummary, expiresAt: null })).toBe(true);
     expect(
       Check(ShareCreateResultSchema, {
         ...publicSummary,
@@ -360,7 +361,7 @@ describe('share contracts', () => {
         type: 'content',
         path: `/api/v1/public/links/${publicCode}/content`,
       },
-      expiresAt: '2026-08-19T12:00:00.000Z',
+      expiresAt: null,
     };
 
     expect(Check(PublicShareResolutionSchema, resolution)).toBe(true);

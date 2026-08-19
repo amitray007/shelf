@@ -1,15 +1,15 @@
 import type {
-  ProtectedShareExpiryPreset,
+  ArtifactDefaultShares,
   ShareCreateInput,
   ShareCreateResult,
-  ShareExpiryPreset,
+  ShareExpiryPresetWithNever,
   ShareManagementSummary,
   SharePage,
   ShareTarget,
 } from '@shelf/contracts';
 import { SHARE_EXPIRY_PRESETS, SHARE_SESSION_LIMITS } from '@shelf/contracts';
 
-import { createShare, listShares, revokeShare } from '../client.js';
+import { createShare, ensureArtifactDefaultShares, listShares, revokeShare } from '../client.js';
 import { usageFailure } from '../output.js';
 import type { CliRuntime } from '../runtime.js';
 
@@ -43,6 +43,10 @@ export interface ListSharesCommandOptions extends ShareCommandOptions {
 
 export interface RevokeShareCommandOptions extends ShareCommandOptions {
   share: string;
+}
+
+export interface DefaultSharesCommandOptions extends ShareCommandOptions {
+  artifact: string;
 }
 
 function token(runtime: CliRuntime): string {
@@ -117,7 +121,7 @@ export function shareCreateInput(
   if (accessType === 'public' && maxSessions !== undefined) {
     throw usageFailure('--max-sessions is available only for protected shares.');
   }
-  let expiresIn: ProtectedShareExpiryPreset | ShareExpiryPreset | undefined;
+  let expiresIn: ShareExpiryPresetWithNever | undefined;
   if (options.expiresIn !== undefined) {
     const allowed =
       options.expiresIn === 'never' ||
@@ -127,17 +131,14 @@ export function shareCreateInput(
         'The expiry preset must be one of: never, 5m, 30m, 2hr, 6hr, 24hr, 3d, 7d, 15d, 30d.',
       );
     }
-    if (accessType === 'public' && options.expiresIn === 'never') {
-      throw usageFailure('Public shares must expire.');
-    }
-    expiresIn = options.expiresIn as ProtectedShareExpiryPreset | ShareExpiryPreset;
+    expiresIn = options.expiresIn as ShareExpiryPresetWithNever;
   }
   const expiresAt = options.expiresAt === undefined ? undefined : expiry(options.expiresAt);
   if (accessType === 'public') {
     return {
       accessType,
       target: shareTarget,
-      ...(expiresIn === undefined ? {} : { expiresIn: expiresIn as ShareExpiryPreset }),
+      ...(expiresIn === undefined ? {} : { expiresIn }),
       ...(expiresAt === undefined ? {} : { expiresAt }),
     };
   }
@@ -201,6 +202,19 @@ export function executeListShares(
       ...transport(options, runtime),
       limit: pageLimit(options.limit),
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
+export function executeDefaultShares(
+  options: DefaultSharesCommandOptions,
+  runtime: CliRuntime,
+): Promise<ArtifactDefaultShares> {
+  return ensureArtifactDefaultShares(
+    {
+      ...transport(options, runtime),
+      artifactId: artifactId(options.artifact),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );

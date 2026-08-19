@@ -1,9 +1,14 @@
 import { Button } from '@cloudflare/kumo/components/button';
-import type { Artifact, ArtifactRevision, ShareManagementSummary } from '@shelf/contracts';
+import type {
+  Artifact,
+  ArtifactDefaultShares,
+  ArtifactRevision,
+  ShareManagementSummary,
+} from '@shelf/contracts';
 import { useEffect, useState } from 'react';
 
 import { ordinal } from '../components/revision-label.js';
-import { DashboardApiError, loadLatestActiveArtifactShare } from './api.js';
+import { DashboardApiError, ensureArtifactDefaultShares } from './api.js';
 import { Modal, SecretReveal } from './dialogs.js';
 import { ShareDialog } from './share-dialog.js';
 import { shareSessionUsage } from './status.js';
@@ -25,7 +30,7 @@ export function ArtifactShareDialog({
   readonly onOpenChange: (open: boolean) => void;
 }) {
   const [creating, setCreating] = useState(false);
-  const [share, setShare] = useState<ShareManagementSummary>();
+  const [shares, setShares] = useState<ArtifactDefaultShares>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [retry, setRetry] = useState(0);
@@ -35,11 +40,11 @@ export function ArtifactShareDialog({
     if (!open || creating) return;
     const controller = new AbortController();
     setLoading(true);
-    setShare(undefined);
+    setShares(undefined);
     setError(undefined);
-    void loadLatestActiveArtifactShare(artifact.workspaceId, artifact.artifactId, controller.signal)
-      .then((latest) => {
-        if (!controller.signal.aborted) setShare(latest);
+    void ensureArtifactDefaultShares(artifact.workspaceId, artifact.artifactId, controller.signal)
+      .then((defaults) => {
+        if (!controller.signal.aborted) setShares(defaults);
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
@@ -70,14 +75,46 @@ export function ArtifactShareDialog({
     );
   }
 
-  const target =
-    share?.target.mode === 'pinned'
-      ? `${ordinal(share.target.revisionNumber)} Revision`
-      : 'Always the latest revision';
+  const shareCard = (share: ShareManagementSummary) => {
+    const target =
+      share.target.mode === 'pinned'
+        ? `${ordinal(share.target.revisionNumber)} Revision`
+        : 'Always the latest revision';
+    return (
+      <section className="latest-share-summary" aria-label={`${share.accessType} default link`}>
+        <div className="latest-share-heading">
+          <div>
+            <span>{share.accessType === 'protected' ? 'Protected link' : 'Public link'}</span>
+            <strong>{target}</strong>
+          </div>
+          <time dateTime={share.createdAt}>
+            {dateTimeFormatter.format(new Date(share.createdAt))}
+          </time>
+        </div>
+        <dl className="share-dialog-metadata">
+          <div>
+            <dt>Expires</dt>
+            <dd>Never</dd>
+          </div>
+          {share.accessType === 'protected' ? (
+            <div>
+              <dt>Sessions</dt>
+              <dd>{shareSessionUsage(share)}</dd>
+            </div>
+          ) : null}
+        </dl>
+        <SecretReveal
+          hint="This reusable default link stays available until you revoke it."
+          label={share.accessType === 'protected' ? 'Protected URL' : 'Public URL'}
+          value={new URL(share.url, window.location.origin).href}
+        />
+      </section>
+    );
+  };
 
   return (
     <Modal
-      description={`Reuse an active link for ${artifact.name}, or create another one.`}
+      description={`Copy a permanent default link for ${artifact.name}, or create a custom one.`}
       onOpenChange={onOpenChange}
       open={open}
       title="Share artifact"
@@ -92,45 +129,11 @@ export function ArtifactShareDialog({
             </Button>
           </div>
         )}
-        {!loading && error === undefined && share === undefined ? (
-          <div className="share-dialog-empty">
-            <strong>No active share link</strong>
-            <span>Create a link anyone with the URL can open.</span>
+        {shares === undefined ? null : (
+          <div className="artifact-default-shares">
+            {shareCard(shares.protected)}
+            {shareCard(shares.public)}
           </div>
-        ) : null}
-        {share === undefined ? null : (
-          <section className="latest-share-summary" aria-label="Latest active share link">
-            <div className="latest-share-heading">
-              <div>
-                <span>{share.accessType === 'protected' ? 'Protected link' : 'Public link'}</span>
-                <strong>{target}</strong>
-              </div>
-              <time dateTime={share.createdAt}>
-                {dateTimeFormatter.format(new Date(share.createdAt))}
-              </time>
-            </div>
-            <dl className="share-dialog-metadata">
-              <div>
-                <dt>Expires</dt>
-                <dd>
-                  {share.expiresAt === null
-                    ? 'Never'
-                    : dateTimeFormatter.format(new Date(share.expiresAt))}
-                </dd>
-              </div>
-              {share.accessType === 'protected' ? (
-                <div>
-                  <dt>Sessions</dt>
-                  <dd>{shareSessionUsage(share)}</dd>
-                </div>
-              ) : null}
-            </dl>
-            <SecretReveal
-              hint="This link remains available here until it expires or is revoked."
-              label="Share URL"
-              value={new URL(share.url, window.location.origin).href}
-            />
-          </section>
         )}
         <div className="dialog-actions">
           <Button onClick={() => onOpenChange(false)} type="button">

@@ -181,6 +181,44 @@ describe('artifact catalog service', () => {
     ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   });
 
+  it('passes normalized search terms to the repository and scopes cursors to them', async () => {
+    const requests: Array<{ search?: string }> = [];
+    const artifacts: ArtifactCatalogRepository = {
+      ...repository(),
+      async listArtifacts(request) {
+        requests.push(request);
+        return {
+          items: [storedArtifact],
+          next: { timestamp: storedArtifact.updatedAt, artifactId: storedArtifact.artifactId },
+        };
+      },
+    };
+    const catalog = createArtifactCatalogService({
+      artifacts,
+      authorizer: { async authorize() {} },
+    });
+
+    const first = await catalog.listArtifacts({
+      installationId: 'installation-main',
+      workspaceId: 'workspace-main',
+      actorId: 'actor-reader',
+      limit: 10,
+      search: '  changelog  ',
+    });
+    expect(requests[0]?.search).toBe('changelog');
+
+    await expect(
+      catalog.listArtifacts({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        actorId: 'actor-reader',
+        limit: 10,
+        search: 'README',
+        cursor: first.nextCursor as string,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  });
+
   it('rejects a malformed opaque cursor as a canonical invalid request', async () => {
     const catalog = createArtifactCatalogService({
       artifacts: repository(),

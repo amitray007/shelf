@@ -2,6 +2,7 @@ import { openAsBlob } from 'node:fs';
 import { basename } from 'node:path';
 import {
   type Artifact,
+  type ArtifactDefaultShares,
   type ArtifactDeletionResult,
   type ArtifactPage,
   type ArtifactRevisionPage,
@@ -9,6 +10,7 @@ import {
   type FolderPublishResult,
   type FolderTreePage,
   isArtifact,
+  isArtifactDefaultShares,
   isArtifactDeletionResult,
   isArtifactPage,
   isArtifactRevisionPage,
@@ -154,6 +156,14 @@ export interface ListSharesOptions {
   workspaceId: string;
   limit: number;
   cursor?: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface EnsureArtifactDefaultSharesOptions {
+  installationUrl: string;
+  workspaceId: string;
+  artifactId: string;
   token: string;
   allowInsecureLoopback?: boolean;
 }
@@ -610,6 +620,33 @@ export async function createShare(
         workspaceId: options.workspaceId,
         artifactId: options.artifactId,
       }),
+  );
+}
+
+export async function ensureArtifactDefaultShares(
+  options: EnsureArtifactDefaultSharesOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<ArtifactDefaultShares> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/artifacts/${encodeURIComponent(options.artifactId)}/shares/defaults`,
+    origin,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'POST',
+      expectedStatus: 200,
+      redactShareCapabilities: true,
+    },
+    dependencies,
+    (value): value is ArtifactDefaultShares =>
+      isArtifactDefaultShares(value) &&
+      value.workspaceId === options.workspaceId &&
+      value.artifactId === options.artifactId,
   );
 }
 

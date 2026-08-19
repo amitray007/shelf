@@ -365,7 +365,7 @@ describe('anonymous share resolution', () => {
     const stored = share(ids.latestShare, {
       accessType: 'public',
       publicCode: 'PublicCode12',
-      expiresAt: '2026-08-19T12:00:00.000Z',
+      expiresAt: null,
     });
     const resolve = createShareResolutionService({
       shares: repository({
@@ -399,6 +399,7 @@ describe('anonymous share resolution', () => {
     ).resolves.toMatchObject({
       accessType: 'public',
       publicCode: 'PublicCode12',
+      expiresAt: null,
       action: { path: '/api/v1/public/links/PublicCode12/content' },
     });
   });

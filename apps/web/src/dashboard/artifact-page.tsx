@@ -376,23 +376,34 @@ export function ArtifactPage() {
   };
   const latest = artifact.latestRevision;
   const viewingLatest = viewedRevision.revisionId === latest.revisionId;
+  const artifactTitle = viewedRevision.publisherMetadata.title?.trim() || artifact.name;
+  const artifactDescription = viewedRevision.publisherMetadata.description?.trim();
+  const sourceFileName =
+    viewedRevision.kind === 'file' ? viewedRevision.originalFileName : viewedRevision.rootName;
 
   return (
     <div className="dashboard-page artifact-detail">
       <header className="page-heading artifact-heading">
-        <div className="artifact-title-row">
-          <h1 title={artifact.name}>{artifact.name}</h1>
-          <Button
-            aria-label="Rename artifact"
-            className="artifact-rename-action"
-            icon={PencilSimpleIcon}
-            onClick={() => setRenameOpen(true)}
-            shape="square"
-            size="sm"
-            title="Rename artifact"
-            type="button"
-            variant="ghost"
-          />
+        <div className="artifact-heading-copy">
+          <div className="artifact-title-row">
+            <h1 title={artifactTitle}>{artifactTitle}</h1>
+            <Button
+              aria-label="Rename artifact"
+              className="artifact-rename-action"
+              icon={PencilSimpleIcon}
+              onClick={() => setRenameOpen(true)}
+              shape="square"
+              size="sm"
+              title="Rename artifact"
+              type="button"
+              variant="ghost"
+            />
+          </div>
+          {artifactDescription === undefined || artifactDescription.length === 0 ? null : (
+            <p className="artifact-description" title={artifactDescription}>
+              {artifactDescription}
+            </p>
+          )}
         </div>
         <div className="heading-actions">
           <LinkButton
@@ -442,7 +453,11 @@ export function ArtifactPage() {
         >
           <section className="managed-stage" aria-labelledby="preview-heading">
             <header className="managed-stage-bar">
-              <span id="preview-heading">Artifact preview</span>
+              <span className="managed-stage-label" id="preview-heading">
+                <strong title={sourceFileName}>{sourceFileName}</strong>
+                <span aria-hidden="true">·</span>
+                <span>Artifact Preview</span>
+              </span>
               <div className="managed-stage-actions">
                 <span>
                   {viewingLatest

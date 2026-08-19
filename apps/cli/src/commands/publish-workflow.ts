@@ -4,9 +4,15 @@ import { createReadStream } from 'node:fs';
 import { lstat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import type { FolderPublishResult, PublishResult, ShareCreateResult } from '@shelf/contracts';
+import type {
+  FolderPublishResult,
+  PublishResult,
+  ShareCreateInput,
+  ShareCreateResult,
+  ShareManagementSummary,
+} from '@shelf/contracts';
 
-import { createShare, publishFile } from '../client.js';
+import { createShare, ensureArtifactDefaultShares, publishFile } from '../client.js';
 import { mediaTypeForPath } from '../media-type.js';
 import {
   type JournalPublishResult,
@@ -38,7 +44,7 @@ export interface PublishWorkflowResult {
   readonly status: 'complete';
   readonly profile: string;
   readonly publish: PublishResult | FolderPublishResult;
-  readonly share: ShareCreateResult | null;
+  readonly share: ShareCreateResult | ShareManagementSummary | null;
   readonly urls: {
     readonly artifact: string;
     readonly revision: string;
@@ -49,6 +55,15 @@ export interface PublishWorkflowResult {
 export interface PublishWorkflowExecution {
   readonly output: PublishWorkflowResult;
   finalize(): Promise<void>;
+}
+
+function usesPreparedDefault(input: ShareCreateInput): boolean {
+  return (
+    input.target.mode === 'latest' &&
+    !('expiresAt' in input) &&
+    (!('expiresIn' in input) || input.expiresIn === 'never') &&
+    !('maxSessions' in input)
+  );
 }
 
 function opaqueArtifactId(value: string | undefined): string | undefined {
@@ -176,21 +191,36 @@ export async function executePublishWorkflow(
     ).href,
     share: null,
   } as const;
-  let share: ShareCreateResult | null = null;
+  let share: ShareCreateResult | ShareManagementSummary | null = null;
   if (options.share) {
+    const input = shareCreateInput(options, { mode: 'latest' });
     try {
-      share = await createShare(
-        {
-          installationUrl: profile.installationUrl,
-          workspaceId: profile.workspaceId,
-          artifactId: publish.artifactId,
-          input: shareCreateInput(options, { mode: 'latest' }),
-          idempotencyKey: journal.record.shareIdempotencyKey,
-          token: profile.token,
-          allowInsecureLoopback: profile.allowInsecureLoopback,
-        },
-        runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
-      );
+      if (usesPreparedDefault(input)) {
+        const defaults = await ensureArtifactDefaultShares(
+          {
+            installationUrl: profile.installationUrl,
+            workspaceId: profile.workspaceId,
+            artifactId: publish.artifactId,
+            token: profile.token,
+            allowInsecureLoopback: profile.allowInsecureLoopback,
+          },
+          runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+        );
+        share = defaults[input.accessType];
+      } else {
+        share = await createShare(
+          {
+            installationUrl: profile.installationUrl,
+            workspaceId: profile.workspaceId,
+            artifactId: publish.artifactId,
+            input,
+            idempotencyKey: journal.record.shareIdempotencyKey,
+            token: profile.token,
+            allowInsecureLoopback: profile.allowInsecureLoopback,
+          },
+          runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+        );
+      }
     } catch (error) {
       if (!(error instanceof CliFailure)) throw error;
       throw new CliPartialFailure(

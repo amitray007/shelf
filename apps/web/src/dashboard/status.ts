@@ -22,15 +22,13 @@ export interface SharePolicyDraft {
   expiryChoice: ShareExpiryChoice;
   customExpiresAt: string;
   maxSessions: string;
-  publicAcknowledged: boolean;
 }
 
-export function defaultSharePolicy(accessType: 'protected' | 'public') {
+export function defaultSharePolicy() {
   return {
-    expiryChoice: accessType === 'protected' ? ('never' as const) : ('24hr' as const),
+    expiryChoice: 'never' as const,
     customExpiresAt: '',
     maxSessions: '',
-    publicAcknowledged: false,
   };
 }
 
@@ -41,9 +39,7 @@ export function resolveShareExpiry(
   now = new Date(),
 ): ResolvedShareExpiry {
   if (choice === 'never') {
-    return accessType === 'protected'
-      ? { expiresIn: 'never' }
-      : { error: 'Public links must expire.' };
+    return { expiresIn: 'never' };
   }
   if (choice !== 'custom') {
     return {
@@ -60,7 +56,7 @@ export function resolveShareExpiry(
     accessType === 'public' &&
     expiresAt.getTime() - now.getTime() > SHARE_EXPIRY_DURATION_MS['30d']
   ) {
-    return { error: 'Public links must expire within 30 days.' };
+    return { error: 'A finite Public link cannot exceed 30 days.' };
   }
   return { expiresAt: expiresAt.toISOString(), previewAt: expiresAt.toISOString() };
 }
@@ -93,9 +89,6 @@ export function buildShareCreateInput(
   if ('error' in expiry) return expiry;
   if (draft.targetMode === 'pinned' && draft.revisionId === '') {
     return { error: 'Choose a revision to pin.' };
-  }
-  if (draft.accessType === 'public' && !draft.publicAcknowledged) {
-    return { error: 'Confirm that anyone with this URL may access the content.' };
   }
   let maxSessions: number | undefined;
   if (draft.accessType === 'protected' && draft.maxSessions !== '') {

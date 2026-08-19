@@ -58,6 +58,7 @@ const PageQuerySchema = Type.Object(
     cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 2048 })),
     sort: Type.Optional(Type.Union([Type.Literal('created'), Type.Literal('updated')])),
     order: Type.Optional(Type.Union([Type.Literal('asc'), Type.Literal('desc')])),
+    search: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   },
   { additionalProperties: false },
 );
@@ -168,6 +169,7 @@ export async function registerArtifactRoutes(
         cursor?: string;
         sort?: 'created' | 'updated';
         order?: 'asc' | 'desc';
+        search?: string;
       };
       return catalog.listArtifacts({
         installationId: identity.installationId,
@@ -176,6 +178,7 @@ export async function registerArtifactRoutes(
         limit: query.limit ?? 20,
         sort: query.sort ?? 'updated',
         order: query.order ?? 'desc',
+        ...(query.search === undefined ? {} : { search: query.search }),
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         signal: requestCancellationSignal(request, reply),
       });

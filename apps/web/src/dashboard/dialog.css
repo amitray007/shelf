@@ -135,18 +135,6 @@
   color: var(--text-subtle);
 }
 
-.public-share-warning {
-  display: grid;
-  gap: 10px;
-}
-
-.public-share-warning p {
-  margin: 0;
-  color: var(--text-subtle);
-  font-size: var(--font-meta);
-  line-height: 1.45;
-}
-
 .confirmation-block {
   display: flex;
   flex-direction: column;
@@ -177,8 +165,12 @@
   gap: 16px;
 }
 
-.share-dialog-status,
-.share-dialog-empty {
+.artifact-default-shares {
+  display: grid;
+  gap: 20px;
+}
+
+.share-dialog-status {
   margin: 0;
   color: var(--text-muted);
   font-size: var(--font-meta);
@@ -195,25 +187,15 @@
   margin: 0;
 }
 
-.share-dialog-empty {
-  display: grid;
-  gap: 4px;
-  padding: 16px;
-  border: 1px dashed var(--rule-strong);
-  border-radius: 5px;
-  background: var(--canvas);
-}
-
-.share-dialog-empty strong {
-  color: var(--text);
-  font-size: var(--font-body);
-  font-weight: 580;
-}
-
 .latest-share-summary {
   display: grid;
   gap: 16px;
   padding: 4px 0;
+}
+
+.artifact-default-shares > .latest-share-summary + .latest-share-summary {
+  padding-top: 20px;
+  border-top: 1px solid var(--rule);
 }
 
 .latest-share-heading {

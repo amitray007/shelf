@@ -977,6 +977,7 @@ export class PostgresRevisionRepository
     limit: number;
     sort: 'created' | 'updated';
     order: 'asc' | 'desc';
+    search?: string;
     after?: { timestamp: string; artifactId: string };
   }) {
     const sortColumn =
@@ -1001,6 +1002,18 @@ export class PostgresRevisionRepository
       .where('artifact.installation_id', '=', request.installationId)
       .where('artifact.workspace_id', '=', request.workspaceId);
     query = query.where('artifact.deleted_at', 'is', null);
+    if (request.search !== undefined) {
+      const escaped = request.search.replace(/[\\%_]/gu, '\\$&');
+      const pattern = `%${escaped}%`;
+      query = query.where((expressions) =>
+        expressions.or([
+          expressions('artifact.name', 'ilike', pattern),
+          expressions('revision.original_file_name', 'ilike', pattern),
+          sql<boolean>`revision.publisher_metadata ->> 'title' ILIKE ${pattern} ESCAPE '\\'`,
+          sql<boolean>`revision.publisher_metadata ->> 'description' ILIKE ${pattern} ESCAPE '\\'`,
+        ]),
+      );
+    }
     if (request.after !== undefined) {
       const after = request.after;
       const timestamp = new Date(after.timestamp);

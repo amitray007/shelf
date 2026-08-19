@@ -10,6 +10,7 @@ import { Type } from 'typebox';
 import type { ShelfAppDependencies, ShelfMultipartLimits } from '../app.js';
 import { authenticate } from '../authenticate.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
+import { createPublishDefaultShareLifecycle } from '../share-lifecycle.js';
 
 export const PUBLISH_ROUTE_URL = '/api/v1/workspaces/:workspaceId/artifacts';
 export const PUBLISH_REVISION_ROUTE_URL =
@@ -108,6 +109,7 @@ export async function registerPublishRoute(
     ...dependencies,
     artifactRepository: dependencies.revisionRepository,
   });
+  const defaultShares = createPublishDefaultShareLifecycle(dependencies);
 
   const handler =
     (targetsExistingArtifact: boolean) => async (request: FastifyRequest, reply: FastifyReply) => {
@@ -160,6 +162,23 @@ export async function registerPublishRoute(
         signal,
       };
       const result = await publish(input);
+      if (!targetsExistingArtifact) {
+        try {
+          await defaultShares.ensureDefaultShares({
+            installationId: identity.installationId,
+            workspaceId: params.workspaceId,
+            actorId: identity.actorId,
+            artifactId: result.artifactId,
+            requestId: request.id,
+            signal,
+          });
+        } catch (error) {
+          request.log.error(
+            { err: error, artifactId: result.artifactId },
+            'Default share provisioning failed after file publication.',
+          );
+        }
+      }
       return reply.status(201).send(result);
     };
 

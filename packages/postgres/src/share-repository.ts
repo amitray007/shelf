@@ -229,7 +229,7 @@ async function findIdempotency(
   return { fingerprint, result: storedShare(share) };
 }
 
-function shareValues(result: StoredShare): ShareTable {
+function shareValues(result: StoredShare, purpose: CommitShareCreateInput['purpose']): ShareTable {
   return {
     share_id: result.shareId,
     installation_id: result.installationId,
@@ -247,6 +247,7 @@ function shareValues(result: StoredShare): ShareTable {
     sessions_used: String(result.sessionsUsed),
     revoked_at: result.revokedAt === null ? null : new Date(result.revokedAt),
     revoked_by_actor_id: result.revokedByActorId,
+    is_default: purpose === 'artifact-default',
   };
 }
 
@@ -258,6 +259,17 @@ function isPublicCodeConflict(error: unknown): boolean {
     error.code === '23505' &&
     'constraint' in error &&
     error.constraint === 'shelf_shares_public_code_unique_idx'
+  );
+}
+
+function isDefaultConflict(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === '23505' &&
+    'constraint' in error &&
+    error.constraint === 'shelf_shares_active_default_unique_idx'
   );
 }
 
@@ -344,7 +356,7 @@ export class PostgresShareRepository implements ShareRepository {
         if (claim !== undefined) {
           const inserted = await transaction
             .insertInto('shelf_shares')
-            .values(shareValues(input.result))
+            .values(shareValues(input.result, input.purpose))
             .returningAll()
             .executeTakeFirstOrThrow();
           return { status: 'committed', result: storedShare(inserted) };
@@ -360,6 +372,7 @@ export class PostgresShareRepository implements ShareRepository {
       });
     } catch (error) {
       if (isPublicCodeConflict(error)) return { status: 'public-code-conflict' };
+      if (isDefaultConflict(error)) return { status: 'default-conflict' };
       throw error;
     }
   }
@@ -401,6 +414,54 @@ export class PostgresShareRepository implements ShareRepository {
       ...(hasMore && last !== undefined
         ? { next: { createdAt: last.createdAt, shareId: last.shareId } }
         : {}),
+    };
+  }
+
+  async findArtifactDefaultShares(request: {
+    installationId: string;
+    workspaceId: string;
+    artifactId: string;
+  }) {
+    const canonical = this.#database
+      .selectFrom('shelf_shares')
+      .where('installation_id', '=', request.installationId)
+      .where('workspace_id', '=', request.workspaceId)
+      .where('artifact_id', '=', request.artifactId)
+      .where('target_mode', '=', 'latest')
+      .where('expires_at', 'is', null)
+      .where('max_sessions', 'is', null)
+      .where('is_default', '=', true);
+    const [protectedRow, publicRow, generationRows] = await Promise.all([
+      canonical
+        .selectAll()
+        .where('access_type', '=', 'protected')
+        .where('revoked_at', 'is', null)
+        .orderBy('created_at', 'desc')
+        .orderBy('share_id', 'asc')
+        .limit(1)
+        .executeTakeFirst(),
+      canonical
+        .selectAll()
+        .where('access_type', '=', 'public')
+        .where('revoked_at', 'is', null)
+        .orderBy('created_at', 'desc')
+        .orderBy('share_id', 'asc')
+        .limit(1)
+        .executeTakeFirst(),
+      canonical
+        .select('access_type')
+        .select((expression) => expression.fn.countAll<number>().as('generation_count'))
+        .groupBy('access_type')
+        .execute(),
+    ]);
+    const protectedShare = protectedRow === undefined ? undefined : storedShare(protectedRow);
+    const publicShare = publicRow === undefined ? undefined : storedShare(publicRow);
+    const generations = { protected: 0, public: 0 };
+    for (const row of generationRows) generations[row.access_type] = Number(row.generation_count);
+    return {
+      ...(protectedShare === undefined ? {} : { protected: protectedShare }),
+      ...(publicShare === undefined ? {} : { public: publicShare }),
+      generations,
     };
   }
 

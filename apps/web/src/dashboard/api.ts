@@ -1,5 +1,6 @@
 import {
   type Artifact,
+  type ArtifactDefaultShares,
   type ArtifactDeletionResult,
   type ArtifactPage,
   type ArtifactRevisionPage,
@@ -10,6 +11,7 @@ import {
   type DashboardSession,
   type FolderEntry,
   isArtifact,
+  isArtifactDefaultShares,
   isArtifactDeletionResult,
   isArtifactPage,
   isArtifactRevisionPage,
@@ -28,7 +30,6 @@ import {
   type RevisionComparison,
   type ShareCreateInput,
   type ShareCreateResult,
-  type ShareManagementSummary,
   type SharePage,
   type WorkspaceCreateResult,
 } from '@shelf/contracts';
@@ -153,9 +154,11 @@ export async function loadArtifacts(
   signal?: AbortSignal,
   sort: 'created' | 'updated' = 'updated',
   order: 'asc' | 'desc' = 'desc',
+  search?: string,
 ): Promise<ArtifactPage> {
   const query = new URLSearchParams({ limit: '10', sort, order });
   if (cursor !== undefined) query.set('cursor', cursor);
+  if (search !== undefined && search.length > 0) query.set('search', search);
   const value = await requestJson(
     `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts?${query}`,
     signal === undefined ? undefined : { signal },
@@ -212,26 +215,23 @@ export async function loadWorkspaceShares(
   return value;
 }
 
-export async function loadLatestActiveArtifactShare(
+export async function ensureArtifactDefaultShares(
   workspaceId: string,
   artifactId: string,
   signal?: AbortSignal,
-): Promise<ShareManagementSummary | undefined> {
-  let cursor: string | undefined;
-  const visited = new Set<string>();
-  do {
-    const page = await loadWorkspaceShares(workspaceId, cursor, signal);
-    const share = page.items.find(
-      (candidate) => candidate.artifactId === artifactId && candidate.status === 'active',
-    );
-    if (share !== undefined) return share;
-    cursor = page.nextCursor ?? undefined;
-    if (cursor !== undefined && visited.has(cursor)) {
-      throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned a repeated share cursor.');
-    }
-    if (cursor !== undefined) visited.add(cursor);
-  } while (cursor !== undefined);
-  return undefined;
+): Promise<ArtifactDefaultShares> {
+  const value = await requestJson(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/shares/defaults`,
+    { method: 'POST', ...(signal === undefined ? {} : { signal }) },
+  );
+  if (
+    !isArtifactDefaultShares(value) ||
+    value.workspaceId !== workspaceId ||
+    value.artifactId !== artifactId
+  ) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned invalid default links.');
+  }
+  return value;
 }
 
 export async function loadFolderEntries(
@@ -349,10 +349,14 @@ export async function createArtifactShare(
   artifactId: string,
   input: ShareCreateInput,
   idempotencyKey: string,
+  signal?: AbortSignal,
 ): Promise<ShareCreateResult> {
   const value = await requestJson(
     `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/shares`,
-    jsonRequest('POST', input, { 'idempotency-key': idempotencyKey }),
+    {
+      ...jsonRequest('POST', input, { 'idempotency-key': idempotencyKey }),
+      ...(signal === undefined ? {} : { signal }),
+    },
   );
   if (!isShareCreateResult(value)) {
     throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');

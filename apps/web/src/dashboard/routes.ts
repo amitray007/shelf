@@ -118,8 +118,9 @@ export function artifactsLoader({ params, request }: LoaderFunctionArgs): Promis
   const cursor = query.get('cursor') ?? undefined;
   const sort = query.get('sort') === 'created' ? 'created' : 'updated';
   const order = query.get('order') === 'asc' ? 'asc' : 'desc';
+  const search = query.get('search')?.trim() || undefined;
   return withSessionRedirect(request, () =>
-    loadArtifacts(workspaceId, cursor, request.signal, sort, order),
+    loadArtifacts(workspaceId, cursor, request.signal, sort, order, search),
   );
 }
 

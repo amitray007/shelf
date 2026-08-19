@@ -14,13 +14,6 @@ import {
 
 const roots: string[] = [];
 const apps: FastifyInstance[] = [];
-const fixedShareIds = [
-  'shr_AAAAAAAAAAAAAAAAAAAAAA',
-  'shr_BBBBBBBBBBBBBBBBBBBBBB',
-  'shr_CCCCCCCCCCCCCCCCCCCCCC',
-  'shr_DDDDDDDDDDDDDDDDDDDDDD',
-];
-
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
@@ -59,7 +52,7 @@ async function fixture(overrides: Partial<CreateShelfAppOptions> = {}) {
     },
     authorizer: { async authorize() {} },
     shareCapabilityCodec: createHmacShareCapabilityCodec(Buffer.alloc(32, 7)),
-    generateShareId: () => fixedShareIds[shareIdIndex++] ?? 'shr_DDDDDDDDDDDDDDDDDDDDDD',
+    generateShareId: () => `shr_${String(shareIdIndex++).padStart(22, '0')}`,
     ...overrides,
   });
   apps.push(app);
@@ -211,7 +204,7 @@ describe('share HTTP boundary', () => {
       apiVersion: 'v1',
       artifactId,
       workspaceId: 'workspace-main',
-      revokedShareCount: 1,
+      revokedShareCount: 3,
     });
     expect(Date.parse(deleted.json().recoverableUntil) - Date.parse(deleted.json().deletedAt)).toBe(
       30 * 24 * 60 * 60 * 1_000,
@@ -306,8 +299,10 @@ describe('share HTTP boundary', () => {
     expect(replayed.statusCode).toBe(201);
     expect(replayed.json()).toMatchObject({ replayed: true, url: created.json().url });
     expect(listed.statusCode).toBe(200);
-    expect(listed.json().items).toHaveLength(1);
-    expect(listed.json().items[0]).toMatchObject({ url: created.json().url });
+    expect(listed.json().items).toHaveLength(3);
+    expect(listed.json().items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ url: created.json().url })]),
+    );
     expect(JSON.stringify(listed.json())).toContain(secret);
     expect(revoked.statusCode).toBe(200);
     expect(revoked.json().revokedAt).toBeTruthy();
@@ -506,7 +501,9 @@ describe('share HTTP boundary', () => {
     expect(renewed.statusCode, renewed.body).toBe(200);
     expect(renewed.json().token).not.toBe(expiredToken);
     expect(downloaded.statusCode, downloaded.body).toBe(200);
-    expect(listed.json().items[0]).toMatchObject({ sessionsUsed: 1, sessionsRemaining: 0 });
+    expect(
+      listed.json().items.find((item: { shareId: string }) => item.shareId === shareId),
+    ).toMatchObject({ sessionsUsed: 1, sessionsRemaining: 0 });
   });
 
   it('collapses tampered, future-issued, and cross-share viewer authority', async () => {
@@ -568,9 +565,10 @@ describe('share HTTP boundary', () => {
 
   it('serves a Public share through secret-free link routes with its preset preserved', async () => {
     let now = new Date('2026-08-18T12:00:00.000Z');
+    const publicCodes = ['DefaultCode1', 'PubCode_1234'];
     const app = await fixture({
       shareClock: () => now,
-      generatePublicCode: () => 'PubCode_1234',
+      generatePublicCode: () => publicCodes.shift() ?? 'RetryCode123',
     });
     const published = await publishFile(app, 'public bytes', 'publish-public');
     const created = await app.inject({

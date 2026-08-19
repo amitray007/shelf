@@ -242,7 +242,7 @@ describe('profile-backed shelf publish', () => {
     expect([...form.keys()]).toEqual(['manifest', 'file']);
   });
 
-  it('creates exactly one explicit latest share and returns its absolute capability URL', async () => {
+  it('returns the requested expiring link after the server prepares publish defaults', async () => {
     const { config, file } = await fixture();
     const env = { SHELF_CONFIG_DIR: config, SHELF_PERSONAL_TOKEN: 'personal-secret' };
     expect(
@@ -264,26 +264,33 @@ describe('profile-backed shelf publish', () => {
       ),
     ).toBe(0);
     const stdout: string[] = [];
+    const expiringShare = {
+      ...shareResult,
+      expiresAt: '2026-08-19T12:00:00.000Z',
+    };
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(Response.json(publishResult, { status: 201 }))
-      .mockResolvedValueOnce(Response.json(shareResult, { status: 201 }));
+      .mockResolvedValueOnce(Response.json(expiringShare, { status: 201 }));
 
-    const exitCode = await runCli(['node', 'shelf', 'publish', file, '--share', '--user-bypass'], {
-      env,
-      stdout: (chunk) => stdout.push(chunk),
-      stderr() {},
-      fetch,
-    });
+    const exitCode = await runCli(
+      ['node', 'shelf', 'publish', file, '--share', '--expires-in', '24hr', '--user-bypass'],
+      {
+        env,
+        stdout: (chunk) => stdout.push(chunk),
+        stderr() {},
+        fetch,
+      },
+    );
 
     expect(exitCode).toBe(0);
     const output = JSON.parse(stdout[0] ?? '{}');
     expect(output).toMatchObject({
       status: 'complete',
       publish: { artifactId: publishResult.artifactId },
-      share: shareResult,
+      share: expiringShare,
       urls: {
-        share: `https://shelf.example${shareResult.url}`,
+        share: `https://shelf.example${expiringShare.url}`,
       },
     });
     expect(fetch).toHaveBeenCalledTimes(2);
@@ -292,12 +299,81 @@ describe('profile-backed shelf publish', () => {
     );
     expect(fetch.mock.calls[1]?.[1]).toMatchObject({
       method: 'POST',
-      body: JSON.stringify({ accessType: 'protected', target: { mode: 'latest' } }),
+      body: JSON.stringify({
+        accessType: 'protected',
+        target: { mode: 'latest' },
+        expiresIn: '24hr',
+      }),
       headers: expect.objectContaining({
         authorization: 'Bearer personal-secret',
         'idempotency-key': expect.any(String),
       }),
     });
+  });
+
+  it('returns the requested prepared Public link instead of creating a third default', async () => {
+    const { config, file } = await fixture();
+    const env = { SHELF_CONFIG_DIR: config, SHELF_PERSONAL_TOKEN: 'personal-secret' };
+    await runCli(
+      [
+        'node',
+        'shelf',
+        'profiles',
+        'set',
+        'default',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'personal',
+        '--credential-env',
+        'SHELF_PERSONAL_TOKEN',
+      ],
+      { env, stdout() {}, stderr() {} },
+    );
+    const { requestId: _requestId, replayed: _replayed, ...protectedDefault } = shareResult;
+    const defaults = {
+      apiVersion: 'v1',
+      workspaceId: 'personal',
+      artifactId: publishResult.artifactId,
+      protected: protectedDefault,
+      public: {
+        apiVersion: 'v1',
+        workspaceId: 'personal',
+        artifactId: publishResult.artifactId,
+        shareId: `shr_${'p'.repeat(22)}`,
+        visibility: 'unlisted',
+        accessType: 'public',
+        target: { mode: 'latest' },
+        createdAt: '2026-08-18T12:00:00.000Z',
+        expiresAt: null,
+        revokedAt: null,
+        status: 'active',
+        publicCode: 'PublicCode12',
+        url: '/s/PublicCode12',
+      },
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json(publishResult, { status: 201 }))
+      .mockResolvedValueOnce(Response.json(defaults));
+    const stdout: string[] = [];
+
+    const exitCode = await runCli(
+      ['node', 'shelf', 'publish', file, '--share', '--access', 'public', '--user-bypass'],
+      {
+        env,
+        fetch,
+        stdout: (chunk) => stdout.push(chunk),
+        stderr() {},
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[1]?.[0].toString()).toContain('/shares/defaults');
+    expect(fetch.mock.calls[1]?.[1]).toMatchObject({ method: 'POST' });
+    expect(new Headers(fetch.mock.calls[1]?.[1]?.headers).has('idempotency-key')).toBe(false);
+    expect(JSON.parse(stdout[0] ?? '{}')).toMatchObject({ share: defaults.public });
   });
 
   it('never emits success before local recovery cleanup has completed', async () => {
@@ -395,12 +471,15 @@ describe('profile-backed shelf publish', () => {
           { status: 503 },
         ),
       );
-    const firstExit = await runCli(['node', 'shelf', 'publish', file, '--share', '--user-bypass'], {
-      env,
-      stdout: (chunk) => firstStdout.push(chunk),
-      stderr: (chunk) => firstStderr.push(chunk),
-      fetch: firstFetch,
-    });
+    const firstExit = await runCli(
+      ['node', 'shelf', 'publish', file, '--share', '--expires-in', '24hr', '--user-bypass'],
+      {
+        env,
+        stdout: (chunk) => firstStdout.push(chunk),
+        stderr: (chunk) => firstStderr.push(chunk),
+        fetch: firstFetch,
+      },
+    );
 
     expect(firstExit).toBe(6);
     expect(firstStdout).toEqual([]);
@@ -433,12 +512,15 @@ describe('profile-backed shelf publish', () => {
     const retryFetch = vi.fn<typeof globalThis.fetch>(async () =>
       Response.json({ ...shareResult, replayed: true }, { status: 201 }),
     );
-    const retryExit = await runCli(['node', 'shelf', 'publish', file, '--share', '--user-bypass'], {
-      env,
-      stdout: (chunk) => retryStdout.push(chunk),
-      stderr: (chunk) => retryStderr.push(chunk),
-      fetch: retryFetch,
-    });
+    const retryExit = await runCli(
+      ['node', 'shelf', 'publish', file, '--share', '--expires-in', '24hr', '--user-bypass'],
+      {
+        env,
+        stdout: (chunk) => retryStdout.push(chunk),
+        stderr: (chunk) => retryStderr.push(chunk),
+        fetch: retryFetch,
+      },
+    );
 
     expect(retryStderr).toEqual([]);
     expect(retryExit).toBe(0);
@@ -506,12 +588,15 @@ describe('profile-backed shelf publish', () => {
       .mockResolvedValueOnce(Response.json(publishResult, { status: 201 }))
       .mockResolvedValueOnce(Response.json(unavailable, { status: 503 }));
     expect(
-      await runCli(['node', 'shelf', 'publish', file, '--share', '--user-bypass'], {
-        env,
-        fetch: firstFetch,
-        stdout() {},
-        stderr() {},
-      }),
+      await runCli(
+        ['node', 'shelf', 'publish', file, '--share', '--expires-in', '24hr', '--user-bypass'],
+        {
+          env,
+          fetch: firstFetch,
+          stdout() {},
+          stderr() {},
+        },
+      ),
     ).not.toBe(0);
 
     await writeFile(file, '<h1>Changed idea</h1>');
@@ -526,12 +611,15 @@ describe('profile-backed shelf publish', () => {
       .mockResolvedValueOnce(Response.json(shareResult, { status: 201 }));
 
     expect(
-      await runCli(['node', 'shelf', 'publish', file, '--share', '--user-bypass'], {
-        env,
-        fetch: retryFetch,
-        stdout() {},
-        stderr() {},
-      }),
+      await runCli(
+        ['node', 'shelf', 'publish', file, '--share', '--expires-in', '24hr', '--user-bypass'],
+        {
+          env,
+          fetch: retryFetch,
+          stdout() {},
+          stderr() {},
+        },
+      ),
     ).toBe(0);
     expect(retryFetch).toHaveBeenCalledTimes(2);
     expect(retryFetch.mock.calls[0]?.[0].toString()).toContain('/artifacts');

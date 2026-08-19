@@ -6,6 +6,29 @@
   font-family: "Geist Mono Variable", ui-monospace, monospace;
 }
 
+.artifact-search {
+  display: block;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.artifact-search-form {
+  display: flex;
+  width: 100%;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.artifact-search-form > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.artifact-search-form > button {
+  flex: 0 0 auto;
+  min-height: 36px;
+}
+
 .cli-publish-hint {
   width: min(100%, 400px);
   min-width: 0;
@@ -42,26 +65,31 @@
   border-top: 1px solid var(--rule);
 }
 
-.artifact-deletion-notice {
+.artifact-deletion-toast {
+  position: fixed;
+  z-index: 20;
+  right: 24px;
+  bottom: 24px;
   display: flex;
+  width: min(420px, calc(100vw - 32px));
   min-height: 52px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin: -8px 0 16px;
-  padding: 9px 11px;
-  border: 1px solid var(--rule);
-  border-radius: 5px;
-  background: var(--raised);
+  padding: 12px 14px;
+  border: 1px solid var(--text-muted);
+  border-radius: 8px;
+  background: var(--elevated);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 18%);
 }
 
-.artifact-deletion-notice > div {
+.artifact-deletion-toast > div {
   display: grid;
   min-width: 0;
   gap: 2px;
 }
 
-.artifact-deletion-notice strong {
+.artifact-deletion-toast strong {
   overflow: hidden;
   color: var(--text);
   font-size: var(--font-meta);
@@ -70,7 +98,7 @@
   white-space: nowrap;
 }
 
-.artifact-deletion-notice span {
+.artifact-deletion-toast span {
   color: var(--text-muted);
   font-size: var(--font-machine);
   line-height: 1.4;
@@ -316,7 +344,9 @@
 }
 
 @media (max-width: 520px) {
-  .artifact-deletion-notice {
+  .artifact-deletion-toast {
+    right: 16px;
+    bottom: 16px;
     align-items: stretch;
     flex-direction: column;
   }

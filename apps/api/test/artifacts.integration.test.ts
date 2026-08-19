@@ -188,6 +188,24 @@ describe('artifact catalog HTTP API', () => {
     expect(secondPage.nextCursor).toBeNull();
   });
 
+  it('searches the workspace catalog by filename and presentation name', async () => {
+    const app = await fixture();
+    await publish(app, 'readme content', 'README.md', 'search-readme');
+    await publish(app, 'notes content', 'notes.txt', 'search-notes');
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/workspaces/workspace-main/artifacts?limit=10&search=readme',
+      headers: { authorization: 'Bearer test' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().items).toHaveLength(1);
+    expect(response.json().items[0]).toMatchObject({
+      latestRevision: { originalFileName: 'README.md' },
+    });
+  });
+
   it('returns a canonical invalid request for a malformed cursor', async () => {
     const app = await fixture();
     const response = await app.inject({

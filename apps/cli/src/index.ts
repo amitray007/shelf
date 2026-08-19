@@ -38,7 +38,9 @@ import {
 } from './commands/revisions.js';
 import {
   type CreateShareCommandOptions,
+  type DefaultSharesCommandOptions,
   executeCreateShare,
+  executeDefaultShares,
   executeListShares,
   executeRevokeShare,
   type ListSharesCommandOptions,
@@ -122,7 +124,7 @@ Authentication and output:
       '--user-bypass',
       'allow an intentional human publish without title and description metadata',
     )
-    .option('--share', 'create one unlisted latest share after publishing')
+    .option('--share', 'return a prepared default or create the requested custom share')
     .option('--access <protected|public>', 'share access policy; defaults to protected')
     .option(
       '--expires-in <preset>',
@@ -142,8 +144,9 @@ Metadata:
   --metadata key=value. Humans may intentionally omit title/description with --user-bypass.
 
 Sharing:
-  --share creates a Latest Protected link by default. Use --access public for a short,
-  non-confidential link. Public links expire after 24hr by default and cannot be permanent.
+  Every new file receives permanent Latest Protected and Public defaults. With --share and no
+  finite/session policy, Shelf returns the prepared default for --access (Protected by default).
+  Add --expires-in, --expires-at, or --max-sessions to create and return a custom link instead.
 
 Examples:
   shelf publish ./notes.md --title "Release notes" --description "Changes in this build"
@@ -379,7 +382,7 @@ Examples:
       `
 Access policies:
   protected  Capability URL. May never expire and may set --max-sessions.
-  public     Short non-confidential URL. Must expire; omission defaults to 24hr.
+  public     Short non-confidential URL. Omission defaults to Never.
 
 Targets default to Latest. Add --revision to pin the link to one immutable revision.
 Use either --expires-in or --expires-at, never both.
@@ -392,6 +395,26 @@ Examples:
     )
     .action(async (options: CreateShareCommandOptions) => {
       result = await executeCreateShare(options, runtime);
+    });
+  shares
+    .command('defaults')
+    .description('Get or repair both permanent Latest defaults for one artifact')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .requiredOption('--artifact <artifact-id>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Returns both prepared links. Protected URLs contain confidential capability material; Public
+URLs are short and non-confidential. Missing or revoked defaults are repaired automatically.
+
+Example:
+  shelf shares defaults --url <url> --workspace <id> --artifact <artifact-id>
+`,
+    )
+    .action(async (options: DefaultSharesCommandOptions) => {
+      result = await executeDefaultShares(options, runtime);
     });
   shares
     .command('list')

@@ -251,6 +251,46 @@ async function api(request, response, url) {
     `^/api/v1/workspaces/${workspaceId}/artifacts/(art_[A-Za-z0-9_-]{22})/shares$`,
     'u',
   ).exec(path);
+  const defaultSharesMatch = new RegExp(
+    `^/api/v1/workspaces/${workspaceId}/artifacts/(art_[A-Za-z0-9_-]{22})/shares/defaults$`,
+    'u',
+  ).exec(path);
+  if (request.method === 'POST' && defaultSharesMatch !== null) {
+    const requestedArtifactId = defaultSharesMatch[1];
+    const common = {
+      apiVersion: 'v1',
+      workspaceId,
+      artifactId: requestedArtifactId,
+      visibility: 'unlisted',
+      target: { mode: 'latest' },
+      createdAt: '2026-08-18T10:10:00.000Z',
+      expiresAt: null,
+      revokedAt: null,
+      status: 'active',
+    };
+    json(response, 200, {
+      apiVersion: 'v1',
+      workspaceId,
+      artifactId: requestedArtifactId,
+      protected: {
+        ...common,
+        shareId: createdShareId,
+        accessType: 'protected',
+        maxSessions: null,
+        sessionsUsed: 0,
+        sessionsRemaining: null,
+        url: `/s/${createdShareId}#${shareSecret}`,
+      },
+      public: {
+        ...common,
+        shareId: `shr_${'u'.repeat(22)}`,
+        accessType: 'public',
+        publicCode: 'DefaultPub12',
+        url: '/s/DefaultPub12',
+      },
+    });
+    return;
+  }
   if (request.method === 'POST' && createShareMatch !== null) {
     const requestedArtifactId = createShareMatch[1];
     const value = JSON.parse(await body(request));
@@ -259,7 +299,7 @@ async function api(request, response, url) {
       (value.target?.mode === 'pinned' && typeof value.target.revisionId === 'string');
     if (
       request.headers['idempotency-key'] === undefined ||
-      value.accessType !== 'protected' ||
+      (value.accessType !== 'protected' && value.accessType !== 'public') ||
       value.expiresIn !== 'never' ||
       !validTarget ||
       !artifactsById.has(requestedArtifactId)
@@ -270,23 +310,28 @@ async function api(request, response, url) {
       });
       return;
     }
+    const isPublic = value.accessType === 'public';
     json(response, 201, {
       apiVersion: 'v1',
       requestId: 'request-browser-share',
       workspaceId,
-      shareId: createdShareId,
+      shareId: isPublic ? `shr_${'u'.repeat(22)}` : createdShareId,
       artifactId: requestedArtifactId,
       visibility: 'unlisted',
-      accessType: 'protected',
+      accessType: value.accessType,
       target: value.target,
       createdAt: '2026-08-18T10:10:00.000Z',
       expiresAt: null,
       revokedAt: null,
       status: 'active',
-      maxSessions: null,
-      sessionsUsed: 0,
-      sessionsRemaining: null,
-      url: `/s/${createdShareId}#${shareSecret}`,
+      ...(isPublic
+        ? { publicCode: 'DefaultPub12', url: '/s/DefaultPub12' }
+        : {
+            maxSessions: null,
+            sessionsUsed: 0,
+            sessionsRemaining: null,
+            url: `/s/${createdShareId}#${shareSecret}`,
+          }),
       replayed: false,
     });
     return;

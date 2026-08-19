@@ -379,6 +379,7 @@ export class MemoryRevisionRepository
     limit: number;
     sort: 'created' | 'updated';
     order: 'asc' | 'desc';
+    search?: string;
     after?: { timestamp: string; artifactId: string };
   }) {
     const timestamp = (artifact: StoredArtifact) =>
@@ -389,7 +390,20 @@ export class MemoryRevisionRepository
         (artifact) =>
           this.#isActive(artifact.artifactId) &&
           artifact.installationId === request.installationId &&
-          artifact.workspaceId === request.workspaceId,
+          artifact.workspaceId === request.workspaceId &&
+          (request.search === undefined ||
+            [
+              artifact.name,
+              artifact.latestRevision.publisherMetadata.title,
+              artifact.latestRevision.publisherMetadata.description,
+              'rootName' in artifact.latestRevision
+                ? artifact.latestRevision.rootName
+                : artifact.latestRevision.originalFileName,
+            ].some(
+              (value) =>
+                value?.toLocaleLowerCase().includes(request.search?.toLocaleLowerCase() ?? '') ===
+                true,
+            )),
       )
       .sort(
         (left, right) =>

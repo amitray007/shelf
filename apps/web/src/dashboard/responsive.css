@@ -25,6 +25,14 @@
     grid-template-columns: 1fr 1fr;
   }
 
+  .artifact-search-form {
+    min-width: 0;
+  }
+
+  .cli-publish-hint {
+    width: 100%;
+  }
+
   .managed-stage {
     height: min(58vh, 520px);
     min-height: 360px;

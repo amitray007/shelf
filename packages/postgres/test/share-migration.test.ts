@@ -17,6 +17,8 @@ import { accessCredentialsMigration } from '../src/migrations/0003_access_creden
 import { artifactLifecycleMigration } from '../src/migrations/0004_artifact_lifecycle.js';
 import { folderSnapshotsMigration } from '../src/migrations/0005_folder_snapshots.js';
 import { sharesMigration } from '../src/migrations/0006_shares.js';
+import { shareAccessPoliciesMigration } from '../src/migrations/0009_share_access_policies.js';
+import { permanentPublicSharesMigration } from '../src/migrations/0010_permanent_public_shares.js';
 
 const adminConnectionString = process.env.SHELF_TEST_POSTGRES_URL;
 const describePostgres = adminConnectionString === undefined ? describe.skip : describe;
@@ -74,6 +76,8 @@ describePostgres('shares migration', () => {
         { migrationName: '0007_artifact_deletion', status: 'Success' },
         { migrationName: '0008_workspaces', status: 'Success' },
         { migrationName: '0009_share_access_policies', status: 'Success' },
+        { migrationName: '0010_permanent_public_shares', status: 'Success' },
+        { migrationName: '0011_artifact_default_shares', status: 'Success' },
       ]);
       await sql`
         insert into shelf_actors (
@@ -135,6 +139,8 @@ describePostgres('shares migration', () => {
       );
 
       await sql`delete from shelf_shares`.execute(database);
+      await permanentPublicSharesMigration.down?.(database);
+      await shareAccessPoliciesMigration.down?.(database);
       await sharesMigration.down?.(database);
       const tables = await sql<{ shares: string | null; idempotency: string | null }>`
         select

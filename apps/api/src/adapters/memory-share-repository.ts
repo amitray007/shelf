@@ -39,6 +39,7 @@ function copyShare(value: StoredShare): StoredShare {
 export class MemoryShareRepository implements ShareRepository {
   readonly #source: ShareRevisionSource;
   readonly #shares = new Map<string, StoredShare>();
+  readonly #defaultShareIds = new Set<string>();
   readonly #idempotency = new Map<string, ShareCreateIdempotencyRecord>();
   readonly #sessionReceipts = new Map<string, ProtectedSessionEstablishment>();
 
@@ -136,8 +137,25 @@ export class MemoryShareRepository implements ShareRepository {
     ) {
       return { status: 'public-code-conflict' };
     }
+    if (
+      input.purpose === 'artifact-default' &&
+      [...this.#defaultShareIds].some((shareId) => {
+        const share = this.#shares.get(shareId);
+        return (
+          share !== undefined &&
+          share.installationId === input.result.installationId &&
+          share.workspaceId === input.result.workspaceId &&
+          share.artifactId === input.result.artifactId &&
+          share.accessType === input.result.accessType &&
+          share.revokedAt === null
+        );
+      })
+    ) {
+      return { status: 'default-conflict' };
+    }
     const stored = copyShare(input.result);
     this.#shares.set(stored.shareId, stored);
+    if (input.purpose === 'artifact-default') this.#defaultShareIds.add(stored.shareId);
     this.#idempotency.set(key, { fingerprint: input.fingerprint, result: stored });
     return { status: 'committed', result: copyShare(stored) };
   }
@@ -174,6 +192,40 @@ export class MemoryShareRepository implements ShareRepository {
       ...(hasMore && last !== undefined
         ? { next: { createdAt: last.createdAt, shareId: last.shareId } }
         : {}),
+    };
+  }
+
+  async findArtifactDefaultShares(request: {
+    installationId: string;
+    workspaceId: string;
+    artifactId: string;
+  }) {
+    const canonical = [...this.#shares.values()].filter(
+      (share) =>
+        share.installationId === request.installationId &&
+        share.workspaceId === request.workspaceId &&
+        share.artifactId === request.artifactId &&
+        this.#defaultShareIds.has(share.shareId) &&
+        share.target.mode === 'latest' &&
+        share.expiresAt === null &&
+        share.maxSessions === null,
+    );
+    const active = canonical
+      .filter((share) => share.revokedAt === null)
+      .sort(
+        (left, right) =>
+          right.createdAt.localeCompare(left.createdAt) ||
+          left.shareId.localeCompare(right.shareId),
+      );
+    const protectedShare = active.find((share) => share.accessType === 'protected');
+    const publicShare = active.find((share) => share.accessType === 'public');
+    return {
+      ...(protectedShare === undefined ? {} : { protected: copyShare(protectedShare) }),
+      ...(publicShare === undefined ? {} : { public: copyShare(publicShare) }),
+      generations: {
+        protected: canonical.filter((share) => share.accessType === 'protected').length,
+        public: canonical.filter((share) => share.accessType === 'public').length,
+      },
     };
   }
 

@@ -100,6 +100,110 @@ async function waitFor(assertion: () => Promise<boolean>, timeoutMs = 2_000): Pr
 }
 
 describe('POST /api/v1/workspaces/:workspaceId/artifacts', () => {
+  it('prepares permanent latest Protected and Public links without returning them', async () => {
+    const { app } = await fixture();
+    const response = await publish(app, validBody('share defaults'), 'publish-with-defaults');
+    const shares = await app.inject({
+      method: 'GET',
+      url: '/api/v1/workspaces/workspace-main/shares?limit=10',
+      headers: { authorization: 'Bearer test' },
+    });
+
+    expect(response.statusCode, response.body).toBe(201);
+    expect(response.json()).not.toHaveProperty('shares');
+    expect(shares.statusCode, shares.body).toBe(200);
+    expect(shares.json().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          artifactId: response.json().artifactId,
+          accessType: 'protected',
+          target: { mode: 'latest' },
+          expiresAt: null,
+        }),
+        expect.objectContaining({
+          artifactId: response.json().artifactId,
+          accessType: 'public',
+          target: { mode: 'latest' },
+          expiresAt: null,
+        }),
+      ]),
+    );
+    const publicShare = shares
+      .json()
+      .items.find((item: { accessType: string }) => item.accessType === 'public');
+    const resolved = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/links/${publicShare.publicCode as string}/resolve`,
+    });
+    expect(resolved.statusCode, resolved.body).toBe(200);
+    expect(resolved.json()).toMatchObject({
+      accessType: 'public',
+      expiresAt: null,
+      artifact: { artifactId: response.json().artifactId },
+    });
+
+    const defaults = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/workspace-main/artifacts/${response.json().artifactId as string}/shares/defaults`,
+      headers: { authorization: 'Bearer test' },
+    });
+    expect(defaults.statusCode, defaults.body).toBe(200);
+    expect(defaults.json()).toMatchObject({
+      artifactId: response.json().artifactId,
+      protected: { accessType: 'protected', expiresAt: null },
+      public: { accessType: 'public', expiresAt: null },
+    });
+    const originalProtectedId = defaults.json().protected.shareId as string;
+    const revoked = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/workspaces/workspace-main/shares/${originalProtectedId}`,
+      headers: { authorization: 'Bearer test' },
+    });
+    const repaired = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/workspace-main/artifacts/${response.json().artifactId as string}/shares/defaults`,
+      headers: { authorization: 'Bearer test' },
+    });
+    expect(revoked.statusCode, revoked.body).toBe(200);
+    expect(repaired.statusCode, repaired.body).toBe(200);
+    expect(repaired.json().protected.shareId).not.toBe(originalProtectedId);
+    expect(repaired.json().public.shareId).toBe(defaults.json().public.shareId);
+
+    const originalPublicId = defaults.json().public.shareId as string;
+    const revokedPublic = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/workspaces/workspace-main/shares/${originalPublicId}`,
+      headers: { authorization: 'Bearer test' },
+    });
+    const repairedPublic = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/workspace-main/artifacts/${response.json().artifactId as string}/shares/defaults`,
+      headers: { authorization: 'Bearer test' },
+    });
+    expect(revokedPublic.statusCode, revokedPublic.body).toBe(200);
+    expect(repairedPublic.statusCode, repairedPublic.body).toBe(200);
+    expect(repairedPublic.json().protected.shareId).toBe(repaired.json().protected.shareId);
+    expect(repairedPublic.json().public.shareId).not.toBe(originalPublicId);
+  });
+
+  it('keeps a committed publication successful when eager default provisioning is unavailable', async () => {
+    let publishAuthorizations = 0;
+    const authorizer: Authorizer = {
+      async authorize(request) {
+        if (request.action === 'file.publish' && ++publishAuthorizations > 1) {
+          throw new AuthorizationDeniedError();
+        }
+      },
+    };
+    const { app, root } = await fixture({ authorizer });
+
+    const response = await publish(app, validBody('durable upload'), 'publish-default-failure');
+
+    expect(response.statusCode, response.body).toBe(201);
+    expect(response.json()).toMatchObject({ artifactId: expect.any(String) });
+    expect(await filesBelow(join(root, 'sealed'))).not.toEqual([]);
+  });
+
   it('publishes another revision to the same stable artifact', async () => {
     const { app } = await fixture();
     const first = await publish(app, validBody('version one'), 'create-versioned-artifact');

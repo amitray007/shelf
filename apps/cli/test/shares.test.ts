@@ -155,7 +155,7 @@ describe('shelf shares', () => {
     });
   });
 
-  it('creates a public share with the default 24 hour server policy', async () => {
+  it('creates a permanent public share by default', async () => {
     const result = {
       apiVersion: 'v1' as const,
       workspaceId: summary.workspaceId,
@@ -166,7 +166,7 @@ describe('shelf shares', () => {
       publicCode: 'AbCdEf0123_-',
       target: { mode: 'latest' as const },
       createdAt: summary.createdAt,
-      expiresAt: '2026-08-18T12:00:00.000Z',
+      expiresAt: null,
       revokedAt: null,
       status: 'active' as const,
       url: '/s/AbCdEf0123_-',
@@ -323,6 +323,55 @@ describe('shelf shares', () => {
     expect(output.stdout.value()).toBe('');
   });
 
+  it('gets or repairs both prepared defaults for one artifact', async () => {
+    const defaults = {
+      apiVersion: 'v1' as const,
+      workspaceId: 'workspace-main',
+      artifactId: ids.artifact,
+      protected: summary,
+      public: {
+        apiVersion: 'v1' as const,
+        workspaceId: 'workspace-main',
+        shareId: 'shr_DDDDDDDDDDDDDDDDDDDDDD',
+        artifactId: ids.artifact,
+        visibility: 'unlisted' as const,
+        accessType: 'public' as const,
+        publicCode: 'PublicCode12',
+        target: { mode: 'latest' as const },
+        createdAt: summary.createdAt,
+        expiresAt: null,
+        revokedAt: null,
+        status: 'active' as const,
+        url: '/s/PublicCode12',
+      },
+    };
+    const fetch = vi.fn(async () => Response.json(defaults));
+    const output = runtime(fetch);
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'shares',
+        'defaults',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--artifact',
+        ids.artifact,
+      ],
+      output.value,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(output.stdout.value())).toEqual(defaults);
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      `https://shelf.example/api/v1/workspaces/workspace-main/artifacts/${ids.artifact}/shares/defaults`,
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
+  });
+
   it('lists a bounded page with its reusable capability URL', async () => {
     const page = {
       apiVersion: 'v1',
@@ -429,20 +478,6 @@ describe('shelf shares', () => {
         'public',
         '--max-sessions',
         '2',
-        '--idempotency-key',
-        'key',
-      ],
-    ],
-    [
-      'permanent public share',
-      [
-        'create',
-        '--artifact',
-        ids.artifact,
-        '--access',
-        'public',
-        '--expires-in',
-        'never',
         '--idempotency-key',
         'key',
       ],

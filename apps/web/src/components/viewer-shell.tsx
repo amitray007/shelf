@@ -2,6 +2,9 @@ import { Loader } from '@cloudflare/kumo/components/loader';
 import { WarningCircleIcon } from '@phosphor-icons/react/WarningCircle';
 import type { PublicShareResolution } from '@shelf/contracts';
 
+import type { ViewerAuthority } from '../api.js';
+import { isFileShareResolution } from '../share-types.js';
+import { DownloadAction } from './artifact-content.js';
 import { revisionLabel } from './revision-label.js';
 
 export function LoadingView() {
@@ -37,9 +40,15 @@ export function UnavailableView() {
   );
 }
 
-export function ViewerRail({ resolution }: { readonly resolution: PublicShareResolution }) {
+export function ViewerRail({
+  authority,
+  resolution,
+}: {
+  readonly authority: ViewerAuthority;
+  readonly resolution: PublicShareResolution;
+}) {
   const revision = resolution.revision;
-  const targetLabel = resolution.target.mode === 'latest' ? 'latest' : 'pinned';
+  const targetLabel = resolution.target.mode === 'latest' ? 'Latest' : 'Pinned';
 
   return (
     <header className="rail viewer-rail">
@@ -60,6 +69,9 @@ export function ViewerRail({ resolution }: { readonly resolution: PublicShareRes
         <span className="target-state">
           {targetLabel} · {revisionLabel(revision.revisionNumber)}
         </span>
+        {isFileShareResolution(resolution) ? (
+          <DownloadAction authority={authority} compact resolution={resolution} />
+        ) : null}
       </div>
     </header>
   );

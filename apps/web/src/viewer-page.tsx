@@ -187,7 +187,7 @@ export function ViewerPage() {
 
   return (
     <div className="viewer">
-      <ViewerRail resolution={payload.resolution} />
+      <ViewerRail authority={payload.authority} resolution={payload.resolution} />
       {payload.kind === 'file' ? (
         <FileArtifact payload={payload} />
       ) : (

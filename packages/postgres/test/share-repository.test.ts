@@ -106,6 +106,7 @@ function createInput(result: StoredShare, key: string): CommitShareCreateInput {
     },
     fingerprint: `share-create-request/v1:sha256:${fingerprintCharacter.repeat(64)}`,
     result,
+    purpose: 'user-created',
   };
 }
 
@@ -139,7 +140,10 @@ describePostgres('PostgresShareRepository', () => {
 
       const first = new PostgresShareRepository(firstDatabase);
       const second = new PostgresShareRepository(secondDatabase);
-      const input = createInput(share(ids.latestShare), 'latest');
+      const input = {
+        ...createInput(share(ids.latestShare), 'latest'),
+        purpose: 'artifact-default' as const,
+      };
       const [left, right] = await Promise.all([
         first.commitCreate(input),
         second.commitCreate(input),
@@ -205,6 +209,20 @@ describePostgres('PostgresShareRepository', () => {
       await expect(repository.resolveShareTarget(ids.pinnedShare)).resolves.toMatchObject({
         revision: { revision: { revisionId: ids.firstRevision } },
       });
+      const customPermanentId = 'shr_ZZZZZZZZZZZZZZZZZZZZZZ';
+      await repository.commitCreate(
+        createInput(share(customPermanentId), 'custom-permanent-latest'),
+      );
+      await expect(
+        repository.findArtifactDefaultShares({
+          installationId: 'installation-main',
+          workspaceId: 'workspace-main',
+          artifactId: ids.artifact,
+        }),
+      ).resolves.toMatchObject({
+        protected: { shareId: ids.latestShare },
+        generations: { protected: 1, public: 0 },
+      });
 
       const firstPage = await repository.listShares({
         installationId: 'installation-main',
@@ -249,8 +267,86 @@ describePostgres('PostgresShareRepository', () => {
         revokedAt,
         revokedByActorId: 'actor-publisher',
       });
+      await expect(
+        repository.findArtifactDefaultShares({
+          installationId: 'installation-main',
+          workspaceId: 'workspace-main',
+          artifactId: ids.artifact,
+        }),
+      ).resolves.toEqual({ generations: { protected: 1, public: 0 } });
     } finally {
       await database.destroy();
+    }
+  });
+
+  it('linearizes distinct actors creating the same active artifact default', async () => {
+    const firstDatabase = createPostgresDatabase({ connectionString });
+    const secondDatabase = createPostgresDatabase({ connectionString });
+    try {
+      const artifactId = 'art_TTTTTTTTTTTTTTTTTTTTTT';
+      const revisionId = 'rev_UUUUUUUUUUUUUUUUUUUUUU';
+      await sql`
+        insert into shelf_actors (
+          actor_id, installation_id, actor_kind, actor_name, auth_user_id,
+          created_by_actor_id, created_at, disabled_at
+        ) values (
+          'actor-default-racer', 'installation-main', 'service', 'default racer', null,
+          'actor-publisher', '2026-08-17T11:30:00.000Z'::timestamptz, null
+        ) on conflict do nothing
+      `.execute(firstDatabase);
+      const published = publish(revisionId, '9');
+      published.artifactId = artifactId;
+      await new PostgresRevisionRepository(firstDatabase).commitPublish({
+        namespace: {
+          installationId: published.installationId,
+          workspaceId: published.workspaceId,
+          actorId: 'actor-publisher',
+          operation: 'file.publish',
+          key: 'default-race-artifact',
+        },
+        fingerprint: `publish-request/v1:sha256:${'9'.repeat(64)}`,
+        result: published,
+      });
+      const left = {
+        ...createInput({ ...share('shr_VVVVVVVVVVVVVVVVVVVVVV'), artifactId }, 'default-race-left'),
+        purpose: 'artifact-default' as const,
+      };
+      const rightResult = {
+        ...share('shr_WWWWWWWWWWWWWWWWWWWWWW'),
+        artifactId,
+        createdByActorId: 'actor-default-racer',
+      };
+      const right = {
+        ...createInput(rightResult, 'default-race-right'),
+        namespace: {
+          ...createInput(rightResult, 'default-race-right').namespace,
+          actorId: 'actor-default-racer',
+        },
+        purpose: 'artifact-default' as const,
+      };
+
+      const outcomes = await Promise.all([
+        new PostgresShareRepository(firstDatabase).commitCreate(left),
+        new PostgresShareRepository(secondDatabase).commitCreate(right),
+      ]);
+
+      expect(outcomes.map((outcome) => outcome.status).sort()).toEqual([
+        'committed',
+        'default-conflict',
+      ]);
+      await expect(
+        new PostgresShareRepository(firstDatabase).findArtifactDefaultShares({
+          installationId: 'installation-main',
+          workspaceId: 'workspace-main',
+          artifactId,
+        }),
+      ).resolves.toMatchObject({
+        protected: { shareId: expect.stringMatching(/^shr_[VW]/u) },
+        generations: { protected: 1, public: 0 },
+      });
+    } finally {
+      await firstDatabase.destroy();
+      await secondDatabase.destroy();
     }
   });
 

@@ -114,11 +114,26 @@ describe('viewer content states', () => {
   });
 
   it('presents a compact artifact map without decorative trust indicators', () => {
-    const html = renderToStaticMarkup(<ViewerRail resolution={FILE_RESOLUTION} />);
+    const html = renderToStaticMarkup(
+      <ViewerRail
+        authority={{ accessType: 'public', publicCode: 'pub_1234567890' }}
+        resolution={FILE_RESOLUTION}
+      />,
+    );
 
     expect(html).toContain('Shared artifact');
     expect(html).toContain('idea.md');
+    expect(html).toContain('Latest');
+    expect(html).toContain('Download');
     expect(html).toContain('rail-secondary-separator');
     expect(html).not.toContain('trust-dot');
+
+    const pinnedHtml = renderToStaticMarkup(
+      <ViewerRail
+        authority={{ accessType: 'public', publicCode: 'pub_1234567890' }}
+        resolution={FOLDER_RESOLUTION}
+      />,
+    );
+    expect(pinnedHtml).toContain('Pinned');
   });
 });

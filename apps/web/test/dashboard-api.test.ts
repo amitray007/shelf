@@ -7,6 +7,7 @@ import {
   DashboardApiError,
   DashboardAuthenticationError,
   deleteArtifact,
+  ensureArtifactDefaultShares,
   loadArtifacts,
   loadDashboardCredentials,
   loadDashboardSession,
@@ -108,9 +109,9 @@ describe('dashboard API client', () => {
       json({ apiVersion: 'v1', items: [], nextCursor: null }),
     );
     globalThis.fetch = fetch;
-    await loadArtifacts('workspace/main', 'opaque cursor');
+    await loadArtifacts('workspace/main', 'opaque cursor', undefined, 'updated', 'desc', 'readme');
     expect(fetch.mock.calls[0]?.[0]).toBe(
-      '/api/v1/workspaces/workspace%2Fmain/artifacts?limit=10&sort=updated&order=desc&cursor=opaque+cursor',
+      '/api/v1/workspaces/workspace%2Fmain/artifacts?limit=10&sort=updated&order=desc&cursor=opaque+cursor&search=readme',
     );
   });
 
@@ -209,6 +210,64 @@ describe('dashboard API client', () => {
     for (const call of fetch.mock.calls) {
       expect(call[1]?.headers).toMatchObject({ 'idempotency-key': key });
     }
+  });
+
+  it('loads both prepared defaults through one artifact-scoped request', async () => {
+    const artifactId = `art_${'a'.repeat(22)}`;
+    const protectedShare = {
+      apiVersion: 'v1',
+      workspaceId: 'workspace-main',
+      artifactId,
+      shareId: `shr_${'b'.repeat(22)}`,
+      visibility: 'unlisted',
+      accessType: 'protected',
+      target: { mode: 'latest' },
+      createdAt: '2026-08-19T00:00:00.000Z',
+      expiresAt: null,
+      revokedAt: null,
+      status: 'active',
+      maxSessions: null,
+      sessionsUsed: 0,
+      sessionsRemaining: null,
+      url: `/s/shr_${'b'.repeat(22)}#${'s'.repeat(43)}`,
+    } as const;
+    const publicShare = {
+      apiVersion: 'v1',
+      workspaceId: 'workspace-main',
+      artifactId,
+      shareId: `shr_${'c'.repeat(22)}`,
+      visibility: 'unlisted',
+      accessType: 'public',
+      target: { mode: 'latest' },
+      createdAt: '2026-08-19T00:00:00.000Z',
+      expiresAt: null,
+      revokedAt: null,
+      status: 'active',
+      publicCode: 'PublicCode12',
+      url: '/s/PublicCode12',
+    } as const;
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      json({
+        apiVersion: 'v1',
+        workspaceId: 'workspace-main',
+        artifactId,
+        protected: protectedShare,
+        public: publicShare,
+      }),
+    );
+    globalThis.fetch = fetch;
+
+    await expect(ensureArtifactDefaultShares('workspace-main', artifactId)).resolves.toMatchObject({
+      protected: protectedShare,
+      public: publicShare,
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls[0]?.[0].toString()).toContain(
+      `/artifacts/${artifactId}/shares/defaults`,
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+    });
   });
 
   it('sends canonical Protected and Public share policies without dropping mode fields', async () => {

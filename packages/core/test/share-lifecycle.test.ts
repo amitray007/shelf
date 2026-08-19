@@ -59,6 +59,9 @@ function repository(overrides: Partial<ShareRepository> = {}): ShareRepository {
     async listShares() {
       return { items: [] };
     },
+    async findArtifactDefaultShares() {
+      return { generations: { protected: 0, public: 0 } };
+    },
     async findShare() {
       return undefined;
     },
@@ -409,7 +412,60 @@ describe('share lifecycle service', () => {
 });
 
 describe('share access policies', () => {
-  it('replays a Public default with its persisted deadline and URL after expiry', async () => {
+  it('reuses active uniqueness winners when concurrent default repair loses the race', async () => {
+    const protectedWinner = storedShare({ shareId: 'shr_PPPPPPPPPPPPPPPPPPPPPP' });
+    const publicWinner = storedShare({
+      shareId: 'shr_QQQQQQQQQQQQQQQQQQQQQQ',
+      accessType: 'public',
+      publicCode: 'PublicCode12',
+    });
+    let lookups = 0;
+    const commitCreate = vi.fn(async (input) => {
+      expect(input.purpose).toBe('artifact-default');
+      return { status: 'default-conflict' as const };
+    });
+    const service = createShareLifecycleService({
+      authorizer: { async authorize() {} },
+      shares: repository({
+        commitCreate,
+        async findArtifactDefaultShares() {
+          lookups += 1;
+          if (lookups === 1) return { generations: { protected: 0, public: 0 } };
+          if (lookups === 2) {
+            return {
+              protected: protectedWinner,
+              generations: { protected: 1, public: 0 },
+            };
+          }
+          return {
+            protected: protectedWinner,
+            public: publicWinner,
+            generations: { protected: 1, public: 1 },
+          };
+        },
+      }),
+      capabilityCodec,
+      clock: () => new Date('2026-08-18T00:00:00.000Z'),
+      generateShareId: () => ids.share,
+      generatePublicCode: () => 'OtherCode123',
+    });
+
+    await expect(
+      service.ensureDefaultShares({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        actorId: 'actor-publisher',
+        artifactId: ids.artifact,
+        requestId: 'request-default-race',
+      }),
+    ).resolves.toMatchObject({
+      protected: { shareId: protectedWinner.shareId, accessType: 'protected' },
+      public: { shareId: publicWinner.shareId, accessType: 'public' },
+    });
+    expect(commitCreate).toHaveBeenCalledTimes(2);
+  });
+
+  it('replays a permanent Public default with its persisted URL', async () => {
     let now = new Date('2026-08-18T00:00:00.000Z');
     let record: { fingerprint: string; result: StoredShare } | undefined;
     const service = createShareLifecycleService({
@@ -440,13 +496,13 @@ describe('share access policies', () => {
     };
 
     const created = await service.createShare(request);
-    now = new Date('2026-08-20T00:00:00.000Z');
+    now = new Date('2027-08-20T00:00:00.000Z');
     const replayed = await service.createShare({ ...request, requestId: 'request-replay' });
 
     expect(created).toMatchObject({
       accessType: 'public',
       publicCode: 'PublicCode12',
-      expiresAt: '2026-08-19T00:00:00.000Z',
+      expiresAt: null,
       url: '/s/PublicCode12',
       replayed: false,
     });
@@ -454,7 +510,7 @@ describe('share access policies', () => {
       ...created,
       requestId: 'request-replay',
       replayed: true,
-      status: 'expired',
+      status: 'active',
     });
   });
 
@@ -500,7 +556,7 @@ describe('share access policies', () => {
     );
   });
 
-  it('enforces Public expiry and Protected limit combinations', async () => {
+  it('supports permanent Public links while bounding finite Public expiry', async () => {
     const commits: StoredShare[] = [];
     let suffix = 0;
     const service = createShareLifecycleService({
@@ -524,6 +580,15 @@ describe('share access policies', () => {
       target: { mode: 'latest' as const },
       requestId: 'request-policy',
     };
+
+    await expect(
+      service.createShare({
+        ...base,
+        accessType: 'public',
+        expiresIn: 'never',
+        idempotencyKey: 'public-never',
+      }),
+    ).resolves.toMatchObject({ accessType: 'public', expiresAt: null });
 
     await expect(
       service.createShare({
@@ -564,7 +629,7 @@ describe('share access policies', () => {
       sessionsUsed: 0,
       sessionsRemaining: 5,
     });
-    expect(commits).toHaveLength(2);
+    expect(commits).toHaveLength(3);
   });
 
   it('retries Public selector collisions three times and then reports service failure', async () => {
