@@ -299,19 +299,10 @@ function PierreCode({
                 else onCopyLine?.(range);
               }}
               style={{
-                alignItems: 'center',
                 background:
                   gutterAction === 'comment' ? 'var(--accent)' : 'var(--diffs-modified-base)',
-                border: 0,
-                borderRadius: 4,
-                color: 'var(--diffs-bg)',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                height: '1lh',
-                justifyContent: 'center',
-                padding: 0,
-                width: '1lh',
               }}
+              title={gutterAction === 'comment' ? 'Add comment on line' : 'Copy line link'}
               type="button"
             >
               {gutterAction === 'comment' ? (

@@ -203,23 +203,35 @@
   display: flex;
   flex: 0 0 auto;
   justify-content: flex-end;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--rule);
   background: var(--surface);
 }
 
 .managed-file-preview {
   display: flex;
+  min-width: 0;
   min-height: 0;
   flex: 1;
   overflow: hidden;
 }
 
-.managed-file-review-stage > .review-panel {
-  min-height: 220px;
-  max-height: 42%;
-  flex: 0 0 340px;
-  border-top: 1px solid var(--rule);
+.managed-file-review-body {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.managed-file-review-body > .review-panel {
+  width: min(360px, 34%);
+  min-width: 300px;
+  min-height: 0;
+  max-height: none;
+  flex: 0 0 min(360px, 34%);
+  border-top: 0;
+  border-left: 1px solid var(--rule-strong);
 }
 
 .share-policy-badge {
@@ -712,6 +724,19 @@
     height: min(62dvh, 560px);
     border-radius: 5px;
     box-shadow: 0 0 0 1px var(--rule);
+  }
+
+  .managed-file-review-body {
+    flex-direction: column;
+  }
+
+  .managed-file-review-body > .review-panel {
+    width: 100%;
+    min-width: 0;
+    max-height: 420px;
+    flex: 0 0 360px;
+    border-top: 1px solid var(--rule-strong);
+    border-left: 0;
   }
 
   .artifact-inspector {

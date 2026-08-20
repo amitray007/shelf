@@ -350,6 +350,8 @@ export function ArtifactPage() {
     payload.commentsNextCursor,
   );
   const [loadingOlderComments, setLoadingOlderComments] = useState(false);
+  const [commentSaving, setCommentSaving] = useState(false);
+  const [commentError, setCommentError] = useState<string>();
   useEffect(() => setCommentThreads(payload.comments), [payload.comments]);
   useEffect(() => setCommentNextCursor(payload.commentsNextCursor), [payload.commentsNextCursor]);
   const activePanel = inspectorPanel(searchParams.get('panel'));
@@ -434,46 +436,75 @@ export function ArtifactPage() {
     setSearchParams(next, { defaultShouldRevalidate: false, replace: true });
   };
   const replyToThread = async (threadId: string, body: string) => {
-    const post = await createArtifactCommentReply(
-      artifact.workspaceId,
-      artifact.artifactId,
-      threadId,
-      body,
-    );
-    setCommentThreads((current) =>
-      current.map((thread) =>
-        thread.threadId === threadId ? { ...thread, posts: [...thread.posts, post] } : thread,
-      ),
-    );
+    setCommentSaving(true);
+    setCommentError(undefined);
+    try {
+      const post = await createArtifactCommentReply(
+        artifact.workspaceId,
+        artifact.artifactId,
+        threadId,
+        body,
+      );
+      setCommentThreads((current) =>
+        current.map((thread) =>
+          thread.threadId === threadId ? { ...thread, posts: [...thread.posts, post] } : thread,
+        ),
+      );
+    } catch (cause) {
+      setCommentError(cause instanceof Error ? cause.message : 'Could not reply to this thread.');
+      throw cause;
+    } finally {
+      setCommentSaving(false);
+    }
   };
   const setThreadStatus = async (threadId: string, status: 'resolve' | 'reopen') => {
-    const updated = await updateArtifactCommentThread(
-      artifact.workspaceId,
-      artifact.artifactId,
-      threadId,
-      status,
-    );
-    setCommentThreads((current) =>
-      current.map((thread) => (thread.threadId === updated.threadId ? updated : thread)),
-    );
+    setCommentSaving(true);
+    setCommentError(undefined);
+    try {
+      const updated = await updateArtifactCommentThread(
+        artifact.workspaceId,
+        artifact.artifactId,
+        threadId,
+        status,
+      );
+      setCommentThreads((current) =>
+        current.map((thread) => (thread.threadId === updated.threadId ? updated : thread)),
+      );
+    } catch (cause) {
+      setCommentError(cause instanceof Error ? cause.message : 'Could not update this thread.');
+      throw cause;
+    } finally {
+      setCommentSaving(false);
+    }
   };
   const moderatePost = async (postId: string, moderation: 'hide' | 'unhide') => {
-    const updated = await moderateArtifactCommentPost(
-      artifact.workspaceId,
-      artifact.artifactId,
-      postId,
-      moderation,
-    );
-    setCommentThreads((current) =>
-      current.map((thread) =>
-        thread.threadId !== updated.threadId
-          ? thread
-          : {
-              ...thread,
-              posts: thread.posts.map((post) => (post.postId === updated.postId ? updated : post)),
-            },
-      ),
-    );
+    setCommentSaving(true);
+    setCommentError(undefined);
+    try {
+      const updated = await moderateArtifactCommentPost(
+        artifact.workspaceId,
+        artifact.artifactId,
+        postId,
+        moderation,
+      );
+      setCommentThreads((current) =>
+        current.map((thread) =>
+          thread.threadId !== updated.threadId
+            ? thread
+            : {
+                ...thread,
+                posts: thread.posts.map((post) =>
+                  post.postId === updated.postId ? updated : post,
+                ),
+              },
+        ),
+      );
+    } catch (cause) {
+      setCommentError(cause instanceof Error ? cause.message : 'Could not update this comment.');
+      throw cause;
+    } finally {
+      setCommentSaving(false);
+    }
   };
   const loadOlderComments = async () => {
     if (commentNextCursor === null || loadingOlderComments) return;
@@ -618,7 +649,7 @@ export function ArtifactPage() {
               review={{
                 activeThreadId,
                 canCreateThread: false,
-                error: undefined,
+                error: commentError,
                 loading: false,
                 loadingOlder: loadingOlderComments,
                 nextCursor: commentNextCursor,
@@ -633,7 +664,7 @@ export function ArtifactPage() {
                 onReply: replyToThread,
                 onSelectThread: selectThread,
                 onSetThreadStatus: setThreadStatus,
-                saving: false,
+                saving: commentSaving,
                 revisionId: viewedRevision.revisionId,
                 threads: commentThreads,
               }}

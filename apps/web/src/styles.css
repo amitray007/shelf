@@ -123,14 +123,15 @@ a {
   z-index: 4;
   top: calc(var(--bar-size) + 10px);
   right: 14px;
-  width: 40px;
-  min-height: 40px;
+  width: 38px;
+  min-height: 38px;
   align-items: center;
   justify-content: center;
   padding: 0;
   border: 1px solid var(--rule-strong);
-  border-radius: 7px;
-  background: var(--surface);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--canvas));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
   color: var(--text-subtle);
   cursor: pointer;
   font:
@@ -152,20 +153,20 @@ a {
   min-height: 0;
   flex: 0 0 min(360px, 32vw);
   flex-direction: column;
-  border-left: 1px solid var(--rule);
-  background: var(--surface);
+  border-left: 1px solid var(--rule-strong);
+  background: var(--canvas);
   color: var(--text);
 }
 
 .review-sidebar-toolbar {
   display: flex;
-  min-height: 52px;
-  flex: 0 0 52px;
+  min-height: 56px;
+  flex: 0 0 56px;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--rule);
-  background: color-mix(in srgb, var(--surface) 94%, var(--canvas));
+  background: var(--surface);
 }
 
 .review-sidebar-modes,
@@ -176,8 +177,11 @@ a {
 }
 
 .review-sidebar-modes {
-  padding-right: 6px;
-  border-right: 1px solid var(--rule);
+  padding: 2px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--canvas);
+  gap: 2px;
 }
 
 .review-sidebar-actions {
@@ -196,8 +200,8 @@ a {
 .review-sidebar-tool {
   position: relative;
   display: inline-flex;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
@@ -210,9 +214,16 @@ a {
 .review-sidebar-tool:hover:not(:disabled),
 .review-sidebar-tool[aria-selected="true"],
 .review-sidebar-tool[aria-pressed="true"] {
-  border-color: var(--rule-strong);
-  background: var(--canvas);
+  border-color: transparent;
+  background: var(--elevated);
   color: var(--text);
+}
+
+.review-sidebar-tool:active,
+.review-button:active,
+.review-post-action:active,
+.review-identity-button:active {
+  transform: scale(0.97);
 }
 
 .review-sidebar-tool:disabled {
@@ -250,15 +261,16 @@ a {
 .review-identity-button {
   display: inline-flex;
   max-width: calc(100% - 24px);
-  min-height: 32px;
+  width: calc(100% - 24px);
+  min-height: 42px;
   align-items: center;
   gap: 8px;
-  margin: 10px 12px 2px;
-  padding: 3px 7px 3px 3px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--accent);
+  margin: 12px 12px 4px;
+  padding: 5px 10px 5px 5px;
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text-subtle);
   cursor: pointer;
   font-size: 11px;
   overflow: hidden;
@@ -268,8 +280,8 @@ a {
 }
 
 .review-identity-button:hover {
-  border-color: var(--rule);
-  background: var(--canvas);
+  border-color: var(--rule-strong);
+  background: var(--elevated);
 }
 
 .review-identity-button span {
@@ -310,26 +322,41 @@ a {
   color: var(--text);
 }
 .review-search {
-  min-height: 42px;
-  margin: 10px 12px 0;
-  padding: 0 11px;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--canvas);
+  width: calc(100% - 24px);
+  min-height: 38px;
+  margin: 8px 12px 2px;
+  padding: 0 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  outline: none;
+  background: var(--surface);
   color: var(--text);
   font:
     13px "Geist Variable",
     ui-sans-serif,
     sans-serif;
 }
+
+.review-search::placeholder {
+  color: var(--text-muted);
+}
+
+.review-search:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
 .review-panel-body {
   min-height: 0;
   flex: 1;
   overflow: auto;
-  padding: 12px 14px 28px;
+  padding: 14px 12px 32px;
 }
 .review-status {
-  margin: 10px 14px 0;
+  margin: 10px 12px 0;
+  padding: 9px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--surface);
 }
 .review-status-error {
   color: #ff9b9f;
@@ -352,15 +379,21 @@ a {
 }
 .review-thread-card {
   margin: 6px 0;
-  padding: 14px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--canvas) 86%, var(--surface));
-  box-shadow: 0 1px 0 rgb(255 255 255 / 2%) inset;
+  padding: 13px 14px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 3%) inset;
+  transition:
+    border-color 160ms ease-out,
+    background 160ms ease-out;
 }
 .review-thread-button:hover .review-thread-card {
   border-color: var(--rule-strong);
-  background: var(--canvas);
+  background: var(--elevated);
+}
+.review-thread-button:focus-visible .review-thread-card {
+  border-color: var(--accent);
 }
 .review-thread-card-heading {
   display: flex;
@@ -423,7 +456,8 @@ a {
 }
 .review-thread-location {
   display: block;
-  margin: 4px 12px 10px;
+  margin: 7px 2px 2px;
+  color: var(--text-muted);
   font:
     11px "Geist Mono Variable",
     ui-monospace,
@@ -433,17 +467,19 @@ a {
   white-space: nowrap;
 }
 .review-thread-detail {
-  padding: 0 2px;
+  padding: 0 2px 20px;
 }
 .review-back-button {
   justify-content: flex-start;
   width: auto;
-  min-height: 38px;
-  padding: 0;
+  min-height: 34px;
+  margin-bottom: 8px;
+  padding: 0 8px 0 0;
+  color: var(--text-muted);
   font-size: 12px;
 }
 .review-post {
-  padding: 16px 0;
+  padding: 14px 0 16px;
   border-bottom: 1px solid var(--rule);
 }
 .review-post-heading {
@@ -455,16 +491,25 @@ a {
 .review-post-heading time {
   margin-left: auto;
 }
+.review-post-heading strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .review-thread-actions {
-  display: grid;
-  gap: 10px;
-  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
 }
 .review-button {
-  min-height: 44px;
-  padding: 0 13px;
+  min-height: 36px;
+  padding: 0 11px;
   border: 1px solid var(--rule-strong);
-  border-radius: 6px;
+  border-radius: 7px;
   cursor: pointer;
   font:
     560 12px "Geist Variable",
@@ -484,23 +529,67 @@ a {
   background: var(--action-hover);
 }
 .review-button-quiet {
+  border-color: var(--rule);
   background: transparent;
   color: var(--text-subtle);
 }
-.review-composer {
-  display: grid;
-  gap: 7px;
-  margin-top: 12px;
-  padding: 10px;
-  border: 1px solid var(--rule);
-  border-radius: 7px;
-  background: var(--canvas);
+.review-button-quiet:hover {
+  border-color: var(--rule-strong);
+  background: var(--surface);
+  color: var(--text);
 }
-.review-composer textarea {
+.review-thread-actions .review-button-quiet:last-child {
+  border-color: color-mix(in srgb, var(--proof) 65%, var(--rule));
+  color: var(--proof);
+}
+.review-thread-resolved {
+  flex: 1;
+  margin: 0;
+  color: var(--proof);
+  font-size: 12px;
+  font-weight: 600;
+}
+.review-post-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 9px;
+}
+.review-post-action {
+  min-height: 27px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+.review-post-action:hover {
+  border-color: var(--rule);
+  background: var(--elevated);
+  color: var(--text);
+}
+.review-post-action-danger {
+  color: var(--danger);
+}
+.review-delete-confirm {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.review-post-editor {
+  margin-top: 10px;
+  padding: 9px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+.review-post-editor textarea {
+  display: block;
   width: 100%;
-  min-height: 72px;
+  min-height: 78px;
   resize: vertical;
-  border: 0;
   outline: 0;
   background: transparent;
   color: var(--text);
@@ -508,6 +597,35 @@ a {
     13px / 1.5 "Geist Variable",
     ui-sans-serif,
     sans-serif;
+}
+.review-composer {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  padding: 11px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 8px 22px rgb(0 0 0 / 12%);
+}
+.review-composer textarea {
+  width: 100%;
+  min-height: 76px;
+  padding: 8px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  resize: vertical;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font:
+    13px / 1.5 "Geist Variable",
+    ui-sans-serif,
+    sans-serif;
+}
+.review-composer textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .review-composer-footer {
   display: flex;
@@ -525,14 +643,15 @@ a {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgb(0 0 0 / 62%);
+  background: rgb(0 0 0 / 72%);
+  backdrop-filter: blur(4px);
 }
 .review-dialog {
   width: min(400px, 100%);
-  padding: 22px;
+  padding: 24px;
   border: 1px solid var(--rule-strong);
-  border-radius: 9px;
-  background: var(--elevated);
+  border-radius: 12px;
+  background: var(--surface);
   box-shadow: 0 20px 60px rgb(0 0 0 / 45%);
 }
 .review-dialog h2 {
@@ -866,6 +985,25 @@ a {
   gap: 7px;
 }
 
+.pierre-line-annotation-expanded {
+  max-width: min(460px, 64vw);
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--rule-strong);
+  border-left: 2px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.pierre-line-annotation-expanded:hover {
+  border-color: var(--accent);
+  background: var(--elevated);
+}
+
 .pierre-line-annotation-pin {
   width: 24px;
   min-width: 24px;
@@ -906,6 +1044,31 @@ a {
 
 .pierre-gutter-utility-icon {
   display: block;
+}
+
+.pierre-gutter-utility-button {
+  display: inline-flex;
+  width: 1lh;
+  height: 1lh;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, var(--rule-strong));
+  border-radius: 5px;
+  color: var(--canvas);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 20%);
+  transition:
+    transform 120ms ease-out,
+    filter 120ms ease-out;
+}
+
+.pierre-gutter-utility-button:hover {
+  filter: brightness(1.12);
+}
+
+.pierre-gutter-utility-button:active {
+  transform: scale(0.92);
 }
 
 .source-view-content {

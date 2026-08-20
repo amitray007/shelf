@@ -174,47 +174,48 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
             type="button"
           >
             {discussionOpen ? 'Hide discussion' : 'Discussion'}
-            {review.threads.length > 0 ? ` · ${review.threads.length}` : ''}
           </button>
         </div>
       ) : null}
-      <div className="managed-file-preview">
-        <FileView
-          {...(source === null ? {} : { source })}
-          {...(review === undefined
-            ? {}
-            : {
-                review: {
-                  canCreateThread: false,
-                  revisionId: review.revisionId,
-                  threads: review.threads,
-                  onCreateThread: review.onCreateThread,
-                  onSelectThread: review.onSelectThread,
-                },
-              })}
-          fileName={revision.originalFileName}
-          key={revision.revisionId}
-          preview={preview}
-        />
+      <div className="managed-file-review-body">
+        <div className="managed-file-preview">
+          <FileView
+            {...(source === null ? {} : { source })}
+            {...(review === undefined
+              ? {}
+              : {
+                  review: {
+                    canCreateThread: false,
+                    revisionId: review.revisionId,
+                    threads: review.threads,
+                    onCreateThread: review.onCreateThread,
+                    onSelectThread: review.onSelectThread,
+                  },
+                })}
+            fileName={revision.originalFileName}
+            key={revision.revisionId}
+            preview={preview}
+          />
+        </div>
+        {review && discussionOpen ? (
+          <DiscussionPanel
+            activeThreadId={review.activeThreadId}
+            error={review.error}
+            loading={review.loading}
+            loadingOlder={review.loadingOlder}
+            nextCursor={review.nextCursor}
+            moderator={review.moderator}
+            onCreateThread={review.onCreateThread}
+            {...(review.onLoadOlder === undefined ? {} : { onLoadOlder: review.onLoadOlder })}
+            onModeratePost={review.onModeratePost}
+            onReply={review.onReply}
+            onSelectThread={review.onSelectThread}
+            onSetThreadStatus={review.onSetThreadStatus}
+            saving={review.saving}
+            threads={review.threads}
+          />
+        ) : null}
       </div>
-      {review && discussionOpen ? (
-        <DiscussionPanel
-          activeThreadId={review.activeThreadId}
-          error={review.error}
-          loading={review.loading}
-          loadingOlder={review.loadingOlder}
-          nextCursor={review.nextCursor}
-          moderator={review.moderator}
-          onCreateThread={review.onCreateThread}
-          {...(review.onLoadOlder === undefined ? {} : { onLoadOlder: review.onLoadOlder })}
-          onModeratePost={review.onModeratePost}
-          onReply={review.onReply}
-          onSelectThread={review.onSelectThread}
-          onSetThreadStatus={review.onSetThreadStatus}
-          saving={review.saving}
-          threads={review.threads}
-        />
-      ) : null}
     </div>
   );
 });
