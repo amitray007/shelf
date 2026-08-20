@@ -942,7 +942,8 @@ export function FileView({
   const requestedFocusRequestId = focusRequestId ?? review?.focusRequestId;
   const openSidebarButtonRef = useRef<HTMLButtonElement>(null);
   const previousSidebarOpenRef = useRef(sidebarOpen);
-  const showSidebarToggle = sidebarOpen === false && onOpenSidebar !== undefined;
+  const showSidebarToggle = sidebarOpen !== undefined && onOpenSidebar !== undefined;
+  const sidebarToggleLabel = `${sidebarOpen ? 'Collapse' : 'Open'} ${sidebarLabel ?? 'review sidebar'}`;
 
   useEffect(() => {
     if (previousSidebarOpenRef.current && sidebarOpen === false) {
@@ -992,12 +993,12 @@ export function FileView({
             {showSidebarToggle ? (
               <button
                 aria-controls={sidebarControlsId}
-                aria-expanded={false}
-                aria-label={`Open ${sidebarLabel ?? 'review sidebar'}`}
+                aria-expanded={sidebarOpen}
+                aria-label={sidebarToggleLabel}
                 className="file-view-sidebar-toggle review-sidebar-tool"
                 onClick={onOpenSidebar}
                 ref={openSidebarButtonRef}
-                title={`Open ${sidebarLabel ?? 'review sidebar'}`}
+                title={sidebarToggleLabel}
                 type="button"
               >
                 <SidebarSimpleIcon aria-hidden="true" size={18} weight="regular" />

@@ -413,13 +413,6 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
                   discussionCount={review.threads.length}
                   mode={review.mode}
                   onModeChange={review.onModeChange}
-                  {...(review.onSidebarToggle === undefined
-                    ? {}
-                    : {
-                        onCollapse: review.onSidebarToggle,
-                        sidebarControlsId,
-                        sidebarLabel: 'folder tree and discussions sidebar',
-                      })}
                   onSearchToggle={() =>
                     review.mode === 'discussion'
                       ? setDiscussionSearchOpen((open) => !open)

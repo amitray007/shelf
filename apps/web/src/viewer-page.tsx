@@ -328,7 +328,7 @@ export function ViewerPage() {
               content={
                 <FileArtifact
                   payload={payload}
-                  onOpenSidebar={() => setDiscussionVisibility(true)}
+                  onOpenSidebar={() => setDiscussionVisibility(!discussionOpen)}
                   review={{
                     canCreateThread: review.writable,
                     revisionId: payload.resolution.revision.revisionId,
@@ -360,7 +360,6 @@ export function ViewerPage() {
                       ? { revisionId: payload.resolution.revision.revisionId, kind: 'file' }
                       : undefined
                   }
-                  onCollapse={() => setDiscussionVisibility(!discussionOpen)}
                   onLoadOlder={review.loadOlder}
                   onCreateThread={review.createThread}
                   onDeletePost={review.deletePost}
@@ -371,7 +370,6 @@ export function ViewerPage() {
                   onSetThreadStatus={review.setThreadStatus}
                   publicViewer
                   saving={review.saving}
-                  sidebarLabel="file discussions sidebar"
                   sidebarControlsId="viewer-discussion-sidebar"
                   threads={review.threads}
                 />

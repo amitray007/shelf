@@ -249,23 +249,15 @@ describe('viewer content states', () => {
   it('keeps sidebar toolbar controls ordered and owned by its content region', () => {
     const html = renderToStaticMarkup(
       <ReviewSidebarToolbar
-        onCollapse={() => undefined}
         onSearchToggle={() => undefined}
         searchOpen={false}
-        sidebarControlsId="sidebar-content"
-        sidebarLabel="file discussions sidebar"
         threadFilter="all"
         onThreadFilterChange={() => undefined}
       />,
     );
     const labels = [...html.matchAll(/aria-label="([^"]+)"/g)].map((match) => match[1]);
-    expect(labels.slice(-3)).toEqual([
-      'Search discussions',
-      'Collapse file discussions sidebar',
-      'Filter discussions',
-    ]);
-    expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain('aria-controls="sidebar-content"');
+    expect(labels.slice(-2)).toEqual(['Search discussions', 'Filter discussions']);
+    expect(html).not.toContain('Collapse file discussions sidebar');
   });
 
   it('puts the collapsed public discussion reopen action in the file header', () => {
@@ -288,6 +280,24 @@ describe('viewer content states', () => {
     expect(html).toContain('Open file discussions sidebar');
     expect(html).toContain('aria-controls="public-file-sidebar"');
     expect(html).toContain('aria-expanded="false"');
+    const openHtml = renderToStaticMarkup(
+      <FileView
+        fileName="idea.md"
+        header={
+          <>
+            <strong>idea.md</strong>
+            <span>42 B</span>
+          </>
+        }
+        onOpenSidebar={() => undefined}
+        sidebarControlsId="public-file-sidebar"
+        sidebarLabel="file discussions sidebar"
+        sidebarOpen
+        preview={<p>Preview</p>}
+      />,
+    );
+    expect(openHtml).toContain('Collapse file discussions sidebar');
+    expect(openHtml).toContain('aria-expanded="true"');
   });
 
   it('groups multiple source discussions into one annotation per line', () => {

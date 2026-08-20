@@ -59,10 +59,8 @@ export interface DiscussionPanelProps {
   readonly newAnchor?: CommentAnchor | undefined;
   readonly collapsible?: boolean | undefined;
   readonly collapsed?: boolean | undefined;
-  readonly onCollapse?: (() => void) | undefined;
   readonly publicViewer?: boolean | undefined;
   readonly sidebarControlsId?: string | undefined;
-  readonly sidebarLabel?: string | undefined;
 }
 
 export function ReviewComposer({
@@ -206,10 +204,8 @@ export function DiscussionPanel({
   onThreadFilterChange,
   collapsible = false,
   collapsed = false,
-  onCollapse,
   publicViewer = false,
   sidebarControlsId,
-  sidebarLabel = publicViewer ? 'file discussions sidebar' : 'review sidebar',
 }: DiscussionPanelProps) {
   const [query, setQuery] = useState('');
   const [localThreadFilter, setLocalThreadFilter] = useState<ReviewThreadFilter>('all');
@@ -340,13 +336,6 @@ export function DiscussionPanel({
       {showToolbar ? (
         <ReviewSidebarToolbar
           discussionCount={threads.length}
-          {...(onCollapse === undefined
-            ? {}
-            : {
-                onCollapse,
-                ...(sidebarControlsId === undefined ? {} : { sidebarControlsId }),
-                sidebarLabel,
-              })}
           onClose={onClose}
           onSearchToggle={toggleSearch}
           searchOpen={searchOpen}
