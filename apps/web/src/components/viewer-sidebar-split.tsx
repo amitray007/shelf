@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
 
 export const VIEWER_SIDEBAR_WIDTH_STORAGE_KEY = 'shelf:viewer-sidebar-width:v1';
-export const VIEWER_SIDEBAR_COLLAPSED_WIDTH = 44;
+export const VIEWER_SIDEBAR_COLLAPSED_WIDTH = 0;
 
 export interface ViewerSidebarBounds {
   readonly min: number;

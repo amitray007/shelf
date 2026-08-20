@@ -15,7 +15,7 @@ import {
 import { ReviewEditComposer } from './edit-composer.js';
 import { readReviewVisitorIdentity } from './identity.js';
 import { VisitorNameDialog } from './identity-dialog.js';
-import { ReviewSidebarRail, ReviewSidebarToolbar } from './sidebar-toolbar.js';
+import { ReviewSidebarToolbar } from './sidebar-toolbar.js';
 import type { ReviewThreadFilter } from './types.js';
 
 export { ReviewEditComposer } from './edit-composer.js';
@@ -217,8 +217,6 @@ export function DiscussionPanel({
   const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string>();
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const railButtonRef = useRef<HTMLButtonElement>(null);
-  const previousCollapsedRef = useRef(collapsed);
   const activeThread = threads.find((thread) => thread.threadId === activeThreadId);
   const searchOpen = controlledSearchOpen ?? localSearchOpen;
   const toggleSearch = onSearchToggle ?? (() => setLocalSearchOpen((open) => !open));
@@ -297,10 +295,6 @@ export function DiscussionPanel({
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus();
   }, [searchOpen]);
-  useEffect(() => {
-    if (!previousCollapsedRef.current && collapsed) railButtonRef.current?.focus();
-    previousCollapsedRef.current = collapsed;
-  }, [collapsed]);
   const runAction = async (action: () => Promise<void>) => {
     setActionError(undefined);
     try {
@@ -309,7 +303,7 @@ export function DiscussionPanel({
       setActionError(cause instanceof Error ? cause.message : 'Could not save this review.');
     }
   };
-  const panelClassName = `review-panel review-chat-panel${publicViewer ? ' review-panel-public' : ''}${collapsible && collapsed ? ' review-panel-collapsed' : ''}`;
+  const panelClassName = `review-panel review-chat-panel${publicViewer ? ' review-panel-public' : ''}`;
   const panelContent = (
     <>
       {showToolbar ? (
@@ -608,14 +602,6 @@ export function DiscussionPanel({
       ) : (
         panelContent
       )}
-      {collapsible && collapsed ? (
-        <ReviewSidebarRail
-          buttonRef={railButtonRef}
-          onOpen={onCollapse ?? (() => undefined)}
-          sidebarLabel={sidebarLabel}
-          {...(sidebarControlsId === undefined ? {} : { sidebarControlsId })}
-        />
-      ) : null}
     </aside>
   );
 }

@@ -267,26 +267,26 @@ describe('viewer content states', () => {
     expect(html).toContain('aria-controls="sidebar-content"');
   });
 
-  it('keeps collapsed public discussion content hidden behind a reopen rail', () => {
+  it('puts the collapsed public discussion reopen action in the file header', () => {
     const html = renderToStaticMarkup(
-      <DiscussionPanel
-        collapsed
-        collapsible
-        newAnchor={{ revisionId: FILE_RESOLUTION.revision.revisionId, kind: 'file' }}
-        onCollapse={() => undefined}
-        onCreateThread={async () => undefined}
-        onReply={async () => undefined}
-        onSelectThread={() => undefined}
-        onSetThreadStatus={async () => undefined}
-        publicViewer
+      <FileView
+        fileName="idea.md"
+        header={
+          <>
+            <strong>idea.md</strong>
+            <span>42 B</span>
+          </>
+        }
+        onOpenSidebar={() => undefined}
         sidebarControlsId="public-file-sidebar"
-        threads={[]}
+        sidebarLabel="file discussions sidebar"
+        sidebarOpen={false}
+        preview={<p>Preview</p>}
       />,
     );
-    expect(html).toContain('hidden="" id="public-file-sidebar"');
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain('aria-controls="public-file-sidebar"');
     expect(html).toContain('Open file discussions sidebar');
+    expect(html).toContain('aria-controls="public-file-sidebar"');
+    expect(html).toContain('aria-expanded="false"');
   });
 
   it('groups multiple source discussions into one annotation per line', () => {

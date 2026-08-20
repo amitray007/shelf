@@ -169,9 +169,13 @@ export async function loadViewerPayload(
 function FileArtifact({
   payload,
   review,
+  sidebarOpen,
+  onOpenSidebar,
 }: {
   readonly payload: Extract<PublicSharePayload, { kind: 'file' }>;
   readonly review?: React.ComponentProps<typeof ArtifactContent>['review'];
+  readonly sidebarOpen?: boolean | undefined;
+  readonly onOpenSidebar?: (() => void) | undefined;
 }) {
   const downloadUrl = useMemo(
     () =>
@@ -203,7 +207,11 @@ function FileArtifact({
       renderer={prepared.renderer}
       resolution={payload.resolution}
       authority={payload.authority}
+      onOpenSidebar={onOpenSidebar}
       review={review}
+      sidebarControlsId="viewer-discussion-sidebar"
+      sidebarLabel="file discussions sidebar"
+      sidebarOpen={sidebarOpen}
     />
   );
 }
@@ -320,6 +328,7 @@ export function ViewerPage() {
               content={
                 <FileArtifact
                   payload={payload}
+                  onOpenSidebar={() => setDiscussionVisibility(true)}
                   review={{
                     canCreateThread: review.writable,
                     revisionId: payload.resolution.revision.revisionId,
@@ -333,6 +342,7 @@ export function ViewerPage() {
                     onSelectThread: selectReviewThread,
                     saving: review.saving,
                   }}
+                  sidebarOpen={discussionOpen}
                 />
               }
               sidebarOpen={discussionOpen}

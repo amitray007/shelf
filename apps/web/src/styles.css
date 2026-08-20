@@ -174,10 +174,10 @@ a {
 }
 
 .viewer-sidebar-split-collapsed > [data-testid="viewer-sidebar"] {
-  width: 44px !important;
-  min-width: 44px !important;
-  max-width: 44px !important;
-  flex-basis: 44px !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  flex-basis: 0 !important;
 }
 
 .viewer-sidebar-split-collapsed > [data-separator] {
@@ -206,27 +206,6 @@ a {
 .review-panel-public {
   border-right: 1px solid var(--rule-strong);
   border-left: 0;
-}
-
-.review-panel-public.review-panel-collapsed {
-  width: 44px;
-  min-width: 44px;
-  flex: 0 0 44px;
-}
-
-.review-sidebar-rail {
-  display: flex;
-  width: 44px;
-  min-width: 44px;
-  min-height: 0;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-
-.review-sidebar-rail-button {
-  flex: 0 0 32px;
 }
 
 .review-sidebar-content {
@@ -1202,10 +1181,6 @@ a {
   min-height: 0;
   flex: 1;
   border: 0;
-}
-
-.folder-browser-sidebar-content-collapsed {
-  align-items: center;
 }
 
 .rail {
@@ -2330,20 +2305,24 @@ a {
 
   .viewer-main .viewer-sidebar-split-collapsed > [data-testid="viewer-sidebar"] {
     position: static;
-    width: 44px;
-    min-width: 44px;
+    width: 0;
+    min-width: 0;
     height: 100% !important;
-    flex: 0 0 44px;
+    flex: 0 0 0;
   }
 
   .viewer-main .viewer-sidebar-split-collapsed > [data-testid="viewer-content"] {
-    width: calc(100% - 44px) !important;
+    width: 100% !important;
     height: 100% !important;
   }
 
   .folder-browser .viewer-sidebar-split {
     display: grid !important;
     grid-template-rows: minmax(120px, 34vh) minmax(0, 1fr);
+  }
+
+  .folder-browser .viewer-sidebar-split-collapsed {
+    grid-template-rows: 0 minmax(0, 1fr);
   }
 
   .folder-browser .viewer-sidebar-split > [data-panel] {
@@ -2371,7 +2350,11 @@ a {
     .folder-browser-sidebar-split-review.viewer-sidebar-split-collapsed
     > [data-testid="viewer-sidebar"] {
     position: static;
-    height: 44px !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+    height: 0 !important;
+    flex-basis: 0 !important;
   }
 
   .folder-browser-tree {

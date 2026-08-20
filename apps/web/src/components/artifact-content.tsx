@@ -24,6 +24,10 @@ interface ArtifactContentProps {
   readonly downloadUrl?: string;
   readonly authority: ViewerAuthority;
   readonly review?: FileReviewProps | undefined;
+  readonly onOpenSidebar?: (() => void) | undefined;
+  readonly sidebarControlsId?: string | undefined;
+  readonly sidebarOpen?: boolean | undefined;
+  readonly sidebarLabel?: string | undefined;
 }
 
 export function DownloadAction({
@@ -139,6 +143,10 @@ export function ArtifactContent({
   downloadUrl,
   authority,
   review,
+  onOpenSidebar,
+  sidebarControlsId,
+  sidebarOpen,
+  sidebarLabel,
 }: ArtifactContentProps) {
   if (isFolderShareResolution(resolution)) {
     return (
@@ -153,6 +161,21 @@ export function ArtifactContent({
   }
 
   if (!isFileShareResolution(resolution)) return null;
+
+  const fileHeader = (
+    <>
+      <strong title={resolution.revision.originalFileName}>
+        {resolution.revision.originalFileName}
+      </strong>
+      <span>{formatBytes(resolution.revision.byteCount)}</span>
+    </>
+  );
+  const sidebarProps = {
+    ...(onOpenSidebar === undefined ? {} : { onOpenSidebar }),
+    ...(sidebarControlsId === undefined ? {} : { sidebarControlsId }),
+    ...(sidebarOpen === undefined ? {} : { sidebarOpen }),
+    ...(sidebarLabel === undefined ? {} : { sidebarLabel }),
+  };
 
   const normalizedMediaType = normalizeMediaType(resolution.revision.mediaType);
   let preview: React.ReactNode | undefined;
@@ -193,23 +216,32 @@ export function ArtifactContent({
   if (preview !== undefined || text !== undefined) {
     return (
       <FileView
+        header={fileHeader}
         {...(text === undefined ? {} : { source: text })}
         fileName={resolution.revision.originalFileName}
         key={resolution.revision.revisionId}
         preview={preview}
         review={review}
+        {...sidebarProps}
       />
     );
   }
   if (renderer.kind === 'download') {
     return (
-      <div className="artifact-surface artifact-download">
-        <DownloadOnly
-          authority={authority}
-          mediaType={resolution.revision.mediaType}
-          resolution={resolution}
-        />
-      </div>
+      <FileView
+        fileName={resolution.revision.originalFileName}
+        header={fileHeader}
+        preview={
+          <div className="artifact-surface artifact-download">
+            <DownloadOnly
+              authority={authority}
+              mediaType={resolution.revision.mediaType}
+              resolution={resolution}
+            />
+          </div>
+        }
+        {...sidebarProps}
+      />
     );
   }
   return null;

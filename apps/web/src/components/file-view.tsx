@@ -7,6 +7,7 @@ import { CheckIcon } from '@phosphor-icons/react/Check';
 import { CopyIcon } from '@phosphor-icons/react/Copy';
 import { GearSixIcon } from '@phosphor-icons/react/GearSix';
 import { ListNumbersIcon } from '@phosphor-icons/react/ListNumbers';
+import { SidebarSimpleIcon } from '@phosphor-icons/react/SidebarSimple';
 import { TextAlignLeftIcon } from '@phosphor-icons/react/TextAlignLeft';
 import type { LineAnnotation, SelectedLineRange } from '@pierre/diffs';
 import type { FileContents, FileOptions, FileProps } from '@pierre/diffs/react';
@@ -913,6 +914,10 @@ export function FileView({
   focusRequestId,
   preview,
   review,
+  sidebarControlsId,
+  sidebarLabel,
+  sidebarOpen,
+  onOpenSidebar,
   source,
 }: {
   readonly annotations?: readonly SourceLineAnnotation[];
@@ -922,6 +927,10 @@ export function FileView({
   readonly focusRequestId?: number | undefined;
   readonly preview?: React.ReactNode;
   readonly review?: FileReviewProps | undefined;
+  readonly sidebarControlsId?: string | undefined;
+  readonly sidebarLabel?: string | undefined;
+  readonly sidebarOpen?: boolean | undefined;
+  readonly onOpenSidebar?: (() => void) | undefined;
   readonly source?: string;
 }) {
   const hasContent = preview !== undefined || source !== undefined;
@@ -931,6 +940,16 @@ export function FileView({
   );
   const requestedFocusLine = focusLine ?? review?.focusLine;
   const requestedFocusRequestId = focusRequestId ?? review?.focusRequestId;
+  const openSidebarButtonRef = useRef<HTMLButtonElement>(null);
+  const previousSidebarOpenRef = useRef(sidebarOpen);
+  const showSidebarToggle = sidebarOpen === false && onOpenSidebar !== undefined;
+
+  useEffect(() => {
+    if (previousSidebarOpenRef.current && sidebarOpen === false) {
+      openSidebarButtonRef.current?.focus();
+    }
+    previousSidebarOpenRef.current = sidebarOpen;
+  }, [sidebarOpen]);
 
   useEffect(() => {
     if (requestedFocusLine !== undefined && source !== undefined) setMode('source');
@@ -948,8 +967,8 @@ export function FileView({
     }
   }, [fileName, hasModes, mode]);
 
-  if (!hasContent && header === undefined) return null;
-  if (header === undefined && !hasModes) {
+  if (!hasContent && header === undefined && !showSidebarToggle) return null;
+  if (header === undefined && !hasModes && !showSidebarToggle) {
     if (preview === undefined)
       return (
         <SourceView
@@ -968,7 +987,25 @@ export function FileView({
   return (
     <div className="file-view">
       <header className="file-view-toolbar">
-        {header === undefined ? null : <div className="file-view-meta">{header}</div>}
+        {header === undefined && !showSidebarToggle ? null : (
+          <div className="file-view-meta">
+            {showSidebarToggle ? (
+              <button
+                aria-controls={sidebarControlsId}
+                aria-expanded={false}
+                aria-label={`Open ${sidebarLabel ?? 'review sidebar'}`}
+                className="file-view-sidebar-toggle review-sidebar-tool"
+                onClick={onOpenSidebar}
+                ref={openSidebarButtonRef}
+                title={`Open ${sidebarLabel ?? 'review sidebar'}`}
+                type="button"
+              >
+                <SidebarSimpleIcon aria-hidden="true" size={18} weight="regular" />
+              </button>
+            ) : null}
+            {header}
+          </div>
+        )}
         {hasModes ? (
           <Tabs
             activateOnFocus={false}

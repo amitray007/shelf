@@ -3,7 +3,6 @@ import { FunnelIcon } from '@phosphor-icons/react/Funnel';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/MagnifyingGlass';
 import { SidebarSimpleIcon } from '@phosphor-icons/react/SidebarSimple';
 import { XIcon } from '@phosphor-icons/react/X';
-import type { RefObject } from 'react';
 import { REVIEW_THREAD_FILTERS, type ReviewSidebarMode, type ReviewThreadFilter } from './types.js';
 
 export interface ReviewSidebarToolbarProps {
@@ -19,35 +18,6 @@ export interface ReviewSidebarToolbarProps {
   readonly sidebarControlsId?: string | undefined;
   readonly sidebarLabel?: string | undefined;
   readonly onClose?: (() => void) | undefined;
-}
-
-export function ReviewSidebarRail({
-  onOpen,
-  buttonRef,
-  sidebarLabel = 'review sidebar',
-  sidebarControlsId,
-}: {
-  readonly onOpen: () => void;
-  readonly buttonRef?: RefObject<HTMLButtonElement | null> | undefined;
-  readonly sidebarLabel?: string | undefined;
-  readonly sidebarControlsId?: string | undefined;
-}) {
-  return (
-    <div className="review-sidebar-rail">
-      <button
-        aria-controls={sidebarControlsId}
-        aria-expanded={false}
-        aria-label={`Open ${sidebarLabel}`}
-        className="review-sidebar-tool review-sidebar-rail-button"
-        onClick={onOpen}
-        ref={buttonRef}
-        title={`Open ${sidebarLabel}`}
-        type="button"
-      >
-        <SidebarSimpleIcon aria-hidden="true" size={18} weight="regular" />
-      </button>
-    </div>
-  );
 }
 
 export function ReviewSidebarToolbar({

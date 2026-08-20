@@ -17,7 +17,7 @@ import {
 import { formatBytes } from './format.js';
 import { MarkdownView } from './markdown-view.js';
 import { DiscussionPanel } from './review/discussion-panel.js';
-import { ReviewSidebarRail, ReviewSidebarToolbar } from './review/sidebar-toolbar.js';
+import { ReviewSidebarToolbar } from './review/sidebar-toolbar.js';
 import type { ReviewSidebarMode, ReviewThreadFilter } from './review/types.js';
 import { ViewerSidebarSplit } from './viewer-sidebar-split.js';
 
@@ -167,9 +167,6 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
   const [threadFilter, setThreadFilter] = useState<ReviewThreadFilter>('all');
   const sidebarOpen = review?.sidebarOpen ?? true;
   const sidebarControlsId = review?.sidebarControlsId ?? 'folder-browser-sidebar-content';
-  const railButtonRef = useRef<HTMLButtonElement>(null);
-  const previousSidebarOpenRef = useRef(sidebarOpen);
-  const previousReviewPresentRef = useRef(review !== undefined);
   const restoredExpandedPaths = useMemo(() => readExpandedTreePaths(paths), [paths]);
   const handleSelectionChange = useCallback((selectedPaths: readonly string[]) => {
     const nextFile = [...selectedPaths].reverse().find((path) => filePathsRef.current.has(path));
@@ -248,14 +245,6 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
       // Folder selection remains usable when browser storage is unavailable.
     }
   }, [model, selectedPath]);
-
-  useEffect(() => {
-    if (previousReviewPresentRef.current && previousSidebarOpenRef.current && !sidebarOpen) {
-      railButtonRef.current?.focus();
-    }
-    previousSidebarOpenRef.current = sidebarOpen;
-    previousReviewPresentRef.current = review !== undefined;
-  }, [review, sidebarOpen]);
 
   useEffect(() => {
     const persistExpansion = () => {
@@ -397,6 +386,14 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
                         saving: review.saving,
                       },
                     })}
+                {...(review === undefined
+                  ? {}
+                  : {
+                      onOpenSidebar: review.onSidebarToggle,
+                      sidebarControlsId,
+                      sidebarLabel: 'folder tree and discussions sidebar',
+                      sidebarOpen,
+                    })}
                 key={folderFileViewKey(selected?.path, bytes === undefined)}
                 preview={preview}
               />
@@ -407,79 +404,65 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
         sidebar={
           <aside className="folder-browser-tree">
             {review ? (
-              <>
-                <div
-                  className="folder-browser-sidebar-content"
-                  hidden={!sidebarOpen}
-                  id={sidebarControlsId}
-                >
-                  <ReviewSidebarToolbar
-                    discussionCount={review.threads.length}
-                    mode={review.mode}
-                    onModeChange={review.onModeChange}
-                    {...(review.onSidebarToggle === undefined
-                      ? {}
-                      : {
-                          onCollapse: review.onSidebarToggle,
-                          sidebarControlsId,
-                          sidebarLabel: 'folder tree and discussions sidebar',
-                        })}
-                    onSearchToggle={() =>
-                      review.mode === 'discussion'
-                        ? setDiscussionSearchOpen((open) => !open)
-                        : setTreeSearchOpen((open) => !open)
-                    }
-                    searchLabel={
-                      review.mode === 'discussion' ? 'Search discussions' : 'Search files'
-                    }
-                    searchOpen={
-                      review.mode === 'discussion' ? discussionSearchOpen : treeSearchOpen
-                    }
-                    {...(review.mode === 'discussion'
-                      ? { threadFilter, onThreadFilterChange: setThreadFilter }
-                      : {})}
+              <div
+                className="folder-browser-sidebar-content"
+                hidden={!sidebarOpen}
+                id={sidebarControlsId}
+              >
+                <ReviewSidebarToolbar
+                  discussionCount={review.threads.length}
+                  mode={review.mode}
+                  onModeChange={review.onModeChange}
+                  {...(review.onSidebarToggle === undefined
+                    ? {}
+                    : {
+                        onCollapse: review.onSidebarToggle,
+                        sidebarControlsId,
+                        sidebarLabel: 'folder tree and discussions sidebar',
+                      })}
+                  onSearchToggle={() =>
+                    review.mode === 'discussion'
+                      ? setDiscussionSearchOpen((open) => !open)
+                      : setTreeSearchOpen((open) => !open)
+                  }
+                  searchLabel={review.mode === 'discussion' ? 'Search discussions' : 'Search files'}
+                  searchOpen={review.mode === 'discussion' ? discussionSearchOpen : treeSearchOpen}
+                  {...(review.mode === 'discussion'
+                    ? { threadFilter, onThreadFilterChange: setThreadFilter }
+                    : {})}
+                />
+                {review.mode === 'discussion' ? (
+                  <DiscussionPanel
+                    activeThreadId={review.activeThreadId}
+                    error={review.error}
+                    loading={review.loading}
+                    newAnchor={selectedAnchor}
+                    onCreateThread={review.onCreateThread}
+                    onDeletePost={review.onDeletePost}
+                    onEditPost={review.onEditPost}
+                    onReply={review.onReply}
+                    onModeratePost={review.onModeratePost}
+                    onNavigateToThread={review.onNavigateToThread}
+                    onSelectThread={review.onSelectThread}
+                    onSetThreadStatus={review.onSetThreadStatus}
+                    moderator={review.moderator}
+                    saving={review.saving}
+                    selectedPath={selectedPath}
+                    onSearchToggle={() => setDiscussionSearchOpen((open) => !open)}
+                    searchOpen={discussionSearchOpen}
+                    showToolbar={false}
+                    threadFilter={threadFilter}
+                    onThreadFilterChange={setThreadFilter}
+                    threads={review.threads}
                   />
-                  {review.mode === 'discussion' ? (
-                    <DiscussionPanel
-                      activeThreadId={review.activeThreadId}
-                      error={review.error}
-                      loading={review.loading}
-                      newAnchor={selectedAnchor}
-                      onCreateThread={review.onCreateThread}
-                      onDeletePost={review.onDeletePost}
-                      onEditPost={review.onEditPost}
-                      onReply={review.onReply}
-                      onModeratePost={review.onModeratePost}
-                      onNavigateToThread={review.onNavigateToThread}
-                      onSelectThread={review.onSelectThread}
-                      onSetThreadStatus={review.onSetThreadStatus}
-                      moderator={review.moderator}
-                      saving={review.saving}
-                      selectedPath={selectedPath}
-                      onSearchToggle={() => setDiscussionSearchOpen((open) => !open)}
-                      searchOpen={discussionSearchOpen}
-                      showToolbar={false}
-                      threadFilter={threadFilter}
-                      onThreadFilterChange={setThreadFilter}
-                      threads={review.threads}
-                    />
-                  ) : (
-                    <FileTree
-                      aria-label="Folder contents"
-                      className="folder-browser-pierre-tree"
-                      model={model}
-                    />
-                  )}
-                </div>
-                {!sidebarOpen ? (
-                  <ReviewSidebarRail
-                    buttonRef={railButtonRef}
-                    onOpen={review.onSidebarToggle ?? (() => undefined)}
-                    sidebarLabel="folder tree and discussions sidebar"
-                    sidebarControlsId={sidebarControlsId}
+                ) : (
+                  <FileTree
+                    aria-label="Folder contents"
+                    className="folder-browser-pierre-tree"
+                    model={model}
                   />
-                ) : null}
-              </>
+                )}
+              </div>
             ) : (
               <FileTree
                 aria-label="Folder contents"
