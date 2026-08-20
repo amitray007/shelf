@@ -50,6 +50,7 @@ export interface FileReviewProps {
   readonly canCreateThread: boolean;
   readonly revisionId: string;
   readonly path?: string;
+  readonly activeThreadId?: string | undefined;
   readonly focusLine?: number | undefined;
   readonly focusRequestId?: number | undefined;
   readonly threads: readonly CommentThread[];
@@ -562,6 +563,19 @@ export function SourceView({
     () => groupSourceThreadsByLine(review?.threads ?? [], fileName),
     [fileName, review?.threads],
   );
+  const toggleSourceAnnotation = (lineNumber: number) => {
+    const closing = expandedLineNumber === lineNumber;
+    if (closing) {
+      const group = sourceThreadGroups.find((candidate) => candidate.lineNumber === lineNumber);
+      if (
+        review?.activeThreadId !== undefined &&
+        group?.threads.some((thread) => thread.threadId === review.activeThreadId)
+      ) {
+        review.onSelectThread('');
+      }
+    }
+    setExpandedLineNumber(closing ? undefined : lineNumber);
+  };
   const annotationCount = annotations.length + sourceThreadGroups.length;
   const lineAnnotations = useMemo<readonly SourceLineAnnotation[]>(() => {
     const visibleAnnotations: SourceLineAnnotation[] = settings.annotations
@@ -839,9 +853,7 @@ export function SourceView({
           onAddComment={
             review?.canCreateThread === true && commentsVisible ? setSelectedLines : undefined
           }
-          onAnnotationToggle={(lineNumber) =>
-            setExpandedLineNumber((current) => (current === lineNumber ? undefined : lineNumber))
-          }
+          onAnnotationToggle={toggleSourceAnnotation}
           onCancelInlineComment={() => setSelectedLines(null)}
           onDeletePost={review?.onDeletePost}
           onEditPost={review?.onEditPost}

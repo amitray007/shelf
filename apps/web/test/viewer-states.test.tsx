@@ -17,6 +17,7 @@ import {
   FolderBrowser,
   folderFileViewKey,
   isFolderEntryVisible,
+  isProgrammaticFolderSelection,
   shouldApplyFolderFocusRequest,
 } from '../src/components/folder-browser.js';
 import {
@@ -202,6 +203,12 @@ describe('viewer content states', () => {
     expect(shouldApplyFolderFocusRequest(1, undefined)).toBe(true);
     expect(shouldApplyFolderFocusRequest(1, 1)).toBe(false);
     expect(shouldApplyFolderFocusRequest(2, 1)).toBe(true);
+  });
+
+  it('distinguishes programmatic Line X selection from manual file selection', () => {
+    expect(isProgrammaticFolderSelection('src/anchored.ts', 'src/anchored.ts')).toBe(true);
+    expect(isProgrammaticFolderSelection('src/other.ts', 'src/anchored.ts')).toBe(false);
+    expect(isProgrammaticFolderSelection('src/anchored.ts', undefined)).toBe(false);
   });
 
   it('uses compact relative review times and illustrated DiceBear avatars', () => {

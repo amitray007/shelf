@@ -33,6 +33,7 @@ export interface FolderBrowserReview {
   readonly error?: string | undefined;
   readonly mode: ReviewSidebarMode;
   readonly onModeChange: (mode: ReviewSidebarMode) => void;
+  readonly onSelectFile?: ((path: string) => void) | undefined;
   readonly onSelectThread: (threadId: string) => void;
   readonly onNavigateToThread?: ((threadId: string) => void) | undefined;
   readonly onCreateThread: (anchor: CommentAnchor, body: string) => Promise<void>;
@@ -127,6 +128,13 @@ export function shouldApplyFolderFocusRequest(
   return requestId !== undefined && requestId !== consumedRequestId;
 }
 
+export function isProgrammaticFolderSelection(
+  selectedPath: string,
+  programmaticPath: string | undefined,
+): boolean {
+  return selectedPath === programmaticPath;
+}
+
 export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps) {
   const firstFile = entries.find((entry) => entry.kind === 'file');
   const paths = useMemo(
@@ -141,6 +149,10 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
   filePathsRef.current = filePaths;
   const focusRequestId = review?.focusRequestId;
   const consumedFocusRequestIdRef = useRef<number | undefined>(undefined);
+  const onSelectFileRef = useRef(review?.onSelectFile);
+  onSelectFileRef.current = review?.onSelectFile;
+  const programmaticSelectionPathRef = useRef<string | undefined>(undefined);
+  const treeMountedRef = useRef(false);
   const [selectedPath, setSelectedPath] = useState(
     () => readSelectedFilePath(filePaths) ?? firstFile?.path,
   );
@@ -152,7 +164,13 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
   const restoredExpandedPaths = useMemo(() => readExpandedTreePaths(paths), [paths]);
   const handleSelectionChange = useCallback((selectedPaths: readonly string[]) => {
     const nextFile = [...selectedPaths].reverse().find((path) => filePathsRef.current.has(path));
-    if (nextFile !== undefined) setSelectedPath(nextFile);
+    if (nextFile === undefined) return;
+    if (isProgrammaticFolderSelection(nextFile, programmaticSelectionPathRef.current)) {
+      programmaticSelectionPathRef.current = undefined;
+    } else if (treeMountedRef.current) {
+      onSelectFileRef.current?.(nextFile);
+    }
+    setSelectedPath(nextFile);
   }, []);
   const { model } = useFileTree({
     density: 'default',
@@ -189,12 +207,17 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
   });
 
   useEffect(() => {
+    treeMountedRef.current = true;
+  }, []);
+
+  useEffect(() => {
     if (treeSearchOpen) model.openSearch();
     else model.closeSearch();
   }, [model, treeSearchOpen]);
 
   useEffect(() => {
     const expandedPaths = expandedTreePaths(paths, model);
+    if (selectedPath !== undefined) programmaticSelectionPathRef.current = selectedPath;
     model.resetPaths(paths, { initialExpandedPaths: expandedPaths });
     try {
       window.sessionStorage.setItem(
@@ -204,10 +227,11 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
     } catch {
       // Session storage can be unavailable in privacy-restricted browser contexts.
     }
-  }, [model, paths]);
+  }, [model, paths, selectedPath]);
 
   useEffect(() => {
     if (selectedPath === undefined) return;
+    programmaticSelectionPathRef.current = selectedPath;
     model.getItem(selectedPath)?.select();
     try {
       window.sessionStorage.setItem(viewerSessionStorageKey('folder-selected-file'), selectedPath);
@@ -249,6 +273,7 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
     consumedFocusRequestIdRef.current = focusRequestId;
     if (path !== selectedPath) {
       setSelectedPath(path);
+      programmaticSelectionPathRef.current = path;
       model.getItem(path)?.select();
     }
   }, [filePaths, focusRequestId, model, review?.activeThreadId, review?.threads, selectedPath]);
@@ -387,6 +412,7 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
                     canCreateThread: review.canCreateThread,
                     revisionId: review.revisionId,
                     ...(selected === undefined ? {} : { path: selected.path }),
+                    activeThreadId: review.activeThreadId,
                     focusLine: review.focusLine,
                     focusRequestId: review.focusRequestId,
                     threads: review.threads,

@@ -604,6 +604,16 @@ a {
 .review-post-heading .review-thread-location {
   flex: 0 0 auto;
 }
+.review-post-heading-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.review-post-heading-actions .review-thread-location {
+  margin-left: 0;
+}
 .review-post-heading strong {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -737,6 +747,9 @@ a {
 }
 .review-post-menu-trigger:active {
   transform: scale(0.96);
+}
+.review-post-heading-actions .review-post-menu-trigger {
+  margin-left: 0;
 }
 .review-composer {
   display: grid;

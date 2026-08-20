@@ -355,60 +355,62 @@ export function DiscussionPanel({
                     <ReviewAvatar post={post} />
                     <strong>{reviewAuthorName(post)}</strong>
                     <ReviewTime value={post.createdAt} />
-                    {postIndex === 0 && activeThread.anchor.startLine !== undefined ? (
-                      <button
-                        aria-label={`Go to Line ${activeThread.anchor.startLine}`}
-                        className="review-thread-location"
-                        onClick={() => {
-                          (onNavigateToThread ?? onSelectThread)(activeThread.threadId);
-                        }}
-                        type="button"
-                      >
-                        Line {activeThread.anchor.startLine}
-                      </button>
-                    ) : null}
-                    {post.deletedAt === null &&
-                    post.hiddenAt === null &&
-                    ((activeThread.resolvedAt === null &&
-                      post.permissions.canEdit &&
-                      onEditPost !== undefined) ||
-                      (post.permissions.canDelete && onDeletePost !== undefined)) ? (
-                      <DropdownMenu>
-                        <DropdownMenu.Trigger
-                          render={
-                            <button
-                              aria-label="Comment actions"
-                              className="review-post-menu-trigger"
-                              title="Comment actions"
-                              type="button"
-                            >
-                              <DotsThreeIcon aria-hidden="true" size={17} weight="bold" />
-                            </button>
-                          }
-                        />
-                        <DropdownMenu.Content align="end">
-                          {activeThread.resolvedAt === null &&
-                          post.permissions.canEdit &&
-                          onEditPost ? (
-                            <DropdownMenu.Item
-                              onClick={() => {
-                                setEditingPostId(post.postId);
-                              }}
-                            >
-                              Edit comment
-                            </DropdownMenu.Item>
-                          ) : null}
-                          {post.permissions.canDelete && onDeletePost ? (
-                            <DropdownMenu.Item
-                              onClick={() => setDeleteConfirmPostId(post.postId)}
-                              variant="danger"
-                            >
-                              Delete comment
-                            </DropdownMenu.Item>
-                          ) : null}
-                        </DropdownMenu.Content>
-                      </DropdownMenu>
-                    ) : null}
+                    <div className="review-post-heading-actions">
+                      {postIndex === 0 && activeThread.anchor.startLine !== undefined ? (
+                        <button
+                          aria-label={`Go to Line ${activeThread.anchor.startLine}`}
+                          className="review-thread-location"
+                          onClick={() => {
+                            (onNavigateToThread ?? onSelectThread)(activeThread.threadId);
+                          }}
+                          type="button"
+                        >
+                          Line {activeThread.anchor.startLine}
+                        </button>
+                      ) : null}
+                      {post.deletedAt === null &&
+                      post.hiddenAt === null &&
+                      ((activeThread.resolvedAt === null &&
+                        post.permissions.canEdit &&
+                        onEditPost !== undefined) ||
+                        (post.permissions.canDelete && onDeletePost !== undefined)) ? (
+                        <DropdownMenu>
+                          <DropdownMenu.Trigger
+                            render={
+                              <button
+                                aria-label="Comment actions"
+                                className="review-post-menu-trigger"
+                                title="Comment actions"
+                                type="button"
+                              >
+                                <DotsThreeIcon aria-hidden="true" size={17} weight="bold" />
+                              </button>
+                            }
+                          />
+                          <DropdownMenu.Content align="end">
+                            {activeThread.resolvedAt === null &&
+                            post.permissions.canEdit &&
+                            onEditPost ? (
+                              <DropdownMenu.Item
+                                onClick={() => {
+                                  setEditingPostId(post.postId);
+                                }}
+                              >
+                                Edit comment
+                              </DropdownMenu.Item>
+                            ) : null}
+                            {post.permissions.canDelete && onDeletePost ? (
+                              <DropdownMenu.Item
+                                onClick={() => setDeleteConfirmPostId(post.postId)}
+                                variant="danger"
+                              >
+                                Delete comment
+                              </DropdownMenu.Item>
+                            ) : null}
+                          </DropdownMenu.Content>
+                        </DropdownMenu>
+                      ) : null}
+                    </div>
                   </div>
                   {post.hiddenAt !== null ? (
                     <div className="review-hidden-post">

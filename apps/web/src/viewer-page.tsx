@@ -282,6 +282,7 @@ export function ViewerPage() {
     if (payload.kind === 'file') setDiscussionVisibility(true);
     else if (threadId !== '') setMode('discussion');
   };
+  const clearReviewNavigation = () => selectReviewThread('');
   const navigateToReviewThread = (threadId: string) => {
     const thread = review.threads.find((candidate) => candidate.threadId === threadId);
     const line = thread?.anchor.startLine;
@@ -326,6 +327,7 @@ export function ViewerPage() {
                     canCreateThread: review.writable,
                     revisionId: payload.resolution.revision.revisionId,
                     threads: review.threads,
+                    activeThreadId: review.activeThreadId,
                     onCreateThread: review.createThread,
                     onDeletePost: review.deletePost,
                     onEditPost: review.editPost,
@@ -354,6 +356,7 @@ export function ViewerPage() {
                     error: review.error,
                     mode: folderMode,
                     onModeChange: setMode,
+                    onSelectFile: clearReviewNavigation,
                     onSelectThread: selectReviewThread,
                     onNavigateToThread: navigateToReviewThread,
                     onCreateThread: review.createThread,
