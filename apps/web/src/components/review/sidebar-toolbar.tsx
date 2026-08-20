@@ -1,5 +1,4 @@
 import { ChatCircleDotsIcon } from '@phosphor-icons/react/ChatCircleDots';
-import { FunnelSimpleIcon } from '@phosphor-icons/react/FunnelSimple';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/MagnifyingGlass';
 import { TreeStructureIcon } from '@phosphor-icons/react/TreeStructure';
 import { XIcon } from '@phosphor-icons/react/X';
@@ -65,15 +64,6 @@ export function ReviewSidebarToolbar({
           type="button"
         >
           <MagnifyingGlassIcon aria-hidden="true" size={18} weight="regular" />
-        </button>
-        <button
-          aria-label="Discussion filters"
-          className="review-sidebar-tool"
-          disabled
-          title="Filters coming soon"
-          type="button"
-        >
-          <FunnelSimpleIcon aria-hidden="true" size={18} weight="regular" />
         </button>
         {onClose ? (
           <button
