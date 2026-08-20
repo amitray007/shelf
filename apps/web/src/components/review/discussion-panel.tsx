@@ -634,7 +634,11 @@ export function DiscussionPanel({
     </>
   );
   return (
-    <aside aria-label="Discussion" className={panelClassName}>
+    <aside
+      aria-label="Discussion"
+      className={panelClassName}
+      {...(collapsible ? {} : { id: sidebarControlsId })}
+    >
       {collapsible ? (
         <div className="review-sidebar-content" hidden={collapsed} id={sidebarControlsId}>
           {panelContent}

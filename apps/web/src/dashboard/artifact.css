@@ -199,15 +199,6 @@
   overflow: hidden;
 }
 
-.managed-discussion-toolbar {
-  display: flex;
-  flex: 0 0 auto;
-  justify-content: flex-end;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--rule);
-  background: var(--surface);
-}
-
 .managed-file-preview {
   display: flex;
   min-width: 0;

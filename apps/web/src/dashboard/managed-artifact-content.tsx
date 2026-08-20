@@ -168,18 +168,6 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
   }
   return (
     <div className="managed-file-review-stage">
-      {review && onDiscussionToggle ? (
-        <div className="managed-discussion-toolbar">
-          <button
-            aria-expanded={discussionOpen}
-            className="review-button review-button-quiet"
-            onClick={onDiscussionToggle}
-            type="button"
-          >
-            {discussionOpen ? 'Hide discussion' : 'Discussion'}
-          </button>
-        </div>
-      ) : null}
       <div className="managed-file-review-body">
         <div className="managed-file-preview">
           <FileView
@@ -201,6 +189,14 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
             fileName={revision.originalFileName}
             key={revision.revisionId}
             preview={preview}
+            {...(review === undefined || onDiscussionToggle === undefined
+              ? {}
+              : {
+                  onOpenSidebar: onDiscussionToggle,
+                  sidebarControlsId: 'managed-artifact-discussion-sidebar',
+                  sidebarLabel: 'discussions sidebar',
+                  sidebarOpen: discussionOpen,
+                })}
           />
         </div>
         {review && discussionOpen ? (
@@ -220,6 +216,7 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
             onSelectThread={review.onSelectThread}
             onSetThreadStatus={review.onSetThreadStatus}
             saving={review.saving}
+            sidebarControlsId="managed-artifact-discussion-sidebar"
             threads={review.threads}
           />
         ) : null}

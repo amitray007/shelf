@@ -804,11 +804,18 @@ describe('viewer content states', () => {
             <span>42 B</span>
           </>
         }
+        onOpenSidebar={() => undefined}
         preview={<p>Rendered preview</p>}
+        sidebarControlsId="artifact-discussion-sidebar"
+        sidebarLabel="discussions sidebar"
+        sidebarOpen
         source="# Raw source"
       />,
     );
     expect(html.indexOf('42 B')).toBeLessThan(html.indexOf('Preview'));
+    expect(html.indexOf('file-view-sidebar-toggle')).toBeLessThan(html.indexOf('Preview'));
+    expect(html).toContain('Collapse discussions sidebar');
+    expect(html).toContain('aria-controls="artifact-discussion-sidebar"');
     expect(html).toContain('Source');
   });
 
