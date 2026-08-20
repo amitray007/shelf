@@ -17,12 +17,14 @@ import {
   revokeShare,
   setShareCommentPolicy,
 } from '../client.js';
+import { resolveWorkspaceContext, transportFields } from '../context.js';
 import { usageFailure } from '../output.js';
 import type { CliRuntime } from '../runtime.js';
 
 interface ShareCommandOptions {
-  url: string;
-  workspace: string;
+  profile?: string;
+  url?: string;
+  workspace?: string;
   allowInsecureLoopback?: boolean;
 }
 
@@ -61,17 +63,6 @@ export interface ShareCommentsCommandOptions extends ShareCommandOptions {
 
 export interface DefaultSharesCommandOptions extends ShareCommandOptions {
   artifact: string;
-}
-
-function token(runtime: CliRuntime): string {
-  const value = runtime.env.SHELF_TOKEN;
-  if (value === undefined || value.length === 0) throw usageFailure('SHELF_TOKEN is required.');
-  return value;
-}
-
-function workspaceId(value: string): string {
-  if (value.length === 0 || value.length > 128) throw usageFailure('The workspace ID is invalid.');
-  return value;
 }
 
 function artifactId(value: string): string {
@@ -186,15 +177,9 @@ function pageLimit(value: string | undefined): number {
   return parsed;
 }
 
-function transport(options: ShareCommandOptions, runtime: CliRuntime) {
-  return {
-    installationUrl: options.url,
-    workspaceId: workspaceId(options.workspace),
-    token: token(runtime),
-    ...(options.allowInsecureLoopback === undefined
-      ? {}
-      : { allowInsecureLoopback: options.allowInsecureLoopback }),
-  };
+async function transport(options: ShareCommandOptions, runtime: CliRuntime) {
+  const context = await resolveWorkspaceContext(options, runtime);
+  return { ...transportFields(context), workspaceId: context.workspaceId };
 }
 
 function target(revision: string | undefined): ShareTarget {
@@ -203,13 +188,13 @@ function target(revision: string | undefined): ShareTarget {
     : { mode: 'pinned', revisionId: revisionId(revision) };
 }
 
-export function executeCreateShare(
+export async function executeCreateShare(
   options: CreateShareCommandOptions,
   runtime: CliRuntime,
 ): Promise<ShareCreateResult> {
   return createShare(
     {
-      ...transport(options, runtime),
+      ...(await transport(options, runtime)),
       artifactId: artifactId(options.artifact),
       input: shareCreateInput(options, target(options.revision)),
       idempotencyKey: idempotencyKey(options.idempotencyKey),
@@ -218,13 +203,13 @@ export function executeCreateShare(
   );
 }
 
-export function executeListShares(
+export async function executeListShares(
   options: ListSharesCommandOptions,
   runtime: CliRuntime,
 ): Promise<SharePage> {
   return listShares(
     {
-      ...transport(options, runtime),
+      ...(await transport(options, runtime)),
       limit: pageLimit(options.limit),
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
     },
@@ -232,33 +217,33 @@ export function executeListShares(
   );
 }
 
-export function executeDefaultShares(
+export async function executeDefaultShares(
   options: DefaultSharesCommandOptions,
   runtime: CliRuntime,
 ): Promise<ArtifactDefaultShares> {
   return ensureArtifactDefaultShares(
     {
-      ...transport(options, runtime),
+      ...(await transport(options, runtime)),
       artifactId: artifactId(options.artifact),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );
 }
 
-export function executeRevokeShare(
+export async function executeRevokeShare(
   options: RevokeShareCommandOptions,
   runtime: CliRuntime,
 ): Promise<ShareManagementSummary> {
   return revokeShare(
     {
-      ...transport(options, runtime),
+      ...(await transport(options, runtime)),
       shareId: shareId(options.share),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );
 }
 
-export function executeSetShareCommentPolicy(
+export async function executeSetShareCommentPolicy(
   options: ShareCommentsCommandOptions,
   runtime: CliRuntime,
 ): Promise<ShareManagementSummary> {
@@ -266,7 +251,7 @@ export function executeSetShareCommentPolicy(
   if (policy === undefined) throw usageFailure('--comments is required.');
   return setShareCommentPolicy(
     {
-      ...transport(options, runtime),
+      ...(await transport(options, runtime)),
       shareId: shareId(options.share),
       commentPolicy: policy,
     },

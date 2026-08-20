@@ -12,15 +12,23 @@ import {
   type FolderTreePage,
 } from '@shelf/contracts';
 
-import { getFolderTree, publishFolder, type ShelfClientDependencies } from '../client.js';
+import {
+  downloadFolderEntryContent,
+  getFolderTree,
+  publishFolder,
+  type ShelfClientDependencies,
+} from '../client.js';
+import { resolveRemoteContext, resolveWorkspaceContext, transportFields } from '../context.js';
+import { downloadToPath } from '../download.js';
 import { mediaTypeForPath } from '../media-type.js';
 import { usageFailure } from '../output.js';
 import type { CliRuntime } from '../runtime.js';
 import { publisherMetadata, requireAgentMetadata } from './publish.js';
 
 export interface PublishFolderCommandOptions {
-  url: string;
-  workspace: string;
+  profile?: string;
+  url?: string;
+  workspace?: string;
   directory: string;
   idempotencyKey: string;
   artifact?: string;
@@ -32,11 +40,33 @@ export interface PublishFolderCommandOptions {
 }
 
 export interface FolderTreeCommandOptions {
-  url: string;
+  profile?: string;
+  url?: string;
   revision: string;
   limit?: string;
   cursor?: string;
   allowInsecureLoopback?: boolean;
+}
+
+export interface FolderDownloadCommandOptions {
+  profile?: string;
+  url?: string;
+  revision: string;
+  path: string;
+  output: string;
+  overwrite?: boolean;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface FolderDownloadResult {
+  apiVersion: 'v1';
+  operation: 'folders.download';
+  revisionId: string;
+  path: string;
+  output: string;
+  byteCount: number;
+  mediaType: string;
+  entityTag: string | null;
 }
 
 interface LocalFolderFile {
@@ -54,12 +84,6 @@ export interface PreparedLocalFolder {
 
 const WINDOWS_RESERVED_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu;
 const WINDOWS_RESERVED_CHARACTER = /[<>:"|?*]/u;
-
-function token(runtime: CliRuntime): string {
-  const value = runtime.env.SHELF_TOKEN;
-  if (value === undefined || value.length === 0) throw usageFailure('SHELF_TOKEN is required.');
-  return value;
-}
 
 function opaqueId(value: string, kind: 'artifact' | 'revision'): string {
   const prefix = kind === 'artifact' ? 'art' : 'rev';
@@ -100,6 +124,27 @@ function portablePath(path: string): string {
     )
   ) {
     throw usageFailure(`The directory contains a non-portable path: ${path}`);
+  }
+  return normalized;
+}
+
+/**
+ * Validates one folder entry path for retrieval against the same rules the API applies in
+ * PortableFolderPathSchema. Publish-time portability rules are deliberately not applied here so
+ * that any entry the API accepted can still be downloaded.
+ */
+function entryPath(path: string): string {
+  const normalized = path.normalize('NFC');
+  const segments = normalized.split('/');
+  if (
+    normalized.length === 0 ||
+    Buffer.byteLength(normalized, 'utf8') > FOLDER_LIMITS.maxPathBytes ||
+    normalized.startsWith('/') ||
+    normalized.includes('\\') ||
+    /\p{Cc}/u.test(normalized) ||
+    segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')
+  ) {
+    throw usageFailure('The folder entry path is invalid.');
   }
   return normalized;
 }
@@ -220,11 +265,24 @@ export async function executePublishFolder(
   runtime: CliRuntime,
   dependencies?: Partial<ShelfClientDependencies>,
 ): Promise<FolderPublishResult> {
-  return executePublishFolderWithToken(options, runtime, token(runtime), dependencies);
+  const context = await resolveWorkspaceContext(options, runtime);
+  return executePublishFolderWithToken(
+    {
+      ...options,
+      url: context.installationUrl,
+      workspace: context.workspaceId,
+      ...(context.allowInsecureLoopback === undefined
+        ? {}
+        : { allowInsecureLoopback: context.allowInsecureLoopback }),
+    },
+    runtime,
+    context.token,
+    dependencies,
+  );
 }
 
 export async function executePublishFolderWithToken(
-  options: PublishFolderCommandOptions,
+  options: PublishFolderCommandOptions & { url: string; workspace: string },
   runtime: CliRuntime,
   authenticationToken: string,
   dependencies?: Partial<ShelfClientDependencies>,
@@ -262,21 +320,49 @@ export async function executePublishFolderWithToken(
   );
 }
 
-export function executeFolderTree(
+export async function executeFolderTree(
   options: FolderTreeCommandOptions,
   runtime: CliRuntime,
 ): Promise<FolderTreePage> {
+  const context = await resolveRemoteContext(options, runtime);
   return getFolderTree(
     {
-      installationUrl: options.url,
+      ...transportFields(context),
       revisionId: opaqueId(options.revision, 'revision'),
       limit: positiveLimit(options.limit),
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
-      token: token(runtime),
-      ...(options.allowInsecureLoopback === undefined
-        ? {}
-        : { allowInsecureLoopback: options.allowInsecureLoopback }),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );
+}
+
+export async function executeFolderDownload(
+  options: FolderDownloadCommandOptions,
+  runtime: CliRuntime,
+): Promise<FolderDownloadResult> {
+  const revision = opaqueId(options.revision, 'revision');
+  const path = entryPath(options.path);
+  const context = await resolveRemoteContext(options, runtime);
+  const downloaded = await downloadToPath(
+    {
+      outputPath: options.output,
+      ...(options.overwrite === undefined ? {} : { overwrite: options.overwrite }),
+      failureMessage: 'The folder entry download could not be written safely.',
+    },
+    () =>
+      downloadFolderEntryContent(
+        { ...transportFields(context), revisionId: revision, path },
+        runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+      ),
+  );
+  return {
+    apiVersion: 'v1',
+    operation: 'folders.download',
+    revisionId: revision,
+    path,
+    output: downloaded.output,
+    byteCount: downloaded.byteCount,
+    mediaType: downloaded.mediaType,
+    entityTag: downloaded.entityTag,
+  };
 }

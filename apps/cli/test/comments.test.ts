@@ -4,6 +4,7 @@ import { runCli } from '../src/index.js';
 
 const ids = {
   artifact: 'art_AAAAAAAAAAAAAAAAAAAAAA',
+  second: 'art_DDDDDDDDDDDDDDDDDDDDDD',
   revision: 'rev_BBBBBBBBBBBBBBBBBBBBBB',
   thread: 'thread_01',
   post: 'post_01',
@@ -64,6 +65,7 @@ describe('shelf comments', () => {
     expect(exitCode).toBe(0);
     expect(output.stdout.value()).toContain('list');
     expect(output.stdout.value()).toContain('reply');
+    expect(output.stdout.value()).toContain('summaries');
     expect(output.stdout.value()).toContain('hide');
   });
 
@@ -179,6 +181,187 @@ describe('shelf comments', () => {
       });
     },
   );
+
+  it('sends an optional trimmed display name with a moderator reply', async () => {
+    const fetch = vi.fn(async () => Response.json(thread.posts[0], { status: 201 }));
+    const output = runtime(fetch);
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'comments',
+        'reply',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--artifact',
+        ids.artifact,
+        '--thread',
+        ids.thread,
+        '--body',
+        'Done.',
+        '--display-name',
+        '  Release bot  ',
+      ],
+      output.value,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ body: 'Done.', displayName: 'Release bot' }),
+    });
+  });
+
+  it.each([
+    ['an empty display name', 'Done.', ['--display-name', '   ']],
+    ['an oversized display name', 'Done.', ['--display-name', 'n'.repeat(129)]],
+    ['a blank body', '   ', []],
+    ['an oversized body', 'b'.repeat(20_001), []],
+  ] as const)('rejects a reply with %s before contacting the API', async (_name, body, extra) => {
+    const fetch = vi.fn();
+    const output = runtime(fetch);
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'comments',
+        'reply',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--artifact',
+        ids.artifact,
+        '--thread',
+        ids.thread,
+        '--body',
+        body,
+        ...extra,
+      ],
+      output.value,
+    );
+
+    expect(exitCode).toBe(2);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(JSON.parse(output.stderr.value())).toMatchObject({ error: { code: 'INVALID_REQUEST' } });
+  });
+
+  it('summarizes comment activity for a batch of artifacts', async () => {
+    const summaries = {
+      items: [
+        {
+          artifactId: ids.artifact,
+          participantCount: 1,
+          participants: [
+            {
+              participantId: 'visitor_opaque',
+              displayName: 'Reviewer',
+              threadCount: 1,
+              replyCount: 0,
+              latestThreadId: ids.thread,
+              latestActivityAt: '2026-08-18T12:00:00.000Z',
+              recentThreads: [
+                { threadId: ids.thread, latestActivityAt: '2026-08-18T12:00:00.000Z' },
+              ],
+            },
+          ],
+          openThreadCount: 1,
+          openReplyCount: 0,
+          latestActivityAt: '2026-08-18T12:00:00.000Z',
+          latestThreadId: ids.thread,
+        },
+      ],
+    };
+    const fetch = vi.fn(async () => Response.json(summaries));
+    const output = runtime(fetch);
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'comments',
+        'summaries',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--artifact',
+        ids.artifact,
+        '--artifact',
+        ids.second,
+      ],
+      output.value,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(output.stdout.value())).toEqual(summaries);
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      'https://shelf.example/api/v1/workspaces/workspace-main/comments/summaries',
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ artifactIds: [ids.artifact, ids.second] }),
+      headers: expect.objectContaining({ authorization: 'Bearer secret-token' }),
+    });
+  });
+
+  it.each([
+    ['a malformed artifact', [ids.artifact, 'not-an-artifact']],
+    ['a repeated artifact', [ids.artifact, ids.artifact]],
+    ['an oversized batch', Array.from({ length: 101 }, () => ids.artifact)],
+  ] as const)(
+    'rejects %s in a summaries batch before contacting the API',
+    async (_name, values) => {
+      const fetch = vi.fn();
+      const output = runtime(fetch);
+
+      const exitCode = await runCli(
+        [
+          'node',
+          'shelf',
+          'comments',
+          'summaries',
+          '--url',
+          'https://shelf.example',
+          '--workspace',
+          'workspace-main',
+          ...values.flatMap((value) => ['--artifact', value]),
+        ],
+        output.value,
+      );
+
+      expect(exitCode).toBe(2);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(JSON.parse(output.stderr.value())).toMatchObject({
+        error: { code: 'INVALID_REQUEST' },
+      });
+    },
+  );
+
+  it('requires at least one artifact for a summaries batch', async () => {
+    const fetch = vi.fn();
+    const output = runtime(fetch);
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'comments',
+        'summaries',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+      ],
+      output.value,
+    );
+
+    expect(exitCode).toBe(2);
+    expect(fetch).not.toHaveBeenCalled();
+  });
 
   it('rejects a malformed comment identifier before contacting the API', async () => {
     const fetch = vi.fn();

@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type {
   Artifact,
   ArtifactDeletionResult,
@@ -15,12 +17,14 @@ import {
   renameArtifact,
   restoreArtifact,
 } from '../client.js';
+import { resolveRemoteContext, resolveWorkspaceContext, transportFields } from '../context.js';
 import { usageFailure } from '../output.js';
 import type { CliRuntime } from '../runtime.js';
 
 export interface ListArtifactsCommandOptions {
-  url: string;
-  workspace: string;
+  profile?: string;
+  url?: string;
+  workspace?: string;
   limit?: string;
   cursor?: string;
   sort?: string;
@@ -30,7 +34,8 @@ export interface ListArtifactsCommandOptions {
 }
 
 export interface ShowArtifactCommandOptions {
-  url: string;
+  profile?: string;
+  url?: string;
   artifact: string;
   allowInsecureLoopback?: boolean;
 }
@@ -53,15 +58,9 @@ export interface RecoverArtifactCommandOptions extends ShowArtifactCommandOption
 }
 
 export interface RestoreArtifactCommandOptions extends ShowArtifactCommandOptions {
-  workspace: string;
+  workspace?: string;
   revision: string;
   idempotencyKey: string;
-}
-
-function token(runtime: CliRuntime): string {
-  const value = runtime.env.SHELF_TOKEN;
-  if (value === undefined || value.length === 0) throw usageFailure('SHELF_TOKEN is required.');
-  return value;
 }
 
 function pageLimit(value: string | undefined): number {
@@ -121,84 +120,72 @@ function artifactSortOrder(value: string | undefined): 'asc' | 'desc' {
   throw usageFailure('Artifact sort order must be asc or desc.');
 }
 
-export function executeListArtifacts(
+export async function executeListArtifacts(
   options: ListArtifactsCommandOptions,
   runtime: CliRuntime,
 ): Promise<ArtifactPage> {
+  const context = await resolveWorkspaceContext(options, runtime);
   return listArtifacts(
     {
-      installationUrl: options.url,
-      workspaceId: options.workspace,
+      ...transportFields(context),
+      workspaceId: context.workspaceId,
       limit: pageLimit(options.limit),
       sort: artifactSort(options.sort),
       order: artifactSortOrder(options.order),
       ...(options.search === undefined ? {} : { search: options.search }),
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
-      token: token(runtime),
-      ...(options.allowInsecureLoopback === undefined
-        ? {}
-        : { allowInsecureLoopback: options.allowInsecureLoopback }),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );
 }
 
-export function executeShowArtifact(
+export async function executeShowArtifact(
   options: ShowArtifactCommandOptions,
   runtime: CliRuntime,
 ): Promise<Artifact> {
+  const context = await resolveRemoteContext(options, runtime);
   return getArtifact(
     {
-      installationUrl: options.url,
+      ...transportFields(context),
       artifactId: artifactId(options.artifact),
-      token: token(runtime),
-      ...(options.allowInsecureLoopback === undefined
-        ? {}
-        : { allowInsecureLoopback: options.allowInsecureLoopback }),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );
 }
 
-export function executeArtifactHistory(
+export async function executeArtifactHistory(
   options: ArtifactHistoryCommandOptions,
   runtime: CliRuntime,
 ): Promise<ArtifactRevisionPage> {
+  const context = await resolveRemoteContext(options, runtime);
   return listArtifactRevisions(
     {
-      installationUrl: options.url,
+      ...transportFields(context),
       artifactId: artifactId(options.artifact),
       limit: pageLimit(options.limit),
       order: artifactHistoryOrder(options.order),
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
-      token: token(runtime),
-      ...(options.allowInsecureLoopback === undefined
-        ? {}
-        : { allowInsecureLoopback: options.allowInsecureLoopback }),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );
 }
 
-export function executeRenameArtifact(
+export async function executeRenameArtifact(
   options: RenameArtifactCommandOptions,
   runtime: CliRuntime,
 ): Promise<Artifact> {
+  const context = await resolveRemoteContext(options, runtime);
   return renameArtifact(
     {
-      installationUrl: options.url,
+      ...transportFields(context),
       artifactId: artifactId(options.artifact),
       name: artifactName(options.name),
-      token: token(runtime),
-      ...(options.allowInsecureLoopback === undefined
-        ? {}
-        : { allowInsecureLoopback: options.allowInsecureLoopback }),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );
 }
 
-export function executeDeleteArtifact(
+export async function executeDeleteArtifact(
   options: DeleteArtifactCommandOptions,
   runtime: CliRuntime,
 ): Promise<ArtifactDeletionResult> {
@@ -206,58 +193,47 @@ export function executeDeleteArtifact(
   if (options.confirm !== confirmedArtifactId) {
     throw usageFailure('The deletion confirmation must exactly match the artifact ID.');
   }
+  const context = await resolveRemoteContext(options, runtime);
   return deleteArtifact(
     {
-      installationUrl: options.url,
+      ...transportFields(context),
       artifactId: confirmedArtifactId,
-      token: token(runtime),
-      ...(options.allowInsecureLoopback === undefined
-        ? {}
-        : { allowInsecureLoopback: options.allowInsecureLoopback }),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );
 }
 
-export function executeRecoverArtifact(
+export async function executeRecoverArtifact(
   options: RecoverArtifactCommandOptions,
   runtime: CliRuntime,
 ): Promise<Artifact> {
   const recoveryIdempotencyKey = idempotencyKey(
     options.idempotencyKey ?? `artifact-recover-${randomUUID()}`,
   );
+  const context = await resolveRemoteContext(options, runtime);
   return recoverArtifact(
     {
-      installationUrl: options.url,
+      ...transportFields(context),
       artifactId: artifactId(options.artifact),
       idempotencyKey: recoveryIdempotencyKey,
-      token: token(runtime),
-      ...(options.allowInsecureLoopback === undefined
-        ? {}
-        : { allowInsecureLoopback: options.allowInsecureLoopback }),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );
 }
 
-export function executeRestoreArtifact(
+export async function executeRestoreArtifact(
   options: RestoreArtifactCommandOptions,
   runtime: CliRuntime,
 ): Promise<RestoreResult> {
+  const context = await resolveWorkspaceContext(options, runtime);
   return restoreArtifact(
     {
-      installationUrl: options.url,
-      workspaceId: options.workspace,
+      ...transportFields(context),
+      workspaceId: context.workspaceId,
       artifactId: artifactId(options.artifact),
       sourceRevisionId: revisionId(options.revision),
       idempotencyKey: idempotencyKey(options.idempotencyKey),
-      token: token(runtime),
-      ...(options.allowInsecureLoopback === undefined
-        ? {}
-        : { allowInsecureLoopback: options.allowInsecureLoopback }),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );
 }
-
-import { randomUUID } from 'node:crypto';

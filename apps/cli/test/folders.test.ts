@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -205,6 +205,196 @@ describe('shelf folders', () => {
     expect(fetch.mock.calls[0]?.[0].toString()).toBe(
       `https://shelf.example/api/v1/revisions/${result.revisionId}/tree?limit=25`,
     );
+  });
+
+  it('downloads one folder entry to an explicit new path', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'shelf-folder-download-'));
+    roots.push(root);
+    const output = join(root, 'index.ts');
+    const bytes = 'export {};\n';
+    const stdout = capture();
+    const fetch = vi.fn(
+      async () =>
+        new Response(bytes, {
+          status: 200,
+          headers: {
+            'content-length': String(Buffer.byteLength(bytes)),
+            'content-type': 'text/typescript',
+            etag: `"sha256:${'c'.repeat(64)}"`,
+          },
+        }),
+    );
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'folders',
+        'download',
+        '--url',
+        'https://shelf.example',
+        '--revision',
+        result.revisionId,
+        '--path',
+        'src/index.ts',
+        '--output',
+        output,
+      ],
+      { env: { SHELF_TOKEN: 'secret-token' }, stdout: stdout.write, stderr() {}, fetch },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(await readFile(output, 'utf8')).toBe(bytes);
+    expect(JSON.parse(stdout.value())).toEqual({
+      apiVersion: 'v1',
+      operation: 'folders.download',
+      revisionId: result.revisionId,
+      path: 'src/index.ts',
+      output,
+      byteCount: Buffer.byteLength(bytes),
+      mediaType: 'text/typescript',
+      entityTag: `"sha256:${'c'.repeat(64)}"`,
+    });
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      `https://shelf.example/api/v1/revisions/${result.revisionId}/tree/content?path=src%2Findex.ts`,
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'GET',
+      headers: expect.objectContaining({ authorization: 'Bearer secret-token' }),
+    });
+  });
+
+  it('refuses to replace a folder entry output without --overwrite', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'shelf-folder-download-overwrite-'));
+    roots.push(root);
+    const output = join(root, 'README.md');
+    await writeFile(output, 'old bytes');
+    const fetch = vi.fn(
+      async () =>
+        new Response('new bytes', {
+          headers: { 'content-length': '9', 'content-type': 'text/markdown' },
+        }),
+    );
+    const args = [
+      'node',
+      'shelf',
+      'folders',
+      'download',
+      '--url',
+      'https://shelf.example',
+      '--revision',
+      result.revisionId,
+      '--path',
+      'README.md',
+      '--output',
+      output,
+    ];
+
+    expect(
+      await runCli(args, {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout() {},
+        stderr() {},
+        fetch,
+      }),
+    ).toBe(2);
+    expect(await readFile(output, 'utf8')).toBe('old bytes');
+    expect(fetch).not.toHaveBeenCalled();
+
+    expect(
+      await runCli([...args, '--overwrite'], {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout() {},
+        stderr() {},
+        fetch,
+      }),
+    ).toBe(0);
+    expect(await readFile(output, 'utf8')).toBe('new bytes');
+  });
+
+  it('leaves no folder entry output when streamed bytes do not match the declared length', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'shelf-folder-download-truncated-'));
+    roots.push(root);
+    const output = join(root, 'README.md');
+    const stderr = capture();
+    const fetch = vi.fn(
+      async () =>
+        new Response('short', {
+          headers: { 'content-length': '9', 'content-type': 'text/markdown' },
+        }),
+    );
+
+    expect(
+      await runCli(
+        [
+          'node',
+          'shelf',
+          'folders',
+          'download',
+          '--url',
+          'https://shelf.example',
+          '--revision',
+          result.revisionId,
+          '--path',
+          'README.md',
+          '--output',
+          output,
+        ],
+        { env: { SHELF_TOKEN: 'secret-token' }, stdout() {}, stderr: stderr.write, fetch },
+      ),
+    ).toBe(1);
+    expect(JSON.parse(stderr.value())).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
+    await expect(readFile(output)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it.each([
+    ['an absolute path', '/etc/passwd'],
+    ['a parent traversal', 'src/../../secret'],
+    ['a backslash path', 'src\\index.ts'],
+    ['an empty segment', 'src//index.ts'],
+  ] as const)('rejects %s before contacting the API', async (_name, path) => {
+    const root = await mkdtemp(join(tmpdir(), 'shelf-folder-download-invalid-'));
+    roots.push(root);
+    const stderr = capture();
+    const fetch = vi.fn();
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'folders',
+        'download',
+        '--url',
+        'https://shelf.example',
+        '--revision',
+        result.revisionId,
+        '--path',
+        path,
+        '--output',
+        join(root, 'out.bin'),
+      ],
+      { env: { SHELF_TOKEN: 'secret-token' }, stdout() {}, stderr: stderr.write, fetch },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(JSON.parse(stderr.value())).toMatchObject({ error: { code: 'INVALID_REQUEST' } });
+  });
+
+  it('documents folder entry download safety and required flags', async () => {
+    const stdout = capture();
+    expect(
+      await runCli(['node', 'shelf', 'folders', 'download', '--help'], {
+        env: {},
+        stdout: stdout.write,
+        stderr() {},
+      }),
+    ).toBe(0);
+    expect(stdout.value()).toContain('--path <entry-path>');
+    expect(stdout.value()).toContain('--output <path>');
+    expect(stdout.value()).toContain('--overwrite');
+    expect(stdout.value()).toContain('--profile <name>');
+    expect(stdout.value()).toContain('refuses to replace');
   });
 
   it('rejects symlinks before making a request', async () => {

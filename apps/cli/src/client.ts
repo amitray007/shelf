@@ -8,6 +8,7 @@ import {
   type ArtifactRevisionPage,
   type CommentPolicy,
   type CommentPost,
+  type CommentSummary,
   type CommentThread,
   type FolderManifestInput,
   type FolderPublishResult,
@@ -140,6 +141,10 @@ export interface DownloadRevisionContentOptions {
   allowInsecureLoopback?: boolean;
 }
 
+export interface DownloadFolderEntryContentOptions extends DownloadRevisionContentOptions {
+  path: string;
+}
+
 export interface RevisionContentDownload {
   body: ReadableStream<Uint8Array>;
   byteCount: number;
@@ -213,6 +218,15 @@ export interface ArtifactCommentMutationOptions {
 
 export interface ReplyArtifactCommentOptions extends ArtifactCommentMutationOptions {
   body: string;
+  displayName?: string;
+}
+
+export interface SummarizeArtifactCommentsOptions {
+  installationUrl: string;
+  workspaceId: string;
+  artifactIds: readonly string[];
+  token: string;
+  allowInsecureLoopback?: boolean;
 }
 
 export interface ArtifactCommentPostMutationOptions {
@@ -561,13 +575,13 @@ export async function compareRevisions(
   );
 }
 
-export async function downloadRevisionContent(
-  options: DownloadRevisionContentOptions,
-  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+async function requestContentStream(
+  initial: URL,
+  options: { token: string; allowInsecureLoopback: boolean },
+  dependencies: Pick<ShelfClientDependencies, 'fetch'>,
 ): Promise<RevisionContentDownload> {
-  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
-  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
-  let url = new URL(`/api/v1/revisions/${encodeURIComponent(options.revisionId)}/content`, origin);
+  const allowInsecureLoopback = options.allowInsecureLoopback;
+  let url = initial;
   for (let redirects = 0; redirects <= 5; redirects += 1) {
     let response: Response;
     try {
@@ -621,6 +635,33 @@ export async function downloadRevisionContent(
     };
   }
   throw failure('INTERNAL_ERROR', 'Shelf returned too many redirects.');
+}
+
+export async function downloadRevisionContent(
+  options: DownloadRevisionContentOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<RevisionContentDownload> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  return requestContentStream(
+    new URL(`/api/v1/revisions/${encodeURIComponent(options.revisionId)}/content`, origin),
+    { token: options.token, allowInsecureLoopback },
+    dependencies,
+  );
+}
+
+export async function downloadFolderEntryContent(
+  options: DownloadFolderEntryContentOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<RevisionContentDownload> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/revisions/${encodeURIComponent(options.revisionId)}/tree/content`,
+    origin,
+  );
+  url.searchParams.set('path', options.path);
+  return requestContentStream(url, { token: options.token, allowInsecureLoopback }, dependencies);
 }
 
 function isShareManagementSummary(value: unknown): value is ShareManagementSummary {
@@ -837,11 +878,85 @@ export async function replyArtifactComment(
       token: options.token,
       allowInsecureLoopback,
       method: 'POST',
-      body: JSON.stringify({ body: options.body }),
+      body: JSON.stringify({
+        body: options.body,
+        ...(options.displayName === undefined ? {} : { displayName: options.displayName }),
+      }),
       expectedStatus: 201,
     },
     dependencies,
     isCommentPost,
+  );
+}
+
+function isCount(value: unknown): boolean {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isOptionalText(value: unknown): boolean {
+  return value === null || typeof value === 'string';
+}
+
+function isCommentSummary(value: unknown): value is CommentSummary {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.artifactId === 'string' &&
+    isCount(record.participantCount) &&
+    isCount(record.openThreadCount) &&
+    isCount(record.openReplyCount) &&
+    isOptionalText(record.latestActivityAt) &&
+    isOptionalText(record.latestThreadId) &&
+    Array.isArray(record.participants) &&
+    record.participants.every((participant) => {
+      if (typeof participant !== 'object' || participant === null) return false;
+      const entry = participant as Record<string, unknown>;
+      return (
+        typeof entry.participantId === 'string' &&
+        typeof entry.displayName === 'string' &&
+        isCount(entry.threadCount) &&
+        isCount(entry.replyCount) &&
+        isOptionalText(entry.latestThreadId) &&
+        isOptionalText(entry.latestActivityAt) &&
+        Array.isArray(entry.recentThreads) &&
+        entry.recentThreads.every(
+          (thread) =>
+            typeof thread === 'object' &&
+            thread !== null &&
+            typeof (thread as Record<string, unknown>).threadId === 'string' &&
+            typeof (thread as Record<string, unknown>).latestActivityAt === 'string',
+        )
+      );
+    })
+  );
+}
+
+function isCommentSummaryPage(value: unknown): value is { items: CommentSummary[] } {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const items = (value as { items?: unknown }).items;
+  return Array.isArray(items) && items.every((item) => isCommentSummary(item));
+}
+
+export async function summarizeArtifactComments(
+  options: SummarizeArtifactCommentsOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<{ items: CommentSummary[] }> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/comments/summaries`,
+    origin,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'POST',
+      body: JSON.stringify({ artifactIds: [...options.artifactIds] }),
+    },
+    dependencies,
+    isCommentSummaryPage,
   );
 }
 

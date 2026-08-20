@@ -20,6 +20,8 @@ import {
   type ShowArtifactCommandOptions,
 } from './commands/artifacts.js';
 import {
+  type CommentSummariesCommandOptions,
+  executeCommentSummaries,
   executeHideComment,
   executeListComments,
   executeReopenComment,
@@ -32,8 +34,10 @@ import {
   type ThreadStatusCommandOptions,
 } from './commands/comments.js';
 import {
+  executeFolderDownload,
   executeFolderTree,
   executePublishFolder,
+  type FolderDownloadCommandOptions,
   type FolderTreeCommandOptions,
   type PublishFolderCommandOptions,
 } from './commands/folders.js';
@@ -109,17 +113,23 @@ export async function runCli(
 Agent workflow:
   1. Configure a profile: shelf profiles set default --url <url> --workspace <id> --credential-env SHELF_TOKEN
   2. Publish with context: shelf publish ./report.md --title "Report" --description "What this artifact contains"
-  3. Inspect JSON output or use: shelf artifacts list --url <url> --workspace <id>
+  3. Inspect JSON output or use: shelf artifacts list --profile default
 
-Authentication and output:
-  Credentials are read from the configured profile or SHELF_TOKEN; never pass tokens as arguments.
+Context and authentication:
+  Every remote command accepts --profile <name> to resolve the installation URL, workspace, and
+  credential from a configured profile. Without --profile, pass --url (and --workspace where the
+  command is workspace-scoped) and export SHELF_TOKEN. Mixing --profile with --url, --workspace,
+  or --allow-insecure-loopback is a usage error. Never pass tokens as arguments.
+
+Output:
   Success writes one JSON document to stdout. Errors write one redacted JSON document to stderr.
   Run "shelf <command> --help" for command-specific flags and examples.
 
 Review comments:
-  Authenticated artifact review is available through "shelf comments". It lists threads and
-  supports moderator replies, resolve/reopen, and hide/unhide. Visitor identity and public-link
-  capability secrets are intentionally not accepted by the CLI.
+  Authenticated artifact review is available through "shelf comments". It lists threads, batches
+  activity rollups with "summaries", and supports moderator replies, resolve/reopen, and
+  hide/unhide. Visitor identity and public-link capability secrets are intentionally not accepted
+  by the CLI.
 `,
   );
 
@@ -232,8 +242,9 @@ Examples:
   folders
     .command('publish')
     .description('Publish one complete immutable folder snapshot')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .requiredOption('--directory <path>')
     .requiredOption('--idempotency-key <key>')
     .option('--artifact <artifact-id>', 'publish another snapshot to this folder artifact')
@@ -259,7 +270,8 @@ Metadata:
   folders
     .command('tree')
     .description('Read one immutable folder revision tree')
-    .requiredOption('--url <url>')
+    .option('--profile <name>', 'use one configured profile instead of --url')
+    .option('--url <url>')
     .requiredOption('--revision <revision-id>')
     .option('--limit <count>')
     .option('--cursor <cursor>')
@@ -267,12 +279,39 @@ Metadata:
     .action(async (options: FolderTreeCommandOptions) => {
       result = await executeFolderTree(options, runtime);
     });
+  folders
+    .command('download')
+    .description('Download one file from inside an immutable folder revision')
+    .option('--profile <name>', 'use one configured profile instead of --url')
+    .option('--url <url>')
+    .requiredOption('--revision <revision-id>')
+    .requiredOption('--path <entry-path>', 'portable folder entry path to download')
+    .requiredOption('--output <path>', 'explicit local file path to write')
+    .option('--overwrite', 'atomically replace an existing file; default refuses to replace')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Safety and output:
+  The command streams one authenticated folder entry to a temporary file and publishes it
+  atomically at --output. It refuses to replace an existing path unless --overwrite is supplied.
+  Success writes one JSON document to stdout. Authentication uses --profile or SHELF_TOKEN.
+
+Examples:
+  shelf folders download --url https://shelf.example --revision rev_<id> --path src/index.ts --output ./index.ts
+  shelf folders download --profile default --revision rev_<id> --path README.md --output ./README.md --overwrite
+`,
+    )
+    .action(async (options: FolderDownloadCommandOptions) => {
+      result = await executeFolderDownload(options, runtime);
+    });
 
   const revisions = program.command('revisions').description('Inspect immutable revisions');
   revisions
     .command('compare')
     .description('Compare two revisions of one artifact')
-    .requiredOption('--url <url>')
+    .option('--profile <name>', 'use one configured profile instead of --url')
+    .option('--url <url>')
     .requiredOption('--base <revision-id>')
     .requiredOption('--target <revision-id>')
     .option('--limit <count>')
@@ -284,7 +323,8 @@ Metadata:
   revisions
     .command('download')
     .description('Download one exact immutable file revision')
-    .requiredOption('--url <url>')
+    .option('--profile <name>', 'use one configured profile instead of --url')
+    .option('--url <url>')
     .requiredOption('--revision <revision-id>')
     .requiredOption('--output <path>', 'explicit local file path to write')
     .option('--overwrite', 'atomically replace an existing file; default refuses to replace')
@@ -295,11 +335,12 @@ Metadata:
 Safety and output:
   The command streams authenticated exact revision bytes to a temporary file and publishes it
   atomically at --output. It refuses to replace an existing path unless --overwrite is supplied.
-  Success writes one JSON document to stdout. Authentication uses SHELF_TOKEN.
+  Success writes one JSON document to stdout. Authentication uses --profile or SHELF_TOKEN.
 
 Examples:
   shelf revisions download --url https://shelf.example --revision rev_<id> --output ./artifact.bin
   shelf revisions download --url https://shelf.example --revision rev_<id> --output ./artifact.bin --overwrite
+  shelf revisions download --profile default --revision rev_<id> --output ./artifact.bin
 `,
     )
     .action(async (options: DownloadRevisionCommandOptions) => {
@@ -310,8 +351,9 @@ Examples:
   artifacts
     .command('list')
     .description('List a workspace artifact page')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .option('--limit <count>')
     .option('--cursor <cursor>')
     .option('--sort <created|updated>', 'sort field; defaults to updated')
@@ -324,7 +366,8 @@ Examples:
   artifacts
     .command('show')
     .description('Show one artifact and its latest revision')
-    .requiredOption('--url <url>')
+    .option('--profile <name>', 'use one configured profile instead of --url')
+    .option('--url <url>')
     .requiredOption('--artifact <artifact-id>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: ShowArtifactCommandOptions) => {
@@ -333,7 +376,8 @@ Examples:
   artifacts
     .command('history')
     .description('List immutable revision history')
-    .requiredOption('--url <url>')
+    .option('--profile <name>', 'use one configured profile instead of --url')
+    .option('--url <url>')
     .requiredOption('--artifact <artifact-id>')
     .option('--limit <count>')
     .option('--order <newest|oldest>')
@@ -345,7 +389,8 @@ Examples:
   artifacts
     .command('rename')
     .description('Rename an artifact without changing revision content')
-    .requiredOption('--url <url>')
+    .option('--profile <name>', 'use one configured profile instead of --url')
+    .option('--url <url>')
     .requiredOption('--artifact <artifact-id>')
     .requiredOption('--name <name>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
@@ -355,8 +400,9 @@ Examples:
   artifacts
     .command('restore')
     .description('Create a new revision from an earlier immutable revision')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .requiredOption('--artifact <artifact-id>')
     .requiredOption('--revision <revision-id>')
     .requiredOption('--idempotency-key <key>')
@@ -367,7 +413,8 @@ Examples:
   artifacts
     .command('delete')
     .description('Soft-delete an artifact and revoke its active shares')
-    .requiredOption('--url <url>')
+    .option('--profile <name>', 'use one configured profile instead of --url')
+    .option('--url <url>')
     .requiredOption('--artifact <artifact-id>')
     .requiredOption('--confirm <artifact-id>', 'confirm the exact artifact ID to delete')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
@@ -377,7 +424,8 @@ Examples:
   artifacts
     .command('recover')
     .description('Recover a soft-deleted artifact during its recovery window')
-    .requiredOption('--url <url>')
+    .option('--profile <name>', 'use one configured profile instead of --url')
+    .option('--url <url>')
     .requiredOption('--artifact <artifact-id>')
     .option('--idempotency-key <key>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
@@ -389,8 +437,9 @@ Examples:
   shares
     .command('create')
     .description('Create a reusable Protected or Public share link')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .requiredOption('--artifact <artifact-id>')
     .requiredOption('--idempotency-key <key>')
     .option('--revision <revision-id>', 'pin the share to one immutable revision')
@@ -429,8 +478,9 @@ Examples:
   shares
     .command('defaults')
     .description('Get or repair both permanent Latest defaults for one artifact')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .requiredOption('--artifact <artifact-id>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .addHelpText(
@@ -449,8 +499,9 @@ Example:
   shares
     .command('list')
     .description('List reusable share URLs, lifecycle state, and usage')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .option('--limit <count>')
     .option('--cursor <cursor>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
@@ -460,8 +511,9 @@ Example:
   shares
     .command('revoke')
     .description('Revoke one share immediately')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .requiredOption('--share <share-id>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: RevokeShareCommandOptions) => {
@@ -470,8 +522,9 @@ Example:
   shares
     .command('comments')
     .description('Set the comment policy on an existing share')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .requiredOption('--share <share-id>')
     .requiredOption('--comments <off|private|shared>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
@@ -497,8 +550,9 @@ Examples:
   comments
     .command('list')
     .description('List artifact comment threads and their posts')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .requiredOption('--artifact <artifact-id>')
     .option('--revision <revision-id>', 'evaluate line anchors against this revision')
     .option('--cursor <cursor>', 'opaque cursor returned by the previous page')
@@ -523,21 +577,51 @@ Example:
   comments
     .command('reply')
     .description('Reply to an artifact thread as the authenticated moderator')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .requiredOption('--artifact <artifact-id>')
     .requiredOption('--thread <thread-id>')
     .requiredOption('--body <text>')
+    .option('--display-name <name>', 'moderator display name shown on the reply (1-128 characters)')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .addHelpText(
       'after',
       `
+The reply is posted as the authenticated moderator and returned as one structured post. Bodies
+are limited to 20000 characters. Add --display-name to override the recorded moderator name.
+
 Example:
   shelf comments reply --url https://shelf.example --workspace <id> --artifact art_<id> --thread thread_<id> --body "Reviewed and fixed."
+  shelf comments reply --profile default --artifact art_<id> --thread thread_<id> --body "Fixed." --display-name "Release bot"
 `,
     )
     .action(async (options: ReplyCommentCommandOptions) => {
       result = await executeReplyComment(options, runtime);
+    });
+
+  comments
+    .command('summaries')
+    .description('Summarize comment activity for a batch of workspace artifacts')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
+    .requiredOption('--artifact <artifact-id>', 'artifact to summarize; repeatable', collect, [])
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Summaries let an agent poll which artifacts have open discussions or new activity without
+paging every thread. Repeat --artifact for each artifact, from 1 to 100 per request. Each item
+reports participants, open thread and reply counts, and the latest activity instant.
+
+Examples:
+  shelf comments summaries --url https://shelf.example --workspace <id> --artifact art_<id>
+  shelf comments summaries --profile default --artifact art_<one> --artifact art_<two>
+`,
+    )
+    .action(async (options: CommentSummariesCommandOptions) => {
+      result = await executeCommentSummaries(options, runtime);
     });
 
   const threadStatusHelp = `
@@ -549,8 +633,9 @@ Example:
   comments
     .command('resolve')
     .description('Resolve an artifact comment thread')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .requiredOption('--artifact <artifact-id>')
     .requiredOption('--thread <thread-id>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
@@ -561,8 +646,9 @@ Example:
   comments
     .command('reopen')
     .description('Reopen an artifact comment thread')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .requiredOption('--artifact <artifact-id>')
     .requiredOption('--thread <thread-id>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
@@ -581,8 +667,9 @@ Example:
   comments
     .command('hide')
     .description('Hide an artifact comment post as moderator')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .requiredOption('--artifact <artifact-id>')
     .requiredOption('--post <post-id>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
@@ -593,8 +680,9 @@ Example:
   comments
     .command('unhide')
     .description('Unhide an artifact comment post as moderator')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>')
+    .option('--workspace <workspace>')
     .requiredOption('--artifact <artifact-id>')
     .requiredOption('--post <post-id>')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')

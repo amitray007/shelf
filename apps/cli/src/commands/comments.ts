@@ -1,17 +1,20 @@
-import type { CommentPost, CommentThread } from '@shelf/contracts';
+import type { CommentPost, CommentSummary, CommentThread } from '@shelf/contracts';
 
 import {
   listArtifactComments,
   moderateArtifactCommentPost,
   replyArtifactComment,
   setArtifactCommentStatus,
+  summarizeArtifactComments,
 } from '../client.js';
+import { resolveWorkspaceContext, transportFields } from '../context.js';
 import { usageFailure } from '../output.js';
 import type { CliRuntime } from '../runtime.js';
 
 interface ArtifactCommentsCommandOptions {
-  url: string;
-  workspace: string;
+  profile?: string;
+  url?: string;
+  workspace?: string;
   artifact: string;
   allowInsecureLoopback?: boolean;
 }
@@ -25,6 +28,7 @@ export interface ListCommentsCommandOptions extends ArtifactCommentsCommandOptio
 export interface ReplyCommentCommandOptions extends ArtifactCommentsCommandOptions {
   thread: string;
   body: string;
+  displayName?: string;
 }
 
 export interface ThreadStatusCommandOptions extends ArtifactCommentsCommandOptions {
@@ -35,15 +39,15 @@ export interface PostModerationCommandOptions extends ArtifactCommentsCommandOpt
   post: string;
 }
 
-function token(runtime: CliRuntime): string {
-  const value = runtime.env.SHELF_TOKEN;
-  if (value === undefined || value.length === 0) throw usageFailure('SHELF_TOKEN is required.');
-  return value;
-}
+/** Matches the summarizeCommentsV1 request schema batch bound in apps/api/src/routes/comments.ts. */
+const COMMENT_SUMMARY_BATCH_LIMIT = 100;
 
-function workspaceId(value: string): string {
-  if (value.length === 0 || value.length > 128) throw usageFailure('The workspace ID is invalid.');
-  return value;
+export interface CommentSummariesCommandOptions {
+  profile?: string;
+  url?: string;
+  workspace?: string;
+  artifact: readonly string[];
+  allowInsecureLoopback?: boolean;
 }
 
 function artifactId(value: string): string {
@@ -57,12 +61,15 @@ function revisionId(value: string | undefined): string | undefined {
   return value;
 }
 
-function commentId(value: string, label: 'thread' | 'post'): string {
-  const hasControlCharacter = [...value].some((character) => {
+function hasControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
     const codePoint = character.codePointAt(0);
     return codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f);
   });
-  if (value.length === 0 || value.length > 128 || hasControlCharacter) {
+}
+
+function commentId(value: string, label: 'thread' | 'post'): string {
+  if (value.length === 0 || value.length > 128 || hasControlCharacter(value)) {
     throw usageFailure(`The ${label} ID is invalid.`);
   }
   return value;
@@ -75,6 +82,29 @@ function body(value: string): string {
   return value;
 }
 
+function displayName(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > 128 || hasControlCharacter(trimmed)) {
+    throw usageFailure('The display name must contain 1 to 128 characters.');
+  }
+  return trimmed;
+}
+
+function summaryArtifactIds(values: readonly string[]): string[] {
+  if (values.length === 0) throw usageFailure('At least one --artifact is required.');
+  if (values.length > COMMENT_SUMMARY_BATCH_LIMIT) {
+    throw usageFailure(
+      `A comment summary batch accepts at most ${COMMENT_SUMMARY_BATCH_LIMIT} artifacts.`,
+    );
+  }
+  const ids = values.map((value) => artifactId(value));
+  if (new Set(ids).size !== ids.length) {
+    throw usageFailure('A comment summary batch must not repeat an artifact.');
+  }
+  return ids;
+}
+
 function pageLimit(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
   if (!/^\d+$/u.test(value)) throw usageFailure('The comment page limit is invalid.');
@@ -85,19 +115,16 @@ function pageLimit(value: string | undefined): number | undefined {
   return parsed;
 }
 
-function transport(options: ArtifactCommentsCommandOptions, runtime: CliRuntime) {
+async function transport(options: ArtifactCommentsCommandOptions, runtime: CliRuntime) {
+  const context = await resolveWorkspaceContext(options, runtime);
   return {
-    installationUrl: options.url,
-    workspaceId: workspaceId(options.workspace),
+    ...transportFields(context),
+    workspaceId: context.workspaceId,
     artifactId: artifactId(options.artifact),
-    token: token(runtime),
-    ...(options.allowInsecureLoopback === undefined
-      ? {}
-      : { allowInsecureLoopback: options.allowInsecureLoopback }),
   };
 }
 
-export function executeListComments(
+export async function executeListComments(
   options: ListCommentsCommandOptions,
   runtime: CliRuntime,
 ): Promise<{ items: CommentThread[]; nextCursor: string | null }> {
@@ -105,7 +132,7 @@ export function executeListComments(
   const limit = pageLimit(options.limit);
   return listArtifactComments(
     {
-      ...transport(options, runtime),
+      ...(await transport(options, runtime)),
       ...(selectedRevision === undefined ? {} : { revisionId: selectedRevision }),
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
       ...(limit === undefined ? {} : { limit }),
@@ -114,28 +141,46 @@ export function executeListComments(
   );
 }
 
-export function executeReplyComment(
+export async function executeReplyComment(
   options: ReplyCommentCommandOptions,
   runtime: CliRuntime,
 ): Promise<CommentPost> {
+  const name = displayName(options.displayName);
   return replyArtifactComment(
     {
-      ...transport(options, runtime),
+      ...(await transport(options, runtime)),
       threadId: commentId(options.thread, 'thread'),
       body: body(options.body),
+      ...(name === undefined ? {} : { displayName: name }),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );
 }
 
-function executeThreadStatus(
+export async function executeCommentSummaries(
+  options: CommentSummariesCommandOptions,
+  runtime: CliRuntime,
+): Promise<{ items: CommentSummary[] }> {
+  const artifactIds = summaryArtifactIds(options.artifact);
+  const context = await resolveWorkspaceContext(options, runtime);
+  return summarizeArtifactComments(
+    {
+      ...transportFields(context),
+      workspaceId: context.workspaceId,
+      artifactIds,
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
+async function executeThreadStatus(
   options: ThreadStatusCommandOptions,
   status: 'resolve' | 'reopen',
   runtime: CliRuntime,
 ): Promise<CommentThread> {
   return setArtifactCommentStatus(
     {
-      ...transport(options, runtime),
+      ...(await transport(options, runtime)),
       threadId: commentId(options.thread, 'thread'),
       status,
     },
@@ -157,14 +202,14 @@ export function executeReopenComment(
   return executeThreadStatus(options, 'reopen', runtime);
 }
 
-function executePostModeration(
+async function executePostModeration(
   options: PostModerationCommandOptions,
   moderation: 'hide' | 'unhide',
   runtime: CliRuntime,
 ): Promise<CommentPost> {
   return moderateArtifactCommentPost(
     {
-      ...transport(options, runtime),
+      ...(await transport(options, runtime)),
       postId: commentId(options.post, 'post'),
       moderation,
     },
