@@ -13,6 +13,7 @@ import {
 } from '@shelf/contracts';
 
 import type { ViewerShareReference } from './capability.js';
+import { ContentCache } from './content-cache.js';
 import {
   type FileShareResolution,
   type FolderShareResolution,
@@ -22,6 +23,7 @@ import {
 
 const PROTECTED_ACTION = /^\/api\/v1\/public\/shares\/(shr_[A-Za-z0-9_-]{22})\/(content|tree)$/;
 const PUBLIC_ACTION = /^\/api\/v1\/public\/links\/([A-Za-z0-9_-]{12})\/(content|tree)$/;
+const viewerFolderContentCache = new ContentCache({ maxBytes: 16 * 1024 * 1024, maxEntries: 64 });
 
 export type ViewerAuthority =
   | {
@@ -298,18 +300,30 @@ export async function loadViewerFolderEntryBytes(
   signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
   viewerShareActionUrl(resolution, authority);
-  const query = new URLSearchParams({ path });
-  const url =
+  // Session identity partitions protected bytes without retaining or keying on the
+  // bearer token. Public codes are already the stable scope of a public link.
+  const accessScope =
     authority.accessType === 'protected'
-      ? `/api/v1/public/shares/${encodeURIComponent(authority.shareId)}/tree/content?${query}`
-      : `/api/v1/public/links/${encodeURIComponent(authority.publicCode)}/tree/content?${query}`;
-  const init =
-    authority.accessType === 'protected'
-      ? jsonPost({ token: authority.token }, signal)
-      : { ...anonymousRequest(signal), method: 'GET' };
-  const response = await anonymousFetch(url, init);
-  if (!response.ok) throw new PublicShareUnavailableError();
-  return response.arrayBuffer();
+      ? `protected:${authority.shareId}:${authority.sessionId}`
+      : `public:${authority.publicCode}`;
+  return viewerFolderContentCache.getOrLoad(
+    { accessScope, revisionId: resolution.revision.revisionId, folderPath: path },
+    async (cacheSignal) => {
+      const query = new URLSearchParams({ path });
+      const url =
+        authority.accessType === 'protected'
+          ? `/api/v1/public/shares/${encodeURIComponent(authority.shareId)}/tree/content?${query}`
+          : `/api/v1/public/links/${encodeURIComponent(authority.publicCode)}/tree/content?${query}`;
+      const init =
+        authority.accessType === 'protected'
+          ? jsonPost({ token: authority.token }, cacheSignal)
+          : { ...anonymousRequest(cacheSignal), method: 'GET' };
+      const response = await anonymousFetch(url, init);
+      if (!response.ok) throw new PublicShareUnavailableError();
+      return response.arrayBuffer();
+    },
+    signal,
+  );
 }
 
 function viewerCommentPrefix(authority: ViewerAuthority): string {
