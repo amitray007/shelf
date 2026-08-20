@@ -221,8 +221,8 @@ a {
 
 .review-sidebar-toolbar {
   display: flex;
-  min-height: 48px;
-  flex: 0 0 48px;
+  min-height: 40px;
+  flex: 0 0 40px;
   align-items: center;
   gap: 16px;
   padding: 0 12px;
