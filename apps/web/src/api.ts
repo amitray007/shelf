@@ -322,11 +322,15 @@ function viewerCommentInit(
   authority: ViewerAuthority,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  method: 'POST' | 'PATCH' = 'POST',
 ): RequestInit {
-  return jsonPost(
-    authority.accessType === 'protected' ? { token: authority.token, ...body } : body,
-    signal,
-  );
+  return {
+    ...jsonPost(
+      authority.accessType === 'protected' ? { token: authority.token, ...body } : body,
+      signal,
+    ),
+    method,
+  };
 }
 
 function requireCommentThread(value: unknown): CommentThread {
@@ -453,6 +457,7 @@ export async function updateViewerCommentThread(
           status: context.status,
         },
         signal,
+        'PATCH',
       ),
     ),
   );
@@ -485,6 +490,7 @@ export async function updateViewerCommentPost(
             : {}),
         },
         signal,
+        'PATCH',
       ),
     ),
   );

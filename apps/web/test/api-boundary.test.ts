@@ -202,6 +202,14 @@ describe('viewer content boundary', () => {
       `/api/v1/public/shares/${SHARE_ID}/comments/posts/post_1`,
       `/api/v1/public/shares/${SHARE_ID}/comments/posts/post_1`,
     ]);
+    expect(fetch.mock.calls.map(([, init]) => init?.method)).toEqual([
+      'POST',
+      'POST',
+      'POST',
+      'PATCH',
+      'PATCH',
+      'PATCH',
+    ]);
     for (const [, init] of fetch.mock.calls) {
       expect(String(init?.body)).toContain(visitorToken);
       expect(String(init?.body)).toContain(TOKEN);
