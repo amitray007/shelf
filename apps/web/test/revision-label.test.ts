@@ -20,7 +20,7 @@ describe('revision labels', () => {
     expect(ordinal(value)).toBe(expected);
   });
 
-  it('adds the consistent revision prefix', () => {
-    expect(revisionLabel(3)).toBe('Revision: 3rd');
+  it('adds the consistent revision suffix', () => {
+    expect(revisionLabel(3)).toBe('3rd Revision');
   });
 });

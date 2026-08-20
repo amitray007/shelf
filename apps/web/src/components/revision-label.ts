@@ -15,7 +15,7 @@ export function ordinal(value: number): string {
 }
 
 export function revisionLabel(revisionNumber: number): string {
-  return `Revision: ${ordinal(revisionNumber)}`;
+  return `${ordinal(revisionNumber)} Revision`;
 }
 
 export function revisionSourceName(revision: ArtifactRevision): string {
