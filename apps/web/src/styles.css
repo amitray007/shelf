@@ -411,6 +411,18 @@ a {
   background: #f4f4f5;
   object-fit: cover;
 }
+.review-avatar-fallback {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--elevated);
+  color: var(--text-muted);
+  font-size: 0.7em;
+  font-weight: 650;
+  line-height: 1;
+}
 .review-avatar-wrap {
   position: relative;
   display: inline-flex;

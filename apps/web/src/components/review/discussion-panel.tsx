@@ -6,11 +6,11 @@ import type { CommentAnchor, CommentThread } from '@shelf/contracts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReviewAvatar,
+  ReviewAvatarImage,
   ReviewBody,
   ReviewThreadCard,
   ReviewTime,
   reviewAuthorName,
-  reviewAvatarUrl,
 } from './comment-card.js';
 import { ReviewEditComposer } from './edit-composer.js';
 import { readReviewVisitorIdentity } from './identity.js';
@@ -116,15 +116,11 @@ export function ReviewComposer({
               title={displayName === '' ? 'Add your name' : `Commenting as ${displayName}`}
               type="button"
             >
-              <img alt="" referrerPolicy="no-referrer" src={reviewAvatarUrl(avatarSeed)} />
+              <ReviewAvatarImage alt="" participantId={avatarSeed} size={36} />
             </button>
           ) : (
             <span className="review-composer-avatar review-composer-avatar-static">
-              <img
-                alt="Shelf team avatar"
-                referrerPolicy="no-referrer"
-                src={reviewAvatarUrl(avatarSeed)}
-              />
+              <ReviewAvatarImage alt="Shelf team avatar" participantId={avatarSeed} size={36} />
             </span>
           )}
           <textarea

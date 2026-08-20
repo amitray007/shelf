@@ -22,7 +22,7 @@ function applyDocumentHeaders(reply: FastifyReply, rendererOrigin: string | unde
       `form-action 'self' ${rendererSource}`,
       `frame-src ${rendererSource}`,
       "frame-ancestors 'none'",
-      "img-src 'self' data: blob:",
+      "img-src 'self' https://api.dicebear.com data: blob:",
       "object-src 'none'",
       "script-src 'self'",
       "style-src 'self' 'unsafe-inline'",

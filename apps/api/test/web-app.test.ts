@@ -48,6 +48,9 @@ describe('production web application boundary', () => {
     expect(document.headers['content-security-policy']).toContain(
       "form-action 'self' https://renderer.shelf.example",
     );
+    expect(document.headers['content-security-policy']).toContain(
+      "img-src 'self' https://api.dicebear.com data: blob:",
+    );
     expect(dashboard.statusCode).toBe(200);
     expect(dashboard.headers['cache-control']).toBe('no-store');
     expect(asset.statusCode).toBe(200);

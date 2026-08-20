@@ -1,6 +1,6 @@
 import { CheckIcon } from '@phosphor-icons/react/Check';
 import type { CommentPost, CommentThread } from '@shelf/contracts';
-import type { MouseEvent } from 'react';
+import { type MouseEvent, useState } from 'react';
 
 export interface ReviewParticipant {
   readonly participantId: string;
@@ -29,6 +29,44 @@ export function reviewAuthorName(post: CommentPost): string {
 
 export function reviewAvatarUrl(participantId: string): string {
   return `https://api.dicebear.com/10.x/voxel-art/svg?tags=animation&seed=${encodeURIComponent(participantId)}`;
+}
+
+export function ReviewAvatarImage({
+  alt,
+  participantId,
+  size = 28,
+}: {
+  readonly alt: string;
+  readonly participantId: string;
+  readonly size?: number;
+}) {
+  const [failedSrc, setFailedSrc] = useState<string>();
+  const src = reviewAvatarUrl(participantId);
+  if (failedSrc === src) {
+    return (
+      <span
+        aria-label={alt}
+        className="review-avatar-fallback"
+        role="img"
+        style={{ width: size, height: size }}
+      >
+        {participantId.trim().slice(0, 1).toUpperCase() || '?'}
+      </span>
+    );
+  }
+  return (
+    <img
+      alt={alt}
+      className="review-avatar"
+      decoding="async"
+      height={size}
+      loading="lazy"
+      onError={() => setFailedSrc(src)}
+      referrerPolicy="no-referrer"
+      src={src}
+      width={size}
+    />
+  );
 }
 
 function formatRelativeReviewTimestamp(timestamp: number, now = Date.now()): string {
@@ -66,15 +104,10 @@ export function ReviewAvatar({
   readonly size?: number;
 }) {
   return (
-    <img
+    <ReviewAvatarImage
       alt={`${reviewAuthorName(post)} avatar`}
-      className="review-avatar"
-      height={size}
-      decoding="async"
-      loading="lazy"
-      src={reviewAvatarUrl(post.author.participantId)}
-      referrerPolicy="no-referrer"
-      width={size}
+      participantId={post.author.participantId}
+      size={size}
     />
   );
 }
@@ -95,14 +128,10 @@ export function ReviewParticipantAvatar({
       title={activityLabel}
       type="button"
     >
-      <img
+      <ReviewAvatarImage
         alt={`${participant.displayName} avatar`}
-        decoding="async"
-        height={28}
-        referrerPolicy="no-referrer"
-        loading="lazy"
-        src={reviewAvatarUrl(participant.participantId)}
-        width={28}
+        participantId={participant.participantId}
+        size={28}
       />
     </button>
   );

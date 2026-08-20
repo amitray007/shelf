@@ -10,6 +10,7 @@ import {
   groupSourceThreadsByLine,
   SourceView,
   sourceCommentsVisible,
+  sourceLineSelectionEnabled,
   toggleSourceComments,
 } from '../src/components/file-view.js';
 import { FolderBrowser, isFolderEntryVisible } from '../src/components/folder-browser.js';
@@ -199,6 +200,13 @@ describe('viewer content states', () => {
     expect(shownSettings.annotations).toBe(true);
     expect(shownSettings.comments).toBe(true);
     expect(sourceCommentsVisible(shownSettings)).toBe(true);
+  });
+
+  it('disables source line selection while comments are hidden', () => {
+    expect(sourceLineSelectionEnabled({ ...DEFAULT_SOURCE_VIEW_SETTINGS, comments: false })).toBe(
+      false,
+    );
+    expect(sourceLineSelectionEnabled(DEFAULT_SOURCE_VIEW_SETTINGS)).toBe(true);
   });
 
   it('removes a deleted root thread but keeps reply tombstones in the thread', () => {

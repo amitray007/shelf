@@ -10,7 +10,7 @@ import { ListNumbersIcon } from '@phosphor-icons/react/ListNumbers';
 import { TextAlignLeftIcon } from '@phosphor-icons/react/TextAlignLeft';
 import type { LineAnnotation, SelectedLineRange } from '@pierre/diffs';
 import type { FileContents, FileOptions, FileProps } from '@pierre/diffs/react';
-import type { CommentAnchor, CommentPost, CommentThread } from '@shelf/contracts';
+import type { CommentAnchor, CommentThread } from '@shelf/contracts';
 import {
   type ComponentType,
   lazy,
@@ -22,11 +22,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ReviewAvatar, ReviewBody, ReviewTime, reviewAuthorName } from './review/comment-card.js';
 import { ReviewComposer } from './review/discussion-panel.js';
-import { ReviewEditComposer } from './review/edit-composer.js';
-
-const SOURCE_INLINE_COMMENT_LIMIT = 5;
+import { InlineSourceThread, type InlineSourceThreadData } from './review/inline-source-thread.js';
 
 type SourceLineAnnotationMetadata =
   | { readonly kind?: 'label'; readonly label: string }
@@ -34,8 +31,8 @@ type SourceLineAnnotationMetadata =
       readonly expanded: boolean;
       readonly kind: 'threads';
       readonly label: string;
-      readonly participantPosts: readonly CommentPost[];
-      readonly posts: readonly CommentPost[];
+      readonly participantPosts: InlineSourceThreadData['participantPosts'];
+      readonly posts: InlineSourceThreadData['posts'];
     }
   | {
       readonly kind: 'composer';
@@ -162,6 +159,10 @@ export function sourceCommentsVisible(
   return settings.comments && settings.annotations;
 }
 
+export function sourceLineSelectionEnabled(settings: SourceViewSettings): boolean {
+  return settings.enableLineSelection && sourceCommentsVisible(settings);
+}
+
 export function toggleSourceComments(settings: SourceViewSettings): SourceViewSettings {
   if (sourceCommentsVisible(settings)) return { ...settings, comments: false };
   return { ...settings, annotations: true, comments: true };
@@ -274,51 +275,13 @@ function PierreCode({
     | undefined;
   readonly onDeletePost?: ((postId: string) => Promise<void>) | undefined;
   readonly onEditPost?: ((postId: string, body: string) => Promise<void>) | undefined;
-  readonly onLineSelectionChange?: (range: SelectedLineRange | null) => void;
+  readonly onLineSelectionChange?: ((range: SelectedLineRange | null) => void) | undefined;
   readonly saving?: boolean | undefined;
   readonly selectedLines?: SelectedLineRange | null;
   readonly settings?: SourceViewSettings;
   readonly source: string;
   readonly wrap: boolean;
 }) {
-  const [editingPostId, setEditingPostId] = useState<string>();
-  const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string>();
-  const [postActionPending, setPostActionPending] = useState(false);
-  const [postActionError, setPostActionError] = useState<
-    { readonly message: string; readonly postId: string } | undefined
-  >();
-  const saveInlineEdit = async (postId: string, body: string) => {
-    if (onEditPost === undefined || body.trim() === '' || postActionPending || saving) return;
-    setPostActionPending(true);
-    setPostActionError(undefined);
-    try {
-      await onEditPost(postId, body.trim());
-      setEditingPostId(undefined);
-    } catch (cause) {
-      setPostActionError({
-        message: cause instanceof Error ? cause.message : 'Could not save this comment.',
-        postId,
-      });
-    } finally {
-      setPostActionPending(false);
-    }
-  };
-  const deleteInlinePost = async (postId: string) => {
-    if (onDeletePost === undefined || postActionPending || saving) return;
-    setPostActionPending(true);
-    setPostActionError(undefined);
-    try {
-      await onDeletePost(postId);
-      setDeleteConfirmPostId(undefined);
-    } catch (cause) {
-      setPostActionError({
-        message: cause instanceof Error ? cause.message : 'Could not delete this comment.',
-        postId,
-      });
-    } finally {
-      setPostActionPending(false);
-    }
-  };
   const file = useMemo<FileContents>(
     () => ({ name: fileName, contents: source }),
     [fileName, source],
@@ -335,7 +298,7 @@ function PierreCode({
         ? {}
         : {
             enableGutterUtility: settings.enableGutterUtility,
-            enableLineSelection: settings.enableLineSelection,
+            enableLineSelection: sourceLineSelectionEnabled(settings),
             enableTokenInteractionsOnWhitespace: settings.tokenInteractions,
             lineHoverHighlight: settings.lineHoverHighlight,
             stickyHeader: settings.stickyHeader,
@@ -389,123 +352,14 @@ function PierreCode({
             }
             if (metadata?.kind === 'threads') {
               return (
-                <div className="pierre-inline-thread">
-                  <button
-                    aria-expanded={metadata.expanded}
-                    aria-label={`${metadata.expanded ? 'Hide' : 'Show'} ${metadata.label} on line ${annotation.lineNumber}`}
-                    className="pierre-inline-thread-trigger"
-                    onClick={() => onAnnotationToggle?.(annotation.lineNumber)}
-                    type="button"
-                  >
-                    <span aria-hidden="true" className="pierre-inline-avatar-stack">
-                      {metadata.participantPosts.slice(0, 3).map((post) => (
-                        <ReviewAvatar key={post.author.participantId} post={post} size={20} />
-                      ))}
-                    </span>
-                    <span>{metadata.label}</span>
-                  </button>
-                  {metadata.expanded ? (
-                    <div className="pierre-inline-thread-card">
-                      <div className="pierre-inline-thread-heading">
-                        <strong>Line {annotation.lineNumber}</strong>
-                        <span>{metadata.label}</span>
-                      </div>
-                      <div
-                        className="pierre-inline-messages"
-                        data-scrollable={
-                          metadata.posts.length > SOURCE_INLINE_COMMENT_LIMIT ? 'true' : undefined
-                        }
-                      >
-                        {metadata.posts.map((post) => (
-                          <article className="pierre-inline-message" key={post.postId}>
-                            <ReviewAvatar post={post} size={24} />
-                            <div className="pierre-inline-message-content">
-                              <div className="pierre-inline-message-heading">
-                                <strong>{reviewAuthorName(post)}</strong>
-                                <ReviewTime value={post.createdAt} />
-                              </div>
-                              {editingPostId === post.postId ? (
-                                <ReviewEditComposer
-                                  compact
-                                  disabled={postActionPending || saving === true}
-                                  initialBody={post.body}
-                                  onCancel={() => setEditingPostId(undefined)}
-                                  onSubmit={(body) => saveInlineEdit(post.postId, body)}
-                                  post={post}
-                                  wrapperClassName="pierre-inline-edit-composer"
-                                />
-                              ) : (
-                                <ReviewBody
-                                  body={
-                                    post.deletedAt !== null
-                                      ? 'Comment deleted'
-                                      : post.hiddenAt !== null
-                                        ? 'Comment hidden'
-                                        : post.body
-                                  }
-                                />
-                              )}
-                              {post.deletedAt === null &&
-                              post.hiddenAt === null &&
-                              ((post.permissions.canEdit && onEditPost !== undefined) ||
-                                (post.permissions.canDelete && onDeletePost !== undefined)) ? (
-                                <div className="pierre-inline-message-actions">
-                                  {post.permissions.canEdit && onEditPost !== undefined ? (
-                                    <button
-                                      aria-label="Edit comment"
-                                      onClick={() => {
-                                        setEditingPostId(post.postId);
-                                        setPostActionError(undefined);
-                                      }}
-                                      type="button"
-                                    >
-                                      Edit
-                                    </button>
-                                  ) : null}
-                                  {post.permissions.canDelete && onDeletePost !== undefined ? (
-                                    <button
-                                      aria-label="Delete comment"
-                                      onClick={() => setDeleteConfirmPostId(post.postId)}
-                                      type="button"
-                                    >
-                                      Delete
-                                    </button>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                              {deleteConfirmPostId === post.postId && onDeletePost !== undefined ? (
-                                <div className="pierre-inline-delete-confirm">
-                                  <span>Delete this comment?</span>
-                                  <button
-                                    onClick={() => setDeleteConfirmPostId(undefined)}
-                                    type="button"
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    disabled={postActionPending || saving}
-                                    onClick={() => void deleteInlinePost(post.postId)}
-                                    type="button"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              ) : null}
-                              {postActionError?.postId === post.postId ? (
-                                <span
-                                  aria-live="assertive"
-                                  className="review-status review-status-error"
-                                >
-                                  {postActionError.message}
-                                </span>
-                              ) : null}
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
+                <InlineSourceThread
+                  data={metadata}
+                  lineNumber={annotation.lineNumber}
+                  onAnnotationToggle={() => onAnnotationToggle?.(annotation.lineNumber)}
+                  onDeletePost={onDeletePost}
+                  onEditPost={onEditPost}
+                  saving={saving}
+                />
               );
             }
             return (
@@ -517,7 +371,7 @@ function PierreCode({
         }
       : {};
   const selectionProps =
-    settings?.enableLineSelection === true
+    settings !== undefined && sourceLineSelectionEnabled(settings)
       ? { selectedLines: selectedLines ?? null }
       : { selectedLines: null };
 
@@ -694,7 +548,7 @@ export function SourceView({
   ]);
 
   const handleKeyboardNavigation = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (!settings.keyboardNavigation || !settings.enableLineSelection) return;
+    if (!sourceLineSelectionEnabled(settings) || !settings.keyboardNavigation) return;
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     const currentLine = selectedLines?.end ?? 1;
     let nextLine: number | undefined;
@@ -947,7 +801,9 @@ export function SourceView({
                 }
               : undefined
           }
-          onLineSelectionChange={setSelectedLines}
+          onLineSelectionChange={
+            sourceLineSelectionEnabled(settings) ? setSelectedLines : undefined
+          }
           saving={review?.saving}
           selectedLines={selectedLines}
           settings={settings}
