@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   type CommentRepository,
+  CommentResolvedThreadEditError,
   CommentWriteDisabledError,
   createCommentService,
   type ShareRepository,
@@ -122,19 +123,17 @@ function harness(policy: 'off' | 'private' | 'shared') {
       return structuredClone(post);
     },
     async deletePost(input) {
-      const post = posts.get(input.postId);
-      if (post === undefined) return undefined;
-      post.deletedAt = input.deletedAt;
-      return structuredClone(post);
-    },
-    async deleteThread(input) {
-      const thread = threads.get(input.threadId);
-      if (thread === undefined) return undefined;
-      threads.delete(input.threadId);
-      const root = thread.posts[0];
-      return root === undefined
-        ? undefined
-        : structuredClone({ ...root, deletedAt: input.deletedAt });
+      for (const thread of threads.values()) {
+        const post = thread.posts.find((candidate) => candidate.postId === input.postId);
+        if (post === undefined) continue;
+        if (thread.posts[0]?.postId === input.postId) {
+          threads.delete(thread.threadId);
+          return structuredClone({ ...post, deletedAt: input.deletedAt });
+        }
+        post.deletedAt = input.deletedAt;
+        return structuredClone(post);
+      }
+      return undefined;
     },
     async setPostHidden(input) {
       const post = posts.get(input.postId);
@@ -687,5 +686,31 @@ describe('comment service', () => {
         body: 'valid body',
       }),
     ).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE', retryable: true });
+  });
+
+  it('maps a repository resolved-edit race to invalid request', async () => {
+    const h = harness('shared');
+    const created = await h.service.createThread({
+      installationId: 'installation-main',
+      workspaceId: 'workspace-main',
+      shareId,
+      revisionId,
+      anchor,
+      authority: { kind: 'visitor', visitorKey: 'visitor_digest_a_123456', displayName: 'A' },
+      body: 'note',
+    });
+    h.comments.editPost = async () => {
+      throw new CommentResolvedThreadEditError();
+    };
+    await expect(
+      h.service.editPost({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        shareId,
+        postId: created.posts[0].postId,
+        authority: { kind: 'moderator', actorId: 'actor-moderator' },
+        body: 'race',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   });
 });

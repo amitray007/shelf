@@ -1,6 +1,8 @@
+import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
+import { FunnelIcon } from '@phosphor-icons/react/Funnel';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/MagnifyingGlass';
 import { XIcon } from '@phosphor-icons/react/X';
-import type { ReviewSidebarMode } from './types.js';
+import { REVIEW_THREAD_FILTERS, type ReviewSidebarMode, type ReviewThreadFilter } from './types.js';
 
 export interface ReviewSidebarToolbarProps {
   readonly mode?: ReviewSidebarMode | undefined;
@@ -9,6 +11,8 @@ export interface ReviewSidebarToolbarProps {
   readonly searchLabel?: string;
   readonly onModeChange?: ((mode: ReviewSidebarMode) => void) | undefined;
   readonly onSearchToggle: () => void;
+  readonly threadFilter?: ReviewThreadFilter | undefined;
+  readonly onThreadFilterChange?: ((filter: ReviewThreadFilter) => void) | undefined;
   readonly onClose?: (() => void) | undefined;
 }
 
@@ -19,6 +23,8 @@ export function ReviewSidebarToolbar({
   searchLabel = 'Search discussions',
   onModeChange,
   onSearchToggle,
+  threadFilter,
+  onThreadFilterChange,
   onClose,
 }: ReviewSidebarToolbarProps) {
   return (
@@ -68,6 +74,30 @@ export function ReviewSidebarToolbar({
         >
           <MagnifyingGlassIcon aria-hidden="true" size={18} weight="regular" />
         </button>
+        {threadFilter !== undefined && onThreadFilterChange !== undefined ? (
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={
+                <button
+                  aria-label="Filter discussions"
+                  aria-pressed={threadFilter !== 'all'}
+                  className="review-sidebar-tool"
+                  title="Filter discussions"
+                  type="button"
+                />
+              }
+            >
+              <FunnelIcon aria-hidden="true" size={18} weight="regular" />
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              {REVIEW_THREAD_FILTERS.map(({ value, label }) => (
+                <DropdownMenu.Item key={value} onClick={() => onThreadFilterChange(value)}>
+                  {label}
+                </DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu>
+        ) : null}
         {onClose ? (
           <button
             aria-label="Close discussion"

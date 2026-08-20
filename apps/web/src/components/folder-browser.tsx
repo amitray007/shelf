@@ -18,7 +18,7 @@ import { formatBytes } from './format.js';
 import { MarkdownView } from './markdown-view.js';
 import { DiscussionPanel } from './review/discussion-panel.js';
 import { ReviewSidebarToolbar } from './review/sidebar-toolbar.js';
-import type { ReviewSidebarMode } from './review/types.js';
+import type { ReviewSidebarMode, ReviewThreadFilter } from './review/types.js';
 
 export interface FolderBrowserReview {
   readonly moderator?: boolean | undefined;
@@ -121,6 +121,7 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
   const [failed, setFailed] = useState(false);
   const [treeSearchOpen, setTreeSearchOpen] = useState(false);
   const [discussionSearchOpen, setDiscussionSearchOpen] = useState(false);
+  const [threadFilter, setThreadFilter] = useState<ReviewThreadFilter>('all');
   const restoredExpandedPaths = useMemo(() => readExpandedTreePaths(paths), [paths]);
   const handleSelectionChange = useCallback((selectedPaths: readonly string[]) => {
     const nextFile = [...selectedPaths].reverse().find((path) => filePathsRef.current.has(path));
@@ -146,7 +147,7 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
         outline: none;
         box-shadow:
           0 0 0 2px var(--trees-bg),
-          0 0 0 4px var(--trees-focus-ring-color);
+          0 0 0 4px var(--line-strong);
       }
       :host(:has([data-file-tree-search-input]:focus-visible))
         [data-type="item"][data-item-focused="true"]::before {
@@ -299,6 +300,9 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
             }
             searchLabel={review.mode === 'discussion' ? 'Search discussions' : 'Search files'}
             searchOpen={review.mode === 'discussion' ? discussionSearchOpen : treeSearchOpen}
+            {...(review.mode === 'discussion'
+              ? { threadFilter, onThreadFilterChange: setThreadFilter }
+              : {})}
           />
         ) : null}
         {review?.mode === 'discussion' ? (
@@ -320,6 +324,8 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
             onSearchToggle={() => setDiscussionSearchOpen((open) => !open)}
             searchOpen={discussionSearchOpen}
             showToolbar={false}
+            threadFilter={threadFilter}
+            onThreadFilterChange={setThreadFilter}
             threads={review.threads}
           />
         ) : (

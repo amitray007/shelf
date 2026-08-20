@@ -1,6 +1,12 @@
 import type { CommentAnchor, CommentThread } from '@shelf/contracts';
 
 export type ReviewSidebarMode = 'tree' | 'discussion';
+export type ReviewThreadFilter = 'all' | 'unresolved' | 'resolved';
+export const REVIEW_THREAD_FILTERS = [
+  { value: 'all', label: 'All discussions' },
+  { value: 'unresolved', label: 'Unresolved' },
+  { value: 'resolved', label: 'Resolved' },
+] as const satisfies readonly { value: ReviewThreadFilter; label: string }[];
 
 export interface ReviewState {
   readonly threads: readonly CommentThread[];

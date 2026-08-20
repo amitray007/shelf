@@ -138,12 +138,6 @@ export interface CommentRepository {
     postId: string;
     deletedAt: string;
   }): Promise<StoredCommentPost | undefined>;
-  deleteThread(request: {
-    installationId: string;
-    workspaceId: string;
-    threadId: string;
-    deletedAt: string;
-  }): Promise<StoredCommentPost | undefined>;
   setPostHidden(request: {
     installationId: string;
     workspaceId: string;
@@ -162,6 +156,13 @@ export interface CommentRepository {
     workspaceId: string;
     artifactIds: string[];
   }): Promise<CommentSummary[]>;
+}
+
+export class CommentResolvedThreadEditError extends Error {
+  constructor() {
+    super('Comment posts cannot be edited while their thread is resolved.');
+    this.name = 'CommentResolvedThreadEditError';
+  }
 }
 
 export type CommentAuthority =

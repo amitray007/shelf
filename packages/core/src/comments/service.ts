@@ -27,6 +27,7 @@ import type {
   StoredCommentPost,
   StoredCommentThread,
 } from './ports.js';
+import { CommentResolvedThreadEditError } from './ports.js';
 
 export class CommentThreadPostLimitError extends ShelfCoreError {
   constructor() {
@@ -844,6 +845,11 @@ export function createCommentService(dependencies: {
           editedAt: clock().toISOString(),
         });
       } catch (error) {
+        if (error instanceof CommentResolvedThreadEditError) {
+          throw new InvalidCommentRequestError([
+            { field: 'postId', reason: 'resolved threads cannot edit posts' },
+          ]);
+        }
         throw boundaryFailure('SERVICE_UNAVAILABLE', 'Comment post update failed.', error);
       }
       if (updated === undefined) throw new CommentNotFoundError();
@@ -904,31 +910,12 @@ export function createCommentService(dependencies: {
       if (context === undefined) throw new CommentNotFoundError();
       let deleted: StoredCommentPost | undefined;
       try {
-        let thread: StoredCommentThread | undefined;
-        try {
-          thread = await dependencies.comments.findThread({
-            installationId: request.installationId,
-            workspaceId: request.workspaceId,
-            threadId: context.post.threadId,
-          });
-        } catch (error) {
-          throw boundaryFailure('SERVICE_UNAVAILABLE', 'Comment thread lookup failed.', error);
-        }
-        const root = thread?.posts[0];
-        deleted =
-          root?.postId === request.postId
-            ? await dependencies.comments.deleteThread({
-                installationId: request.installationId,
-                workspaceId: request.workspaceId,
-                threadId: context.post.threadId,
-                deletedAt: clock().toISOString(),
-              })
-            : await dependencies.comments.deletePost({
-                installationId: request.installationId,
-                workspaceId: request.workspaceId,
-                postId: request.postId,
-                deletedAt: clock().toISOString(),
-              });
+        deleted = await dependencies.comments.deletePost({
+          installationId: request.installationId,
+          workspaceId: request.workspaceId,
+          postId: request.postId,
+          deletedAt: clock().toISOString(),
+        });
       } catch (error) {
         throw boundaryFailure('SERVICE_UNAVAILABLE', 'Comment post deletion failed.', error);
       }

@@ -16,12 +16,13 @@ import {
   PUBLISHER_METADATA_KEYS,
   type ShareManagementSummary,
 } from '@shelf/contracts';
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { Link, useLoaderData, useNavigate, useRevalidator, useSearchParams } from 'react-router';
 
 import { formatBytes } from '../components/format.js';
 import { markReviewThreadRead } from '../components/review/persistence.js';
+import { applyCommentPostTransition } from '../components/review/thread-state.js';
 import { ordinal, revisionSourceName } from '../components/revision-label.js';
 import {
   type ArtifactCommentPostMutation,
@@ -353,6 +354,7 @@ export function ArtifactPage() {
   const [loadingOlderComments, setLoadingOlderComments] = useState(false);
   const [commentSaving, setCommentSaving] = useState(false);
   const [commentError, setCommentError] = useState<string>();
+  const pendingRootDeletionRef = useRef<Set<string>>(new Set());
   useEffect(() => setCommentThreads(payload.comments), [payload.comments]);
   useEffect(() => setCommentNextCursor(payload.commentsNextCursor), [payload.commentsNextCursor]);
   const activePanel = inspectorPanel(searchParams.get('panel'));
@@ -410,13 +412,28 @@ export function ArtifactPage() {
     else next.set('revision', revision.revisionId);
     setSearchParams(next, { replace: true });
   };
-  const selectThread = (threadId: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (threadId === '') next.delete('thread');
-    else next.set('thread', threadId);
-    next.set('discussion', '1');
-    setSearchParams(next, { defaultShouldRevalidate: false, replace: true });
-  };
+  const selectThread = useCallback(
+    (threadId: string) => {
+      const next = new URLSearchParams(searchParams);
+      if (threadId === '') next.delete('thread');
+      else next.set('thread', threadId);
+      next.set('discussion', '1');
+      setSearchParams(next, { defaultShouldRevalidate: false, replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+  useEffect(() => {
+    const pendingThreadIds = pendingRootDeletionRef.current;
+    if (pendingThreadIds.size === 0) return;
+    pendingRootDeletionRef.current = new Set();
+    if (
+      activeThreadId !== undefined &&
+      pendingThreadIds.has(activeThreadId) &&
+      !commentThreads.some((thread) => thread.threadId === activeThreadId)
+    ) {
+      selectThread('');
+    }
+  }, [activeThreadId, commentThreads, selectThread]);
   const toggleDiscussion = () => {
     const next = new URLSearchParams(searchParams);
     if (discussionOpen) {
@@ -492,18 +509,8 @@ export function ArtifactPage() {
         postId,
         mutation,
       );
-      setCommentThreads((current) =>
-        current.map((thread) =>
-          thread.threadId !== updated.threadId
-            ? thread
-            : {
-                ...thread,
-                posts: thread.posts.map((post) =>
-                  post.postId === updated.postId ? updated : post,
-                ),
-              },
-        ),
-      );
+      if (updated.deletedAt !== null) pendingRootDeletionRef.current.add(updated.threadId);
+      setCommentThreads((current) => applyCommentPostTransition(current, updated).threads);
     } catch (cause) {
       setCommentError(cause instanceof Error ? cause.message : fallbackMessage);
       throw cause;

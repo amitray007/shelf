@@ -1,3 +1,4 @@
+import { CheckIcon } from '@phosphor-icons/react/Check';
 import type { CommentPost, CommentThread } from '@shelf/contracts';
 import type { MouseEvent } from 'react';
 
@@ -146,7 +147,17 @@ export function ReviewThreadCard({
       className={`review-thread-card${compact ? ' review-thread-card-compact' : ''}`}
     >
       <div className="review-thread-card-heading">
-        <ReviewAvatar post={first} />
+        <span
+          className="review-avatar-wrap"
+          title={thread.resolvedAt !== null ? 'Resolved discussion' : undefined}
+        >
+          <ReviewAvatar post={first} />
+          {thread.resolvedAt !== null ? (
+            <span aria-label="Resolved discussion" className="review-resolved-indicator" role="img">
+              <CheckIcon aria-hidden="true" size={9} weight="bold" />
+            </span>
+          ) : null}
+        </span>
         <div className="review-thread-author">
           <strong>{reviewAuthorName(first)}</strong>
           <ReviewTime value={first.createdAt} />
@@ -165,9 +176,6 @@ export function ReviewThreadCard({
             <span className="review-thread-replies">
               {thread.posts.length - 1} {thread.posts.length === 2 ? 'reply' : 'replies'}
             </span>
-          ) : null}
-          {thread.resolvedAt !== null ? (
-            <span className="review-thread-status">Resolved</span>
           ) : null}
         </div>
       ) : null}

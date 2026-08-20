@@ -170,19 +170,35 @@ describe('MemoryCommentRepository', () => {
       threadId: 'thread-delete',
       post: post('reply-delete'),
     });
+    await repository.setThreadResolved({
+      installationId: 'installation-one',
+      workspaceId: 'workspace-one',
+      threadId: 'thread-delete',
+      resolvedAt: '2026-08-17T12:00:30.000Z',
+      resolvedByActorId: null,
+    });
     await expect(
-      repository.deleteThread({
+      repository.editPost({
+        installationId: 'installation-one',
+        workspaceId: 'workspace-one',
+        postId: 'root-delete',
+        body: 'edited',
+        editedAt: '2026-08-17T12:01:00.000Z',
+      }),
+    ).rejects.toThrow('resolved');
+    await expect(
+      repository.deletePost({
         installationId: 'installation-two',
         workspaceId: 'workspace-one',
-        threadId: 'thread-delete',
+        postId: 'root-delete',
         deletedAt: '2026-08-17T12:01:00.000Z',
       }),
     ).resolves.toBeUndefined();
     await expect(
-      repository.deleteThread({
+      repository.deletePost({
         installationId: 'installation-one',
         workspaceId: 'workspace-one',
-        threadId: 'thread-delete',
+        postId: 'root-delete',
         deletedAt: '2026-08-17T12:01:00.000Z',
       }),
     ).resolves.toMatchObject({ postId: 'root-delete', deletedAt: '2026-08-17T12:01:00.000Z' });

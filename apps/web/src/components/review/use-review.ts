@@ -1,5 +1,5 @@
 import type { CommentAnchor, CommentPolicy, CommentPost, CommentThread } from '@shelf/contracts';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   createViewerCommentReply,
@@ -18,6 +18,7 @@ import {
   removeReviewValue,
   writeReviewValue,
 } from './persistence.js';
+import { applyCommentPostTransition } from './thread-state.js';
 import type { ReviewActions, ReviewState } from './types.js';
 
 type ReviewResolution = FileShareResolution | FolderShareResolution;
@@ -73,6 +74,7 @@ export function useViewerReview(
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
+  const pendingRootDeletionRef = useRef<Set<string>>(new Set());
 
   const refresh = useCallback(
     async (signal?: AbortSignal) => {
@@ -144,6 +146,19 @@ export function useViewerReview(
     },
     [resolution],
   );
+
+  useEffect(() => {
+    const pendingThreadIds = pendingRootDeletionRef.current;
+    if (pendingThreadIds.size === 0) return;
+    pendingRootDeletionRef.current = new Set();
+    if (
+      activeThreadId !== undefined &&
+      pendingThreadIds.has(activeThreadId) &&
+      !threads.some((thread) => thread.threadId === activeThreadId)
+    ) {
+      selectThread('');
+    }
+  }, [activeThreadId, selectThread, threads]);
 
   const mutate = useCallback(
     async (operation: () => Promise<CommentThread | undefined>) => {
@@ -243,16 +258,8 @@ export function useViewerReview(
     setError(undefined);
     try {
       const result = await operation();
-      setThreads((current) =>
-        current.map((thread) =>
-          thread.threadId !== result.threadId
-            ? thread
-            : {
-                ...thread,
-                posts: thread.posts.map((post) => (post.postId === result.postId ? result : post)),
-              },
-        ),
-      );
+      if (result.deletedAt !== null) pendingRootDeletionRef.current.add(result.threadId);
+      setThreads((current) => applyCommentPostTransition(current, result).threads);
     } catch (cause) {
       setError(messageForError(cause));
       throw cause;

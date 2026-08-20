@@ -16,6 +16,7 @@ import {
 import { readReviewVisitorIdentity } from './identity.js';
 import { VisitorNameDialog } from './identity-dialog.js';
 import { ReviewSidebarToolbar } from './sidebar-toolbar.js';
+import type { ReviewThreadFilter } from './types.js';
 
 function threadLabel(thread: CommentThread): string {
   if (thread.anchor.path !== undefined) return thread.anchor.path;
@@ -46,6 +47,8 @@ export interface DiscussionPanelProps {
   readonly showToolbar?: boolean;
   readonly searchOpen?: boolean | undefined;
   readonly onSearchToggle?: (() => void) | undefined;
+  readonly threadFilter?: ReviewThreadFilter | undefined;
+  readonly onThreadFilterChange?: ((filter: ReviewThreadFilter) => void) | undefined;
   readonly emptyLabel?: string | undefined;
   readonly selectedPath?: string | undefined;
   readonly newAnchor?: CommentAnchor | undefined;
@@ -191,8 +194,11 @@ export function DiscussionPanel({
   showToolbar = true,
   searchOpen: controlledSearchOpen,
   onSearchToggle,
+  threadFilter: controlledThreadFilter,
+  onThreadFilterChange,
 }: DiscussionPanelProps) {
   const [query, setQuery] = useState('');
+  const [localThreadFilter, setLocalThreadFilter] = useState<ReviewThreadFilter>('all');
   const [localSearchOpen, setLocalSearchOpen] = useState(false);
   const [actionError, setActionError] = useState<string>();
   const [editingPostId, setEditingPostId] = useState<string>();
@@ -204,14 +210,43 @@ export function DiscussionPanel({
   const activeThread = threads.find((thread) => thread.threadId === activeThreadId);
   const searchOpen = controlledSearchOpen ?? localSearchOpen;
   const toggleSearch = onSearchToggle ?? (() => setLocalSearchOpen((open) => !open));
-  const filteredThreads = useMemo(() => {
+  const threadFilter = controlledThreadFilter ?? localThreadFilter;
+  const setThreadFilter = onThreadFilterChange ?? setLocalThreadFilter;
+  const threadGroups = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (normalized === '') return threads;
-    return threads.filter((thread) => {
-      const text = thread.posts.map((post) => post.body).join(' ');
-      return `${threadLabel(thread)} ${text}`.toLowerCase().includes(normalized);
-    });
-  }, [query, threads]);
+    const unresolved: CommentThread[] = [];
+    const resolved: CommentThread[] = [];
+    for (const thread of threads) {
+      if (
+        (threadFilter === 'unresolved' && thread.resolvedAt !== null) ||
+        (threadFilter === 'resolved' && thread.resolvedAt === null)
+      )
+        continue;
+      if (normalized !== '') {
+        const text = thread.posts.map((post) => post.body).join(' ');
+        if (!`${threadLabel(thread)} ${text}`.toLowerCase().includes(normalized)) continue;
+      }
+      if (thread.resolvedAt === null) unresolved.push(thread);
+      else resolved.push(thread);
+    }
+    return { unresolved, resolved };
+  }, [query, threadFilter, threads]);
+  const visibleThreadCount = threadGroups.unresolved.length + threadGroups.resolved.length;
+  let emptyMessage = emptyLabel;
+  if (query.trim() === '') {
+    if (threadFilter === 'unresolved') emptyMessage = 'No unresolved discussions.';
+    else if (threadFilter === 'resolved') emptyMessage = 'No resolved discussions.';
+  }
+  const renderThreadButton = (thread: CommentThread) => (
+    <button
+      className="review-thread-button"
+      key={thread.threadId}
+      onClick={() => onSelectThread(thread.threadId)}
+      type="button"
+    >
+      <ReviewThreadCard location={threadLabel(thread)} thread={thread} />
+    </button>
+  );
   useEffect(() => {
     if (activeThreadId !== undefined) replyRef.current?.focus();
   }, [activeThreadId]);
@@ -237,6 +272,8 @@ export function DiscussionPanel({
           onClose={onClose}
           onSearchToggle={toggleSearch}
           searchOpen={searchOpen}
+          threadFilter={threadFilter}
+          onThreadFilterChange={setThreadFilter}
         />
       ) : null}
       {searchOpen ? (
@@ -293,7 +330,9 @@ export function DiscussionPanel({
                     <ReviewTime value={post.createdAt} />
                     {post.deletedAt === null &&
                     post.hiddenAt === null &&
-                    ((post.permissions.canEdit && onEditPost !== undefined) ||
+                    ((activeThread.resolvedAt === null &&
+                      post.permissions.canEdit &&
+                      onEditPost !== undefined) ||
                       (post.permissions.canDelete && onDeletePost !== undefined)) ? (
                       <DropdownMenu>
                         <DropdownMenu.Trigger
@@ -309,7 +348,9 @@ export function DiscussionPanel({
                           }
                         />
                         <DropdownMenu.Content align="end">
-                          {post.permissions.canEdit && onEditPost ? (
+                          {activeThread.resolvedAt === null &&
+                          post.permissions.canEdit &&
+                          onEditPost ? (
                             <DropdownMenu.Item
                               onClick={() => {
                                 setEditingPostId(post.postId);
@@ -450,7 +491,6 @@ export function DiscussionPanel({
             </div>
             {activeThread.resolvedAt !== null ? (
               <div className="review-thread-actions review-chat-footer">
-                <p className="review-thread-resolved">Resolved</p>
                 {activeThread.permissions.canReopen ? (
                   <button
                     className="review-button review-button-quiet"
@@ -460,7 +500,7 @@ export function DiscussionPanel({
                     }
                     type="button"
                   >
-                    Reopen thread
+                    Unresolve discussion
                   </button>
                 ) : null}
               </div>
@@ -495,19 +535,18 @@ export function DiscussionPanel({
         ) : (
           <>
             <div className="review-chat-inbox review-chat-scroll">
-              {filteredThreads.length === 0 ? (
-                <p className="review-empty">{emptyLabel}</p>
+              {visibleThreadCount === 0 ? (
+                <p className="review-empty">{emptyMessage}</p>
               ) : (
-                filteredThreads.map((thread) => (
-                  <button
-                    className="review-thread-button"
-                    key={thread.threadId}
-                    onClick={() => onSelectThread(thread.threadId)}
-                    type="button"
-                  >
-                    <ReviewThreadCard location={threadLabel(thread)} thread={thread} />
-                  </button>
-                ))
+                <>
+                  {threadGroups.unresolved.map(renderThreadButton)}
+                  {threadGroups.resolved.length > 0 ? (
+                    <details className="review-resolved-section" open={threadFilter === 'resolved'}>
+                      <summary>Resolved ({threadGroups.resolved.length})</summary>
+                      {threadGroups.resolved.map(renderThreadButton)}
+                    </details>
+                  ) : null}
+                </>
               )}
               {nextCursor !== null && onLoadOlder ? (
                 <button

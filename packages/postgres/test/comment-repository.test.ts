@@ -237,6 +237,15 @@ describePostgres('PostgresCommentRepository', () => {
           resolvedByActorId: ids.main.actor,
         }),
       ).resolves.toMatchObject({ resolvedByActorId: ids.main.actor });
+      await expect(
+        repository.editPost({
+          installationId: ids.main.installation,
+          workspaceId: ids.main.workspace,
+          postId: 'post-comment-main',
+          body: 'should be rejected',
+          editedAt: '2026-08-17T12:06:30.000Z',
+        }),
+      ).rejects.toThrow('resolved');
 
       await repository.upsertVisitor({
         installationId: ids.main.installation,
@@ -276,18 +285,18 @@ describePostgres('PostgresCommentRepository', () => {
       expect(remaining.rows[0]?.count).toBe('1');
       await expect(repository.cleanupExpiredAbuse('2026-08-19T00:00:00.000Z', 10)).resolves.toBe(1);
       await expect(
-        repository.deleteThread({
+        repository.deletePost({
           installationId: ids.other.installation,
           workspaceId: ids.main.workspace,
-          threadId: thread.threadId,
+          postId: 'post-comment-main',
           deletedAt: '2026-08-19T00:01:00.000Z',
         }),
       ).resolves.toBeUndefined();
       await expect(
-        repository.deleteThread({
+        repository.deletePost({
           installationId: ids.main.installation,
           workspaceId: ids.main.workspace,
-          threadId: thread.threadId,
+          postId: 'post-comment-main',
           deletedAt: '2026-08-19T00:01:00.000Z',
         }),
       ).resolves.toMatchObject({

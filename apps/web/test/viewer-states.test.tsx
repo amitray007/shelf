@@ -15,6 +15,8 @@ import {
   reviewAvatarUrl,
 } from '../src/components/review/comment-card.js';
 import { DiscussionPanel } from '../src/components/review/discussion-panel.js';
+import { applyCommentPostTransition } from '../src/components/review/thread-state.js';
+import { REVIEW_THREAD_FILTERS } from '../src/components/review/types.js';
 import { reviewSurfaceVisible } from '../src/components/review/use-review.js';
 import { UnavailableView, ViewerRail } from '../src/components/viewer-shell.js';
 
@@ -123,6 +125,14 @@ describe('viewer content states', () => {
     expect(reviewSurfaceVisible('private', 0)).toBe(true);
   });
 
+  it('exposes the discussion filter labels used by the toolbar', () => {
+    expect(REVIEW_THREAD_FILTERS.map((filter) => filter.label)).toEqual([
+      'All discussions',
+      'Unresolved',
+      'Resolved',
+    ]);
+  });
+
   it('groups multiple source discussions into one annotation per line', () => {
     const groups = groupSourceThreadsByLine(
       [sourceThread('one', 4), sourceThread('two', 4), sourceThread('elsewhere', 4, 'other.md')],
@@ -140,6 +150,24 @@ describe('viewer content states', () => {
     expect(reviewAvatarUrl('opaque-reviewer')).toContain('/notionists-neutral/svg');
     expect(reviewAvatarUrl('opaque-reviewer')).toContain('backgroundColor=e4e4e7');
     expect(reviewAvatarUrl('opaque-reviewer')).not.toContain('/initials/svg');
+  });
+
+  it('removes a deleted root thread but keeps reply tombstones in the thread', () => {
+    const thread = sourceThread('thread_transition', 7);
+    const root = thread.posts[0];
+    if (root === undefined) throw new Error('fixture root post is required');
+    const deletedRoot = { ...root, deletedAt: '2026-08-20T12:00:00.000Z' };
+    const rootTransition = applyCommentPostTransition([thread], deletedRoot);
+    expect(rootTransition.threads).toEqual([]);
+    expect(rootTransition.removedThreadId).toBe(thread.threadId);
+
+    const reply = { ...root, postId: 'reply_transition', threadId: thread.threadId };
+    const replyTransition = applyCommentPostTransition([{ ...thread, posts: [root, reply] }], {
+      ...reply,
+      deletedAt: '2026-08-20T12:00:00.000Z',
+    });
+    expect(replyTransition.removedThreadId).toBeUndefined();
+    expect(replyTransition.threads[0]?.posts[1]?.deletedAt).toBe('2026-08-20T12:00:00.000Z');
   });
 
   it('renders safe comment bodies and review controls without raw HTML', () => {
@@ -185,6 +213,7 @@ describe('viewer content states', () => {
     expect(html).toContain('&lt;script&gt;bad&lt;/script&gt;');
     expect(html).not.toContain('<script>bad</script>');
     expect(html).toContain('Start a discussion');
+    expect(html).toContain('Filter discussions');
     expect(html).toContain('review-composer-avatar');
     expect(html).toContain('review-composer-submit');
     expect(html).toContain('Submit comment');
@@ -228,8 +257,55 @@ describe('viewer content states', () => {
         threads={[thread]}
       />,
     );
-    expect(html).toContain('Resolved');
+    expect(html).not.toContain('review-thread-status');
     expect(html).not.toContain('Reopen thread');
+  });
+
+  it('shows an unresolve action and keeps delete while hiding edit for resolved posts', () => {
+    const thread = {
+      ...sourceThread('thread_moderator_resolved', 3),
+      resolvedAt: '2026-08-18T12:01:00.000Z',
+      permissions: { canReply: false, canResolve: false, canReopen: true },
+    } satisfies CommentThread;
+    const html = renderToStaticMarkup(
+      <DiscussionPanel
+        activeThreadId={thread.threadId}
+        moderator
+        onCreateThread={async () => undefined}
+        onDeletePost={async () => undefined}
+        onEditPost={async () => undefined}
+        onReply={async () => undefined}
+        onSelectThread={() => undefined}
+        onSetThreadStatus={async () => undefined}
+        threads={[thread]}
+      />,
+    );
+    expect(html).toContain('Unresolve discussion');
+    expect(html).toContain('Comment actions');
+    expect(html).not.toContain('Edit comment');
+  });
+
+  it('renders resolved discussions after unresolved ones in a collapsed section', () => {
+    const resolved = {
+      ...sourceThread('thread_resolved_list', 4),
+      resolvedAt: '2026-08-18T12:01:00.000Z',
+    } satisfies CommentThread;
+    const html = renderToStaticMarkup(
+      <DiscussionPanel
+        onCreateThread={async () => undefined}
+        onReply={async () => undefined}
+        onSelectThread={() => undefined}
+        onSetThreadStatus={async () => undefined}
+        threads={[resolved, sourceThread('thread_open_list', 5)]}
+      />,
+    );
+    expect(html.indexOf('Comment in thread_open_list')).toBeLessThan(
+      html.indexOf('Comment in thread_resolved_list'),
+    );
+    expect(html).toContain('Resolved (1)');
+    expect(html).toContain('<details');
+    expect(html).not.toContain('review-thread-status');
+    expect(html).toContain('review-resolved-indicator');
   });
 
   it('shows comment actions only when the projected post permissions allow them', () => {
@@ -478,6 +554,53 @@ describe('viewer content states', () => {
     );
     expect(html).toContain('folder-browser-pierre-tree');
     expect(html).toContain('aria-label="Folder contents"');
+  });
+
+  it('owns discussion filters at the folder-browser toolbar boundary', () => {
+    const review = {
+      canCreateThread: true,
+      mode: 'discussion' as const,
+      revisionId: FOLDER_RESOLUTION.revision.revisionId,
+      threads: [sourceThread('folder_discussion', 1, 'src/example.ts')],
+      onCreateThread: async () => undefined,
+      onModeChange: () => undefined,
+      onReply: async () => undefined,
+      onSelectThread: () => undefined,
+      onSetThreadStatus: async () => undefined,
+    };
+    const discussionHtml = renderToStaticMarkup(
+      <FolderBrowser
+        entries={[
+          {
+            kind: 'file',
+            path: 'src/example.ts',
+            mediaType: 'text/typescript',
+            contentHash: `sha256:${'d'.repeat(64)}`,
+            byteCount: 21,
+          },
+        ]}
+        loadFile={async () => new TextEncoder().encode('const shelf = true;').buffer}
+        review={review}
+      />,
+    );
+    expect(discussionHtml).toContain('aria-label="Filter discussions"');
+
+    const filesHtml = renderToStaticMarkup(
+      <FolderBrowser
+        entries={[
+          {
+            kind: 'file',
+            path: 'src/example.ts',
+            mediaType: 'text/typescript',
+            contentHash: `sha256:${'d'.repeat(64)}`,
+            byteCount: 21,
+          },
+        ]}
+        loadFile={async () => new TextEncoder().encode('const shelf = true;').buffer}
+        review={{ ...review, mode: 'tree' }}
+      />,
+    );
+    expect(filesHtml).not.toContain('aria-label="Filter discussions"');
   });
 
   it('gives download-only files a clear quiet state', () => {

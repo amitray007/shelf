@@ -9,6 +9,7 @@ import type {
   UpsertCommentVisitorInput,
 } from '@shelf/core';
 import {
+  CommentResolvedThreadEditError,
   type CommentThreadCursor,
   type CommentThreadListScope,
   CommentThreadPostLimitError,
@@ -256,6 +257,9 @@ export class MemoryCommentRepository implements CommentRepository {
   }): Promise<StoredCommentPost | undefined> {
     const post = this.#findMutablePost(request.installationId, request.workspaceId, request.postId);
     if (post === undefined) return undefined;
+    const thread = this.#threads.get(post.threadId);
+    if (thread?.resolvedAt !== null && thread !== undefined)
+      throw new CommentResolvedThreadEditError();
     post.body = request.body;
     post.editedAt = request.editedAt;
     return copy(post);
@@ -267,28 +271,22 @@ export class MemoryCommentRepository implements CommentRepository {
     postId: string;
     deletedAt: string;
   }): Promise<StoredCommentPost | undefined> {
-    const post = this.#findMutablePost(request.installationId, request.workspaceId, request.postId);
-    if (post === undefined) return undefined;
-    post.deletedAt = request.deletedAt;
-    return copy(post);
-  }
-
-  async deleteThread(request: {
-    installationId: string;
-    workspaceId: string;
-    threadId: string;
-    deletedAt: string;
-  }): Promise<StoredCommentPost | undefined> {
-    const thread = this.#threads.get(request.threadId);
-    if (
-      thread === undefined ||
-      thread.installationId !== request.installationId ||
-      thread.workspaceId !== request.workspaceId
-    )
-      return undefined;
-    const root = thread.posts[0];
-    this.#threads.delete(request.threadId);
-    return root === undefined ? undefined : copy({ ...root, deletedAt: request.deletedAt });
+    for (const thread of this.#threads.values()) {
+      if (
+        thread.installationId !== request.installationId ||
+        thread.workspaceId !== request.workspaceId
+      )
+        continue;
+      const post = thread.posts.find((candidate) => candidate.postId === request.postId);
+      if (post === undefined) continue;
+      if (thread.posts[0]?.postId === request.postId) {
+        this.#threads.delete(thread.threadId);
+        return copy({ ...post, deletedAt: request.deletedAt });
+      }
+      post.deletedAt = request.deletedAt;
+      return copy(post);
+    }
+    return undefined;
   }
 
   async setPostHidden(request: {
