@@ -407,6 +407,8 @@
   font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   font-size: var(--font-machine);
   font-weight: 520;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .artifact-sort-link {
