@@ -275,6 +275,32 @@ describePostgres('PostgresCommentRepository', () => {
       `.execute(database);
       expect(remaining.rows[0]?.count).toBe('1');
       await expect(repository.cleanupExpiredAbuse('2026-08-19T00:00:00.000Z', 10)).resolves.toBe(1);
+      await expect(
+        repository.deleteThread({
+          installationId: ids.other.installation,
+          workspaceId: ids.main.workspace,
+          threadId: thread.threadId,
+          deletedAt: '2026-08-19T00:01:00.000Z',
+        }),
+      ).resolves.toBeUndefined();
+      await expect(
+        repository.deleteThread({
+          installationId: ids.main.installation,
+          workspaceId: ids.main.workspace,
+          threadId: thread.threadId,
+          deletedAt: '2026-08-19T00:01:00.000Z',
+        }),
+      ).resolves.toMatchObject({
+        postId: 'post-comment-main',
+        deletedAt: '2026-08-19T00:01:00.000Z',
+      });
+      await expect(
+        repository.findThread({
+          installationId: ids.main.installation,
+          workspaceId: ids.main.workspace,
+          threadId: thread.threadId,
+        }),
+      ).resolves.toBeUndefined();
     } finally {
       await database.destroy();
     }

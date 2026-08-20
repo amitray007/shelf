@@ -273,6 +273,24 @@ export class MemoryCommentRepository implements CommentRepository {
     return copy(post);
   }
 
+  async deleteThread(request: {
+    installationId: string;
+    workspaceId: string;
+    threadId: string;
+    deletedAt: string;
+  }): Promise<StoredCommentPost | undefined> {
+    const thread = this.#threads.get(request.threadId);
+    if (
+      thread === undefined ||
+      thread.installationId !== request.installationId ||
+      thread.workspaceId !== request.workspaceId
+    )
+      return undefined;
+    const root = thread.posts[0];
+    this.#threads.delete(request.threadId);
+    return root === undefined ? undefined : copy({ ...root, deletedAt: request.deletedAt });
+  }
+
   async setPostHidden(request: {
     installationId: string;
     workspaceId: string;

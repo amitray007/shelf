@@ -127,6 +127,15 @@ function harness(policy: 'off' | 'private' | 'shared') {
       post.deletedAt = input.deletedAt;
       return structuredClone(post);
     },
+    async deleteThread(input) {
+      const thread = threads.get(input.threadId);
+      if (thread === undefined) return undefined;
+      threads.delete(input.threadId);
+      const root = thread.posts[0];
+      return root === undefined
+        ? undefined
+        : structuredClone({ ...root, deletedAt: input.deletedAt });
+    },
     async setPostHidden(input) {
       const post = posts.get(input.postId);
       if (post === undefined) return undefined;
@@ -400,6 +409,7 @@ describe('comment service', () => {
     ).resolves.toMatchObject({
       resolvedAt: '2026-08-19T11:00:00.000Z',
       permissions: { canReply: false, canResolve: false, canReopen: false },
+      posts: [{ permissions: { canEdit: false, canDelete: true } }],
     });
     await expect(
       h.service.resolveThread({
@@ -454,6 +464,53 @@ describe('comment service', () => {
     ).resolves.toMatchObject({ deletedAt: '2026-08-19T11:00:00.000Z' });
   });
 
+  it('deleting the root post removes the whole thread while reply deletion stays soft', async () => {
+    const h = harness('shared');
+    const created = await h.service.createThread({
+      installationId: 'installation-main',
+      workspaceId: 'workspace-main',
+      shareId,
+      revisionId,
+      anchor,
+      authority: { kind: 'visitor', visitorKey: 'visitor_digest_a_123456', displayName: 'A' },
+      body: 'root',
+    });
+    const reply = await h.service.createReply({
+      installationId: 'installation-main',
+      workspaceId: 'workspace-main',
+      threadId: created.threadId,
+      shareId,
+      authority: { kind: 'visitor', visitorKey: 'visitor_digest_a_123456', displayName: 'A' },
+      body: 'reply',
+    });
+    await expect(
+      h.service.deletePost({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        postId: reply.postId,
+        shareId,
+        authority: { kind: 'visitor', visitorKey: 'visitor_digest_a_123456' },
+      }),
+    ).resolves.toMatchObject({ deletedAt: '2026-08-19T11:00:00.000Z' });
+    await expect(
+      h.service.deletePost({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        postId: created.posts[0].postId,
+        shareId,
+        authority: { kind: 'visitor', visitorKey: 'visitor_digest_a_123456' },
+      }),
+    ).resolves.toMatchObject({ deletedAt: '2026-08-19T11:00:00.000Z' });
+    await expect(
+      h.service.listThreads({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        shareId,
+        authority: { kind: 'moderator', actorId: 'actor-moderator' },
+      }),
+    ).resolves.toMatchObject({ items: [] });
+  });
+
   it('requires the expected share, allows moderator post management, and requires reopen before replies', async () => {
     const h = harness('shared');
     const created = await h.service.createThread({
@@ -491,16 +548,7 @@ describe('comment service', () => {
         authority: { kind: 'moderator', actorId: 'actor-moderator' },
         body: 'moderator edit',
       }),
-    ).resolves.toMatchObject({ body: 'moderator edit' });
-    await expect(
-      h.service.deletePost({
-        installationId: 'installation-main',
-        workspaceId: 'workspace-main',
-        postId: created.posts[0].postId,
-        shareId,
-        authority: { kind: 'moderator', actorId: 'actor-moderator' },
-      }),
-    ).resolves.toMatchObject({ deletedAt: '2026-08-19T11:00:00.000Z' });
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
     await expect(
       h.service.editPost({
         installationId: 'installation-main',
@@ -530,6 +578,14 @@ describe('comment service', () => {
       canDelete: true,
       canModerate: false,
     });
+    await expect(
+      h.service.deletePost({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        postId: moderatorReply.postId,
+        authority: { kind: 'moderator', actorId: 'actor-moderator' },
+      }),
+    ).resolves.toMatchObject({ deletedAt: '2026-08-19T11:00:00.000Z' });
     await expect(
       h.service.createReply({
         installationId: 'installation-main',

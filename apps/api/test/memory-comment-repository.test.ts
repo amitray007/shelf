@@ -135,4 +135,63 @@ describe('MemoryCommentRepository', () => {
       }),
     ).rejects.toBeInstanceOf(CommentThreadPostLimitError);
   });
+
+  it('deletes a thread and all replies without crossing tenant scope', async () => {
+    const repository = new MemoryCommentRepository();
+    const post = (postId: string) => ({
+      postId,
+      body: postId,
+      author: {
+        kind: 'visitor' as const,
+        participantId: commentParticipantId('visitor', 'visitor-delete-scope'),
+        displayName: 'Reviewer',
+      },
+      visitorKey: 'visitor-delete-scope',
+      actorId: null,
+      createdAt: '2026-08-17T12:00:00.000Z',
+      editedAt: null,
+      deletedAt: null,
+      hiddenAt: null,
+    });
+    await repository.createThread({
+      installationId: 'installation-one',
+      workspaceId: 'workspace-one',
+      artifactId: 'artifact-one',
+      shareId: 'share-one',
+      threadId: 'thread-delete',
+      revisionId: 'revision-one',
+      visibility: 'shared',
+      anchor: { kind: 'file', revisionId: 'revision-one' },
+      post: post('root-delete'),
+    });
+    await repository.createReply({
+      installationId: 'installation-one',
+      workspaceId: 'workspace-one',
+      threadId: 'thread-delete',
+      post: post('reply-delete'),
+    });
+    await expect(
+      repository.deleteThread({
+        installationId: 'installation-two',
+        workspaceId: 'workspace-one',
+        threadId: 'thread-delete',
+        deletedAt: '2026-08-17T12:01:00.000Z',
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.deleteThread({
+        installationId: 'installation-one',
+        workspaceId: 'workspace-one',
+        threadId: 'thread-delete',
+        deletedAt: '2026-08-17T12:01:00.000Z',
+      }),
+    ).resolves.toMatchObject({ postId: 'root-delete', deletedAt: '2026-08-17T12:01:00.000Z' });
+    await expect(
+      repository.findPost({
+        installationId: 'installation-one',
+        workspaceId: 'workspace-one',
+        postId: 'reply-delete',
+      }),
+    ).resolves.toBeUndefined();
+  });
 });

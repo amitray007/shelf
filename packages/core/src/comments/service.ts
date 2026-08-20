@@ -201,6 +201,7 @@ function outputPost(
   post: StoredCommentPost,
   authority: CommentAuthority,
   currentPolicy: CommentPolicy = 'off',
+  resolvedAt: string | null = null,
 ): CommentPost {
   const author: CommentAuthor =
     post.author.kind === 'visitor'
@@ -225,6 +226,7 @@ function outputPost(
     permissions: {
       canEdit:
         post.deletedAt === null &&
+        resolvedAt === null &&
         (authority.kind === 'moderator' ||
           (currentPolicy !== 'off' && post.visitorKey === authority.visitorKey)),
       canDelete:
@@ -306,7 +308,7 @@ function outputThread(
     },
     posts: thread.posts
       .filter((post) => authority.kind === 'moderator' || post.hiddenAt === null)
-      .map((post) => outputPost(post, authority, currentPolicy)),
+      .map((post) => outputPost(post, authority, currentPolicy, thread.resolvedAt)),
   };
 }
 
@@ -773,6 +775,7 @@ export function createCommentService(dependencies: {
     }): Promise<CommentPost> {
       const normalizedBody = body(request.body);
       let share: StoredShare | undefined;
+      let context: Awaited<ReturnType<CommentRepository['findPostContext']>>;
       if (request.authority.kind === 'visitor') {
         validateVisitorMutationAuthority(request.authority);
         if (request.shareId === undefined) {
@@ -780,7 +783,6 @@ export function createCommentService(dependencies: {
             { field: 'shareId', reason: 'is required for visitor writes' },
           ]);
         }
-        let context: Awaited<ReturnType<CommentRepository['findPostContext']>>;
         try {
           context = await dependencies.comments.findPostContext({
             installationId: request.installationId,
@@ -805,6 +807,32 @@ export function createCommentService(dependencies: {
         if (request.authority.displayName !== undefined) {
           await prepareVisitor(request.authority, request.installationId, clock().toISOString());
         }
+      } else {
+        try {
+          context = await dependencies.comments.findPostContext({
+            installationId: request.installationId,
+            workspaceId: request.workspaceId,
+            postId: request.postId,
+          });
+        } catch (error) {
+          throw boundaryFailure('SERVICE_UNAVAILABLE', 'Comment post lookup failed.', error);
+        }
+      }
+      if (context === undefined) throw new CommentNotFoundError();
+      let thread: StoredCommentThread | undefined;
+      try {
+        thread = await dependencies.comments.findThread({
+          installationId: request.installationId,
+          workspaceId: request.workspaceId,
+          threadId: context.post.threadId,
+        });
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Comment thread lookup failed.', error);
+      }
+      if (thread !== undefined && thread.resolvedAt !== null) {
+        throw new InvalidCommentRequestError([
+          { field: 'postId', reason: 'resolved threads cannot edit posts' },
+        ]);
       }
       let updated: StoredCommentPost | undefined;
       try {
@@ -830,6 +858,7 @@ export function createCommentService(dependencies: {
       shareId?: string;
     }): Promise<CommentPost> {
       let share: StoredShare | undefined;
+      let context: Awaited<ReturnType<CommentRepository['findPostContext']>>;
       if (request.authority.kind === 'visitor') {
         validateVisitorMutationAuthority(request.authority);
         if (request.shareId === undefined) {
@@ -837,7 +866,6 @@ export function createCommentService(dependencies: {
             { field: 'shareId', reason: 'is required for visitor writes' },
           ]);
         }
-        let context: Awaited<ReturnType<CommentRepository['findPostContext']>>;
         try {
           context = await dependencies.comments.findPostContext({
             installationId: request.installationId,
@@ -862,15 +890,45 @@ export function createCommentService(dependencies: {
         if (request.authority.displayName !== undefined) {
           await prepareVisitor(request.authority, request.installationId, clock().toISOString());
         }
+      } else {
+        try {
+          context = await dependencies.comments.findPostContext({
+            installationId: request.installationId,
+            workspaceId: request.workspaceId,
+            postId: request.postId,
+          });
+        } catch (error) {
+          throw boundaryFailure('SERVICE_UNAVAILABLE', 'Comment post lookup failed.', error);
+        }
       }
+      if (context === undefined) throw new CommentNotFoundError();
       let deleted: StoredCommentPost | undefined;
       try {
-        deleted = await dependencies.comments.deletePost({
-          installationId: request.installationId,
-          workspaceId: request.workspaceId,
-          postId: request.postId,
-          deletedAt: clock().toISOString(),
-        });
+        let thread: StoredCommentThread | undefined;
+        try {
+          thread = await dependencies.comments.findThread({
+            installationId: request.installationId,
+            workspaceId: request.workspaceId,
+            threadId: context.post.threadId,
+          });
+        } catch (error) {
+          throw boundaryFailure('SERVICE_UNAVAILABLE', 'Comment thread lookup failed.', error);
+        }
+        const root = thread?.posts[0];
+        deleted =
+          root?.postId === request.postId
+            ? await dependencies.comments.deleteThread({
+                installationId: request.installationId,
+                workspaceId: request.workspaceId,
+                threadId: context.post.threadId,
+                deletedAt: clock().toISOString(),
+              })
+            : await dependencies.comments.deletePost({
+                installationId: request.installationId,
+                workspaceId: request.workspaceId,
+                postId: request.postId,
+                deletedAt: clock().toISOString(),
+              });
       } catch (error) {
         throw boundaryFailure('SERVICE_UNAVAILABLE', 'Comment post deletion failed.', error);
       }

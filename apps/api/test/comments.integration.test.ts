@@ -493,7 +493,7 @@ describe('comment HTTP boundary', () => {
     expect(publicResolved.statusCode, publicResolved.body).toBe(200);
     const publicDeleted = await app.inject({
       method: 'PATCH',
-      url: `/api/v1/public/links/${publicCode}/comments/posts/${publicPostId}`,
+      url: `/api/v1/public/links/${publicCode}/comments/posts/${publicReply.json().postId}`,
       payload: { visitorToken, action: 'delete' },
     });
     expect(publicDeleted.statusCode, publicDeleted.body).toBe(200);
@@ -545,6 +545,20 @@ describe('comment HTTP boundary', () => {
     expect(ignoredAnonymousRevisionOverride.json().items).toEqual(
       expect.arrayContaining([expect.objectContaining({ anchorStatus: 'exact' })]),
     );
+    const publicRootDeleted = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/public/links/${publicCode}/comments/posts/${publicPostId}`,
+      payload: { visitorToken, action: 'delete' },
+    });
+    expect(publicRootDeleted.statusCode, publicRootDeleted.body).toBe(200);
+    expect(publicRootDeleted.json().deletedAt).not.toBeNull();
+    const publicAfterRootDelete = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/links/${publicCode}/comments/query`,
+      payload: { visitorToken },
+    });
+    expect(publicAfterRootDelete.statusCode).toBe(200);
+    expect(publicAfterRootDelete.json().items).toEqual([]);
     const mismatchedAdminRevision = await app.inject({
       method: 'GET',
       url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/comments?currentRevisionId=${otherRevisionId}`,

@@ -538,6 +538,49 @@ export class PostgresCommentRepository implements CommentRepository {
     return row === undefined ? undefined : storedPost(row);
   }
 
+  async deleteThread(request: {
+    installationId: string;
+    workspaceId: string;
+    threadId: string;
+    deletedAt: string;
+  }): Promise<StoredCommentPost | undefined> {
+    return this.#database.transaction().execute(async (transaction) => {
+      const thread = await transaction
+        .selectFrom('shelf_comment_threads')
+        .select('thread_id')
+        .where('installation_id', '=', request.installationId)
+        .where('workspace_id', '=', request.workspaceId)
+        .where('thread_id', '=', request.threadId)
+        .forUpdate()
+        .executeTakeFirst();
+      if (thread === undefined) return undefined;
+      const root = await transaction
+        .selectFrom('shelf_comment_posts')
+        .selectAll()
+        .where('installation_id', '=', request.installationId)
+        .where('workspace_id', '=', request.workspaceId)
+        .where('thread_id', '=', request.threadId)
+        .orderBy('created_at', 'asc')
+        .orderBy('post_id', 'asc')
+        .executeTakeFirst();
+      await transaction
+        .deleteFrom('shelf_comment_posts')
+        .where('installation_id', '=', request.installationId)
+        .where('workspace_id', '=', request.workspaceId)
+        .where('thread_id', '=', request.threadId)
+        .execute();
+      await transaction
+        .deleteFrom('shelf_comment_threads')
+        .where('installation_id', '=', request.installationId)
+        .where('workspace_id', '=', request.workspaceId)
+        .where('thread_id', '=', request.threadId)
+        .execute();
+      return root === undefined
+        ? undefined
+        : storedPost({ ...root, deleted_at: new Date(request.deletedAt) });
+    });
+  }
+
   async setPostHidden(request: {
     installationId: string;
     workspaceId: string;
