@@ -36,6 +36,7 @@ export interface DiscussionPanelProps {
   readonly saving?: boolean | undefined;
   readonly error?: string | undefined;
   readonly onSelectThread: (threadId: string) => void;
+  readonly onNavigateToThread?: ((threadId: string) => void) | undefined;
   readonly onCreateThread: (anchor: CommentAnchor, body: string) => Promise<void>;
   readonly onReply: (threadId: string, body: string) => Promise<void>;
   readonly onSetThreadStatus: (threadId: string, status: 'resolve' | 'reopen') => Promise<void>;
@@ -182,6 +183,7 @@ export function DiscussionPanel({
   onEditPost,
   onReply,
   onModeratePost,
+  onNavigateToThread,
   onSelectThread,
   onSetThreadStatus,
   saving = false,
@@ -245,19 +247,25 @@ export function DiscussionPanel({
     else if (threadFilter === 'resolved') emptyMessage = 'No resolved discussions.';
   }
   const renderThreadButton = (thread: CommentThread) => (
-    <button
-      className="review-thread-button"
-      key={thread.threadId}
-      onClick={() => onSelectThread(thread.threadId)}
-      type="button"
-    >
-      <ReviewThreadCard
-        location={
-          thread.anchor.startLine !== undefined ? `Line ${thread.anchor.startLine}` : undefined
-        }
-        thread={thread}
-      />
-    </button>
+    <div className="review-thread-button" key={thread.threadId}>
+      <button
+        className="review-thread-select"
+        onClick={() => onSelectThread(thread.threadId)}
+        type="button"
+      >
+        <ReviewThreadCard thread={thread} />
+      </button>
+      {thread.anchor.startLine !== undefined ? (
+        <button
+          aria-label={`Go to Line ${thread.anchor.startLine}`}
+          className="review-thread-location"
+          onClick={() => (onNavigateToThread ?? onSelectThread)(thread.threadId)}
+          type="button"
+        >
+          Line {thread.anchor.startLine}
+        </button>
+      ) : null}
+    </div>
   );
   const renderThreadGroup = (group: (typeof threadGroups)[number]) => (
     <section className="review-discussion-file-group" key={group.label}>
@@ -341,12 +349,24 @@ export function DiscussionPanel({
               </span>
             </header>
             <div className="review-chat-messages review-chat-scroll">
-              {activeThread.posts.map((post) => (
+              {activeThread.posts.map((post, postIndex) => (
                 <div className="review-post review-chat-message" key={post.postId}>
                   <div className="review-post-heading">
                     <ReviewAvatar post={post} />
                     <strong>{reviewAuthorName(post)}</strong>
                     <ReviewTime value={post.createdAt} />
+                    {postIndex === 0 && activeThread.anchor.startLine !== undefined ? (
+                      <button
+                        aria-label={`Go to Line ${activeThread.anchor.startLine}`}
+                        className="review-thread-location"
+                        onClick={() => {
+                          (onNavigateToThread ?? onSelectThread)(activeThread.threadId);
+                        }}
+                        type="button"
+                      >
+                        Line {activeThread.anchor.startLine}
+                      </button>
+                    ) : null}
                     {post.deletedAt === null &&
                     post.hiddenAt === null &&
                     ((activeThread.resolvedAt === null &&

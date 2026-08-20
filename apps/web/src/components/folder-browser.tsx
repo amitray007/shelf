@@ -26,12 +26,15 @@ export interface FolderBrowserReview {
   readonly revisionId: string;
   readonly threads: readonly CommentThread[];
   readonly activeThreadId?: string | undefined;
+  readonly focusLine?: number | undefined;
+  readonly focusRequestId?: number | undefined;
   readonly loading?: boolean | undefined;
   readonly saving?: boolean | undefined;
   readonly error?: string | undefined;
   readonly mode: ReviewSidebarMode;
   readonly onModeChange: (mode: ReviewSidebarMode) => void;
   readonly onSelectThread: (threadId: string) => void;
+  readonly onNavigateToThread?: ((threadId: string) => void) | undefined;
   readonly onCreateThread: (anchor: CommentAnchor, body: string) => Promise<void>;
   readonly onReply: (threadId: string, body: string) => Promise<void>;
   readonly onSetThreadStatus: (threadId: string, status: 'resolve' | 'reopen') => Promise<void>;
@@ -338,6 +341,7 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
             onEditPost={review.onEditPost}
             onReply={review.onReply}
             onModeratePost={review.onModeratePost}
+            onNavigateToThread={review.onNavigateToThread}
             onSelectThread={review.onSelectThread}
             onSetThreadStatus={review.onSetThreadStatus}
             moderator={review.moderator}
@@ -371,6 +375,8 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
                     canCreateThread: review.canCreateThread,
                     revisionId: review.revisionId,
                     ...(selected === undefined ? {} : { path: selected.path }),
+                    focusLine: review.focusLine,
+                    focusRequestId: review.focusRequestId,
                     threads: review.threads,
                     onCreateThread: review.onCreateThread,
                     onDeletePost: review.onDeletePost,

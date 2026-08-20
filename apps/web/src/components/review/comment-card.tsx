@@ -165,10 +165,12 @@ export function ReviewBody({ body }: { readonly body: string }) {
 export function ReviewThreadCard({
   compact = false,
   location,
+  onNavigate,
   thread,
 }: {
   readonly compact?: boolean;
   readonly location?: string | undefined;
+  readonly onNavigate?: (() => void) | undefined;
   readonly thread: CommentThread;
 }) {
   const first = thread.posts[0];
@@ -198,13 +200,23 @@ export function ReviewThreadCard({
         {thread.anchorStatus === 'outdated' ? (
           <span className="review-thread-badge">Outdated</span>
         ) : null}
+        {location !== undefined ? (
+          <button
+            aria-label={`Go to ${location}`}
+            className="review-thread-location"
+            onClick={(event) => {
+              event.stopPropagation();
+              onNavigate?.();
+            }}
+            type="button"
+          >
+            {location}
+          </button>
+        ) : null}
       </div>
       <ReviewBody body={body} />
       {!compact ? (
         <div className="review-thread-meta">
-          {location !== undefined ? (
-            <span className="review-thread-location">{location}</span>
-          ) : null}
           {thread.posts.length > 1 ? (
             <span className="review-thread-replies">
               {thread.posts.length - 1} {thread.posts.length === 2 ? 'reply' : 'replies'}

@@ -152,6 +152,51 @@ describe('viewer content states', () => {
     expect(groups[0]?.threads.map((thread) => thread.threadId)).toEqual(['one', 'two']);
   });
 
+  it('renders anchored line navigation separately from the discussion message', () => {
+    const html = renderToStaticMarkup(
+      <DiscussionPanel
+        onCreateThread={async () => undefined}
+        onNavigateToThread={() => undefined}
+        onReply={async () => undefined}
+        onSelectThread={() => undefined}
+        onSetThreadStatus={async () => undefined}
+        threads={[
+          sourceThread('line-navigation', 4),
+          {
+            ...sourceThread('file-navigation', 7),
+            anchor: { revisionId: FILE_RESOLUTION.revision.revisionId, kind: 'file' },
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain('aria-label="Go to Line 4"');
+    expect(html).toContain('class="review-thread-select"');
+    expect(html).not.toContain('Go to Line 7');
+  });
+
+  it('keeps one line navigation control on an expanded thread with replies', () => {
+    const thread = sourceThread('expanded-line-navigation', 8);
+    const root = thread.posts[0];
+    if (root === undefined) throw new Error('fixture post is required');
+    const html = renderToStaticMarkup(
+      <DiscussionPanel
+        activeThreadId={thread.threadId}
+        onCreateThread={async () => undefined}
+        onNavigateToThread={() => undefined}
+        onReply={async () => undefined}
+        onSelectThread={() => undefined}
+        onSetThreadStatus={async () => undefined}
+        threads={[
+          {
+            ...thread,
+            posts: [root, { ...root, postId: 'reply_expanded_line_navigation' }],
+          },
+        ]}
+      />,
+    );
+    expect(html.match(/aria-label="Go to Line 8"/gu)).toHaveLength(1);
+  });
+
   it('uses compact relative review times and illustrated DiceBear avatars', () => {
     const now = Date.parse('2026-08-20T12:00:00.000Z');
     expect(formatRelativeReviewTime('2026-08-20T11:00:00.000Z', now)).toBe('1h ago');

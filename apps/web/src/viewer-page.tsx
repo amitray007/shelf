@@ -246,6 +246,8 @@ export function ViewerPage() {
       ? 'discussion'
       : 'tree';
   });
+  const [focusedLine, setFocusedLine] = useState<number>();
+  const [focusRequestId, setFocusRequestId] = useState(0);
 
   useEffect(() => {
     const threadId = new URLSearchParams(window.location.search).get('thread');
@@ -265,6 +267,7 @@ export function ViewerPage() {
     writeReviewValue(`${reviewPanelStorageKey(payload.resolution)}:mode`, mode);
   };
   const selectReviewThread = (threadId: string) => {
+    setFocusedLine(undefined);
     review.selectThread(threadId);
     if (typeof window !== 'undefined') {
       window.history.replaceState(
@@ -278,6 +281,15 @@ export function ViewerPage() {
     }
     if (payload.kind === 'file') setDiscussionVisibility(true);
     else if (threadId !== '') setMode('discussion');
+  };
+  const navigateToReviewThread = (threadId: string) => {
+    const thread = review.threads.find((candidate) => candidate.threadId === threadId);
+    const line = thread?.anchor.startLine;
+    if (line === undefined) return;
+    selectReviewThread(threadId);
+    setFocusedLine(line);
+    setFocusRequestId((current) => current + 1);
+    if (payload.kind === 'folder') setMode('tree');
   };
 
   useEffect(() => {
@@ -317,6 +329,8 @@ export function ViewerPage() {
                     onCreateThread: review.createThread,
                     onDeletePost: review.deletePost,
                     onEditPost: review.editPost,
+                    focusLine: focusedLine,
+                    focusRequestId,
                     onSelectThread: selectReviewThread,
                     saving: review.saving,
                   }
@@ -333,12 +347,15 @@ export function ViewerPage() {
                     revisionId: payload.resolution.revision.revisionId,
                     threads: review.threads,
                     activeThreadId: review.activeThreadId,
+                    focusLine: focusedLine,
+                    focusRequestId,
                     loading: review.loading,
                     saving: review.saving,
                     error: review.error,
                     mode: folderMode,
                     onModeChange: setMode,
                     onSelectThread: selectReviewThread,
+                    onNavigateToThread: navigateToReviewThread,
                     onCreateThread: review.createThread,
                     onReply: review.reply,
                     onSetThreadStatus: review.setThreadStatus,
@@ -368,6 +385,7 @@ export function ViewerPage() {
             onEditPost={review.editPost}
             onReply={review.reply}
             onSelectThread={selectReviewThread}
+            onNavigateToThread={navigateToReviewThread}
             onSetThreadStatus={review.setThreadStatus}
             saving={review.saving}
             threads={review.threads}

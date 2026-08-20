@@ -50,6 +50,8 @@ export interface FileReviewProps {
   readonly canCreateThread: boolean;
   readonly revisionId: string;
   readonly path?: string;
+  readonly focusLine?: number | undefined;
+  readonly focusRequestId?: number | undefined;
   readonly threads: readonly CommentThread[];
   readonly onCreateThread: (anchor: CommentAnchor, body: string) => Promise<void>;
   readonly onEditPost?: ((postId: string, body: string) => Promise<void>) | undefined;
@@ -276,6 +278,8 @@ function PierreCode({
   selectedLines,
   settings,
   source,
+  focusLine,
+  focusRequestId,
   wrap,
 }: {
   readonly fileName: string;
@@ -295,6 +299,8 @@ function PierreCode({
   readonly selectedLines?: SelectedLineRange | null;
   readonly settings?: SourceViewSettings;
   readonly source: string;
+  readonly focusLine?: number | undefined;
+  readonly focusRequestId?: number | undefined;
   readonly wrap: boolean;
 }) {
   const file = useMemo<FileContents>(
@@ -325,9 +331,37 @@ function PierreCode({
                 ? { onGutterUtilityClick: onCopyLine }
                 : {}),
             ...(onLineSelectionChange === undefined ? {} : { onLineSelectionChange }),
+            ...(focusLine === undefined
+              ? {}
+              : {
+                  onPostRender: (_node, instance) => {
+                    // A navigation request gets a fresh active-line write even when
+                    // the target line is unchanged, so repeated Line links re-center it.
+                    if (focusRequestId !== undefined) instance.setEditorActiveLine(null);
+                    instance.setEditorActiveLine(focusLine);
+                    const container = _node.shadowRoot;
+                    if (container === null) return;
+                    const revealLine = () => {
+                      container
+                        .querySelector<HTMLElement>(`[data-line="${focusLine}"]`)
+                        ?.scrollIntoView({ block: 'center', behavior: 'auto' });
+                    };
+                    if (typeof window === 'undefined') revealLine();
+                    else window.requestAnimationFrame(revealLine);
+                  },
+                }),
           }),
     }),
-    [lineNumbers, onAddComment, onCopyLine, onLineSelectionChange, settings, wrap],
+    [
+      focusLine,
+      focusRequestId,
+      lineNumbers,
+      onAddComment,
+      onCopyLine,
+      onLineSelectionChange,
+      settings,
+      wrap,
+    ],
   );
   const mutableLineAnnotations = useMemo(
     () => (lineAnnotations === undefined ? undefined : [...lineAnnotations]),
@@ -416,11 +450,15 @@ export function CodeView({
 export function SourceView({
   annotations = [],
   fileName = 'source.txt',
+  focusLine,
+  focusRequestId,
   review,
   source,
 }: {
   readonly annotations?: readonly SourceLineAnnotation[];
   readonly fileName?: string | undefined;
+  readonly focusLine?: number | undefined;
+  readonly focusRequestId?: number | undefined;
   readonly review?: FileReviewProps | undefined;
   readonly source: string;
 }) {
@@ -482,6 +520,14 @@ export function SourceView({
     document.addEventListener('keydown', discardInlineDraft);
     return () => document.removeEventListener('keydown', discardInlineDraft);
   }, [inlineDraftOpen]);
+
+  useEffect(() => {
+    if (focusLine === undefined || !Number.isInteger(focusLine) || focusLine < 1) return;
+    setSettings((current) =>
+      sourceCommentsVisible(current) ? current : { ...current, annotations: true, comments: true },
+    );
+    setExpandedLineNumber(focusLine);
+  }, [focusLine]);
 
   const updateSettings = <K extends keyof SourceViewSettings>(
     key: K,
@@ -823,6 +869,8 @@ export function SourceView({
           selectedLines={selectedLines}
           settings={settings}
           source={source}
+          focusLine={focusLine ?? review?.focusLine}
+          focusRequestId={focusRequestId ?? review?.focusRequestId}
           wrap={settings.wrap}
         />
       </section>
@@ -849,6 +897,8 @@ export function FileView({
   annotations,
   header,
   fileName,
+  focusLine,
+  focusRequestId,
   preview,
   review,
   source,
@@ -856,6 +906,8 @@ export function FileView({
   readonly annotations?: readonly SourceLineAnnotation[];
   readonly header?: React.ReactNode;
   readonly fileName?: string | undefined;
+  readonly focusLine?: number | undefined;
+  readonly focusRequestId?: number | undefined;
   readonly preview?: React.ReactNode;
   readonly review?: FileReviewProps | undefined;
   readonly source?: string;
@@ -865,6 +917,12 @@ export function FileView({
   const [mode, setMode] = useState<FileViewMode>(() =>
     readFileViewMode(fileName ?? 'source.txt', preview !== undefined, source !== undefined),
   );
+  const requestedFocusLine = focusLine ?? review?.focusLine;
+  const requestedFocusRequestId = focusRequestId ?? review?.focusRequestId;
+
+  useEffect(() => {
+    if (requestedFocusLine !== undefined && source !== undefined) setMode('source');
+  }, [requestedFocusLine, source]);
 
   useEffect(() => {
     if (!hasModes) return;
@@ -885,6 +943,8 @@ export function FileView({
         <SourceView
           {...(annotations === undefined ? {} : { annotations })}
           fileName={fileName}
+          focusLine={requestedFocusLine}
+          focusRequestId={requestedFocusRequestId}
           review={review}
           source={source ?? ''}
         />
@@ -919,6 +979,8 @@ export function FileView({
               <SourceView
                 {...(annotations === undefined ? {} : { annotations })}
                 fileName={fileName}
+                focusLine={requestedFocusLine}
+                focusRequestId={requestedFocusRequestId}
                 review={review}
                 source={source ?? ''}
               />
@@ -930,6 +992,8 @@ export function FileView({
               <SourceView
                 {...(annotations === undefined ? {} : { annotations })}
                 fileName={fileName}
+                focusLine={requestedFocusLine}
+                focusRequestId={requestedFocusRequestId}
                 review={review}
                 source={source ?? ''}
               />
