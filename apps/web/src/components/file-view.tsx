@@ -2,14 +2,12 @@
 
 import { Button } from '@cloudflare/kumo/components/button';
 import { Tabs } from '@cloudflare/kumo/components/tabs';
-import { ArrowUpIcon } from '@phosphor-icons/react/ArrowUp';
 import { ChatCircleDotsIcon } from '@phosphor-icons/react/ChatCircleDots';
 import { CheckIcon } from '@phosphor-icons/react/Check';
 import { CopyIcon } from '@phosphor-icons/react/Copy';
 import { GearSixIcon } from '@phosphor-icons/react/GearSix';
 import { ListNumbersIcon } from '@phosphor-icons/react/ListNumbers';
 import { TextAlignLeftIcon } from '@phosphor-icons/react/TextAlignLeft';
-import { XIcon } from '@phosphor-icons/react/X';
 import type { LineAnnotation, SelectedLineRange } from '@pierre/diffs';
 import type { FileContents, FileOptions, FileProps } from '@pierre/diffs/react';
 import type { CommentAnchor, CommentPost, CommentThread } from '@shelf/contracts';
@@ -24,14 +22,9 @@ import {
   useRef,
   useState,
 } from 'react';
-import {
-  ReviewAvatar,
-  ReviewBody,
-  ReviewTime,
-  reviewAuthorName,
-  reviewAvatarUrl,
-} from './review/comment-card.js';
+import { ReviewAvatar, ReviewBody, ReviewTime, reviewAuthorName } from './review/comment-card.js';
 import { ReviewComposer } from './review/discussion-panel.js';
+import { ReviewEditComposer } from './review/edit-composer.js';
 
 const SOURCE_INLINE_COMMENT_LIMIT = 5;
 
@@ -289,18 +282,17 @@ function PierreCode({
   readonly wrap: boolean;
 }) {
   const [editingPostId, setEditingPostId] = useState<string>();
-  const [editBody, setEditBody] = useState('');
   const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string>();
   const [postActionPending, setPostActionPending] = useState(false);
   const [postActionError, setPostActionError] = useState<
     { readonly message: string; readonly postId: string } | undefined
   >();
-  const saveInlineEdit = async (postId: string) => {
-    if (onEditPost === undefined || editBody.trim() === '' || postActionPending || saving) return;
+  const saveInlineEdit = async (postId: string, body: string) => {
+    if (onEditPost === undefined || body.trim() === '' || postActionPending || saving) return;
     setPostActionPending(true);
     setPostActionError(undefined);
     try {
-      await onEditPost(postId, editBody.trim());
+      await onEditPost(postId, body.trim());
       setEditingPostId(undefined);
     } catch (cause) {
       setPostActionError({
@@ -407,13 +399,7 @@ function PierreCode({
                   >
                     <span aria-hidden="true" className="pierre-inline-avatar-stack">
                       {metadata.participantPosts.slice(0, 3).map((post) => (
-                        <img
-                          alt=""
-                          decoding="async"
-                          key={post.author.participantId}
-                          referrerPolicy="no-referrer"
-                          src={reviewAvatarUrl(post.author.participantId)}
-                        />
+                        <ReviewAvatar key={post.author.participantId} post={post} size={20} />
                       ))}
                     </span>
                     <span>{metadata.label}</span>
@@ -439,54 +425,15 @@ function PierreCode({
                                 <ReviewTime value={post.createdAt} />
                               </div>
                               {editingPostId === post.postId ? (
-                                <div className="review-composer pierre-inline-edit-composer">
-                                  <div className="review-composer-input">
-                                    <textarea
-                                      aria-label="Edit comment"
-                                      disabled={postActionPending || saving}
-                                      maxLength={20_000}
-                                      onChange={(event) => setEditBody(event.target.value)}
-                                      onKeyDown={(event) => {
-                                        if (event.key === 'Escape') {
-                                          event.preventDefault();
-                                          setEditingPostId(undefined);
-                                        }
-                                        if (
-                                          (event.metaKey || event.ctrlKey) &&
-                                          event.key === 'Enter'
-                                        ) {
-                                          event.preventDefault();
-                                          if (editBody.trim() !== '') {
-                                            void saveInlineEdit(post.postId);
-                                          }
-                                        }
-                                      }}
-                                      rows={1}
-                                      value={editBody}
-                                    />
-                                    <div className="pierre-inline-edit-actions">
-                                      <button
-                                        aria-label="Cancel editing comment"
-                                        className="review-composer-cancel"
-                                        onClick={() => setEditingPostId(undefined)}
-                                        type="button"
-                                      >
-                                        <XIcon aria-hidden="true" size={14} weight="bold" />
-                                      </button>
-                                      <button
-                                        aria-label="Save edited comment"
-                                        className="review-composer-submit"
-                                        disabled={
-                                          postActionPending || saving || editBody.trim() === ''
-                                        }
-                                        onClick={() => void saveInlineEdit(post.postId)}
-                                        type="button"
-                                      >
-                                        <ArrowUpIcon aria-hidden="true" size={16} weight="bold" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
+                                <ReviewEditComposer
+                                  compact
+                                  disabled={postActionPending || saving === true}
+                                  initialBody={post.body}
+                                  onCancel={() => setEditingPostId(undefined)}
+                                  onSubmit={(body) => saveInlineEdit(post.postId, body)}
+                                  post={post}
+                                  wrapperClassName="pierre-inline-edit-composer"
+                                />
                               ) : (
                                 <ReviewBody
                                   body={
@@ -508,7 +455,6 @@ function PierreCode({
                                       aria-label="Edit comment"
                                       onClick={() => {
                                         setEditingPostId(post.postId);
-                                        setEditBody(post.body);
                                         setPostActionError(undefined);
                                       }}
                                       type="button"

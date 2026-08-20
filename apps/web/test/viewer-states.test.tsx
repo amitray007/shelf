@@ -167,6 +167,27 @@ describe('viewer content states', () => {
     expect(html).toContain('height="28"');
   });
 
+  it('reuses the edit composer shell for compact inline comments', () => {
+    const post = sourceThread('inline-edit', 1).posts[0];
+    if (post === undefined) throw new Error('inline edit fixture post is required');
+    const html = renderToStaticMarkup(
+      <ReviewEditComposer
+        compact
+        initialBody={post.body}
+        onCancel={() => undefined}
+        onSubmit={async () => undefined}
+        post={post}
+        wrapperClassName="pierre-inline-edit-composer"
+      />,
+    );
+    expect(html).toContain('pierre-inline-edit-composer');
+    expect(html).toContain('pierre-inline-edit-actions');
+    expect(html).toContain('title="Cancel edit (Esc)"');
+    expect(html).toContain('title="Save edit (⌘↵)"');
+    expect(html).not.toContain('review-composer-docked');
+    expect(html).not.toContain('review-composer-avatar');
+  });
+
   it('re-enables annotations when Show comments is activated from an annotations-off state', () => {
     const hiddenSettings = { annotations: false, comments: true };
     expect(sourceCommentsVisible(hiddenSettings)).toBe(false);

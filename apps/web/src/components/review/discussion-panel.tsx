@@ -2,7 +2,6 @@ import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
 import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
 import { ArrowUpIcon } from '@phosphor-icons/react/ArrowUp';
 import { DotsThreeIcon } from '@phosphor-icons/react/DotsThree';
-import { XIcon } from '@phosphor-icons/react/X';
 import type { CommentAnchor, CommentThread } from '@shelf/contracts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -13,10 +12,13 @@ import {
   reviewAuthorName,
   reviewAvatarUrl,
 } from './comment-card.js';
+import { ReviewEditComposer } from './edit-composer.js';
 import { readReviewVisitorIdentity } from './identity.js';
 import { VisitorNameDialog } from './identity-dialog.js';
 import { ReviewSidebarToolbar } from './sidebar-toolbar.js';
 import type { ReviewThreadFilter } from './types.js';
+
+export { ReviewEditComposer } from './edit-composer.js';
 
 function threadLabel(thread: CommentThread): string {
   if (thread.anchor.path !== undefined) return thread.anchor.path;
@@ -167,89 +169,6 @@ export function ReviewComposer({
         />
       ) : null}
     </>
-  );
-}
-
-export function ReviewEditComposer({
-  disabled = false,
-  initialBody,
-  onCancel,
-  onSubmit,
-  post,
-}: {
-  readonly disabled?: boolean;
-  readonly initialBody: string;
-  readonly onCancel: () => void;
-  readonly onSubmit: (body: string) => Promise<void>;
-  readonly post: CommentThread['posts'][number];
-}) {
-  const [body, setBody] = useState(initialBody);
-  const [pending, setPending] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    textareaRef.current?.focus();
-  }, []);
-
-  const submit = async () => {
-    if (body.trim() === '' || pending || disabled) return;
-    setPending(true);
-    try {
-      await onSubmit(body.trim());
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <div className="review-composer review-composer-docked review-composer-edit">
-      <div className="review-composer-input">
-        <span className="review-composer-avatar review-composer-avatar-static">
-          <ReviewAvatar post={post} size={36} />
-        </span>
-        <textarea
-          aria-label="Edit comment"
-          disabled={disabled || pending}
-          maxLength={20_000}
-          onChange={(event) => setBody(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.preventDefault();
-              onCancel();
-            }
-            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-              event.preventDefault();
-              void submit();
-            }
-          }}
-          ref={textareaRef}
-          rows={1}
-          value={body}
-        />
-        <div className="review-composer-actions">
-          <button
-            aria-label="Cancel editing comment"
-            className="review-composer-cancel"
-            disabled={pending}
-            onClick={onCancel}
-            title="Cancel edit (Esc)"
-            type="button"
-          >
-            <XIcon aria-hidden="true" size={15} weight="bold" />
-          </button>
-          <button
-            aria-label="Save edited comment"
-            className="review-composer-submit"
-            disabled={disabled || pending || body.trim() === ''}
-            onClick={() => void submit()}
-            title="Save edit (⌘↵)"
-            type="button"
-          >
-            <ArrowUpIcon aria-hidden="true" size={17} weight="bold" />
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
