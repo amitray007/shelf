@@ -18,7 +18,7 @@ import {
   ReviewAvatar,
   reviewAvatarUrl,
 } from '../src/components/review/comment-card.js';
-import { DiscussionPanel } from '../src/components/review/discussion-panel.js';
+import { DiscussionPanel, ReviewEditComposer } from '../src/components/review/discussion-panel.js';
 import { applyCommentPostTransition } from '../src/components/review/thread-state.js';
 import { REVIEW_THREAD_FILTERS } from '../src/components/review/types.js';
 import { reviewSurfaceVisible } from '../src/components/review/use-review.js';
@@ -313,7 +313,7 @@ describe('viewer content states', () => {
     expect(html).not.toContain('Edit comment');
   });
 
-  it('renders resolved discussions after unresolved ones in a collapsed section', () => {
+  it('groups discussions by file and places resolved threads after unresolved ones', () => {
     const resolved = {
       ...sourceThread('thread_resolved_list', 4),
       resolvedAt: '2026-08-18T12:01:00.000Z',
@@ -330,10 +330,30 @@ describe('viewer content states', () => {
     expect(html.indexOf('Comment in thread_open_list')).toBeLessThan(
       html.indexOf('Comment in thread_resolved_list'),
     );
-    expect(html).toContain('Resolved (1)');
-    expect(html).toContain('<details');
+    expect(html.match(/class="review-discussion-file-heading"/gu)).toHaveLength(1);
+    expect(html).toContain('review-discussion-status-divider');
+    expect(html).not.toContain('Resolved (1)');
+    expect(html).not.toContain('<details');
     expect(html).not.toContain('review-thread-status');
     expect(html).toContain('review-resolved-indicator');
+  });
+
+  it('uses the reply composer shell for editing a discussion post', () => {
+    const thread = sourceThread('thread_edit_composer', 2);
+    const post = thread.posts[0];
+    if (post === undefined) throw new Error('fixture post is required');
+    const html = renderToStaticMarkup(
+      <ReviewEditComposer
+        initialBody={post.body}
+        onCancel={() => undefined}
+        onSubmit={async () => undefined}
+        post={post}
+      />,
+    );
+    expect(html).toContain('review-composer-edit');
+    expect(html).toContain('review-composer-input');
+    expect(html).toContain('review-composer-submit');
+    expect(html).not.toContain('review-message-editor');
   });
 
   it('shows comment actions only when the projected post permissions allow them', () => {

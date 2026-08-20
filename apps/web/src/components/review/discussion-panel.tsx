@@ -170,6 +170,89 @@ export function ReviewComposer({
   );
 }
 
+export function ReviewEditComposer({
+  disabled = false,
+  initialBody,
+  onCancel,
+  onSubmit,
+  post,
+}: {
+  readonly disabled?: boolean;
+  readonly initialBody: string;
+  readonly onCancel: () => void;
+  readonly onSubmit: (body: string) => Promise<void>;
+  readonly post: CommentThread['posts'][number];
+}) {
+  const [body, setBody] = useState(initialBody);
+  const [pending, setPending] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
+  const submit = async () => {
+    if (body.trim() === '' || pending || disabled) return;
+    setPending(true);
+    try {
+      await onSubmit(body.trim());
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="review-composer review-composer-docked review-composer-edit">
+      <div className="review-composer-input">
+        <span className="review-composer-avatar review-composer-avatar-static">
+          <ReviewAvatar post={post} size={36} />
+        </span>
+        <textarea
+          aria-label="Edit comment"
+          disabled={disabled || pending}
+          maxLength={20_000}
+          onChange={(event) => setBody(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              onCancel();
+            }
+            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+              event.preventDefault();
+              void submit();
+            }
+          }}
+          ref={textareaRef}
+          rows={1}
+          value={body}
+        />
+        <div className="review-composer-actions">
+          <button
+            aria-label="Cancel editing comment"
+            className="review-composer-cancel"
+            disabled={pending}
+            onClick={onCancel}
+            title="Cancel edit (Esc)"
+            type="button"
+          >
+            <XIcon aria-hidden="true" size={15} weight="bold" />
+          </button>
+          <button
+            aria-label="Save edited comment"
+            className="review-composer-submit"
+            disabled={disabled || pending || body.trim() === ''}
+            onClick={() => void submit()}
+            title="Save edit (⌘↵)"
+            type="button"
+          >
+            <ArrowUpIcon aria-hidden="true" size={17} weight="bold" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DiscussionPanel({
   activeThreadId,
   emptyLabel = 'No discussions yet.',
@@ -202,9 +285,7 @@ export function DiscussionPanel({
   const [localSearchOpen, setLocalSearchOpen] = useState(false);
   const [actionError, setActionError] = useState<string>();
   const [editingPostId, setEditingPostId] = useState<string>();
-  const [editBody, setEditBody] = useState('');
   const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string>();
-  const editRef = useRef<HTMLTextAreaElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const activeThread = threads.find((thread) => thread.threadId === activeThreadId);
@@ -214,8 +295,10 @@ export function DiscussionPanel({
   const setThreadFilter = onThreadFilterChange ?? setLocalThreadFilter;
   const threadGroups = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const unresolved: CommentThread[] = [];
-    const resolved: CommentThread[] = [];
+    const groups = new Map<
+      string,
+      { label: string; unresolved: CommentThread[]; resolved: CommentThread[] }
+    >();
     for (const thread of threads) {
       if (
         (threadFilter === 'unresolved' && thread.resolvedAt !== null) ||
@@ -226,12 +309,21 @@ export function DiscussionPanel({
         const text = thread.posts.map((post) => post.body).join(' ');
         if (!`${threadLabel(thread)} ${text}`.toLowerCase().includes(normalized)) continue;
       }
-      if (thread.resolvedAt === null) unresolved.push(thread);
-      else resolved.push(thread);
+      const groupKey = thread.anchor.path ?? 'file-discussion';
+      let group = groups.get(groupKey);
+      if (group === undefined) {
+        group = { label: thread.anchor.path ?? 'File discussion', unresolved: [], resolved: [] };
+        groups.set(groupKey, group);
+      }
+      if (thread.resolvedAt === null) group.unresolved.push(thread);
+      else group.resolved.push(thread);
     }
-    return { unresolved, resolved };
+    return [...groups.values()];
   }, [query, threadFilter, threads]);
-  const visibleThreadCount = threadGroups.unresolved.length + threadGroups.resolved.length;
+  const visibleThreadCount = threadGroups.reduce(
+    (count, group) => count + group.unresolved.length + group.resolved.length,
+    0,
+  );
   let emptyMessage = emptyLabel;
   if (query.trim() === '') {
     if (threadFilter === 'unresolved') emptyMessage = 'No unresolved discussions.';
@@ -244,8 +336,23 @@ export function DiscussionPanel({
       onClick={() => onSelectThread(thread.threadId)}
       type="button"
     >
-      <ReviewThreadCard location={threadLabel(thread)} thread={thread} />
+      <ReviewThreadCard
+        location={
+          thread.anchor.startLine !== undefined ? `Line ${thread.anchor.startLine}` : undefined
+        }
+        thread={thread}
+      />
     </button>
+  );
+  const renderThreadGroup = (group: (typeof threadGroups)[number]) => (
+    <section className="review-discussion-file-group" key={group.label}>
+      <h3 className="review-discussion-file-heading">{group.label}</h3>
+      {group.unresolved.map(renderThreadButton)}
+      {group.unresolved.length > 0 && group.resolved.length > 0 ? (
+        <div aria-hidden="true" className="review-discussion-status-divider" />
+      ) : null}
+      {group.resolved.map(renderThreadButton)}
+    </section>
   );
   useEffect(() => {
     if (activeThreadId !== undefined) replyRef.current?.focus();
@@ -253,9 +360,6 @@ export function DiscussionPanel({
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus();
   }, [searchOpen]);
-  useEffect(() => {
-    if (editingPostId !== undefined) editRef.current?.focus();
-  }, [editingPostId]);
   const runAction = async (action: () => Promise<void>) => {
     setActionError(undefined);
     try {
@@ -354,7 +458,6 @@ export function DiscussionPanel({
                             <DropdownMenu.Item
                               onClick={() => {
                                 setEditingPostId(post.postId);
-                                setEditBody(post.body);
                               }}
                             >
                               Edit comment
@@ -386,57 +489,18 @@ export function DiscussionPanel({
                       />
                     </div>
                   ) : editingPostId === post.postId ? (
-                    <div className="review-message-editor">
-                      <textarea
-                        aria-label="Edit comment"
-                        maxLength={20_000}
-                        onChange={(event) => setEditBody(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Escape') {
-                            event.preventDefault();
-                            setEditingPostId(undefined);
-                          }
-                          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                            event.preventDefault();
-                            if (!saving && editBody.trim() !== '') {
-                              void runAction(async () => {
-                                await onEditPost?.(post.postId, editBody.trim());
-                                setEditingPostId(undefined);
-                              });
-                            }
-                          }
-                        }}
-                        ref={editRef}
-                        rows={1}
-                        value={editBody}
-                      />
-                      <div className="review-message-editor-actions">
-                        <button
-                          aria-label="Cancel editing comment"
-                          className="review-message-editor-cancel"
-                          onClick={() => setEditingPostId(undefined)}
-                          title="Cancel edit (Esc)"
-                          type="button"
-                        >
-                          <XIcon aria-hidden="true" size={15} weight="bold" />
-                        </button>
-                        <button
-                          aria-label="Save edited comment"
-                          className="review-message-editor-submit"
-                          disabled={saving || editBody.trim() === ''}
-                          onClick={() =>
-                            void runAction(async () => {
-                              await onEditPost?.(post.postId, editBody.trim());
-                              setEditingPostId(undefined);
-                            })
-                          }
-                          title="Save edit (⌘↵)"
-                          type="button"
-                        >
-                          <ArrowUpIcon aria-hidden="true" size={17} weight="bold" />
-                        </button>
-                      </div>
-                    </div>
+                    <ReviewEditComposer
+                      disabled={saving}
+                      initialBody={post.body}
+                      onCancel={() => setEditingPostId(undefined)}
+                      onSubmit={(body) =>
+                        runAction(async () => {
+                          await onEditPost?.(post.postId, body);
+                          setEditingPostId(undefined);
+                        })
+                      }
+                      post={post}
+                    />
                   ) : (
                     <ReviewBody body={post.deletedAt === null ? post.body : 'Comment deleted'} />
                   )}
@@ -538,15 +602,7 @@ export function DiscussionPanel({
               {visibleThreadCount === 0 ? (
                 <p className="review-empty">{emptyMessage}</p>
               ) : (
-                <>
-                  {threadGroups.unresolved.map(renderThreadButton)}
-                  {threadGroups.resolved.length > 0 ? (
-                    <details className="review-resolved-section" open={threadFilter === 'resolved'}>
-                      <summary>Resolved ({threadGroups.resolved.length})</summary>
-                      {threadGroups.resolved.map(renderThreadButton)}
-                    </details>
-                  ) : null}
-                </>
+                threadGroups.map(renderThreadGroup)
               )}
               {nextCursor !== null && onLoadOlder ? (
                 <button

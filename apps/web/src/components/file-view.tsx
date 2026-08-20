@@ -467,7 +467,7 @@ function PierreCode({
                                     <div className="pierre-inline-edit-actions">
                                       <button
                                         aria-label="Cancel editing comment"
-                                        className="review-message-editor-cancel"
+                                        className="review-composer-cancel"
                                         onClick={() => setEditingPostId(undefined)}
                                         type="button"
                                       >
