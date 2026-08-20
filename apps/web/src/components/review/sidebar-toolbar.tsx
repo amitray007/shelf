@@ -1,5 +1,4 @@
 import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
-import { CaretRightIcon } from '@phosphor-icons/react/CaretRight';
 import { FunnelIcon } from '@phosphor-icons/react/Funnel';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/MagnifyingGlass';
 import { SidebarSimpleIcon } from '@phosphor-icons/react/SidebarSimple';
@@ -45,7 +44,7 @@ export function ReviewSidebarRail({
         title={`Open ${sidebarLabel}`}
         type="button"
       >
-        <CaretRightIcon aria-hidden="true" size={18} weight="regular" />
+        <SidebarSimpleIcon aria-hidden="true" size={18} weight="regular" />
       </button>
     </div>
   );

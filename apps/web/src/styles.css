@@ -220,9 +220,9 @@ a {
   min-width: 44px;
   min-height: 0;
   flex: 1 1 auto;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: 6px;
+  padding: 0;
 }
 
 .review-sidebar-rail-button {
