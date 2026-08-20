@@ -120,6 +120,13 @@ export function folderFileViewKey(path: string | undefined, loading: boolean): s
   return `${path ?? 'empty'}:${loading ? 'loading' : 'loaded'}`;
 }
 
+export function shouldApplyFolderFocusRequest(
+  requestId: number | undefined,
+  consumedRequestId: number | undefined,
+): boolean {
+  return requestId !== undefined && requestId !== consumedRequestId;
+}
+
 export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps) {
   const firstFile = entries.find((entry) => entry.kind === 'file');
   const paths = useMemo(
@@ -132,6 +139,8 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
   );
   const filePathsRef = useRef(filePaths);
   filePathsRef.current = filePaths;
+  const focusRequestId = review?.focusRequestId;
+  const consumedFocusRequestIdRef = useRef<number | undefined>(undefined);
   const [selectedPath, setSelectedPath] = useState(
     () => readSelectedFilePath(filePaths) ?? firstFile?.path,
   );
@@ -233,13 +242,16 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
   }, [filePaths, firstFile?.path, selectedPath]);
 
   useEffect(() => {
+    if (!shouldApplyFolderFocusRequest(focusRequestId, consumedFocusRequestIdRef.current)) return;
     const path = review?.threads.find((thread) => thread.threadId === review.activeThreadId)?.anchor
       .path;
-    if (path !== undefined && filePaths.has(path) && path !== selectedPath) {
+    if (path === undefined || !filePaths.has(path)) return;
+    consumedFocusRequestIdRef.current = focusRequestId;
+    if (path !== selectedPath) {
       setSelectedPath(path);
       model.getItem(path)?.select();
     }
-  }, [filePaths, model, review, selectedPath]);
+  }, [filePaths, focusRequestId, model, review?.activeThreadId, review?.threads, selectedPath]);
 
   useEffect(() => {
     if (selected === undefined) return;

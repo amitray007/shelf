@@ -17,6 +17,7 @@ import {
   FolderBrowser,
   folderFileViewKey,
   isFolderEntryVisible,
+  shouldApplyFolderFocusRequest,
 } from '../src/components/folder-browser.js';
 import {
   formatRelativeReviewTime,
@@ -195,6 +196,12 @@ describe('viewer content states', () => {
       />,
     );
     expect(html.match(/aria-label="Go to Line 8"/gu)).toHaveLength(1);
+  });
+
+  it('releases a consumed folder line request for manual selection and accepts the next one', () => {
+    expect(shouldApplyFolderFocusRequest(1, undefined)).toBe(true);
+    expect(shouldApplyFolderFocusRequest(1, 1)).toBe(false);
+    expect(shouldApplyFolderFocusRequest(2, 1)).toBe(true);
   });
 
   it('uses compact relative review times and illustrated DiceBear avatars', () => {
