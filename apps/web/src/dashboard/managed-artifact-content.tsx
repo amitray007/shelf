@@ -110,6 +110,7 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
     return (
       <FolderBrowser
         entries={entries}
+        key={revision.revisionId}
         loadFile={loadFolderFile}
         {...(review === undefined
           ? {}

@@ -62,6 +62,16 @@ function readExpandedTreePaths(paths: readonly string[]): readonly string[] | nu
   }
 }
 
+function readSelectedFilePath(filePaths: ReadonlySet<string>): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const value = window.sessionStorage.getItem(viewerSessionStorageKey('folder-selected-file'));
+    return value !== null && filePaths.has(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function expandedTreePaths(
   paths: readonly string[],
   model: ReturnType<typeof useFileTree>['model'],
@@ -105,7 +115,6 @@ export function isFolderEntryVisible(path: string, collapsedDirectories: Readonl
 
 export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps) {
   const firstFile = entries.find((entry) => entry.kind === 'file');
-  const firstFilePath = firstFile?.path;
   const paths = useMemo(
     () => entries.map((entry) => (entry.kind === 'directory' ? `${entry.path}/` : entry.path)),
     [entries],
@@ -116,7 +125,9 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
   );
   const filePathsRef = useRef(filePaths);
   filePathsRef.current = filePaths;
-  const [selectedPath, setSelectedPath] = useState(firstFile?.path);
+  const [selectedPath, setSelectedPath] = useState(
+    () => readSelectedFilePath(filePaths) ?? firstFile?.path,
+  );
   const [bytes, setBytes] = useState<ArrayBuffer>();
   const [failed, setFailed] = useState(false);
   const [treeSearchOpen, setTreeSearchOpen] = useState(false);
@@ -133,7 +144,7 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
     icons: { colored: false, set: 'complete' },
     initialExpansion: restoredExpandedPaths === null ? 'open' : 'closed',
     ...(restoredExpandedPaths === null ? {} : { initialExpandedPaths: restoredExpandedPaths }),
-    ...(firstFilePath === undefined ? {} : { initialSelectedPaths: [firstFilePath] }),
+    ...(selectedPath === undefined ? {} : { initialSelectedPaths: [selectedPath] }),
     paths,
     search: true,
     searchBlurBehavior: 'close',
@@ -169,9 +180,6 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
   useEffect(() => {
     const expandedPaths = expandedTreePaths(paths, model);
     model.resetPaths(paths, { initialExpandedPaths: expandedPaths });
-    if (firstFilePath !== undefined) {
-      model.getItem(firstFilePath)?.select();
-    }
     try {
       window.sessionStorage.setItem(
         viewerSessionStorageKey('folder-tree'),
@@ -180,7 +188,17 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
     } catch {
       // Session storage can be unavailable in privacy-restricted browser contexts.
     }
-  }, [firstFilePath, model, paths]);
+  }, [model, paths]);
+
+  useEffect(() => {
+    if (selectedPath === undefined) return;
+    model.getItem(selectedPath)?.select();
+    try {
+      window.sessionStorage.setItem(viewerSessionStorageKey('folder-selected-file'), selectedPath);
+    } catch {
+      // Folder selection remains usable when browser storage is unavailable.
+    }
+  }, [model, selectedPath]);
 
   useEffect(() => {
     const persistExpansion = () => {
@@ -203,9 +221,9 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
   );
 
   useEffect(() => {
-    if (selectedPath === undefined || entries.some((entry) => entry.path === selectedPath)) return;
+    if (selectedPath === undefined || filePaths.has(selectedPath)) return;
     setSelectedPath(firstFile?.path);
-  }, [entries, firstFile?.path, selectedPath]);
+  }, [filePaths, firstFile?.path, selectedPath]);
 
   useEffect(() => {
     const path = review?.threads.find((thread) => thread.threadId === review.activeThreadId)?.anchor

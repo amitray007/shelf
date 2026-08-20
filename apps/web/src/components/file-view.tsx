@@ -168,15 +168,30 @@ export function toggleSourceComments(settings: SourceViewSettings): SourceViewSe
   return { ...settings, annotations: true, comments: true };
 }
 
-export function viewerSessionStorageKey(namespace: string): string {
+export function viewerSessionStorageKey(namespace: string, context = ''): string {
   if (typeof window === 'undefined') return `shelf:${namespace}:server`;
-  const context = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+  const storageContext = `${window.location.origin}${window.location.pathname}${window.location.search}${context === '' ? '' : `\u0000${context}`}`;
   let hash = 2_166_136_261;
-  for (const character of context) {
+  for (const character of storageContext) {
     hash ^= character.codePointAt(0) ?? 0;
     hash = Math.imul(hash, 16_777_619);
   }
   return `shelf:${namespace}:${(hash >>> 0).toString(36)}`;
+}
+
+function readFileViewMode(fileName: string, hasPreview: boolean, hasSource: boolean): FileViewMode {
+  const fallback = hasPreview ? 'preview' : 'source';
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const value = window.sessionStorage.getItem(
+      viewerSessionStorageKey('file-view-mode', fileName),
+    );
+    if (value === 'source' && hasSource) return value;
+    if (value === 'preview' && hasPreview) return value;
+  } catch {
+    // View state remains usable when browser storage is unavailable.
+  }
+  return fallback;
 }
 
 function readSourceViewSettings(): SourceViewSettings {
@@ -845,10 +860,23 @@ export function FileView({
   readonly review?: FileReviewProps | undefined;
   readonly source?: string;
 }) {
-  const initialMode: FileViewMode = preview === undefined ? 'source' : 'preview';
-  const [mode, setMode] = useState<FileViewMode>(initialMode);
   const hasContent = preview !== undefined || source !== undefined;
   const hasModes = preview !== undefined && source !== undefined;
+  const [mode, setMode] = useState<FileViewMode>(() =>
+    readFileViewMode(fileName ?? 'source.txt', preview !== undefined, source !== undefined),
+  );
+
+  useEffect(() => {
+    if (!hasModes) return;
+    try {
+      window.sessionStorage.setItem(
+        viewerSessionStorageKey('file-view-mode', fileName ?? 'source.txt'),
+        mode,
+      );
+    } catch {
+      // View state remains usable when browser storage is unavailable.
+    }
+  }, [fileName, hasModes, mode]);
 
   if (!hasContent && header === undefined) return null;
   if (header === undefined && !hasModes) {

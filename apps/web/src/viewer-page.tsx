@@ -210,7 +210,14 @@ function FolderArtifact({
       loadViewerFolderEntryBytes(payload.resolution, payload.authority, path, signal),
     [payload.authority, payload.resolution],
   );
-  return <FolderBrowser entries={payload.entries} loadFile={loadFile} review={review} />;
+  return (
+    <FolderBrowser
+      entries={payload.entries}
+      key={payload.resolution.revision.revisionId}
+      loadFile={loadFile}
+      review={review}
+    />
+  );
 }
 
 export function ViewerPage() {
