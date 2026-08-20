@@ -323,7 +323,6 @@ a {
 .review-sidebar-tool:active,
 .review-sidebar-mode:active,
 .review-button:active,
-.review-post-action:active,
 .review-composer-avatar:active,
 .review-composer-submit:active {
   transform: scale(0.97);
@@ -759,28 +758,6 @@ a {
   font-size: 12px;
   font-weight: 600;
 }
-.review-post-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  margin-top: 9px;
-}
-.review-post-action {
-  min-height: 27px;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 11px;
-}
-.review-post-action:hover {
-  border-color: var(--rule);
-  background: var(--elevated);
-  color: var(--text);
-}
 .review-delete-confirm {
   display: flex;
   align-items: center;
@@ -1068,11 +1045,6 @@ a {
   color: var(--text);
   font-size: 13px;
   line-height: 1.5;
-}
-
-.review-chat-message .review-post-controls {
-  margin-left: 30px;
-  margin-top: 6px;
 }
 
 .review-chat-footer {

@@ -415,12 +415,16 @@ export function DiscussionPanel({
                           Line {activeThread.anchor.startLine}
                         </button>
                       ) : null}
-                      {post.deletedAt === null &&
-                      post.hiddenAt === null &&
-                      ((activeThread.resolvedAt === null &&
-                        post.permissions.canEdit &&
-                        onEditPost !== undefined) ||
-                        (post.permissions.canDelete && onDeletePost !== undefined)) ? (
+                      {(post.deletedAt === null &&
+                        post.hiddenAt === null &&
+                        ((activeThread.resolvedAt === null &&
+                          post.permissions.canEdit &&
+                          onEditPost !== undefined) ||
+                          (post.permissions.canDelete && onDeletePost !== undefined))) ||
+                      (moderator &&
+                        post.author.kind === 'visitor' &&
+                        post.permissions.canModerate &&
+                        onModeratePost !== undefined) ? (
                         <DropdownMenu>
                           <DropdownMenu.Trigger
                             render={
@@ -435,7 +439,9 @@ export function DiscussionPanel({
                             }
                           />
                           <DropdownMenu.Content align="end">
-                            {activeThread.resolvedAt === null &&
+                            {post.deletedAt === null &&
+                            post.hiddenAt === null &&
+                            activeThread.resolvedAt === null &&
                             post.permissions.canEdit &&
                             onEditPost ? (
                               <DropdownMenu.Item
@@ -446,12 +452,35 @@ export function DiscussionPanel({
                                 Edit comment
                               </DropdownMenu.Item>
                             ) : null}
-                            {post.permissions.canDelete && onDeletePost ? (
+                            {post.deletedAt === null &&
+                            post.hiddenAt === null &&
+                            post.permissions.canDelete &&
+                            onDeletePost ? (
                               <DropdownMenu.Item
                                 onClick={() => setDeleteConfirmPostId(post.postId)}
                                 variant="danger"
                               >
                                 Delete comment
+                              </DropdownMenu.Item>
+                            ) : null}
+                            {moderator &&
+                            post.author.kind === 'visitor' &&
+                            post.permissions.canModerate &&
+                            onModeratePost ? (
+                              <DropdownMenu.Item
+                                disabled={saving}
+                                onClick={() =>
+                                  void runAction(() =>
+                                    onModeratePost(
+                                      post.postId,
+                                      post.hiddenAt === null ? 'hide' : 'unhide',
+                                    ),
+                                  )
+                                }
+                              >
+                                {post.hiddenAt === null
+                                  ? 'Hide visitor post'
+                                  : 'Unhide visitor post'}
                               </DropdownMenu.Item>
                             ) : null}
                           </DropdownMenu.Content>
@@ -514,25 +543,6 @@ export function DiscussionPanel({
                           Delete
                         </button>
                       </div>
-                    </div>
-                  ) : null}
-                  {moderator &&
-                  post.author.kind === 'visitor' &&
-                  post.permissions.canModerate &&
-                  onModeratePost ? (
-                    <div className="review-post-controls">
-                      <button
-                        className="review-post-action"
-                        disabled={saving}
-                        onClick={() =>
-                          void runAction(() =>
-                            onModeratePost(post.postId, post.hiddenAt === null ? 'hide' : 'unhide'),
-                          )
-                        }
-                        type="button"
-                      >
-                        {post.hiddenAt === null ? 'Hide visitor post' : 'Unhide visitor post'}
-                      </button>
                     </div>
                   ) : null}
                 </div>

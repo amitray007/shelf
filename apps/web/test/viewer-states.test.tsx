@@ -768,7 +768,9 @@ describe('viewer content states', () => {
     );
     expect(html).toContain('Hidden');
     expect(html).toContain('Visitor body retained for moderation.');
-    expect(html).toContain('Unhide visitor post');
+    expect(html).toContain('Comment actions');
+    expect(html).not.toContain('review-post-controls');
+    expect(html).not.toContain('review-post-action');
   });
   it('renders source through the syntax-aware viewer and formatted JSON', () => {
     const text = renderContent({ text: '<script>unsafe</script>' });
