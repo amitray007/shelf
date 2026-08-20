@@ -11,6 +11,7 @@ export interface ReviewEditComposerProps {
   readonly onCancel: () => void;
   readonly onSubmit: (body: string) => Promise<void>;
   readonly post: CommentPost;
+  readonly showAvatar?: boolean;
   readonly wrapperClassName?: string;
 }
 
@@ -28,6 +29,7 @@ export function ReviewEditComposer({
   onCancel,
   onSubmit,
   post,
+  showAvatar = true,
   wrapperClassName,
 }: ReviewEditComposerProps) {
   const [body, setBody] = useState(initialBody);
@@ -61,7 +63,7 @@ export function ReviewEditComposer({
   return (
     <div className={wrapperClass}>
       <div className="review-composer-input">
-        {!compact ? (
+        {!compact && showAvatar ? (
           <span className="review-composer-avatar review-composer-avatar-static">
             <ReviewAvatar post={post} size={36} />
           </span>

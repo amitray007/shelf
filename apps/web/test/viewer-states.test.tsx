@@ -623,11 +623,13 @@ describe('viewer content states', () => {
         onCancel={() => undefined}
         onSubmit={async () => undefined}
         post={post}
+        showAvatar={false}
       />,
     );
     expect(html).toContain('review-composer-edit');
     expect(html).toContain('review-composer-input');
     expect(html).toContain('review-composer-submit');
+    expect(html).not.toContain('review-composer-avatar');
     expect(html).not.toContain('review-message-editor');
   });
 

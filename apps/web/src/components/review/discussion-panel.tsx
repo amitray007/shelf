@@ -484,6 +484,7 @@ export function DiscussionPanel({
                         })
                       }
                       post={post}
+                      showAvatar={false}
                     />
                   ) : (
                     <ReviewBody body={post.deletedAt === null ? post.body : 'Comment deleted'} />
