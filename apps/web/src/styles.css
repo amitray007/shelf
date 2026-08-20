@@ -143,15 +143,15 @@ a {
 
 .viewer-sidebar-split-separator {
   position: relative;
-  width: 10px;
-  min-width: 10px;
-  background: var(--canvas);
+  width: 1px;
+  min-width: 1px;
+  background: transparent;
   cursor: col-resize;
 }
 
 .viewer-sidebar-split-separator::before {
   position: absolute;
-  inset: 0 4px;
+  inset: 0;
   border-right: 1px solid var(--rule);
   content: "";
 }
@@ -206,6 +206,10 @@ a {
 .review-panel-public {
   border-right: 1px solid var(--rule-strong);
   border-left: 0;
+}
+
+.viewer-sidebar-split-sidebar .review-panel {
+  border-right: 0;
 }
 
 .review-sidebar-content {
