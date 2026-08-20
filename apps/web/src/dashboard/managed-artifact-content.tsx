@@ -32,6 +32,9 @@ export interface ManagedArtifactReview {
   readonly error?: string | undefined;
   readonly mode?: ReviewSidebarMode | undefined;
   readonly onModeChange?: ((mode: ReviewSidebarMode) => void) | undefined;
+  readonly sidebarOpen?: boolean | undefined;
+  readonly onSidebarToggle?: (() => void) | undefined;
+  readonly sidebarControlsId?: string | undefined;
   readonly onSelectThread: (threadId: string) => void;
   readonly onLoadOlder?: (() => Promise<void>) | undefined;
   readonly onCreateThread: (anchor: CommentAnchor, body: string) => Promise<void>;

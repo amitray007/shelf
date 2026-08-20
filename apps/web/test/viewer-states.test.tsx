@@ -953,6 +953,30 @@ describe('viewer content states', () => {
       />,
     );
     expect(filesHtml).not.toContain('aria-label="Filter discussions"');
+
+    const collapsedFolderHtml = renderToStaticMarkup(
+      <FolderBrowser
+        entries={[
+          {
+            kind: 'file',
+            path: 'src/example.ts',
+            mediaType: 'text/typescript',
+            contentHash: `sha256:${'d'.repeat(64)}`,
+            byteCount: 21,
+          },
+        ]}
+        loadFile={async () => new TextEncoder().encode('const shelf = true;').buffer}
+        review={{
+          ...review,
+          onSidebarToggle: () => undefined,
+          sidebarControlsId: 'managed-folder-sidebar-content',
+          sidebarOpen: false,
+        }}
+      />,
+    );
+    expect(collapsedFolderHtml).toContain('Open folder tree and discussions sidebar');
+    expect(collapsedFolderHtml).toContain('aria-controls="managed-folder-sidebar-content"');
+    expect(collapsedFolderHtml).toContain('aria-expanded="false"');
   });
 
   it('gives download-only files a clear quiet state', () => {
