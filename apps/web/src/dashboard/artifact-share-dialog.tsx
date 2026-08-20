@@ -153,7 +153,7 @@ export function ArtifactShareDialog({
         </dl>
         <div aria-busy={policyBusy.has(share.accessType)} className="share-policy-control">
           <Radio.Group
-            className="choice-group compact-choice-group"
+            className="choice-group compact-choice-group share-policy-choice-group"
             disabled={policyBusy.has(share.accessType)}
             legend="Comments"
             name={`default-share-comments-${share.accessType}`}
@@ -186,6 +186,7 @@ export function ArtifactShareDialog({
       description={`Copy a permanent default link for ${artifact.name}, or create a custom one.`}
       onOpenChange={onOpenChange}
       open={open}
+      size="xl"
       title="Share artifact"
     >
       <div className="dialog-form artifact-share-overview">

@@ -1,6 +1,6 @@
 import { Button } from '@cloudflare/kumo/components/button';
 import { ClipboardText } from '@cloudflare/kumo/components/clipboard-text';
-import { Dialog } from '@cloudflare/kumo/components/dialog';
+import { Dialog, type DialogProps } from '@cloudflare/kumo/components/dialog';
 import { XIcon } from '@phosphor-icons/react/X';
 import { type ReactNode, type RefObject, useEffect } from 'react';
 
@@ -14,6 +14,7 @@ export function Modal({
   children,
   initialFocus,
   canClose = true,
+  size = 'lg',
 }: {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
@@ -22,6 +23,7 @@ export function Modal({
   readonly children: ReactNode;
   readonly initialFocus?: RefObject<HTMLElement | null>;
   readonly canClose?: boolean;
+  readonly size?: DialogProps['size'];
 }) {
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   useEffect(() => {
@@ -39,7 +41,7 @@ export function Modal({
     >
       <Dialog
         className="shelf-dialog"
-        size="lg"
+        size={size}
         {...(prefersReducedMotion
           ? { style: { transitionDuration: '100ms', transitionProperty: 'opacity' } }
           : {})}
