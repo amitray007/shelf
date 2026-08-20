@@ -116,19 +116,16 @@
 }
 
 .artifact-comments-column {
-  width: 176px;
-}
-
-.artifact-revision-column {
-  width: 116px;
+  /* Two participants plus the overflow control, two 4px gaps, and 24px cell padding. */
+  width: 128px;
 }
 
 .artifact-created-column {
-  width: 156px;
+  width: 128px;
 }
 
 .artifact-updated-column {
-  width: 156px;
+  width: 128px;
 }
 
 .artifact-actions-column {
@@ -223,29 +220,18 @@
   }
 }
 
-.artifact-revision-cell {
-  overflow: hidden;
-  color: var(--text-subtle);
-  font:
-    500 var(--font-machine) / 1.35 "Geist Mono Variable",
-    ui-monospace,
-    monospace;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .artifact-comments-cell {
   overflow: hidden;
   padding-right: 12px;
   padding-left: 12px;
+  text-align: center;
 }
 
 .artifact-comments {
   display: flex;
   min-height: 44px;
   align-items: center;
+  justify-content: center;
   gap: 4px;
 }
 
@@ -300,7 +286,7 @@
   color: var(--text-muted);
   font-size: var(--font-meta);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -309,7 +295,7 @@
   padding-right: 16px;
 }
 
-.artifact-table th.artifact-revision-cell,
+.artifact-table th.artifact-comments-cell,
 .artifact-table th.artifact-created-cell,
 .artifact-table th.artifact-updated-cell {
   color: var(--text-muted);
@@ -321,7 +307,7 @@
 .artifact-sort-link {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 5px;
   color: inherit;
   text-decoration: none;
@@ -339,13 +325,13 @@
 }
 
 .artifact-actions-cell {
-  text-align: right;
+  text-align: center;
 }
 
 .artifact-row-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 1px;
 }
 
@@ -404,8 +390,8 @@
     display: none;
   }
 
-  .artifact-comments-column {
-    width: 144px;
+  .artifact-created-column {
+    width: 0;
   }
 }
 
@@ -422,13 +408,13 @@
     display: none;
   }
 
-  .artifact-revision-cell,
-  .artifact-revision-column {
-    display: none;
+  .artifact-updated-column {
+    width: 0;
   }
 
   .artifact-actions-column {
-    width: 140px;
+    /* Three 44px actions, two 1px gaps, and 8px cell padding. */
+    width: 142px;
   }
 
   .artifact-table th,
@@ -438,7 +424,71 @@
   }
 
   .artifact-comments-column {
-    width: 96px;
+    /* Three 44px controls, two 2px gaps, and 8px cell padding. */
+    width: 144px;
+  }
+
+  .artifact-name-column {
+    min-width: 0;
+  }
+
+  .artifact-table {
+    display: block;
+  }
+
+  .artifact-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .artifact-table tbody {
+    display: grid;
+  }
+
+  .artifact-ledger-row {
+    display: grid;
+    width: 100%;
+    height: auto;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name name"
+      "comments actions";
+    gap: 0;
+    padding: 8px 0;
+  }
+
+  .artifact-ledger-row > td {
+    display: block;
+    min-width: 0;
+    padding: 4px;
+    border: 0;
+  }
+
+  .artifact-ledger-row > td:first-child {
+    grid-area: name;
+  }
+
+  .artifact-ledger-row > .artifact-created-cell,
+  .artifact-ledger-row > .artifact-updated-cell {
+    display: none;
+  }
+
+  .artifact-ledger-row > .artifact-comments-cell {
+    width: 144px;
+    grid-area: comments;
+  }
+
+  .artifact-ledger-row > .artifact-actions-cell {
+    width: 142px;
+    grid-area: actions;
   }
 
   .artifact-comments {

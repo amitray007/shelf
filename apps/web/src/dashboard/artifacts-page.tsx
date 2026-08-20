@@ -29,7 +29,6 @@ import {
 } from 'react-router';
 import { ReviewParticipantAvatar } from '../components/review/comment-card.js';
 import { isReviewThreadRead } from '../components/review/persistence.js';
-import { ordinal } from '../components/revision-label.js';
 import {
   DashboardApiError,
   loadArtifact,
@@ -289,7 +288,6 @@ export function ArtifactsPage() {
               <colgroup>
                 <col className="artifact-name-column" />
                 <col className="artifact-comments-column" />
-                <col className="artifact-revision-column" />
                 <col className="artifact-created-column" />
                 <col className="artifact-updated-column" />
                 <col className="artifact-actions-column" />
@@ -297,8 +295,7 @@ export function ArtifactsPage() {
               <Table.Header variant="compact">
                 <Table.Row>
                   <Table.Head>Artifact</Table.Head>
-                  <Table.Head>Comments</Table.Head>
-                  <Table.Head className="artifact-revision-cell">Revision</Table.Head>
+                  <Table.Head className="artifact-comments-cell">Comments</Table.Head>
                   <Table.Head
                     aria-sort={
                       sort === 'created'
@@ -439,9 +436,6 @@ export function ArtifactsPage() {
                             </div>
                           );
                         })()}
-                      </Table.Cell>
-                      <Table.Cell className="artifact-revision-cell">
-                        {ordinal(artifact.latestRevision.revisionNumber)}
                       </Table.Cell>
                       <Table.Cell className="artifact-created-cell">
                         <time dateTime={artifact.createdAt}>{dateLabel(artifact.createdAt)}</time>

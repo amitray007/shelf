@@ -1875,10 +1875,11 @@ a {
   --trees-icon-width-override: 18px;
   --trees-search-bg-override: var(--surface);
   --trees-search-fg-override: var(--text);
+  --trees-focus-ring-color-override: var(--focus-ring);
   --trees-indent-guide-bg-override: transparent;
   --trees-selected-bg-override: var(--surface);
   --trees-selected-fg-override: var(--text);
-  --trees-selected-focused-border-color-override: var(--accent);
+  --trees-selected-focused-border-color-override: var(--focus-ring);
 }
 
 .folder-browser-preview {
