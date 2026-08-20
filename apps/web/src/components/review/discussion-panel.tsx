@@ -1,9 +1,16 @@
+import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
 import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
 import { DotsThreeIcon } from '@phosphor-icons/react/DotsThree';
 import { PaperPlaneTiltIcon } from '@phosphor-icons/react/PaperPlaneTilt';
 import type { CommentAnchor, CommentThread } from '@shelf/contracts';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ReviewAvatar, ReviewBody, ReviewThreadCard, ReviewTime } from './comment-card.js';
+import {
+  ReviewAvatar,
+  ReviewBody,
+  ReviewThreadCard,
+  ReviewTime,
+  reviewAuthorName,
+} from './comment-card.js';
 import { readReviewVisitorIdentity } from './identity.js';
 import { VisitorNameDialog } from './identity-dialog.js';
 import { ReviewSidebarToolbar } from './sidebar-toolbar.js';
@@ -56,11 +63,11 @@ export function ReviewComposer({
   readonly placeholder?: string;
 }) {
   const [body, setBody] = useState('');
-  const [displayName, setDisplayName] = useState(() => readReviewVisitorIdentity().displayName);
   const [nameDialog, setNameDialog] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
   const submitAfterNameRef = useRef(false);
+  const displayName = readReviewVisitorIdentity().displayName;
   const submit = async () => {
     if (body.trim().length === 0 || pending) return;
     if (!moderator && readReviewVisitorIdentity().displayName.trim().length === 0) {
@@ -79,10 +86,9 @@ export function ReviewComposer({
       setPending(false);
     }
   };
-  const continueWithName = (identity: ReturnType<typeof readReviewVisitorIdentity>) => {
+  const continueWithName = () => {
     const shouldSubmit = submitAfterNameRef.current;
     submitAfterNameRef.current = false;
-    setDisplayName(identity.displayName);
     setNameDialog(false);
     if (shouldSubmit) void submit();
   };
@@ -180,7 +186,6 @@ export function DiscussionPanel({
   const [editingPostId, setEditingPostId] = useState<string>();
   const [editBody, setEditBody] = useState('');
   const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string>();
-  const [postMenuId, setPostMenuId] = useState<string>();
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const activeThread = threads.find((thread) => thread.threadId === activeThreadId);
@@ -200,23 +205,6 @@ export function DiscussionPanel({
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus();
   }, [searchOpen]);
-  useEffect(() => {
-    if (postMenuId === undefined) return;
-    const closeMenu = (event: PointerEvent) => {
-      if (!(event.target instanceof Element) || !event.target.closest('.review-post-menu')) {
-        setPostMenuId(undefined);
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPostMenuId(undefined);
-    };
-    document.addEventListener('pointerdown', closeMenu);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('pointerdown', closeMenu);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [postMenuId]);
   const runAction = async (action: () => Promise<void>) => {
     setActionError(undefined);
     try {
@@ -285,65 +273,46 @@ export function DiscussionPanel({
                 <div className="review-post review-chat-message" key={post.postId}>
                   <div className="review-post-heading">
                     <ReviewAvatar post={post} />
-                    <strong>
-                      {post.author.kind === 'visitor' ? post.author.displayName : 'Shelf team'}
-                    </strong>
+                    <strong>{reviewAuthorName(post)}</strong>
                     <ReviewTime value={post.createdAt} />
                     {post.deletedAt === null &&
                     post.hiddenAt === null &&
                     (!moderator || post.author.kind !== 'visitor') &&
                     (post.permissions.canEdit || post.permissions.canDelete) ? (
-                      <div className="review-post-menu">
-                        <button
-                          aria-expanded={postMenuId === post.postId}
-                          aria-haspopup="menu"
-                          aria-label="Comment actions"
-                          className="review-post-menu-trigger"
-                          onClick={() =>
-                            setPostMenuId((current) =>
-                              current === post.postId ? undefined : post.postId,
-                            )
+                      <DropdownMenu>
+                        <DropdownMenu.Trigger
+                          render={
+                            <button
+                              aria-label="Comment actions"
+                              className="review-post-menu-trigger"
+                              title="Comment actions"
+                              type="button"
+                            >
+                              <DotsThreeIcon aria-hidden="true" size={17} weight="bold" />
+                            </button>
                           }
-                          title="Comment actions"
-                          type="button"
-                        >
-                          <DotsThreeIcon aria-hidden="true" size={17} weight="bold" />
-                        </button>
-                        {postMenuId === post.postId ? (
-                          <div
-                            aria-label="Comment actions"
-                            className="review-post-menu-content"
-                            role="menu"
-                          >
-                            {post.permissions.canEdit && onEditPost ? (
-                              <button
-                                onClick={() => {
-                                  setEditingPostId(post.postId);
-                                  setEditBody(post.body);
-                                  setPostMenuId(undefined);
-                                }}
-                                role="menuitem"
-                                type="button"
-                              >
-                                Edit comment
-                              </button>
-                            ) : null}
-                            {post.permissions.canDelete && onDeletePost ? (
-                              <button
-                                className="review-post-menu-danger"
-                                onClick={() => {
-                                  setDeleteConfirmPostId(post.postId);
-                                  setPostMenuId(undefined);
-                                }}
-                                role="menuitem"
-                                type="button"
-                              >
-                                Delete comment
-                              </button>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
+                        />
+                        <DropdownMenu.Content align="end">
+                          {post.permissions.canEdit && onEditPost ? (
+                            <DropdownMenu.Item
+                              onClick={() => {
+                                setEditingPostId(post.postId);
+                                setEditBody(post.body);
+                              }}
+                            >
+                              Edit comment
+                            </DropdownMenu.Item>
+                          ) : null}
+                          {post.permissions.canDelete && onDeletePost ? (
+                            <DropdownMenu.Item
+                              onClick={() => setDeleteConfirmPostId(post.postId)}
+                              variant="danger"
+                            >
+                              Delete comment
+                            </DropdownMenu.Item>
+                          ) : null}
+                        </DropdownMenu.Content>
+                      </DropdownMenu>
                     ) : null}
                   </div>
                   {post.hiddenAt !== null ? (

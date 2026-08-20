@@ -9,7 +9,7 @@ import { ListNumbersIcon } from '@phosphor-icons/react/ListNumbers';
 import { TextAlignLeftIcon } from '@phosphor-icons/react/TextAlignLeft';
 import type { LineAnnotation, SelectedLineRange } from '@pierre/diffs';
 import type { FileContents, FileOptions, FileProps } from '@pierre/diffs/react';
-import type { CommentAnchor, CommentThread } from '@shelf/contracts';
+import type { CommentAnchor, CommentPost, CommentThread } from '@shelf/contracts';
 import {
   type ComponentType,
   lazy,
@@ -21,7 +21,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ReviewAvatar, ReviewBody, ReviewTime, reviewAvatarUrl } from './review/comment-card.js';
+import {
+  ReviewAvatar,
+  ReviewBody,
+  ReviewTime,
+  reviewAuthorName,
+  reviewAvatarUrl,
+} from './review/comment-card.js';
 import { ReviewComposer } from './review/discussion-panel.js';
 
 type SourceLineAnnotationMetadata =
@@ -30,8 +36,8 @@ type SourceLineAnnotationMetadata =
       readonly expanded: boolean;
       readonly kind: 'threads';
       readonly label: string;
-      readonly lineNumber: number;
-      readonly threads: readonly CommentThread[];
+      readonly participantPosts: readonly CommentPost[];
+      readonly posts: readonly CommentPost[];
     }
   | {
       readonly kind: 'composer';
@@ -40,7 +46,7 @@ type SourceLineAnnotationMetadata =
     };
 export type SourceLineAnnotation = LineAnnotation<SourceLineAnnotationMetadata>;
 
-export interface SourceThreadGroup {
+interface SourceThreadGroup {
   readonly lineNumber: number;
   readonly threads: readonly CommentThread[];
 }
@@ -286,11 +292,15 @@ function PierreCode({
     }),
     [lineNumbers, onAddComment, onCopyLine, onLineSelectionChange, settings, wrap],
   );
+  const mutableLineAnnotations = useMemo(
+    () => (lineAnnotations === undefined ? undefined : [...lineAnnotations]),
+    [lineAnnotations],
+  );
 
   const annotationProps =
-    lineAnnotations !== undefined && lineAnnotations.length > 0
+    mutableLineAnnotations !== undefined && mutableLineAnnotations.length > 0
       ? {
-          lineAnnotations: [...lineAnnotations],
+          lineAnnotations: mutableLineAnnotations,
           renderAnnotation: (annotation: SourceLineAnnotation) => {
             const metadata = annotation.metadata;
             if (metadata?.kind === 'composer' && onCreateInlineComment !== undefined) {
@@ -315,21 +325,17 @@ function PierreCode({
               );
             }
             if (metadata?.kind === 'threads') {
-              const posts = metadata.threads.flatMap((thread) => thread.posts);
-              const participants = [
-                ...new Map(posts.map((post) => [post.author.participantId, post])).values(),
-              ];
               return (
                 <div className="pierre-inline-thread">
                   <button
                     aria-expanded={metadata.expanded}
-                    aria-label={`${metadata.expanded ? 'Hide' : 'Show'} ${metadata.label} on line ${metadata.lineNumber}`}
+                    aria-label={`${metadata.expanded ? 'Hide' : 'Show'} ${metadata.label} on line ${annotation.lineNumber}`}
                     className="pierre-inline-thread-trigger"
-                    onClick={() => onAnnotationToggle?.(metadata.lineNumber)}
+                    onClick={() => onAnnotationToggle?.(annotation.lineNumber)}
                     type="button"
                   >
                     <span aria-hidden="true" className="pierre-inline-avatar-stack">
-                      {participants.slice(0, 3).map((post) => (
+                      {metadata.participantPosts.slice(0, 3).map((post) => (
                         <img
                           alt=""
                           key={post.author.participantId}
@@ -343,20 +349,16 @@ function PierreCode({
                   {metadata.expanded ? (
                     <div className="pierre-inline-thread-card">
                       <div className="pierre-inline-thread-heading">
-                        <strong>Line {metadata.lineNumber}</strong>
+                        <strong>Line {annotation.lineNumber}</strong>
                         <span>{metadata.label}</span>
                       </div>
                       <div className="pierre-inline-messages">
-                        {posts.map((post) => (
+                        {metadata.posts.map((post) => (
                           <article className="pierre-inline-message" key={post.postId}>
                             <ReviewAvatar post={post} size={24} />
                             <div className="pierre-inline-message-content">
                               <div className="pierre-inline-message-heading">
-                                <strong>
-                                  {post.author.kind === 'visitor'
-                                    ? post.author.displayName
-                                    : 'Shelf team'}
-                                </strong>
+                                <strong>{reviewAuthorName(post)}</strong>
                                 <ReviewTime value={post.createdAt} />
                               </div>
                               <ReviewBody
@@ -504,15 +506,18 @@ export function SourceView({
       ? [
           ...annotations,
           ...sourceThreadGroups.map(({ lineNumber, threads }) => {
-            const commentCount = threads.reduce((total, thread) => total + thread.posts.length, 0);
+            const posts = threads.flatMap((thread) => thread.posts);
+            const participantPosts = [
+              ...new Map(posts.map((post) => [post.author.participantId, post])).values(),
+            ];
             return {
               lineNumber,
               metadata: {
                 expanded: expandedLineNumber === lineNumber,
                 kind: 'threads' as const,
-                label: `${commentCount} ${commentCount === 1 ? 'comment' : 'comments'}`,
-                lineNumber,
-                threads,
+                label: `${posts.length} ${posts.length === 1 ? 'comment' : 'comments'}`,
+                participantPosts,
+                posts,
               },
             };
           }),

@@ -635,17 +635,13 @@ a {
   min-height: 30px;
   padding-inline: 9px;
 }
-.review-post-menu {
-  position: relative;
-  z-index: 3;
-  margin-left: auto;
-}
 .review-post-menu-trigger {
   display: inline-flex;
   width: 26px;
   height: 26px;
   align-items: center;
   justify-content: center;
+  margin-left: auto;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 5px;
@@ -661,39 +657,6 @@ a {
 }
 .review-post-menu-trigger:active {
   transform: scale(0.96);
-}
-.review-post-menu-content {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  display: grid;
-  width: 148px;
-  padding: 4px;
-  border: 1px solid var(--rule-strong);
-  border-radius: 7px;
-  background: var(--surface);
-  box-shadow: 0 10px 28px rgb(0 0 0 / 30%);
-  transform-origin: top right;
-}
-.review-post-menu-content button {
-  min-height: 30px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-subtle);
-  cursor: pointer;
-  font-size: 12px;
-  text-align: left;
-}
-.review-post-menu-content button:hover,
-.review-post-menu-content button:focus-visible {
-  outline: 0;
-  background: var(--elevated);
-  color: var(--text);
-}
-.review-post-menu-content .review-post-menu-danger {
-  color: var(--danger);
 }
 .review-post-editor {
   margin-top: 10px;
