@@ -414,8 +414,11 @@ export function ArtifactPage() {
     else next.set('revision', revision.revisionId);
     setSearchParams(next, { replace: true });
   };
+  const [focusedLine, setFocusedLine] = useState<number>();
+  const [focusRequestId, setFocusRequestId] = useState(0);
   const selectThread = useCallback(
     (threadId: string) => {
+      setFocusedLine(undefined);
       const next = new URLSearchParams(searchParams);
       if (threadId === '') next.delete('thread');
       else next.set('thread', threadId);
@@ -423,6 +426,23 @@ export function ArtifactPage() {
       setSearchParams(next, { defaultShouldRevalidate: false, replace: true });
     },
     [searchParams, setSearchParams],
+  );
+  const navigateToThread = useCallback(
+    (threadId: string) => {
+      const thread = commentThreads.find((candidate) => candidate.threadId === threadId);
+      const line = thread?.anchor.startLine;
+      if (line === undefined) return;
+      const next = new URLSearchParams(searchParams);
+      next.set('thread', threadId);
+      // Folder discussions live in the sidebar's discussion mode; drop back to
+      // the tree so the anchored file and its source are visible.
+      if (viewedRevision.kind === 'folder') next.delete('discussion');
+      else next.set('discussion', '1');
+      setSearchParams(next, { defaultShouldRevalidate: false, replace: true });
+      setFocusedLine(line);
+      setFocusRequestId((current) => current + 1);
+    },
+    [commentThreads, searchParams, setSearchParams, viewedRevision.kind],
   );
   useEffect(() => {
     const pendingThreadIds = pendingRootDeletionRef.current;
@@ -672,6 +692,9 @@ export function ArtifactPage() {
                 activeThreadId,
                 canCreateThread: false,
                 error: commentError,
+                focusLine: focusedLine,
+                focusRequestId,
+                onNavigateToThread: navigateToThread,
                 loading: false,
                 loadingOlder: loadingOlderComments,
                 nextCursor: commentNextCursor,

@@ -25,6 +25,9 @@ export interface ManagedArtifactReview {
   readonly revisionId: string;
   readonly threads: readonly CommentThread[];
   readonly activeThreadId?: string | undefined;
+  readonly focusLine?: number | undefined;
+  readonly focusRequestId?: number | undefined;
+  readonly onNavigateToThread?: ((threadId: string) => void) | undefined;
   readonly loading?: boolean | undefined;
   readonly loadingOlder?: boolean | undefined;
   readonly nextCursor?: string | null | undefined;
@@ -196,6 +199,9 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
                     canCreateThread: false,
                     revisionId: review.revisionId,
                     threads: review.threads,
+                    activeThreadId: review.activeThreadId,
+                    focusLine: review.focusLine,
+                    focusRequestId: review.focusRequestId,
                     onCreateThread: review.onCreateThread,
                     onDeletePost: review.onDeletePost,
                     onEditPost: review.onEditPost,
@@ -229,6 +235,7 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
             onEditPost={review.onEditPost}
             {...(review.onLoadOlder === undefined ? {} : { onLoadOlder: review.onLoadOlder })}
             onModeratePost={review.onModeratePost}
+            onNavigateToThread={review.onNavigateToThread}
             onReply={review.onReply}
             onSelectThread={review.onSelectThread}
             onSetThreadStatus={review.onSetThreadStatus}
