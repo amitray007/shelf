@@ -1,6 +1,6 @@
 import type { CommentThread, FolderEntry, PublicShareResolution } from '@shelf/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ArtifactContent } from '../src/components/artifact-content.js';
 import {
@@ -26,10 +26,33 @@ import {
   reviewAvatarUrl,
 } from '../src/components/review/comment-card.js';
 import { DiscussionPanel, ReviewEditComposer } from '../src/components/review/discussion-panel.js';
+import { ReviewSidebarToolbar } from '../src/components/review/sidebar-toolbar.js';
 import { applyCommentPostTransition } from '../src/components/review/thread-state.js';
 import { REVIEW_THREAD_FILTERS } from '../src/components/review/types.js';
-import { reviewSurfaceVisible } from '../src/components/review/use-review.js';
+import {
+  reviewPanelStorageKey,
+  reviewSurfaceVisible,
+} from '../src/components/review/use-review.js';
 import { UnavailableView, ViewerRail } from '../src/components/viewer-shell.js';
+import { readViewerSidebarOpen } from '../src/viewer-page.js';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+function reviewTestStorage(): Storage {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key),
+    clear: () => values.clear(),
+    key: (index) => [...values.keys()][index] ?? null,
+    get length() {
+      return values.size;
+    },
+  };
+}
 
 const FILE_RESOLUTION = {
   apiVersion: 'v1',
@@ -142,6 +165,79 @@ describe('viewer content states', () => {
       'Unresolved',
       'Resolved',
     ]);
+  });
+
+  it('resolves public sidebar defaults and explicit state per share revision', () => {
+    const storage = reviewTestStorage();
+    vi.stubGlobal('window', { localStorage: storage });
+    const folderResolution = {
+      ...FOLDER_RESOLUTION,
+      shareId: `shr_${'f'.repeat(22)}`,
+      revision: { ...FOLDER_RESOLUTION.revision, revisionId: `rev_${'g'.repeat(22)}` },
+    };
+    expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(false);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
+
+    storage.setItem(reviewPanelStorageKey(FILE_RESOLUTION), 'malformed');
+    storage.setItem(reviewPanelStorageKey(folderResolution), 'malformed');
+    expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(false);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
+
+    storage.setItem(reviewPanelStorageKey(FILE_RESOLUTION), 'open');
+    storage.setItem(reviewPanelStorageKey(folderResolution), 'closed');
+    expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(true);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(false);
+
+    const otherRevision = {
+      ...FILE_RESOLUTION,
+      shareId: `shr_${'d'.repeat(22)}`,
+      revision: { ...FILE_RESOLUTION.revision, revisionId: `rev_${'e'.repeat(22)}` },
+    };
+    expect(readViewerSidebarOpen(otherRevision)).toBe(false);
+  });
+
+  it('keeps sidebar toolbar controls ordered and owned by its content region', () => {
+    const html = renderToStaticMarkup(
+      <ReviewSidebarToolbar
+        onCollapse={() => undefined}
+        onSearchToggle={() => undefined}
+        searchOpen={false}
+        sidebarControlsId="sidebar-content"
+        sidebarLabel="file discussions sidebar"
+        threadFilter="all"
+        onThreadFilterChange={() => undefined}
+      />,
+    );
+    const labels = [...html.matchAll(/aria-label="([^"]+)"/g)].map((match) => match[1]);
+    expect(labels.slice(-3)).toEqual([
+      'Search discussions',
+      'Collapse file discussions sidebar',
+      'Filter discussions',
+    ]);
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('aria-controls="sidebar-content"');
+  });
+
+  it('keeps collapsed public discussion content hidden behind a reopen rail', () => {
+    const html = renderToStaticMarkup(
+      <DiscussionPanel
+        collapsed
+        collapsible
+        newAnchor={{ revisionId: FILE_RESOLUTION.revision.revisionId, kind: 'file' }}
+        onCollapse={() => undefined}
+        onCreateThread={async () => undefined}
+        onReply={async () => undefined}
+        onSelectThread={() => undefined}
+        onSetThreadStatus={async () => undefined}
+        publicViewer
+        sidebarControlsId="public-file-sidebar"
+        threads={[]}
+      />,
+    );
+    expect(html).toContain('hidden="" id="public-file-sidebar"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-controls="public-file-sidebar"');
+    expect(html).toContain('Open file discussions sidebar');
   });
 
   it('groups multiple source discussions into one annotation per line', () => {

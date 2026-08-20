@@ -15,7 +15,7 @@ import {
 import { ReviewEditComposer } from './edit-composer.js';
 import { readReviewVisitorIdentity } from './identity.js';
 import { VisitorNameDialog } from './identity-dialog.js';
-import { ReviewSidebarToolbar } from './sidebar-toolbar.js';
+import { ReviewSidebarRail, ReviewSidebarToolbar } from './sidebar-toolbar.js';
 import type { ReviewThreadFilter } from './types.js';
 
 export { ReviewEditComposer } from './edit-composer.js';
@@ -55,6 +55,12 @@ export interface DiscussionPanelProps {
   readonly emptyLabel?: string | undefined;
   readonly selectedPath?: string | undefined;
   readonly newAnchor?: CommentAnchor | undefined;
+  readonly collapsible?: boolean | undefined;
+  readonly collapsed?: boolean | undefined;
+  readonly onCollapse?: (() => void) | undefined;
+  readonly publicViewer?: boolean | undefined;
+  readonly sidebarControlsId?: string | undefined;
+  readonly sidebarLabel?: string | undefined;
 }
 
 export function ReviewComposer({
@@ -196,6 +202,12 @@ export function DiscussionPanel({
   onSearchToggle,
   threadFilter: controlledThreadFilter,
   onThreadFilterChange,
+  collapsible = false,
+  collapsed = false,
+  onCollapse,
+  publicViewer = false,
+  sidebarControlsId,
+  sidebarLabel = publicViewer ? 'file discussions sidebar' : 'review sidebar',
 }: DiscussionPanelProps) {
   const [query, setQuery] = useState('');
   const [localThreadFilter, setLocalThreadFilter] = useState<ReviewThreadFilter>('all');
@@ -205,6 +217,8 @@ export function DiscussionPanel({
   const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string>();
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const railButtonRef = useRef<HTMLButtonElement>(null);
+  const previousCollapsedRef = useRef(collapsed);
   const activeThread = threads.find((thread) => thread.threadId === activeThreadId);
   const searchOpen = controlledSearchOpen ?? localSearchOpen;
   const toggleSearch = onSearchToggle ?? (() => setLocalSearchOpen((open) => !open));
@@ -283,6 +297,10 @@ export function DiscussionPanel({
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus();
   }, [searchOpen]);
+  useEffect(() => {
+    if (!previousCollapsedRef.current && collapsed) railButtonRef.current?.focus();
+    previousCollapsedRef.current = collapsed;
+  }, [collapsed]);
   const runAction = async (action: () => Promise<void>) => {
     setActionError(undefined);
     try {
@@ -291,11 +309,19 @@ export function DiscussionPanel({
       setActionError(cause instanceof Error ? cause.message : 'Could not save this review.');
     }
   };
-  return (
-    <aside aria-label="Discussion" className="review-panel review-chat-panel">
+  const panelClassName = `review-panel review-chat-panel${publicViewer ? ' review-panel-public' : ''}${collapsible && collapsed ? ' review-panel-collapsed' : ''}`;
+  const panelContent = (
+    <>
       {showToolbar ? (
         <ReviewSidebarToolbar
           discussionCount={threads.length}
+          {...(onCollapse === undefined
+            ? {}
+            : {
+                onCollapse,
+                ...(sidebarControlsId === undefined ? {} : { sidebarControlsId }),
+                sidebarLabel,
+              })}
           onClose={onClose}
           onSearchToggle={toggleSearch}
           searchOpen={searchOpen}
@@ -571,6 +597,25 @@ export function DiscussionPanel({
           </>
         )}
       </div>
+    </>
+  );
+  return (
+    <aside aria-label="Discussion" className={panelClassName}>
+      {collapsible ? (
+        <div className="review-sidebar-content" hidden={collapsed} id={sidebarControlsId}>
+          {panelContent}
+        </div>
+      ) : (
+        panelContent
+      )}
+      {collapsible && collapsed ? (
+        <ReviewSidebarRail
+          buttonRef={railButtonRef}
+          onOpen={onCollapse ?? (() => undefined)}
+          sidebarLabel={sidebarLabel}
+          {...(sidebarControlsId === undefined ? {} : { sidebarControlsId })}
+        />
+      ) : null}
     </aside>
   );
 }

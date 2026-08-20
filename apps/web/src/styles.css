@@ -118,35 +118,6 @@ a {
   overflow: hidden;
 }
 
-.viewer-review-toggle {
-  display: inline-flex;
-  position: absolute;
-  z-index: 4;
-  top: calc(var(--bar-size) + 10px);
-  right: 14px;
-  width: 38px;
-  min-height: 38px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid var(--rule-strong);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--surface) 94%, var(--canvas));
-  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
-  color: var(--text-subtle);
-  cursor: pointer;
-  font:
-    560 13px / 1 "Geist Variable",
-    ui-sans-serif,
-    system-ui,
-    sans-serif;
-}
-
-.viewer-review-toggle:hover {
-  border-color: var(--accent);
-  color: var(--text);
-}
-
 .review-panel {
   display: flex;
   width: min(348px, 32vw);
@@ -157,6 +128,39 @@ a {
   border-left: 1px solid var(--rule-strong);
   background: var(--canvas);
   color: var(--text);
+}
+
+.review-panel-public {
+  border-right: 1px solid var(--rule-strong);
+  border-left: 0;
+}
+
+.review-panel-public.review-panel-collapsed {
+  width: 44px;
+  min-width: 44px;
+  flex: 0 0 44px;
+}
+
+.review-sidebar-rail {
+  display: flex;
+  width: 44px;
+  min-width: 44px;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6px;
+}
+
+.review-sidebar-rail-button {
+  flex: 0 0 32px;
+}
+
+.review-sidebar-content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 .review-sidebar-toolbar {
@@ -1111,6 +1115,26 @@ a {
   display: none;
 }
 
+.folder-browser-sidebar-content {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.folder-browser-sidebar-content > .review-panel {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  border: 0;
+}
+
+.folder-browser-sidebar-content-collapsed {
+  align-items: center;
+}
+
 .rail {
   z-index: 2;
   display: flex;
@@ -1899,6 +1923,10 @@ a {
   background: var(--canvas);
 }
 
+.folder-browser-sidebar-collapsed {
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+
 .folder-browser-tree {
   position: relative;
   display: flex;
@@ -2221,15 +2249,16 @@ a {
     border-left: 0;
   }
 
-  .viewer-review-toggle {
-    top: auto;
-    right: 12px;
-    bottom: 12px;
-  }
-
   .review-panel {
     width: 100%;
     min-width: 0;
+  }
+
+  .viewer-main > .review-panel-public.review-panel-collapsed {
+    position: static;
+    width: 44px;
+    min-width: 44px;
+    flex: 0 0 44px;
   }
 
   .folder-browser-tree {
@@ -2239,6 +2268,18 @@ a {
   }
 
   .folder-browser-tree:has(> .review-panel) {
+    position: fixed;
+    inset: var(--bar-size) 0 0;
+    z-index: 8;
+    background: var(--canvas);
+  }
+
+  .folder-browser-sidebar-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: 44px minmax(0, 1fr);
+  }
+
+  .folder-browser-tree:has(> .folder-browser-sidebar-content:not([hidden]) > .review-panel) {
     position: fixed;
     inset: var(--bar-size) 0 0;
     z-index: 8;

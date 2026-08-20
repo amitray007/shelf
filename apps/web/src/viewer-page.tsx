@@ -1,4 +1,3 @@
-import { ChatCircleDotsIcon } from '@phosphor-icons/react/ChatCircleDots';
 import type { CommentAnchor } from '@shelf/contracts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { LoaderFunctionArgs } from 'react-router';
@@ -40,6 +39,7 @@ import {
 } from './rendering.js';
 import {
   type FileShareResolution,
+  type FolderShareResolution,
   isFileShareResolution,
   isFolderShareResolution,
 } from './share-types.js';
@@ -54,6 +54,15 @@ export function updateViewerThreadUrl(currentUrl: string, threadId: string): str
   if (threadId === '') url.searchParams.delete('thread');
   else url.searchParams.set('thread', threadId);
   return `${url.pathname}${url.search}${url.hash}`;
+}
+
+export function readViewerSidebarOpen(
+  resolution: FileShareResolution | FolderShareResolution,
+): boolean {
+  const persisted = readReviewValue(reviewPanelStorageKey(resolution));
+  if (persisted === 'open') return true;
+  if (persisted === 'closed') return false;
+  return isFolderShareResolution(resolution);
 }
 
 function prepareFile(
@@ -239,7 +248,7 @@ export function ViewerPage() {
     handleRevisionMismatch,
   );
   const [discussionOpen, setDiscussionOpen] = useState(() => {
-    return readReviewValue(reviewPanelStorageKey(payload.resolution)) === 'open';
+    return readViewerSidebarOpen(payload.resolution);
   });
   const [folderMode, setFolderMode] = useState<ReviewSidebarMode>(() => {
     return readReviewValue(`${reviewPanelStorageKey(payload.resolution)}:mode`) === 'discussion'
@@ -253,8 +262,8 @@ export function ViewerPage() {
     const threadId = new URLSearchParams(window.location.search).get('thread');
     if (threadId !== null && review.enabled) {
       review.selectThread(threadId);
-      if (payload.kind === 'file') setDiscussionOpen(true);
-      else setFolderMode('discussion');
+      setDiscussionOpen(true);
+      if (payload.kind === 'folder') setFolderMode('discussion');
     }
   }, [payload.kind, review.enabled, review.selectThread]);
 
@@ -301,23 +310,39 @@ export function ViewerPage() {
   }, [payload.resolution.artifact.name]);
 
   return (
-    <div
-      className={`viewer${review.enabled && discussionOpen && payload.kind === 'file' ? ' viewer-discussion-open' : ''}`}
-    >
+    <div className="viewer">
       <ViewerRail authority={payload.authority} resolution={payload.resolution} />
-      {review.enabled && payload.kind === 'file' ? (
-        <button
-          aria-expanded={discussionOpen}
-          aria-label={discussionOpen ? 'Hide discussion' : 'Show discussion'}
-          className="viewer-review-toggle"
-          onClick={() => setDiscussionVisibility(!discussionOpen)}
-          title={discussionOpen ? 'Hide discussion' : 'Show discussion'}
-          type="button"
-        >
-          <ChatCircleDotsIcon aria-hidden="true" size={18} weight="regular" />
-        </button>
-      ) : null}
       <div className="viewer-main">
+        {review.enabled && payload.kind === 'file' ? (
+          <DiscussionPanel
+            activeThreadId={review.activeThreadId}
+            collapsed={!discussionOpen}
+            collapsible
+            error={review.error}
+            loading={review.loading}
+            loadingOlder={review.loadingOlder}
+            nextCursor={review.nextCursor}
+            newAnchor={
+              review.writable
+                ? { revisionId: payload.resolution.revision.revisionId, kind: 'file' }
+                : undefined
+            }
+            onCollapse={() => setDiscussionVisibility(!discussionOpen)}
+            onLoadOlder={review.loadOlder}
+            onCreateThread={review.createThread}
+            onDeletePost={review.deletePost}
+            onEditPost={review.editPost}
+            onReply={review.reply}
+            onSelectThread={selectReviewThread}
+            onNavigateToThread={navigateToReviewThread}
+            onSetThreadStatus={review.setThreadStatus}
+            publicViewer
+            saving={review.saving}
+            sidebarLabel="file discussions sidebar"
+            sidebarControlsId="viewer-discussion-sidebar"
+            threads={review.threads}
+          />
+        ) : null}
         {payload.kind === 'file' ? (
           <FileArtifact
             payload={payload}
@@ -355,6 +380,9 @@ export function ViewerPage() {
                     saving: review.saving,
                     error: review.error,
                     mode: folderMode,
+                    sidebarOpen: discussionOpen,
+                    onSidebarToggle: () => setDiscussionVisibility(!discussionOpen),
+                    sidebarControlsId: 'viewer-folder-sidebar',
                     onModeChange: setMode,
                     onSelectFile: clearReviewNavigation,
                     onSelectThread: selectReviewThread,
@@ -369,31 +397,6 @@ export function ViewerPage() {
             }
           />
         )}
-        {review.enabled && payload.kind === 'file' && discussionOpen ? (
-          <DiscussionPanel
-            activeThreadId={review.activeThreadId}
-            error={review.error}
-            loading={review.loading}
-            loadingOlder={review.loadingOlder}
-            nextCursor={review.nextCursor}
-            newAnchor={
-              review.writable
-                ? { revisionId: payload.resolution.revision.revisionId, kind: 'file' }
-                : undefined
-            }
-            onClose={() => setDiscussionVisibility(false)}
-            onLoadOlder={review.loadOlder}
-            onCreateThread={review.createThread}
-            onDeletePost={review.deletePost}
-            onEditPost={review.editPost}
-            onReply={review.reply}
-            onSelectThread={selectReviewThread}
-            onNavigateToThread={navigateToReviewThread}
-            onSetThreadStatus={review.setThreadStatus}
-            saving={review.saving}
-            threads={review.threads}
-          />
-        ) : null}
       </div>
     </div>
   );
