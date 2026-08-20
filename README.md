@@ -166,3 +166,11 @@ Not yet built, intentionally: Compose-volume orchestration, R2 backup and recove
 - [Persistence and content-storage operation](docs/operations/persistence.md)
 - [Authentication and authorization operation](docs/operations/authentication.md)
 - [Single-host self-hosting](docs/operations/self-hosting.md)
+
+## Contributing
+
+Contributions are welcome. Read the [contributing guide](CONTRIBUTING.md) before you open a pull request. This project follows a [code of conduct](CODE_OF_CONDUCT.md). To report a security problem, follow the [security policy](SECURITY.md).
+
+## License
+
+Shelf is released under the [MIT License](LICENSE).
