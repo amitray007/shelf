@@ -426,8 +426,7 @@ export function DiscussionPanel({
                   onClick={() => onSelectThread(thread.threadId)}
                   type="button"
                 >
-                  <ReviewThreadCard thread={thread} />
-                  <span className="review-thread-location">{threadLabel(thread)}</span>
+                  <ReviewThreadCard location={threadLabel(thread)} thread={thread} />
                 </button>
               ))
             )}

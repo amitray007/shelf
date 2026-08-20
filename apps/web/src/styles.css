@@ -148,8 +148,8 @@ a {
 
 .review-panel {
   display: flex;
-  width: min(360px, 32vw);
-  min-width: 320px;
+  width: min(348px, 32vw);
+  min-width: 292px;
   min-height: 0;
   flex: 0 0 min(360px, 32vw);
   flex-direction: column;
@@ -160,11 +160,11 @@ a {
 
 .review-sidebar-toolbar {
   display: flex;
-  min-height: 56px;
-  flex: 0 0 56px;
+  min-height: 48px;
+  flex: 0 0 48px;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 7px 10px;
   border-bottom: 1px solid var(--rule);
   background: var(--surface);
 }
@@ -262,11 +262,11 @@ a {
   display: inline-flex;
   max-width: calc(100% - 24px);
   width: calc(100% - 24px);
-  min-height: 42px;
+  min-height: 36px;
   align-items: center;
   gap: 8px;
-  margin: 12px 12px 4px;
-  padding: 5px 10px 5px 5px;
+  margin: 8px 10px 3px;
+  padding: 4px 8px 4px 4px;
   border: 1px solid var(--rule);
   border-radius: 9px;
   background: var(--surface);
@@ -323,8 +323,8 @@ a {
 }
 .review-search {
   width: calc(100% - 24px);
-  min-height: 38px;
-  margin: 8px 12px 2px;
+  min-height: 34px;
+  margin: 6px 10px 2px;
   padding: 0 12px;
   border: 1px solid var(--rule-strong);
   border-radius: 8px;
@@ -349,11 +349,11 @@ a {
   min-height: 0;
   flex: 1;
   overflow: auto;
-  padding: 14px 12px 32px;
+  padding: 10px 10px 24px;
 }
 .review-status {
-  margin: 10px 12px 0;
-  padding: 9px 10px;
+  margin: 8px 10px 0;
+  padding: 8px 9px;
   border: 1px solid var(--rule);
   border-radius: 7px;
   background: var(--surface);
@@ -362,7 +362,7 @@ a {
   color: #ff9b9f;
 }
 .review-empty {
-  margin: 28px 10px;
+  margin: 22px 8px;
   color: var(--text-muted);
   font-size: 13px;
   text-align: center;
@@ -378,8 +378,8 @@ a {
   text-align: left;
 }
 .review-thread-card {
-  margin: 6px 0;
-  padding: 13px 14px 12px;
+  margin: 5px 0;
+  padding: 11px 12px 10px;
   border: 1px solid var(--rule);
   border-radius: 9px;
   background: var(--surface);
@@ -432,7 +432,7 @@ a {
     monospace;
 }
 .review-body {
-  margin: 9px 0 0;
+  margin: 7px 0 0;
   color: var(--text-subtle);
   font-size: 13px;
   line-height: 1.5;
@@ -456,7 +456,7 @@ a {
 }
 .review-thread-location {
   display: block;
-  margin: 7px 2px 2px;
+  margin: 8px 0 0;
   color: var(--text-muted);
   font:
     11px "Geist Mono Variable",
@@ -466,8 +466,12 @@ a {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.review-thread-card .review-thread-location {
+  padding-top: 7px;
+  border-top: 1px solid color-mix(in srgb, var(--rule) 70%, transparent);
+}
 .review-thread-detail {
-  padding: 0 2px 20px;
+  padding: 0 1px 14px;
 }
 .review-back-button {
   justify-content: flex-start;
@@ -479,7 +483,7 @@ a {
   font-size: 12px;
 }
 .review-post {
-  padding: 14px 0 16px;
+  padding: 11px 0 13px;
   border-bottom: 1px solid var(--rule);
 }
 .review-post-heading {
@@ -500,9 +504,9 @@ a {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-top: 14px;
-  padding-top: 12px;
+  gap: 7px;
+  margin-top: 11px;
+  padding-top: 10px;
   border-top: 1px solid var(--rule);
 }
 .review-button {
@@ -601,8 +605,8 @@ a {
 .review-composer {
   display: grid;
   gap: 7px;
-  margin-top: 14px;
-  padding: 11px;
+  margin-top: 10px;
+  padding: 9px;
   border: 1px solid var(--rule-strong);
   border-radius: 9px;
   background: var(--surface);

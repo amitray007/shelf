@@ -89,9 +89,11 @@ export function ReviewBody({ body }: { readonly body: string }) {
 
 export function ReviewThreadCard({
   compact = false,
+  location,
   thread,
 }: {
   readonly compact?: boolean;
+  readonly location?: string | undefined;
   readonly thread: CommentThread;
 }) {
   const first = thread.posts[0];
@@ -116,6 +118,7 @@ export function ReviewThreadCard({
       {!compact && thread.posts.length > 1 ? (
         <span className="review-thread-replies">{thread.posts.length - 1} replies</span>
       ) : null}
+      {location !== undefined ? <span className="review-thread-location">{location}</span> : null}
     </article>
   );
 }
