@@ -3,13 +3,14 @@ import { Button } from '@cloudflare/kumo/components/button';
 import { Input } from '@cloudflare/kumo/components/input';
 import { Radio } from '@cloudflare/kumo/components/radio';
 import { Select } from '@cloudflare/kumo/components/select';
+import { CaretRightIcon } from '@phosphor-icons/react/CaretRight';
 import {
   type ArtifactRevision,
   type CommentPolicy,
   PROTECTED_SHARE_EXPIRY_OPTIONS,
   PUBLIC_SHARE_EXPIRY_OPTIONS,
 } from '@shelf/contracts';
-import { type FormEvent, useRef, useState } from 'react';
+import { type FormEvent, useId, useRef, useState } from 'react';
 import { useRevalidator } from 'react-router';
 
 import { ordinal, revisionSourceName } from '../components/revision-label.js';
@@ -49,6 +50,30 @@ export const PRIVATE_COMMENT_POLICY_DESCRIPTION =
 export const SHARED_COMMENT_POLICY_DESCRIPTION =
   'Everyone using this link can see shared discussions.';
 
+const commentPolicySummaries: Record<CommentPolicy, string> = {
+  off: 'Comments off',
+  private: 'Private comments',
+  shared: 'Shared comments',
+};
+
+function expirySummary(choice: ShareExpiryChoice): string {
+  if (choice === 'never') return 'Never expires';
+  if (choice === 'custom') return 'Custom expiry';
+  return `Expires in ${expiryLabels[choice].toLocaleLowerCase()}`;
+}
+
+function targetSummary(
+  mode: 'latest' | 'pinned',
+  revisions: readonly ArtifactRevision[],
+  revisionId: string,
+): string {
+  if (mode === 'latest') return 'Latest revision';
+  const revision = revisions.find((candidate) => candidate.revisionId === revisionId);
+  return revision === undefined
+    ? 'Pinned revision'
+    : `Pinned: ${ordinal(revision.revisionNumber)} revision`;
+}
+
 export function ShareDialog({
   workspaceId,
   artifactId,
@@ -70,10 +95,13 @@ export function ShareDialog({
   const [customExpiresAt, setCustomExpiresAt] = useState('');
   const [maxSessions, setMaxSessions] = useState('');
   const [commentPolicy, setCommentPolicy] = useState<CommentPolicy>('off');
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string>();
+  const [createdSummary, setCreatedSummary] = useState<string>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const optionsId = useId();
   const idempotencyRef = useRef<{ intent: string; key: string } | undefined>(undefined);
   const close = (next: boolean) => {
     if (!next && busyRef.current) return;
@@ -86,20 +114,22 @@ export function ShareDialog({
       setCustomExpiresAt(defaults.customExpiresAt);
       setMaxSessions(defaults.maxSessions);
       setCommentPolicy('off');
+      setOptionsOpen(false);
       setShareUrl(undefined);
+      setCreatedSummary(undefined);
       setError(undefined);
       idempotencyRef.current = undefined;
     }
     onOpenChange(next);
   };
   const changeAccessType = (next: 'protected' | 'public') => {
-    const defaults = defaultSharePolicy();
     setAccessType(next);
-    setExpiryChoice(defaults.expiryChoice);
-    setCustomExpiresAt(defaults.customExpiresAt);
-    setMaxSessions(defaults.maxSessions);
     setError(undefined);
     idempotencyRef.current = undefined;
+  };
+  const failCreate = (message: string) => {
+    setError(message);
+    setOptionsOpen(true);
   };
   const expiry = resolveShareExpiry(accessType, expiryChoice, customExpiresAt);
   const create = async (event: FormEvent) => {
@@ -115,7 +145,7 @@ export function ShareDialog({
       commentPolicy,
     });
     if ('error' in built) {
-      setError(built.error);
+      failCreate(built.error);
       return;
     }
     const { input } = built;
@@ -135,9 +165,20 @@ export function ShareDialog({
       );
       idempotencyRef.current = undefined;
       setShareUrl(new URL(result.url, window.location.origin).href);
+      setCreatedSummary(
+        [
+          accessType === 'protected' ? 'Protected' : 'Public',
+          mode === 'latest'
+            ? 'latest revision'
+            : targetSummary(mode, revisions, revisionId).toLocaleLowerCase().replace(':', ' to'),
+          'previewAt' in expiry
+            ? `expires ${expiryFormatter.format(new Date(expiry.previewAt))}`
+            : 'never expires',
+        ].join(' · '),
+      );
       void revalidator.revalidate();
     } catch (caught) {
-      setError(caught instanceof DashboardApiError ? caught.message : 'Share creation failed.');
+      failCreate(caught instanceof DashboardApiError ? caught.message : 'Share creation failed.');
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -145,151 +186,175 @@ export function ShareDialog({
   };
   const options: readonly ShareExpiryChoice[] =
     accessType === 'protected' ? PROTECTED_SHARE_EXPIRY_OPTIONS : PUBLIC_SHARE_EXPIRY_OPTIONS;
+  const optionsSummary = [
+    targetSummary(mode, revisions, revisionId),
+    expirySummary(expiryChoice),
+    commentPolicySummaries[commentPolicy],
+    ...(accessType === 'protected' && maxSessions !== '' ? [`${maxSessions} sessions`] : []),
+  ].join(' · ');
   return (
     <Modal
       canClose={!busy}
       description={
-        accessType === 'protected'
-          ? 'Protected links require their private capability before a viewer session can begin.'
-          : 'Public links are unlisted and accessible to anyone with the URL.'
+        shareUrl === undefined
+          ? 'Share this artifact with people outside the workspace.'
+          : 'Anyone you send this to can use it until it expires or is revoked.'
       }
       onOpenChange={close}
       open={open}
-      title="Create share link"
+      title={shareUrl === undefined ? 'Create share link' : 'Share link created'}
     >
       {shareUrl === undefined ? (
-        <form className="dialog-form" onSubmit={create}>
+        <form className="dialog-form share-create-form" onSubmit={create}>
           <Radio.Group
-            className="choice-group"
+            appearance="card"
+            className="share-access-group"
             legend="Access type"
             name="share-access-type"
             onValueChange={(value) => changeAccessType(value === 'public' ? 'public' : 'protected')}
+            orientation="horizontal"
             value={accessType}
           >
             <Radio.Item
-              label={
-                <span>
-                  <strong>Protected</strong>
-                  <small>Private capability with optional expiry and viewer-session limit.</small>
-                </span>
-              }
+              description="Private capability with optional expiry and viewer-session limit."
+              label="Protected"
               value="protected"
             />
             <Radio.Item
-              label={
-                <span>
-                  <strong>Public</strong>
-                  <small>Short unlisted URL with optional expiry.</small>
-                </span>
-              }
+              description="Short unlisted URL with optional expiry."
+              label="Public"
               value="public"
             />
           </Radio.Group>
 
-          <Radio.Group
-            className="choice-group compact-choice-group"
-            legend="Target"
-            name="share-mode"
-            onValueChange={(value) => setMode(value === 'pinned' ? 'pinned' : 'latest')}
-            value={mode}
-          >
-            <Radio.Item label="Latest revision" value="latest" />
-            <Radio.Item label="Pinned revision" value="pinned" />
-          </Radio.Group>
-          {mode === 'pinned' ? (
-            <Select<string>
-              label="Revision"
-              onValueChange={(value) => setRevisionId(value ?? '')}
-              renderValue={(value) => {
-                const revision = revisions.find((candidate) => candidate.revisionId === value);
-                return revision === undefined
-                  ? null
-                  : `${ordinal(revision.revisionNumber)} — ${revisionSourceName(revision)}`;
-              }}
-              value={revisionId}
+          <div className="share-options">
+            <button
+              aria-controls={optionsId}
+              aria-expanded={optionsOpen}
+              className="share-options-trigger"
+              onClick={() => setOptionsOpen((current) => !current)}
+              type="button"
             >
-              {revisions.map((revision) => (
-                <Select.Option key={revision.revisionId} value={revision.revisionId}>
-                  {ordinal(revision.revisionNumber)} — {revisionSourceName(revision)}
-                </Select.Option>
-              ))}
-            </Select>
-          ) : null}
+              <CaretRightIcon aria-hidden="true" className="share-options-caret" weight="bold" />
+              <span className="share-options-label">Options</span>
+              <span className="share-options-summary">{optionsSummary}</span>
+            </button>
+            {optionsOpen ? (
+              <div className="share-options-grid" id={optionsId}>
+                <div className="share-option-cell">
+                  <Select<'latest' | 'pinned'>
+                    className="share-option-select"
+                    label="Target"
+                    onValueChange={(value) => setMode(value === 'pinned' ? 'pinned' : 'latest')}
+                    renderValue={(value) =>
+                      value === 'pinned' ? 'Pinned revision' : 'Latest revision'
+                    }
+                    value={mode}
+                  >
+                    <Select.Option value="latest">Latest revision</Select.Option>
+                    <Select.Option value="pinned">Pinned revision</Select.Option>
+                  </Select>
+                  {mode === 'pinned' ? (
+                    <Select<string>
+                      className="share-option-select"
+                      label="Revision"
+                      onValueChange={(value) => setRevisionId(value ?? '')}
+                      renderValue={(value) => {
+                        const revision = revisions.find(
+                          (candidate) => candidate.revisionId === value,
+                        );
+                        return revision === undefined
+                          ? null
+                          : `${ordinal(revision.revisionNumber)} — ${revisionSourceName(revision)}`;
+                      }}
+                      value={revisionId}
+                    >
+                      {revisions.map((revision) => (
+                        <Select.Option key={revision.revisionId} value={revision.revisionId}>
+                          {ordinal(revision.revisionNumber)} — {revisionSourceName(revision)}
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  ) : null}
+                </div>
 
-          <Radio.Group
-            className="choice-group compact-choice-group"
-            legend="Comments"
-            name="share-comments-policy"
-            onValueChange={(value) =>
-              setCommentPolicy(value === 'private' || value === 'shared' ? value : 'off')
-            }
-            value={commentPolicy}
-          >
-            <Radio.Item label="Off" value="off" />
-            <Radio.Item
-              label={
-                <span>
-                  <strong>Private</strong>
-                  <small>{PRIVATE_COMMENT_POLICY_DESCRIPTION}</small>
-                </span>
-              }
-              value="private"
-            />
-            <Radio.Item
-              label={
-                <span>
-                  <strong>Shared</strong>
-                  <small>{SHARED_COMMENT_POLICY_DESCRIPTION}</small>
-                </span>
-              }
-              value="shared"
-            />
-          </Radio.Group>
+                <div className="share-option-cell">
+                  <Select<CommentPolicy>
+                    className="share-option-select"
+                    label="Comments"
+                    onValueChange={(value) =>
+                      setCommentPolicy(value === 'private' || value === 'shared' ? value : 'off')
+                    }
+                    renderValue={(value) =>
+                      value === 'private' ? 'Private' : value === 'shared' ? 'Shared' : 'Off'
+                    }
+                    value={commentPolicy}
+                  >
+                    <Select.Option value="off">Off</Select.Option>
+                    <Select.Option value="private">Private</Select.Option>
+                    <Select.Option value="shared">Shared</Select.Option>
+                  </Select>
+                  {commentPolicy === 'off' ? null : (
+                    <p className="share-policy-help">
+                      {commentPolicy === 'private'
+                        ? PRIVATE_COMMENT_POLICY_DESCRIPTION
+                        : SHARED_COMMENT_POLICY_DESCRIPTION}
+                    </p>
+                  )}
+                </div>
 
-          <Select<ShareExpiryChoice>
-            label="Expiry"
-            onValueChange={(value) => {
-              setExpiryChoice(value ?? 'never');
-              setError(undefined);
-            }}
-            renderValue={(value) => (value === null ? null : expiryLabels[value])}
-            value={expiryChoice}
-          >
-            {options.map((option) => (
-              <Select.Option key={option} value={option}>
-                {expiryLabels[option]}
-              </Select.Option>
-            ))}
-          </Select>
-          {expiryChoice === 'custom' ? (
-            <Input
-              label={`Custom expiry (${Intl.DateTimeFormat().resolvedOptions().timeZone})`}
-              onChange={(event) => setCustomExpiresAt(event.currentTarget.value)}
-              required
-              type="datetime-local"
-              value={customExpiresAt}
-            />
-          ) : null}
-          {'previewAt' in expiry ? (
-            <p className="expiry-preview">
-              Expires{' '}
-              <time dateTime={expiry.previewAt}>
-                {expiryFormatter.format(new Date(expiry.previewAt))}
-              </time>
-            </p>
-          ) : null}
+                <div className="share-option-cell">
+                  <Select<ShareExpiryChoice>
+                    className="share-option-select"
+                    label="Expiry"
+                    onValueChange={(value) => {
+                      setExpiryChoice(value ?? 'never');
+                      setError(undefined);
+                    }}
+                    renderValue={(value) => (value === null ? null : expiryLabels[value])}
+                    value={expiryChoice}
+                  >
+                    {options.map((option) => (
+                      <Select.Option key={option} value={option}>
+                        {expiryLabels[option]}
+                      </Select.Option>
+                    ))}
+                  </Select>
+                  {expiryChoice === 'custom' ? (
+                    <Input
+                      label={`Custom expiry (${Intl.DateTimeFormat().resolvedOptions().timeZone})`}
+                      onChange={(event) => setCustomExpiresAt(event.currentTarget.value)}
+                      required
+                      type="datetime-local"
+                      value={customExpiresAt}
+                    />
+                  ) : null}
+                  {'previewAt' in expiry ? (
+                    <p className="expiry-preview">
+                      Expires{' '}
+                      <time dateTime={expiry.previewAt}>
+                        {expiryFormatter.format(new Date(expiry.previewAt))}
+                      </time>
+                    </p>
+                  ) : null}
+                </div>
 
-          {accessType === 'protected' ? (
-            <Input
-              label="Viewer sessions (optional)"
-              max={1_000_000}
-              min={1}
-              onChange={(event) => setMaxSessions(event.currentTarget.value)}
-              placeholder="Unlimited"
-              type="number"
-              value={maxSessions}
-            />
-          ) : null}
+                {accessType === 'protected' ? (
+                  <div className="share-option-cell">
+                    <Input
+                      label="Session limit"
+                      max={1_000_000}
+                      min={1}
+                      onChange={(event) => setMaxSessions(event.currentTarget.value)}
+                      placeholder="Unlimited"
+                      type="number"
+                      value={maxSessions}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
           {error === undefined ? null : (
             <Banner
@@ -305,12 +370,19 @@ export function ShareDialog({
               Cancel
             </Button>
             <Button disabled={busy} loading={busy} type="submit" variant="primary">
-              {busy ? 'Creating…' : 'Create link'}
+              {busy
+                ? 'Creating…'
+                : accessType === 'protected'
+                  ? 'Create protected link'
+                  : 'Create public link'}
             </Button>
           </div>
         </form>
       ) : (
         <div className="dialog-form">
+          {createdSummary === undefined ? null : (
+            <p className="share-created-summary">{createdSummary}</p>
+          )}
           <SecretReveal
             hint="You can copy this link again later from the artifact's Links tab."
             label={accessType === 'protected' ? 'Protected share URL' : 'Public share URL'}

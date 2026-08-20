@@ -124,22 +124,21 @@ export function ArtifactShareDialog({
   }
 
   const shareCard = (share: ShareManagementSummary) => {
-    const target =
-      share.target.mode === 'pinned'
-        ? `${ordinal(share.target.revisionNumber)} Revision`
-        : 'Always the latest revision';
+    const revisionLabel =
+      share.target.mode === 'pinned' ? ordinal(share.target.revisionNumber) : 'Latest';
     return (
       <section className="latest-share-summary" aria-label={`${share.accessType} default link`}>
         <div className="latest-share-heading">
-          <div>
-            <span>{share.accessType === 'protected' ? 'Protected link' : 'Public link'}</span>
-            <strong>{target}</strong>
-          </div>
+          <strong>{share.accessType === 'protected' ? 'Protected link' : 'Public link'}</strong>
           <time dateTime={share.createdAt}>
             {dateTimeFormatter.format(new Date(share.createdAt))}
           </time>
         </div>
         <dl className="share-dialog-metadata">
+          <div>
+            <dt>Revision</dt>
+            <dd>{revisionLabel}</dd>
+          </div>
           <div>
             <dt>Expires</dt>
             <dd>Never</dd>

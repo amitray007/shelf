@@ -51,7 +51,6 @@
 }
 
 .dialog-description {
-  max-width: 420px;
   margin: 6px 0 0;
   color: var(--text-subtle);
   font-size: var(--font-meta);
@@ -62,6 +61,10 @@
   display: grid;
   gap: 18px;
   padding: 20px;
+}
+
+.share-create-form {
+  gap: 20px;
 }
 
 .dialog-actions {
@@ -125,6 +128,81 @@
   align-items: center;
 }
 
+fieldset.share-access-group {
+  gap: 10px;
+}
+
+.share-options {
+  display: grid;
+  gap: 16px;
+}
+
+.share-options-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 2px;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.share-options-trigger:hover {
+  background: color-mix(in oklch, var(--text) 5%, transparent);
+}
+
+.share-options-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.share-options-caret {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.share-options-trigger[aria-expanded="true"] .share-options-caret {
+  rotate: 90deg;
+}
+
+.share-options-label {
+  flex: 0 0 auto;
+  color: var(--text-subtle);
+  font-size: var(--font-meta);
+}
+
+.share-options-summary {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.share-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 10px 16px;
+}
+
+.share-option-cell {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.share-option-cell button.share-option-select {
+  width: 100%;
+}
+
 .expiry-preview {
   margin: -8px 0 0;
   color: var(--text-muted);
@@ -133,6 +211,12 @@
 
 .expiry-preview time {
   color: var(--text-subtle);
+}
+
+.share-created-summary {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
 }
 
 .confirmation-block {
@@ -234,7 +318,22 @@
   font-size: var(--font-meta);
 }
 
+.share-policy-help {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.share-option-cell > .share-policy-help {
+  margin-top: -5px;
+}
+
 @media (max-width: 760px) {
+  .share-options-grid {
+    grid-template-columns: 1fr;
+  }
+
   .artifact-default-shares {
     grid-template-columns: 1fr;
   }
@@ -248,7 +347,11 @@
 }
 
 @media (max-width: 430px) {
-  .share-policy-choice-group {
+  .share-access-group > div {
+    grid-template-columns: 1fr;
+  }
+
+  .artifact-share-overview .share-policy-choice-group {
     grid-template-columns: 1fr;
   }
 
@@ -264,12 +367,6 @@
   gap: 16px;
 }
 
-.latest-share-heading > div {
-  display: grid;
-  gap: 3px;
-}
-
-.latest-share-heading span,
 .latest-share-heading time {
   color: var(--text-muted);
   font-size: var(--font-machine);
@@ -278,7 +375,7 @@
 .latest-share-heading strong {
   color: var(--text);
   font-size: var(--font-body);
-  font-weight: 580;
+  font-weight: 620;
 }
 
 .latest-share-heading time {

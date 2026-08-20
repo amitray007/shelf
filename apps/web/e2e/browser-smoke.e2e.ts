@@ -270,7 +270,9 @@ test('artifact detail keeps revision and share controls compact and explicit', a
   await expect(shareOverview).toContainText('Protected link');
   await shareOverview.getByRole('button', { name: 'Create new link' }).click();
   const shareDialog = page.getByRole('dialog', { name: 'Create share link' });
-  await shareDialog.getByRole('radio', { name: /Pinned/u }).click();
+  await shareDialog.getByRole('button', { name: /Options/u }).click();
+  await shareDialog.getByRole('button', { name: 'Target' }).click();
+  await page.getByRole('option', { name: 'Pinned revision' }).click();
   await expect(shareDialog).toContainText(`12th — ${longArtifactName}`);
   await shareDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.locator('.shelf-dialog')).toHaveCount(0);
@@ -368,9 +370,11 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await expect(shareOverviewDialog.getByRole('button', { name: 'Copy share url' })).toBeVisible();
   await shareOverviewDialog.getByRole('button', { name: 'Create new link' }).click();
   const indexShareDialog = page.getByRole('dialog', { name: 'Create share link' });
-  await expect(indexShareDialog.getByRole('radio', { name: 'Latest revision' })).toBeChecked();
-  await expect(indexShareDialog.getByRole('button', { name: 'Expiry' })).toContainText('Never');
-  await indexShareDialog.getByRole('button', { name: 'Create link' }).click();
+  await expect(indexShareDialog.getByRole('radio', { name: /Protected/u })).toBeChecked();
+  await expect(indexShareDialog.getByRole('button', { name: /Options/u })).toContainText(
+    'Latest revision · Never expires · Comments off',
+  );
+  await indexShareDialog.getByRole('button', { name: 'Create protected link' }).click();
   await expect(indexShareDialog).toContainText(`/s/${createdShareId}#${shareSecret}`);
   await expect(indexShareDialog.getByRole('button', { name: 'Copy share url' })).toBeVisible();
   await indexShareDialog.getByRole('button', { name: 'Done' }).click();
@@ -430,8 +434,10 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
     .getByRole('button', { name: 'Create new link' })
     .click();
   const shareDialog = page.getByRole('dialog', { name: 'Create share link' });
-  await shareDialog.getByRole('radio', { name: /Pinned/u }).click();
-  await shareDialog.getByRole('button', { name: 'Create link' }).click();
+  await shareDialog.getByRole('button', { name: /Options/u }).click();
+  await shareDialog.getByRole('button', { name: 'Target' }).click();
+  await page.getByRole('option', { name: 'Pinned revision' }).click();
+  await shareDialog.getByRole('button', { name: 'Create protected link' }).click();
   await expect(shareDialog).toContainText(`/s/${createdShareId}#${shareSecret}`);
   await shareDialog.getByRole('button', { name: 'Done' }).click();
   await expect(page.locator('.shelf-dialog')).toHaveCount(0);
