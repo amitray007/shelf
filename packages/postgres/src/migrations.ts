@@ -13,6 +13,7 @@ import { shareAccessPoliciesMigration } from './migrations/0009_share_access_pol
 import { permanentPublicSharesMigration } from './migrations/0010_permanent_public_shares.js';
 import { artifactDefaultSharesMigration } from './migrations/0011_artifact_default_shares.js';
 import { commentsMigration } from './migrations/0012_comments.js';
+import { actorDisplayNamesMigration } from './migrations/0013_actor_display_names.js';
 
 const migrations = Object.freeze<Record<string, Migration>>({
   '0001_initial': initialMigration,
@@ -27,6 +28,7 @@ const migrations = Object.freeze<Record<string, Migration>>({
   '0010_permanent_public_shares': permanentPublicSharesMigration,
   '0011_artifact_default_shares': artifactDefaultSharesMigration,
   '0012_comments': commentsMigration,
+  '0013_actor_display_names': actorDisplayNamesMigration,
 });
 
 const provider: MigrationProvider = {
