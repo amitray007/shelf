@@ -101,6 +101,34 @@ export function InlineSourceThread({
                   <div className="pierre-inline-message-heading">
                     <strong>{reviewAuthorName(post)}</strong>
                     <ReviewTime value={post.createdAt} />
+                    {post.deletedAt === null &&
+                    post.hiddenAt === null &&
+                    ((post.permissions.canEdit && onEditPost !== undefined) ||
+                      (post.permissions.canDelete && onDeletePost !== undefined)) ? (
+                      <div className="pierre-inline-message-actions">
+                        {post.permissions.canEdit && onEditPost !== undefined ? (
+                          <button
+                            aria-label="Edit comment"
+                            onClick={() => {
+                              setEditingPostId(post.postId);
+                              setPostActionError(undefined);
+                            }}
+                            type="button"
+                          >
+                            Edit
+                          </button>
+                        ) : null}
+                        {post.permissions.canDelete && onDeletePost !== undefined ? (
+                          <button
+                            aria-label="Delete comment"
+                            onClick={() => setDeleteConfirmPostId(post.postId)}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                   {editingPostId === post.postId ? (
                     <ReviewEditComposer
@@ -123,34 +151,6 @@ export function InlineSourceThread({
                       }
                     />
                   )}
-                  {post.deletedAt === null &&
-                  post.hiddenAt === null &&
-                  ((post.permissions.canEdit && onEditPost !== undefined) ||
-                    (post.permissions.canDelete && onDeletePost !== undefined)) ? (
-                    <div className="pierre-inline-message-actions">
-                      {post.permissions.canEdit && onEditPost !== undefined ? (
-                        <button
-                          aria-label="Edit comment"
-                          onClick={() => {
-                            setEditingPostId(post.postId);
-                            setPostActionError(undefined);
-                          }}
-                          type="button"
-                        >
-                          Edit
-                        </button>
-                      ) : null}
-                      {post.permissions.canDelete && onDeletePost !== undefined ? (
-                        <button
-                          aria-label="Delete comment"
-                          onClick={() => setDeleteConfirmPostId(post.postId)}
-                          type="button"
-                        >
-                          Delete
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
                   {deleteConfirmPostId === post.postId && onDeletePost !== undefined ? (
                     <div className="pierre-inline-delete-confirm">
                       <span>Delete this comment?</span>

@@ -26,6 +26,7 @@ import {
   reviewAvatarUrl,
 } from '../src/components/review/comment-card.js';
 import { DiscussionPanel, ReviewEditComposer } from '../src/components/review/discussion-panel.js';
+import { InlineSourceThread } from '../src/components/review/inline-source-thread.js';
 import { ReviewSidebarToolbar } from '../src/components/review/sidebar-toolbar.js';
 import { applyCommentPostTransition } from '../src/components/review/thread-state.js';
 import { REVIEW_THREAD_FILTERS } from '../src/components/review/types.js';
@@ -395,6 +396,27 @@ describe('viewer content states', () => {
     expect(html).toContain('title="Save edit (⌘↵)"');
     expect(html).not.toContain('review-composer-docked');
     expect(html).not.toContain('review-composer-avatar');
+  });
+
+  it('places source inline comment actions in the message heading', () => {
+    const post = sourceThread('inline-actions', 1).posts[0];
+    if (post === undefined) throw new Error('inline actions fixture post is required');
+    const html = renderToStaticMarkup(
+      <InlineSourceThread
+        data={{
+          expanded: true,
+          label: '1 comment',
+          participantPosts: [post],
+          posts: [post],
+        }}
+        lineNumber={1}
+        onDeletePost={async () => undefined}
+        onEditPost={async () => undefined}
+      />,
+    );
+    expect(html.indexOf('pierre-inline-message-actions')).toBeLessThan(
+      html.indexOf('class="review-body"'),
+    );
   });
 
   it('re-enables annotations when Show comments is activated from an annotations-off state', () => {

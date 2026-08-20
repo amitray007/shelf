@@ -1574,17 +1574,24 @@ a {
 
 .pierre-inline-message-heading {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 7px;
   margin-bottom: 2px;
 }
 
 .pierre-inline-message-heading strong {
+  min-width: 0;
+  overflow: hidden;
   font-size: 12px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pierre-inline-message-heading time {
+  flex: 0 0 auto;
   color: var(--text-muted);
   font-size: 10px;
 }
@@ -1597,8 +1604,9 @@ a {
 
 .pierre-inline-message-actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 8px;
-  margin-top: 5px;
+  margin-left: auto;
 }
 
 .pierre-inline-message-actions button,
