@@ -36,6 +36,10 @@ describe('artifact index presentation', () => {
     expect(source).toContain('loadArtifactCommentSummaries');
     expect(source).toContain('discussion=1&thread=');
     expect(source).toContain('Open all comments');
+    expect(source).toContain('ArtifactCommentsPopover');
+    expect(source).toContain('Comment activity');
+    expect(source).toContain('aria-describedby={descriptionId}');
+    expect(source).toContain('onFocus={openImmediately}');
   });
 
   it('guards reusable share modal results against stale requests', async () => {
@@ -67,5 +71,6 @@ describe('artifact index presentation', () => {
     expect(source).toContain('width: 142px;');
     expect(source).toContain('min-width: 0;');
     expect(source).toContain('"comments actions"');
+    expect(source).toContain('.artifact-comments-popover');
   });
 });

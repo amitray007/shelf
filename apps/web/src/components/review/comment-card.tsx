@@ -113,9 +113,11 @@ export function ReviewAvatar({
 }
 
 export function ReviewParticipantAvatar({
+  ariaDescribedBy,
   onClick,
   participant,
 }: {
+  readonly ariaDescribedBy?: string | undefined;
   readonly onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   readonly participant: ReviewParticipant;
 }) {
@@ -123,9 +125,9 @@ export function ReviewParticipantAvatar({
   return (
     <button
       aria-label={activityLabel}
+      aria-describedby={ariaDescribedBy}
       className="review-participant-avatar"
       onClick={onClick}
-      title={activityLabel}
       type="button"
     >
       <ReviewAvatarImage

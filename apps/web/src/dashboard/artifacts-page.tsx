@@ -2,6 +2,7 @@ import { Button, LinkButton } from '@cloudflare/kumo/components/button';
 import { ClipboardText } from '@cloudflare/kumo/components/clipboard-text';
 import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
 import { Input } from '@cloudflare/kumo/components/input';
+import { Popover } from '@cloudflare/kumo/components/popover';
 import { Table } from '@cloudflare/kumo/components/table';
 import { CaretDownIcon } from '@phosphor-icons/react/CaretDown';
 import { CaretUpIcon } from '@phosphor-icons/react/CaretUp';
@@ -17,7 +18,15 @@ import type {
   ArtifactPage,
   CommentSummary,
 } from '@shelf/contracts';
-import { useEffect, useMemo, useState } from 'react';
+import {
+  type FocusEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Link,
   useLoaderData,
@@ -27,7 +36,7 @@ import {
   useRevalidator,
   useSearchParams,
 } from 'react-router';
-import { ReviewParticipantAvatar } from '../components/review/comment-card.js';
+import { ReviewAvatarImage, ReviewParticipantAvatar } from '../components/review/comment-card.js';
 import { isReviewThreadRead } from '../components/review/persistence.js';
 import {
   DashboardApiError,
@@ -49,6 +58,154 @@ const dateLabelFormatter = new Intl.DateTimeFormat(undefined, {
 
 function dateLabel(value: string): string {
   return dateLabelFormatter.format(new Date(value));
+}
+
+const COMMENT_HOVER_OPEN_DELAY = 120;
+const COMMENT_HOVER_CLOSE_DELAY = 100;
+
+function ArtifactCommentsPopover({
+  artifactName,
+  children,
+  summary,
+}: {
+  readonly artifactName: string;
+  readonly children: (descriptionId: string | undefined) => ReactNode;
+  readonly summary: CommentSummary;
+}) {
+  const anchorRef = useRef<HTMLFieldSetElement>(null);
+  const openTimerRef = useRef<number | undefined>(undefined);
+  const closeTimerRef = useRef<number | undefined>(undefined);
+  const [open, setOpen] = useState(false);
+  const descriptionId = useId();
+  const clearTimers = () => {
+    if (openTimerRef.current !== undefined) window.clearTimeout(openTimerRef.current);
+    if (closeTimerRef.current !== undefined) window.clearTimeout(closeTimerRef.current);
+    openTimerRef.current = undefined;
+    closeTimerRef.current = undefined;
+  };
+  const openImmediately = () => {
+    clearTimers();
+    setOpen(true);
+  };
+  const openOnHover = () => {
+    if (open || openTimerRef.current !== undefined) return;
+    if (closeTimerRef.current !== undefined) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = undefined;
+    openTimerRef.current = window.setTimeout(() => {
+      openTimerRef.current = undefined;
+      setOpen(true);
+    }, COMMENT_HOVER_OPEN_DELAY);
+  };
+  const closeSoon = () => {
+    if (openTimerRef.current !== undefined) window.clearTimeout(openTimerRef.current);
+    openTimerRef.current = undefined;
+    if (closeTimerRef.current !== undefined) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = undefined;
+      setOpen(false);
+    }, COMMENT_HOVER_CLOSE_DELAY);
+  };
+  useEffect(
+    () => () => {
+      if (openTimerRef.current !== undefined) window.clearTimeout(openTimerRef.current);
+      if (closeTimerRef.current !== undefined) window.clearTimeout(closeTimerRef.current);
+    },
+    [],
+  );
+  const handleAnchorBlur = (event: FocusEvent<HTMLFieldSetElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    closeSoon();
+  };
+  const visibleParticipants = summary.participants.slice(0, 6);
+  const additionalParticipantCount = Math.max(
+    0,
+    summary.participantCount - visibleParticipants.length,
+  );
+  const participantLabel = summary.participantCount === 1 ? 'participant' : 'participants';
+  const discussionLabel = summary.openThreadCount === 1 ? 'open discussion' : 'open discussions';
+  const replyLabel = summary.openReplyCount === 1 ? 'open reply' : 'open replies';
+
+  return (
+    <Popover
+      onOpenChange={(nextOpen) => {
+        clearTimers();
+        setOpen(nextOpen);
+      }}
+      open={open}
+    >
+      <fieldset
+        aria-label="Comment activity"
+        className="artifact-comments-anchor"
+        onBlur={handleAnchorBlur}
+        onFocus={openImmediately}
+        onPointerEnter={openOnHover}
+        onPointerLeave={closeSoon}
+        ref={anchorRef}
+      >
+        {children(open ? descriptionId : undefined)}
+      </fieldset>
+      <Popover.Content
+        align="start"
+        anchor={anchorRef}
+        className="artifact-comments-popover"
+        side="bottom"
+        sideOffset={6}
+      >
+        <div
+          className="artifact-comments-popover-body"
+          id={descriptionId}
+          onPointerEnter={() => {
+            if (closeTimerRef.current !== undefined) window.clearTimeout(closeTimerRef.current);
+            closeTimerRef.current = undefined;
+          }}
+          onPointerLeave={closeSoon}
+        >
+          <Popover.Title className="artifact-comments-popover-title">
+            Comment activity
+          </Popover.Title>
+          <Popover.Description className="artifact-comments-popover-artifact">
+            {artifactName}
+          </Popover.Description>
+          <div className="artifact-comments-popover-stats">
+            <span>
+              <strong>{summary.participantCount}</strong> {participantLabel}
+            </span>
+            <span>
+              <strong>{summary.openThreadCount}</strong> {discussionLabel}
+            </span>
+            {summary.openReplyCount > 0 ? (
+              <span>
+                <strong>{summary.openReplyCount}</strong> {replyLabel}
+              </span>
+            ) : null}
+          </div>
+          <ul className="artifact-comments-popover-participants">
+            {visibleParticipants.map((participant) => (
+              <li key={participant.participantId}>
+                <ReviewAvatarImage alt="" participantId={participant.participantId} size={20} />
+                <span className="artifact-comments-popover-participant-name">
+                  {participant.displayName}
+                </span>
+                <span className="artifact-comments-popover-participant-meta">
+                  {participant.threadCount}{' '}
+                  {participant.threadCount === 1 ? 'discussion' : 'discussions'}
+                  {participant.replyCount > 0
+                    ? ` · ${participant.replyCount} ${participant.replyCount === 1 ? 'reply' : 'replies'}`
+                    : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {additionalParticipantCount > 0 ? (
+            <span className="artifact-comments-popover-more">
+              +{additionalParticipantCount} more{' '}
+              {additionalParticipantCount === 1 ? 'participant' : 'participants'}
+            </span>
+          ) : null}
+        </div>
+      </Popover.Content>
+    </Popover>
+  );
 }
 
 export function ArtifactsPage() {
@@ -407,33 +564,38 @@ export function ArtifactsPage() {
                             );
                           };
                           return (
-                            <div className="artifact-comments">
-                              {participants.map((participant) => (
-                                <ReviewParticipantAvatar
-                                  key={participant.participantId}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    openParticipant(participant);
-                                  }}
-                                  participant={participant}
-                                />
-                              ))}
-                              {overflowCount > 0 ? (
-                                <button
-                                  aria-label={`Open all comments for ${artifact.name}`}
-                                  className="artifact-comments-overflow"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void navigate(artifactCommentPath);
-                                  }}
-                                  title="Open all comments"
-                                  type="button"
-                                >
-                                  <span aria-hidden="true">+</span>
-                                  {overflowCount}
-                                </button>
-                              ) : null}
-                            </div>
+                            <ArtifactCommentsPopover artifactName={artifact.name} summary={summary}>
+                              {(descriptionId) => (
+                                <div className="artifact-comments">
+                                  {participants.map((participant) => (
+                                    <ReviewParticipantAvatar
+                                      ariaDescribedBy={descriptionId}
+                                      key={participant.participantId}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        openParticipant(participant);
+                                      }}
+                                      participant={participant}
+                                    />
+                                  ))}
+                                  {overflowCount > 0 ? (
+                                    <button
+                                      aria-describedby={descriptionId}
+                                      aria-label={`Open all comments for ${artifact.name}`}
+                                      className="artifact-comments-overflow"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        void navigate(artifactCommentPath);
+                                      }}
+                                      type="button"
+                                    >
+                                      <span aria-hidden="true">+</span>
+                                      {overflowCount}
+                                    </button>
+                                  ) : null}
+                                </div>
+                              )}
+                            </ArtifactCommentsPopover>
                           );
                         })()}
                       </Table.Cell>
