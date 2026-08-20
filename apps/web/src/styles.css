@@ -163,25 +163,21 @@ a {
   min-height: 48px;
   flex: 0 0 48px;
   align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
+  gap: 16px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--rule);
-  background: var(--surface);
+  background: var(--canvas);
 }
 
 .review-sidebar-modes,
 .review-sidebar-actions {
   display: flex;
   align-items: center;
-  gap: 3px;
 }
 
 .review-sidebar-modes {
-  padding: 2px;
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-  background: var(--canvas);
-  gap: 2px;
+  align-self: stretch;
+  gap: 20px;
 }
 
 .review-sidebar-actions {
@@ -191,17 +187,62 @@ a {
 .review-sidebar-heading {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--text-subtle);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 560;
+}
+
+.review-sidebar-mode {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font:
+    500 12px / 1 "Geist Variable",
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+
+.review-sidebar-mode::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: transparent;
+  content: "";
+}
+
+.review-sidebar-mode:hover,
+.review-sidebar-mode[aria-selected="true"] {
+  color: var(--text);
+}
+
+.review-sidebar-mode[aria-selected="true"]::after {
+  background: var(--text);
+}
+
+.review-sidebar-count {
+  color: var(--text-muted);
+  font:
+    500 10px / 1 "Geist Mono Variable",
+    ui-monospace,
+    monospace;
 }
 
 .review-sidebar-tool {
   position: relative;
   display: inline-flex;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
@@ -212,7 +253,6 @@ a {
 }
 
 .review-sidebar-tool:hover:not(:disabled),
-.review-sidebar-tool[aria-selected="true"],
 .review-sidebar-tool[aria-pressed="true"] {
   border-color: transparent;
   background: var(--elevated);
@@ -220,9 +260,10 @@ a {
 }
 
 .review-sidebar-tool:active,
+.review-sidebar-mode:active,
 .review-button:active,
 .review-post-action:active,
-.review-identity-button:active {
+.review-composer-identity:active {
   transform: scale(0.97);
 }
 
@@ -250,43 +291,11 @@ a {
 .review-panel-header p,
 .review-eyebrow,
 .review-status,
-.review-selected-path,
 .review-composer-footer,
 .review-thread-location,
 .review-thread-replies {
   color: var(--text-muted);
   font-size: 12px;
-}
-
-.review-identity-button {
-  display: inline-flex;
-  max-width: calc(100% - 24px);
-  width: calc(100% - 24px);
-  min-height: 36px;
-  align-items: center;
-  gap: 8px;
-  margin: 8px 10px 3px;
-  padding: 4px 8px 4px 4px;
-  border: 1px solid var(--rule);
-  border-radius: 9px;
-  background: var(--surface);
-  color: var(--text-subtle);
-  cursor: pointer;
-  font-size: 11px;
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.review-identity-button:hover {
-  border-color: var(--rule-strong);
-  background: var(--elevated);
-}
-
-.review-identity-button span {
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .review-panel-header p {
@@ -323,11 +332,11 @@ a {
 }
 .review-search {
   width: calc(100% - 24px);
-  min-height: 34px;
-  margin: 6px 10px 2px;
-  padding: 0 12px;
-  border: 1px solid var(--rule-strong);
-  border-radius: 8px;
+  min-height: 36px;
+  margin: 8px 12px 4px;
+  padding: 0 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
   outline: none;
   background: var(--surface);
   color: var(--text);
@@ -342,8 +351,10 @@ a {
 }
 
 .review-search:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: transparent;
+  box-shadow:
+    0 0 0 2px var(--canvas),
+    0 0 0 4px var(--accent-strong);
 }
 .review-panel-body {
   min-height: 0;
@@ -352,11 +363,10 @@ a {
   padding: 10px 10px 24px;
 }
 .review-status {
-  margin: 8px 10px 0;
-  padding: 8px 9px;
-  border: 1px solid var(--rule);
-  border-radius: 7px;
-  background: var(--surface);
+  margin: 8px 12px 0;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
 }
 .review-status-error {
   color: #ff9b9f;
@@ -378,22 +388,19 @@ a {
   text-align: left;
 }
 .review-thread-card {
-  margin: 5px 0;
-  padding: 11px 12px 10px;
-  border: 1px solid var(--rule);
-  border-radius: 9px;
-  background: var(--surface);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 3%) inset;
-  transition:
-    border-color 160ms ease-out,
-    background 160ms ease-out;
+  margin: 0;
+  padding: 13px 14px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  transition: background-color 140ms ease;
 }
 .review-thread-button:hover .review-thread-card {
-  border-color: var(--rule-strong);
-  background: var(--elevated);
+  background: var(--surface);
 }
 .review-thread-button:focus-visible .review-thread-card {
-  border-color: var(--accent);
+  background: var(--surface);
 }
 .review-thread-card-heading {
   display: flex;
@@ -409,8 +416,8 @@ a {
   display: flex;
   min-width: 0;
   flex: 1;
-  flex-direction: column;
-  gap: 2px;
+  align-items: baseline;
+  gap: 7px;
 }
 .review-thread-author strong {
   overflow: hidden;
@@ -455,20 +462,42 @@ a {
     monospace;
 }
 .review-thread-location {
-  display: block;
-  margin: 8px 0 0;
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-muted);
   font:
     11px "Geist Mono Variable",
     ui-monospace,
     monospace;
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.review-thread-card .review-thread-location {
-  padding-top: 7px;
-  border-top: 1px solid color-mix(in srgb, var(--rule) 70%, transparent);
+.review-thread-card .review-body,
+.review-thread-meta {
+  margin-left: 36px;
+}
+.review-thread-card .review-body {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 5px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.review-thread-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+}
+.review-thread-replies,
+.review-thread-status {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.review-thread-status {
+  color: var(--proof);
 }
 .review-thread-detail {
   padding: 0 1px 14px;
@@ -608,16 +637,15 @@ a {
   margin-top: 10px;
   padding: 9px;
   border: 1px solid var(--rule-strong);
-  border-radius: 9px;
+  border-radius: 7px;
   background: var(--surface);
-  box-shadow: 0 8px 22px rgb(0 0 0 / 12%);
 }
 .review-composer textarea {
   width: 100%;
   min-height: 76px;
   padding: 8px;
   border: 1px solid var(--rule);
-  border-radius: 7px;
+  border-radius: 5px;
   resize: vertical;
   outline: 0;
   background: transparent;
@@ -637,83 +665,98 @@ a {
   justify-content: space-between;
   gap: 8px;
 }
+.review-composer-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.review-composer-identity {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-composer-identity:hover {
+  color: var(--text-subtle);
+}
+.review-composer-hint {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font:
+    10px "Geist Mono Variable",
+    ui-monospace,
+    monospace;
+}
 .review-composer-footer .review-button {
   min-height: 36px;
 }
 
 /* Chat surface */
 .review-chat-panel {
-  background: var(--surface);
+  min-height: 0;
+  flex: 1;
+  background: var(--canvas);
 }
 
 .review-chat-body {
   display: flex;
+  overflow: hidden;
   flex-direction: column;
-  padding: 8px 10px 14px;
+  padding: 0;
   background: var(--canvas);
+}
+
+.review-chat-scroll {
+  min-height: 0;
+  overflow: auto;
 }
 
 .review-chat-inbox {
-  min-height: 0;
-}
-
-.review-chat-preview .review-thread-card {
-  margin: 4px 0;
-  padding: 10px 11px;
-  border-color: var(--rule);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.review-chat-preview .review-thread-card:hover {
-  background: var(--elevated);
-}
-
-.review-chat-preview .review-thread-replies {
-  display: inline-block;
-  margin-top: 6px;
-  padding: 2px 6px;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  background: var(--canvas);
-  font-size: 10px;
+  flex: 1;
 }
 
 .review-chat-thread {
   display: flex;
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
   flex-direction: column;
+  padding: 0;
 }
 
 .review-chat-thread-header {
   display: flex;
-  min-height: 38px;
+  min-height: 44px;
+  flex: 0 0 44px;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin: -2px -2px 8px;
-  padding: 0 2px 8px;
+  gap: 12px;
+  margin: 0;
+  padding: 0 14px;
   border-bottom: 1px solid var(--rule);
 }
 
 .review-chat-thread-header .review-back-button {
-  min-height: 30px;
+  min-height: 32px;
   gap: 6px;
   margin: 0;
-  padding: 0 7px 0 2px;
+  padding: 0 6px 0 0;
   border-radius: 6px;
   font-size: 12px;
 }
 
 .review-chat-thread-anchor {
-  max-width: 52%;
+  min-width: 0;
   overflow: hidden;
-  padding: 4px 7px;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
   color: var(--text-muted);
   font:
-    10px "Geist Mono Variable",
+    11px "Geist Mono Variable",
     ui-monospace,
     monospace;
   text-overflow: ellipsis;
@@ -724,23 +767,16 @@ a {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
+  padding: 4px 14px 20px;
 }
 
 .review-chat-message {
-  width: min(94%, 330px);
+  width: 100%;
   margin: 0;
-  padding: 8px 9px 9px;
-  border: 1px solid var(--rule);
-  border-radius: 10px 10px 10px 4px;
-  background: var(--surface);
-}
-
-.review-chat-message-visitor {
-  align-self: flex-end;
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--rule));
-  border-radius: 10px 10px 4px;
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  padding: 12px 0;
+  border: 0;
+  background: transparent;
 }
 
 .review-chat-message .review-post-heading {
@@ -754,50 +790,96 @@ a {
 }
 
 .review-chat-message .review-body {
+  margin-left: 30px;
   margin-top: 6px;
   color: var(--text);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .review-chat-message .review-post-controls {
+  margin-left: 30px;
   margin-top: 6px;
 }
 
-.review-chat-message .review-thread-actions {
-  margin-top: 10px;
+.review-chat-footer {
+  flex: 0 0 auto;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--rule);
+  background: var(--canvas);
 }
 
-.review-chat-composer {
-  position: sticky;
-  z-index: 2;
-  bottom: -14px;
-  margin: auto -2px -14px;
-  padding: 8px;
+.review-composer-docked {
+  margin: 0;
+  padding: 7px;
   border-color: var(--rule-strong);
-  border-radius: 9px 9px 0 0;
-  background: color-mix(in srgb, var(--surface) 96%, var(--canvas));
-  box-shadow: 0 -8px 22px rgb(0 0 0 / 18%);
+  border-radius: 7px;
+  background: var(--surface);
 }
 
-.review-chat-composer .review-composer-footer {
+.review-composer-docked:focus-within {
+  border-color: transparent;
+  box-shadow:
+    0 0 0 2px var(--canvas),
+    0 0 0 4px var(--accent-strong);
+}
+
+.review-composer-docked textarea {
+  min-height: 38px;
+  max-height: 140px;
+  padding: 4px;
+  border: 0;
+  border-radius: 0;
+  field-sizing: content;
+  resize: none;
+}
+
+.review-composer-docked textarea:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.review-composer-docked .review-composer-footer {
   gap: 10px;
 }
 
-.review-chat-composer .review-composer-footer .review-button {
+.review-composer-docked .review-composer-footer .review-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 32px;
 }
 
-.review-thread-actions:has(.review-chat-composer) {
+.review-composer-context {
+  display: flex;
+  min-width: 0;
+  gap: 5px;
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.review-composer-context strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-subtle);
+  font:
+    500 11px "Geist Mono Variable",
+    ui-monospace,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-chat-footer.review-thread-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
+  gap: 8px;
+  margin: 0;
 }
 
-.review-thread-actions:has(.review-chat-composer) .review-chat-composer {
+.review-chat-footer.review-thread-actions .review-composer {
   grid-column: 1 / -1;
 }
 .review-dialog-backdrop {
@@ -868,6 +950,8 @@ a {
 .folder-browser-tree > .review-panel {
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  flex: 1;
   border: 0;
 }
 .folder-browser-tree > .review-panel .review-panel-header {
@@ -1542,35 +1626,43 @@ a {
 }
 
 .folder-browser-tree {
+  position: relative;
+  display: flex;
   min-width: 0;
-  overflow: auto;
-  padding: 10px 10px 18px;
+  min-height: 0;
+  overflow: hidden;
+  flex-direction: column;
+  padding: 0;
   border-right: 1px solid var(--rule);
 }
 
 .folder-browser-pierre-tree {
   display: block;
   width: 100%;
-  height: 100%;
+  min-height: 0;
+  flex: 1;
   --trees-accent-override: var(--accent);
   --trees-bg-muted-override: var(--surface);
   --trees-bg-override: var(--canvas);
   --trees-border-color-override: var(--rule);
-  --trees-border-radius-override: 5px;
+  --trees-border-radius-override: 6px;
   --trees-font-family-override: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --trees-font-size-override: 13px;
   --trees-fg-muted-override: var(--text-muted);
   --trees-fg-override: var(--text-subtle);
   --trees-input-bg-override: var(--surface);
   --trees-item-height: 36px;
+  --trees-item-margin-x-override: 0px;
   --trees-item-row-gap-override: 8px;
   --trees-level-gap-override: 16px;
-  --trees-padding-inline-override: 12px;
+  --trees-padding-inline-override: 10px;
   --trees-icon-width-override: 18px;
   --trees-search-bg-override: var(--surface);
   --trees-search-fg-override: var(--text);
-  --trees-selected-bg-override: color-mix(in srgb, var(--accent) 14%, var(--canvas));
+  --trees-indent-guide-bg-override: transparent;
+  --trees-selected-bg-override: var(--surface);
   --trees-selected-fg-override: var(--text);
+  --trees-selected-focused-border-color-override: var(--accent);
 }
 
 .folder-browser-preview {
@@ -1865,16 +1957,17 @@ a {
     min-width: 0;
   }
 
-  .folder-browser-tree > .review-panel {
-    position: absolute;
-    inset: 0;
-    z-index: 3;
-  }
-
   .folder-browser-tree {
-    padding: 10px 10px 16px;
+    padding: 0;
     border-right: 0;
     border-bottom: 1px solid var(--rule);
+  }
+
+  .folder-browser-tree:has(> .review-panel) {
+    position: fixed;
+    inset: var(--bar-size) 0 0;
+    z-index: 8;
+    background: var(--canvas);
   }
 
   .tree-row {

@@ -102,7 +102,7 @@ export function ReviewThreadCard({
   return (
     <article
       aria-label={`Discussion started by ${authorName(first)}`}
-      className={`review-thread-card${compact ? ' review-thread-card-compact' : ''}${thread.resolvedAt === null ? '' : ' review-thread-resolved'}`}
+      className={`review-thread-card${compact ? ' review-thread-card-compact' : ''}`}
     >
       <div className="review-thread-card-heading">
         <ReviewAvatar post={first} />
@@ -115,10 +115,21 @@ export function ReviewThreadCard({
         ) : null}
       </div>
       <ReviewBody body={body} />
-      {!compact && thread.posts.length > 1 ? (
-        <span className="review-thread-replies">{thread.posts.length - 1} replies</span>
+      {!compact ? (
+        <div className="review-thread-meta">
+          {location !== undefined ? (
+            <span className="review-thread-location">{location}</span>
+          ) : null}
+          {thread.posts.length > 1 ? (
+            <span className="review-thread-replies">
+              {thread.posts.length - 1} {thread.posts.length === 2 ? 'reply' : 'replies'}
+            </span>
+          ) : null}
+          {thread.resolvedAt !== null ? (
+            <span className="review-thread-status">Resolved</span>
+          ) : null}
+        </div>
       ) : null}
-      {location !== undefined ? <span className="review-thread-location">{location}</span> : null}
     </article>
   );
 }

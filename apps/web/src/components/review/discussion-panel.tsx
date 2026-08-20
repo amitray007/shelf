@@ -43,22 +43,27 @@ export interface DiscussionPanelProps {
 
 export function ReviewComposer({
   disabled = false,
+  docked = false,
   moderator = false,
   onSubmit,
   placeholder = 'Add a note…',
 }: {
   readonly disabled?: boolean;
+  readonly docked?: boolean;
   readonly moderator?: boolean;
   readonly onSubmit: (body: string) => Promise<void>;
   readonly placeholder?: string;
 }) {
   const [body, setBody] = useState('');
+  const [displayName, setDisplayName] = useState(() => readReviewVisitorIdentity().displayName);
   const [nameDialog, setNameDialog] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
+  const submitAfterNameRef = useRef(false);
   const submit = async () => {
     if (body.trim().length === 0 || pending) return;
     if (!moderator && readReviewVisitorIdentity().displayName.trim().length === 0) {
+      submitAfterNameRef.current = true;
       setNameDialog(true);
       return;
     }
@@ -73,13 +78,16 @@ export function ReviewComposer({
       setPending(false);
     }
   };
-  const continueWithName = () => {
+  const continueWithName = (identity: ReturnType<typeof readReviewVisitorIdentity>) => {
+    const shouldSubmit = submitAfterNameRef.current;
+    submitAfterNameRef.current = false;
+    setDisplayName(identity.displayName);
     setNameDialog(false);
-    void submit();
+    if (shouldSubmit) void submit();
   };
   return (
     <>
-      <div className="review-composer review-chat-composer">
+      <div className={`review-composer${docked ? ' review-composer-docked' : ''}`}>
         <textarea
           aria-label={placeholder}
           disabled={disabled || pending}
@@ -92,19 +100,33 @@ export function ReviewComposer({
             }
           }}
           placeholder={placeholder}
-          rows={3}
+          rows={docked ? 1 : 3}
           value={body}
         />
         <div className="review-composer-footer">
-          <span>Markdown-lite · ⌘↵ to send</span>
+          <div className="review-composer-meta">
+            {!moderator ? (
+              <button
+                className="review-composer-identity"
+                onClick={() => {
+                  submitAfterNameRef.current = false;
+                  setNameDialog(true);
+                }}
+                type="button"
+              >
+                {displayName === '' ? 'Add your name' : `Commenting as ${displayName}`}
+              </button>
+            ) : null}
+            <span className="review-composer-hint">⌘↵</span>
+          </div>
           <button
             className="review-button review-button-primary"
             disabled={disabled || pending || body.trim() === ''}
             onClick={() => void submit()}
             type="button"
           >
-            <PaperPlaneTiltIcon aria-hidden="true" size={15} weight="fill" />
-            {pending ? 'Saving…' : 'Comment'}
+            <PaperPlaneTiltIcon aria-hidden="true" size={15} weight="regular" />
+            {pending ? 'Saving…' : docked ? 'Send' : 'Comment'}
           </button>
         </div>
         {error ? (
@@ -114,7 +136,13 @@ export function ReviewComposer({
         ) : null}
       </div>
       {nameDialog ? (
-        <VisitorNameDialog onCancel={() => setNameDialog(false)} onSaved={continueWithName} />
+        <VisitorNameDialog
+          onCancel={() => {
+            submitAfterNameRef.current = false;
+            setNameDialog(false);
+          }}
+          onSaved={continueWithName}
+        />
       ) : null}
     </>
   );
@@ -147,12 +175,12 @@ export function DiscussionPanel({
 }: DiscussionPanelProps) {
   const [query, setQuery] = useState('');
   const [localSearchOpen, setLocalSearchOpen] = useState(false);
-  const [nameDialog, setNameDialog] = useState(false);
   const [actionError, setActionError] = useState<string>();
   const [editingPostId, setEditingPostId] = useState<string>();
   const [editBody, setEditBody] = useState('');
   const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string>();
   const replyRef = useRef<HTMLTextAreaElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const activeThread = threads.find((thread) => thread.threadId === activeThreadId);
   const searchOpen = controlledSearchOpen ?? localSearchOpen;
   const toggleSearch = onSearchToggle ?? (() => setLocalSearchOpen((open) => !open));
@@ -167,6 +195,9 @@ export function DiscussionPanel({
   useEffect(() => {
     if (activeThreadId !== undefined) replyRef.current?.focus();
   }, [activeThreadId]);
+  useEffect(() => {
+    if (searchOpen) searchRef.current?.focus();
+  }, [searchOpen]);
   const runAction = async (action: () => Promise<void>) => {
     setActionError(undefined);
     try {
@@ -179,26 +210,11 @@ export function DiscussionPanel({
     <aside aria-label="Discussion" className="review-panel review-chat-panel">
       {showToolbar ? (
         <ReviewSidebarToolbar
+          discussionCount={threads.length}
           onClose={onClose}
           onSearchToggle={toggleSearch}
           searchOpen={searchOpen}
         />
-      ) : null}
-      {!moderator ? (
-        <button
-          className="review-identity-button"
-          onClick={() => setNameDialog(true)}
-          type="button"
-        >
-          <img
-            alt=""
-            className="review-avatar"
-            height={24}
-            src="https://api.dicebear.com/9.x/initials/svg?seed=visitor"
-            width={24}
-          />
-          <span>{readReviewVisitorIdentity().displayName || 'Add your name'}</span>
-        </button>
       ) : null}
       {searchOpen ? (
         <input
@@ -206,6 +222,7 @@ export function DiscussionPanel({
           className="review-search"
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search discussions"
+          ref={searchRef}
           type="search"
           value={query}
         />
@@ -224,12 +241,6 @@ export function DiscussionPanel({
         <p aria-live="assertive" className="review-status review-status-error">
           {actionError}
         </p>
-      ) : null}
-      {nameDialog && !moderator ? (
-        <VisitorNameDialog
-          onCancel={() => setNameDialog(false)}
-          onSaved={() => setNameDialog(false)}
-        />
       ) : null}
       <div className="review-panel-body review-chat-body">
         {activeThread ? (
@@ -250,12 +261,9 @@ export function DiscussionPanel({
                 {activeThread.anchorStatus === 'outdated' ? ' · Outdated' : ''}
               </span>
             </header>
-            <div className="review-chat-messages">
+            <div className="review-chat-messages review-chat-scroll">
               {activeThread.posts.map((post) => (
-                <div
-                  className={`review-post review-chat-message${post.author.kind === 'visitor' ? ' review-chat-message-visitor' : ''}`}
-                  key={post.postId}
-                >
+                <div className="review-post review-chat-message" key={post.postId}>
                   <div className="review-post-heading">
                     <ReviewAvatar post={post} />
                     <strong>
@@ -389,7 +397,7 @@ export function DiscussionPanel({
               ))}
             </div>
             {activeThread.resolvedAt !== null ? (
-              <div className="review-thread-actions">
+              <div className="review-thread-actions review-chat-footer">
                 <p className="review-thread-resolved">Resolved</p>
                 {activeThread.permissions.canReopen ? (
                   <button
@@ -405,10 +413,11 @@ export function DiscussionPanel({
                 ) : null}
               </div>
             ) : (
-              <div className="review-thread-actions">
+              <div className="review-thread-actions review-chat-footer">
                 {activeThread.permissions.canReply ? (
                   <ReviewComposer
                     disabled={saving}
+                    docked
                     moderator={moderator}
                     onSubmit={(body) => onReply(activeThread.threadId, body)}
                     placeholder="Reply to this discussion…"
@@ -433,42 +442,47 @@ export function DiscussionPanel({
           </section>
         ) : (
           <>
-            {filteredThreads.length === 0 ? (
-              <p className="review-empty">{emptyLabel}</p>
-            ) : (
-              filteredThreads.map((thread) => (
+            <div className="review-chat-inbox review-chat-scroll">
+              {filteredThreads.length === 0 ? (
+                <p className="review-empty">{emptyLabel}</p>
+              ) : (
+                filteredThreads.map((thread) => (
+                  <button
+                    className="review-thread-button"
+                    key={thread.threadId}
+                    onClick={() => onSelectThread(thread.threadId)}
+                    type="button"
+                  >
+                    <ReviewThreadCard location={threadLabel(thread)} thread={thread} />
+                  </button>
+                ))
+              )}
+              {nextCursor !== null && onLoadOlder ? (
                 <button
-                  className="review-thread-button review-chat-preview"
-                  key={thread.threadId}
-                  onClick={() => onSelectThread(thread.threadId)}
+                  className="review-button review-button-quiet review-load-older"
+                  disabled={loadingOlder}
+                  onClick={() => void onLoadOlder()}
                   type="button"
                 >
-                  <ReviewThreadCard location={threadLabel(thread)} thread={thread} />
+                  {loadingOlder ? 'Loading older discussions…' : 'Load older discussions'}
                 </button>
-              ))
-            )}
-            {selectedPath !== undefined ? (
-              <p className="review-selected-path">
-                New comments on <strong>{selectedPath}</strong> can be attached from the file.
-              </p>
-            ) : null}
+              ) : null}
+            </div>
             {newAnchor ? (
-              <ReviewComposer
-                disabled={saving}
-                moderator={moderator}
-                onSubmit={(body) => onCreateThread(newAnchor, body)}
-                placeholder="Start a discussion…"
-              />
-            ) : null}
-            {nextCursor !== null && onLoadOlder ? (
-              <button
-                className="review-button review-button-quiet review-load-older"
-                disabled={loadingOlder}
-                onClick={() => void onLoadOlder()}
-                type="button"
-              >
-                {loadingOlder ? 'Loading older discussions…' : 'Load older discussions'}
-              </button>
+              <div className="review-chat-footer review-chat-new-thread">
+                {selectedPath !== undefined ? (
+                  <p className="review-composer-context">
+                    Comment on <strong title={selectedPath}>{selectedPath}</strong>
+                  </p>
+                ) : null}
+                <ReviewComposer
+                  disabled={saving}
+                  docked
+                  moderator={moderator}
+                  onSubmit={(body) => onCreateThread(newAnchor, body)}
+                  placeholder="Start a discussion…"
+                />
+              </div>
             ) : null}
           </>
         )}

@@ -129,14 +129,33 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
   const { model } = useFileTree({
     density: 'default',
     fileTreeSearchMode: 'expand-matches',
-    icons: { colored: true, set: 'complete' },
+    icons: { colored: false, set: 'complete' },
     initialExpansion: restoredExpandedPaths === null ? 'open' : 'closed',
     ...(restoredExpandedPaths === null ? {} : { initialExpandedPaths: restoredExpandedPaths }),
     ...(firstFilePath === undefined ? {} : { initialSelectedPaths: [firstFilePath] }),
     paths,
     search: true,
     searchBlurBehavior: 'close',
-    unsafeCSS: '[data-file-tree-search-container][data-open="false"] { display: none; }',
+    unsafeCSS: `
+      [data-file-tree-search-container][data-open="false"] { display: none; }
+      [data-file-tree-search-container][data-open="true"] {
+        padding-top: 8px;
+        margin-bottom: 4px;
+      }
+      [data-file-tree-search-input]:focus-visible {
+        outline: none;
+        box-shadow:
+          0 0 0 2px var(--trees-bg),
+          0 0 0 4px var(--trees-focus-ring-color);
+      }
+      :host(:has([data-file-tree-search-input]:focus-visible))
+        [data-type="item"][data-item-focused="true"]::before {
+        outline-color: transparent;
+      }
+      [data-file-tree-virtualized-scroll="true"] {
+        padding-block: 8px 16px;
+      }
+    `,
     stickyFolders: true,
     onSelectionChange: handleSelectionChange,
   });
@@ -270,6 +289,7 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
       <aside className="folder-browser-tree">
         {review ? (
           <ReviewSidebarToolbar
+            discussionCount={review.threads.length}
             mode={review.mode}
             onModeChange={review.onModeChange}
             onSearchToggle={() =>

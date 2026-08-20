@@ -1,11 +1,10 @@
-import { ChatCircleDotsIcon } from '@phosphor-icons/react/ChatCircleDots';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/MagnifyingGlass';
-import { TreeStructureIcon } from '@phosphor-icons/react/TreeStructure';
 import { XIcon } from '@phosphor-icons/react/X';
 import type { ReviewSidebarMode } from './types.js';
 
 export interface ReviewSidebarToolbarProps {
   readonly mode?: ReviewSidebarMode | undefined;
+  readonly discussionCount?: number | undefined;
   readonly searchOpen: boolean;
   readonly searchLabel?: string;
   readonly onModeChange?: ((mode: ReviewSidebarMode) => void) | undefined;
@@ -15,6 +14,7 @@ export interface ReviewSidebarToolbarProps {
 
 export function ReviewSidebarToolbar({
   mode,
+  discussionCount = 0,
   searchOpen,
   searchLabel = 'Search discussions',
   onModeChange,
@@ -28,30 +28,33 @@ export function ReviewSidebarToolbar({
           <button
             aria-label="Show file tree"
             aria-selected={mode === 'tree'}
-            className="review-sidebar-tool"
+            className="review-sidebar-mode"
             onClick={() => onModeChange('tree')}
             role="tab"
-            title="File tree"
             type="button"
           >
-            <TreeStructureIcon aria-hidden="true" size={18} weight="regular" />
+            Files
           </button>
           <button
             aria-label="Show discussion"
             aria-selected={mode === 'discussion'}
-            className="review-sidebar-tool review-sidebar-discussion-tool"
+            className="review-sidebar-mode"
             onClick={() => onModeChange('discussion')}
             role="tab"
-            title="Discussion"
             type="button"
           >
-            <ChatCircleDotsIcon aria-hidden="true" size={18} weight="regular" />
+            Discussion
+            {discussionCount > 0 ? (
+              <span className="review-sidebar-count">{discussionCount}</span>
+            ) : null}
           </button>
         </div>
       ) : (
         <div className="review-sidebar-heading">
-          <ChatCircleDotsIcon aria-hidden="true" size={18} weight="regular" />
           <span>Discussion</span>
+          {discussionCount > 0 ? (
+            <span className="review-sidebar-count">{discussionCount}</span>
+          ) : null}
         </div>
       )}
       <div className="review-sidebar-actions">
