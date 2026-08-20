@@ -9,7 +9,7 @@ import type {
   CommentThread,
   FolderEntry,
 } from '@shelf/contracts';
-import { memo, useCallback, useEffect, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { CodeView, decodeFileSource, FileView, formatJson } from '../components/file-view.js';
 import { FolderBrowser } from '../components/folder-browser.js';
@@ -108,6 +108,11 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
     (path: string, signal: AbortSignal) => loadFolderEntryBytes(revision.revisionId, path, signal),
     [revision.revisionId],
   );
+  const [previewFolderSidebarOpen, setPreviewFolderSidebarOpen] = useState(true);
+  const togglePreviewFolderSidebar = useCallback(
+    () => setPreviewFolderSidebarOpen((open) => !open),
+    [],
+  );
 
   if (revision.kind === 'folder') {
     return (
@@ -115,6 +120,15 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
         entries={entries}
         key={revision.revisionId}
         loadFile={loadFolderFile}
+        {...(review === undefined
+          ? {
+              navigation: {
+                onSidebarToggle: togglePreviewFolderSidebar,
+                sidebarControlsId: 'preview-folder-sidebar-content',
+                sidebarOpen: previewFolderSidebarOpen,
+              },
+            }
+          : {})}
         {...(review === undefined
           ? {}
           : {

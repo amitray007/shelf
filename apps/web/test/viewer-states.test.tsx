@@ -908,6 +908,36 @@ describe('viewer content states', () => {
     expect(html).toContain('aria-label="Folder contents"');
   });
 
+  it('keeps preview folder navigation read-only with a searchable Files sidebar', () => {
+    const html = renderToStaticMarkup(
+      <FolderBrowser
+        entries={[
+          {
+            kind: 'file',
+            path: 'src/example.ts',
+            mediaType: 'text/typescript',
+            contentHash: `sha256:${'d'.repeat(64)}`,
+            byteCount: 21,
+          },
+        ]}
+        loadFile={async () => new TextEncoder().encode('const shelf = true;').buffer}
+        navigation={{
+          onSidebarToggle: () => undefined,
+          sidebarControlsId: 'preview-folder-sidebar-content',
+          sidebarOpen: true,
+        }}
+      />,
+    );
+    expect(html).toContain('Files');
+    expect(html).toContain('Search files');
+    expect(html).toContain('Collapse folder files sidebar');
+    expect(html).toContain('aria-controls="preview-folder-sidebar-content"');
+    expect(html).not.toContain('Discussion');
+    expect(html).not.toContain('Filter discussions');
+    expect(html).not.toContain('New comment');
+    expect(html).not.toContain('Leave a comment');
+  });
+
   it('owns discussion filters at the folder-browser toolbar boundary', () => {
     const review = {
       canCreateThread: true,

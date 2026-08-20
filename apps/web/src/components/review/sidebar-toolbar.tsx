@@ -5,6 +5,7 @@ import { XIcon } from '@phosphor-icons/react/X';
 import { REVIEW_THREAD_FILTERS, type ReviewSidebarMode, type ReviewThreadFilter } from './types.js';
 
 export interface ReviewSidebarToolbarProps {
+  readonly filesOnly?: boolean | undefined;
   readonly mode?: ReviewSidebarMode | undefined;
   readonly discussionCount?: number | undefined;
   readonly searchOpen: boolean;
@@ -17,6 +18,7 @@ export interface ReviewSidebarToolbarProps {
 }
 
 export function ReviewSidebarToolbar({
+  filesOnly = false,
   mode,
   discussionCount = 0,
   searchOpen,
@@ -29,7 +31,7 @@ export function ReviewSidebarToolbar({
 }: ReviewSidebarToolbarProps) {
   return (
     <div aria-label="Review tools" className="review-sidebar-toolbar" role="toolbar">
-      {onModeChange ? (
+      {!filesOnly && onModeChange ? (
         <div className="review-sidebar-modes" role="tablist" aria-label="Sidebar view">
           <button
             aria-label="Show file tree"
@@ -57,8 +59,8 @@ export function ReviewSidebarToolbar({
         </div>
       ) : (
         <div className="review-sidebar-heading">
-          <span>Discussion</span>
-          {discussionCount > 0 ? (
+          <span>{filesOnly ? 'Files' : 'Discussion'}</span>
+          {!filesOnly && discussionCount > 0 ? (
             <span className="review-sidebar-count">{discussionCount}</span>
           ) : null}
         </div>

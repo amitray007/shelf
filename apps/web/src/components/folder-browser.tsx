@@ -54,6 +54,13 @@ interface FolderBrowserProps {
   readonly entries: readonly FolderEntry[];
   readonly loadFile: (path: string, signal: AbortSignal) => Promise<ArrayBuffer>;
   readonly review?: FolderBrowserReview | undefined;
+  readonly navigation?: FolderBrowserNavigation | undefined;
+}
+
+export interface FolderBrowserNavigation {
+  readonly sidebarOpen: boolean;
+  readonly onSidebarToggle: () => void;
+  readonly sidebarControlsId?: string | undefined;
 }
 
 function readExpandedTreePaths(paths: readonly string[]): readonly string[] | null {
@@ -139,7 +146,7 @@ export function isProgrammaticFolderSelection(
   return selectedPath === programmaticPath;
 }
 
-export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps) {
+export function FolderBrowser({ entries, loadFile, navigation, review }: FolderBrowserProps) {
   const firstFile = entries.find((entry) => entry.kind === 'file');
   const paths = useMemo(
     () => entries.map((entry) => (entry.kind === 'directory' ? `${entry.path}/` : entry.path)),
@@ -165,8 +172,9 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
   const [treeSearchOpen, setTreeSearchOpen] = useState(false);
   const [discussionSearchOpen, setDiscussionSearchOpen] = useState(false);
   const [threadFilter, setThreadFilter] = useState<ReviewThreadFilter>('all');
-  const sidebarOpen = review?.sidebarOpen ?? true;
-  const sidebarControlsId = review?.sidebarControlsId ?? 'folder-browser-sidebar-content';
+  const sidebarOpen = review?.sidebarOpen ?? navigation?.sidebarOpen ?? true;
+  const sidebarControlsId =
+    review?.sidebarControlsId ?? navigation?.sidebarControlsId ?? 'folder-browser-sidebar-content';
   const restoredExpandedPaths = useMemo(() => readExpandedTreePaths(paths), [paths]);
   const handleSelectionChange = useCallback((selectedPaths: readonly string[]) => {
     const nextFile = [...selectedPaths].reverse().find((path) => filePathsRef.current.has(path));
@@ -353,7 +361,7 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
       ? undefined
       : { revisionId: review.revisionId, path: selected.path, kind: 'file' };
 
-  const folderSidebarOpen = review === undefined || sidebarOpen;
+  const folderSidebarOpen = sidebarOpen;
 
   return (
     <section aria-label="Folder browser" className="folder-browser">
@@ -386,12 +394,15 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
                         saving: review.saving,
                       },
                     })}
-                {...(review === undefined
+                {...(review === undefined && navigation === undefined
                   ? {}
                   : {
-                      onOpenSidebar: review.onSidebarToggle,
+                      onOpenSidebar: review?.onSidebarToggle ?? navigation?.onSidebarToggle,
                       sidebarControlsId,
-                      sidebarLabel: 'folder tree and discussions sidebar',
+                      sidebarLabel:
+                        review === undefined
+                          ? 'folder files sidebar'
+                          : 'folder tree and discussions sidebar',
                       sidebarOpen,
                     })}
                 key={folderFileViewKey(selected?.path, bytes === undefined)}
@@ -403,28 +414,31 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
         sidebarOpen={folderSidebarOpen}
         sidebar={
           <aside className="folder-browser-tree">
-            {review ? (
+            {review !== undefined || navigation !== undefined ? (
               <div
                 className="folder-browser-sidebar-content"
                 hidden={!sidebarOpen}
                 id={sidebarControlsId}
               >
                 <ReviewSidebarToolbar
-                  discussionCount={review.threads.length}
-                  mode={review.mode}
-                  onModeChange={review.onModeChange}
+                  discussionCount={review?.threads.length}
+                  filesOnly={navigation !== undefined}
+                  mode={review?.mode}
+                  onModeChange={review?.onModeChange}
                   onSearchToggle={() =>
-                    review.mode === 'discussion'
+                    review?.mode === 'discussion'
                       ? setDiscussionSearchOpen((open) => !open)
                       : setTreeSearchOpen((open) => !open)
                   }
-                  searchLabel={review.mode === 'discussion' ? 'Search discussions' : 'Search files'}
-                  searchOpen={review.mode === 'discussion' ? discussionSearchOpen : treeSearchOpen}
-                  {...(review.mode === 'discussion'
+                  searchLabel={
+                    review?.mode === 'discussion' ? 'Search discussions' : 'Search files'
+                  }
+                  searchOpen={review?.mode === 'discussion' ? discussionSearchOpen : treeSearchOpen}
+                  {...(review?.mode === 'discussion'
                     ? { threadFilter, onThreadFilterChange: setThreadFilter }
                     : {})}
                 />
-                {review.mode === 'discussion' ? (
+                {review?.mode === 'discussion' ? (
                   <DiscussionPanel
                     activeThreadId={review.activeThreadId}
                     error={review.error}

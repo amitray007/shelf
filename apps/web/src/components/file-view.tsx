@@ -472,6 +472,8 @@ export function SourceView({
   const [selectedLines, setSelectedLines] = useState<SelectedLineRange | null>(null);
   const [expandedLineNumber, setExpandedLineNumber] = useState<number | undefined>();
   const commentsVisible = sourceCommentsVisible(settings);
+  const createThread = review?.onCreateThread;
+  const canCreateThread = review?.canCreateThread === true && createThread !== undefined;
   const inlineDraftOpen = selectedLines !== null;
   const settingsRef = useRef<HTMLDivElement>(null);
   const lineCount = useMemo(() => Math.max(1, source.split(/\r?\n/u).length), [source]);
@@ -604,7 +606,7 @@ export function SourceView({
             : []),
         ]
       : [];
-    if (commentsVisible && review?.canCreateThread === true && selectedLines !== null) {
+    if (commentsVisible && canCreateThread && selectedLines !== null) {
       visibleAnnotations.push({
         lineNumber: selectedLines.end,
         metadata: {
@@ -619,7 +621,7 @@ export function SourceView({
     annotations,
     expandedLineNumber,
     commentsVisible,
-    review?.canCreateThread,
+    canCreateThread,
     selectedLines,
     settings.annotations,
     sourceThreadGroups,
@@ -850,20 +852,18 @@ export function SourceView({
           fileName={fileName}
           lineAnnotations={lineAnnotations}
           lineNumbers={settings.lineNumbers}
-          {...(review?.canCreateThread === true
+          {...(canCreateThread
             ? {}
             : { onCopyLine: (range: SelectedLineRange) => void copyLineLink(range) })}
-          onAddComment={
-            review?.canCreateThread === true && commentsVisible ? setSelectedLines : undefined
-          }
+          onAddComment={canCreateThread && commentsVisible ? setSelectedLines : undefined}
           onAnnotationToggle={toggleSourceAnnotation}
           onCancelInlineComment={() => setSelectedLines(null)}
           onDeletePost={review?.onDeletePost}
           onEditPost={review?.onEditPost}
           onCreateInlineComment={
-            review?.canCreateThread === true
+            canCreateThread && createThread !== undefined
               ? async (range, body) => {
-                  await review.onCreateThread(
+                  await createThread(
                     {
                       revisionId: review.revisionId,
                       ...(review.path === undefined ? {} : { path: review.path }),
