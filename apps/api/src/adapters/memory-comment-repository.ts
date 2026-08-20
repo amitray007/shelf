@@ -358,7 +358,7 @@ export class MemoryCommentRepository implements CommentRepository {
             displayName:
               post.visitorKey === null
                 ? post.author.kind === 'actor'
-                  ? post.author.actorId
+                  ? (post.author.displayName ?? post.author.actorId)
                   : post.author.displayName
                 : (this.#visitors.get(`${request.installationId}\u0000${post.visitorKey}`)
                     ?.displayName ??

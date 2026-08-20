@@ -401,10 +401,14 @@ export async function createArtifactCommentReply(
   artifactId: string,
   threadId: string,
   body: string,
+  displayName?: string,
 ): Promise<CommentPost> {
   const value = await requestJson(
     `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/comments/threads/${encodeURIComponent(threadId)}/replies`,
-    jsonRequest('POST', { body }),
+    jsonRequest('POST', {
+      body,
+      ...(displayName === undefined ? {} : { displayName }),
+    }),
   );
   if (!isCommentPost(value)) {
     throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid discussion reply.');

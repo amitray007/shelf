@@ -16,7 +16,8 @@ import {
 } from './comment-card.js';
 import { ReviewEditComposer } from './edit-composer.js';
 import { readReviewVisitorIdentity } from './identity.js';
-import { VisitorNameDialog } from './identity-dialog.js';
+import { ModeratorNameDialog, VisitorNameDialog } from './identity-dialog.js';
+import { readModeratorDisplayName } from './moderator-identity.js';
 import { ReviewSidebarToolbar } from './sidebar-toolbar.js';
 import type { ReviewThreadFilter } from './types.js';
 
@@ -82,11 +83,14 @@ export function ReviewComposer({
   const [nameDialog, setNameDialog] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
+  const [moderatorName, setModeratorName] = useState(readModeratorDisplayName);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const submitAfterNameRef = useRef(false);
   const identity = readReviewVisitorIdentity();
-  const displayName = identity.displayName;
-  const avatarSeed = moderator ? 'shelf-team' : displayName || identity.visitorToken || 'reviewer';
+  const displayName = moderator ? moderatorName : identity.displayName;
+  const avatarSeed = moderator
+    ? moderatorName || 'shelf-team'
+    : displayName || identity.visitorToken || 'reviewer';
   useEffect(() => {
     if (autoFocus) textareaRef.current?.focus();
   }, [autoFocus]);
@@ -118,24 +122,24 @@ export function ReviewComposer({
     <>
       <div className={`review-composer${docked ? ' review-composer-docked' : ''}`}>
         <div className="review-composer-input">
-          {!moderator ? (
-            <button
-              aria-label={displayName === '' ? 'Add your name' : `Change name for ${displayName}`}
-              className="review-composer-avatar"
-              onClick={() => {
-                submitAfterNameRef.current = false;
-                setNameDialog(true);
-              }}
-              title={displayName === '' ? 'Add your name' : `Commenting as ${displayName}`}
-              type="button"
-            >
-              <ReviewAvatarImage alt="" participantId={avatarSeed} size={36} />
-            </button>
-          ) : (
-            <span className="review-composer-avatar review-composer-avatar-static">
-              <ReviewAvatarImage alt="Shelf team avatar" participantId={avatarSeed} size={36} />
-            </span>
-          )}
+          <button
+            aria-label={displayName === '' ? 'Add your name' : `Change name for ${displayName}`}
+            className="review-composer-avatar"
+            onClick={() => {
+              submitAfterNameRef.current = false;
+              setNameDialog(true);
+            }}
+            title={
+              displayName === ''
+                ? moderator
+                  ? 'Commenting as Shelf team · set your name'
+                  : 'Add your name'
+                : `Commenting as ${displayName}`
+            }
+            type="button"
+          >
+            <ReviewAvatarImage alt="" participantId={avatarSeed} size={36} />
+          </button>
           <textarea
             aria-label={placeholder}
             disabled={disabled || pending}
@@ -170,13 +174,23 @@ export function ReviewComposer({
         ) : null}
       </div>
       {nameDialog ? (
-        <VisitorNameDialog
-          onCancel={() => {
-            submitAfterNameRef.current = false;
-            setNameDialog(false);
-          }}
-          onSaved={continueWithName}
-        />
+        moderator ? (
+          <ModeratorNameDialog
+            onCancel={() => setNameDialog(false)}
+            onSaved={(name) => {
+              setModeratorName(name);
+              setNameDialog(false);
+            }}
+          />
+        ) : (
+          <VisitorNameDialog
+            onCancel={() => {
+              submitAfterNameRef.current = false;
+              setNameDialog(false);
+            }}
+            onSaved={continueWithName}
+          />
+        )
       ) : null}
     </>
   );

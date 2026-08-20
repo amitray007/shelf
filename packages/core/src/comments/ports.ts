@@ -167,7 +167,7 @@ export class CommentResolvedThreadEditError extends Error {
 
 export type CommentAuthority =
   | { kind: 'visitor'; visitorKey: string; displayName?: string }
-  | { kind: 'moderator'; actorId: string };
+  | { kind: 'moderator'; actorId: string; displayName?: string };
 
 export interface CommentShareContext {
   installationId: string;

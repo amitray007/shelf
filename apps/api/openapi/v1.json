@@ -4850,6 +4850,11 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 128
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
                   }
                 },
                 "additionalProperties": false
@@ -5151,6 +5156,11 @@
                           "maxLength": 128
                         },
                         "actorId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "displayName": {
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 128
@@ -5513,6 +5523,11 @@
                                 "maxLength": 128
                               },
                               "actorId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "displayName": {
                                 "type": "string",
                                 "minLength": 1,
                                 "maxLength": 128
@@ -15700,6 +15715,11 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 20000
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
                   }
                 },
                 "additionalProperties": false

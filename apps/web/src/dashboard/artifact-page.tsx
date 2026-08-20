@@ -21,6 +21,7 @@ import { Group, Panel, Separator } from 'react-resizable-panels';
 import { Link, useLoaderData, useNavigate, useRevalidator, useSearchParams } from 'react-router';
 
 import { formatBytes } from '../components/format.js';
+import { readModeratorDisplayName } from '../components/review/moderator-identity.js';
 import { markReviewThreadRead } from '../components/review/persistence.js';
 import { applyCommentPostTransition } from '../components/review/thread-state.js';
 import { ordinal, revisionSourceName } from '../components/revision-label.js';
@@ -458,11 +459,13 @@ export function ArtifactPage() {
     setCommentSaving(true);
     setCommentError(undefined);
     try {
+      const moderatorName = readModeratorDisplayName();
       const post = await createArtifactCommentReply(
         artifact.workspaceId,
         artifact.artifactId,
         threadId,
         body,
+        moderatorName === '' ? undefined : moderatorName,
       );
       setCommentThreads((current) =>
         current.map((thread) =>

@@ -113,6 +113,19 @@ function validateVisitorMutationAuthority(
   if (authority.displayName !== undefined) displayNameForVisitor(authority);
 }
 
+function displayNameForModerator(
+  authority: Extract<CommentAuthority, { kind: 'moderator' }>,
+): string | undefined {
+  if (authority.displayName === undefined) return undefined;
+  const displayName = authority.displayName.trim();
+  if (displayName.length === 0 || displayName.length > 128) {
+    throw new InvalidCommentRequestError([
+      { field: 'displayName', reason: 'must contain 1-128 characters' },
+    ]);
+  }
+  return displayName;
+}
+
 function validateAnchor(anchor: CommentAnchor): void {
   if (
     anchor.path !== undefined &&
@@ -218,6 +231,9 @@ function outputPost(
           kind: 'actor',
           participantId: commentParticipantId('actor', post.actorId ?? post.author.actorId),
           actorId: post.author.actorId,
+          ...(post.author.displayName === undefined
+            ? {}
+            : { displayName: post.author.displayName }),
         };
   return {
     postId: post.postId,
@@ -249,6 +265,8 @@ function postForAuthority(
   commentBody: string,
   createdAt: string,
 ): Omit<StoredCommentPost, 'threadId'> {
+  const moderatorDisplayName =
+    authority.kind === 'moderator' ? displayNameForModerator(authority) : undefined;
   return {
     postId,
     body: commentBody,
@@ -263,6 +281,7 @@ function postForAuthority(
             kind: 'actor',
             participantId: commentParticipantId('actor', authority.actorId),
             actorId: authority.actorId,
+            ...(moderatorDisplayName === undefined ? {} : { displayName: moderatorDisplayName }),
           },
     visitorKey: authority.kind === 'visitor' ? authority.visitorKey : null,
     actorId: authority.kind === 'moderator' ? authority.actorId : null,

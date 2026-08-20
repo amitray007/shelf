@@ -24,7 +24,8 @@ const REVIEW_DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
 });
 
 export function reviewAuthorName(post: CommentPost): string {
-  return post.author.kind === 'visitor' ? post.author.displayName : 'Shelf team';
+  if (post.author.kind === 'visitor') return post.author.displayName;
+  return post.author.displayName ?? 'Shelf team';
 }
 
 export function reviewAvatarUrl(participantId: string): string {

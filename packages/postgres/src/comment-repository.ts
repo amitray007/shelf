@@ -66,6 +66,7 @@ function storedPost(row: PostRow): StoredCommentPost {
           kind: 'actor' as const,
           participantId: commentParticipantId('actor', row.actor_id as string),
           actorId: row.actor_id as string,
+          ...(row.display_name === null ? {} : { displayName: row.display_name }),
         };
   return {
     postId: row.post_id,
@@ -183,7 +184,7 @@ function postValues(
     author_kind: input.author.kind,
     visitor_key: input.visitorKey,
     actor_id: input.actorId,
-    display_name: input.author.kind === 'visitor' ? input.author.displayName : null,
+    display_name: input.author.displayName ?? null,
     body: input.body,
     created_at: new Date(input.createdAt),
     edited_at: input.editedAt === null ? null : new Date(input.editedAt),

@@ -729,7 +729,10 @@ export async function registerCommentRoutes(
         operationId: 'createModeratorCommentReplyV1',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         params: ArtifactThreadParamsSchema,
-        body: Type.Object({ body: CommentBodySchema }, { additionalProperties: false }),
+        body: Type.Object(
+          { body: CommentBodySchema, displayName: Type.Optional(DisplayNameSchema) },
+          { additionalProperties: false },
+        ),
         response: { 201: Type.Ref('CommentPost'), ...errors },
       },
     },
@@ -740,7 +743,7 @@ export async function registerCommentRoutes(
         artifactId: string;
         threadId: string;
       };
-      const body = request.body as { body: string };
+      const body = request.body as { body: string; displayName?: string };
       await dependencies.authorizer.authorize({
         installationId: identity.installationId,
         workspaceId: params.workspaceId,
@@ -757,7 +760,11 @@ export async function registerCommentRoutes(
         installationId: identity.installationId,
         workspaceId: params.workspaceId,
         threadId: params.threadId,
-        authority: { kind: 'moderator', actorId: identity.actorId },
+        authority: {
+          kind: 'moderator',
+          actorId: identity.actorId,
+          ...(body.displayName === undefined ? {} : { displayName: body.displayName }),
+        },
         body: body.body,
       });
       return reply.status(201).send(result);

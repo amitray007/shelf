@@ -44,6 +44,7 @@ export const CommentAuthorSchema = Type.Union([
       kind: Type.Literal('actor'),
       participantId: Type.String({ minLength: 1, maxLength: 128 }),
       actorId: Type.String({ minLength: 1, maxLength: 128 }),
+      displayName: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
     },
     { additionalProperties: false },
   ),

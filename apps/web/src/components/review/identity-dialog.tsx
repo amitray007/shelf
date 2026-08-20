@@ -5,15 +5,24 @@ import {
   readReviewVisitorIdentity,
   saveReviewVisitorIdentity,
 } from './identity.js';
+import { readModeratorDisplayName, saveModeratorDisplayName } from './moderator-identity.js';
 
-export function VisitorNameDialog({
+function ReviewNameDialog({
+  description,
+  initialName,
   onCancel,
-  onSaved,
+  onSubmitName,
+  required = true,
+  title,
 }: {
+  readonly description: string;
+  readonly initialName: string;
   readonly onCancel: () => void;
-  readonly onSaved: (identity: ReviewVisitorIdentity) => void;
+  readonly onSubmitName: (name: string) => void;
+  readonly required?: boolean;
+  readonly title: string;
 }) {
-  const [name, setName] = useState(() => readReviewVisitorIdentity().displayName);
+  const [name, setName] = useState(initialName);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     inputRef.current?.focus();
@@ -25,9 +34,8 @@ export function VisitorNameDialog({
   }, [onCancel]);
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    const identity = readReviewVisitorIdentity();
-    if (name.trim().length === 0) return;
-    onSaved(saveReviewVisitorIdentity({ ...identity, displayName: name }));
+    if (required && name.trim().length === 0) return;
+    onSubmitName(name);
   };
   return (
     <div
@@ -36,8 +44,8 @@ export function VisitorNameDialog({
       role="presentation"
     >
       <form className="review-dialog" onSubmit={submit} role="dialog" aria-modal="true">
-        <h2 id="review-visitor-title">Choose a name for this review</h2>
-        <p>Your name is shown beside comments you leave on this shared link.</p>
+        <h2 id="review-visitor-title">{title}</h2>
+        <p>{description}</p>
         <label className="review-field">
           <span>Display name</span>
           <input
@@ -46,7 +54,7 @@ export function VisitorNameDialog({
             maxLength={128}
             onChange={(event) => setName(event.target.value)}
             ref={inputRef}
-            required
+            required={required}
             value={name}
           />
         </label>
@@ -60,5 +68,45 @@ export function VisitorNameDialog({
         </div>
       </form>
     </div>
+  );
+}
+
+export function VisitorNameDialog({
+  onCancel,
+  onSaved,
+}: {
+  readonly onCancel: () => void;
+  readonly onSaved: (identity: ReviewVisitorIdentity) => void;
+}) {
+  return (
+    <ReviewNameDialog
+      description="Your name is shown beside comments you leave on this shared link."
+      initialName={readReviewVisitorIdentity().displayName}
+      onCancel={onCancel}
+      onSubmitName={(name) => {
+        const identity = readReviewVisitorIdentity();
+        onSaved(saveReviewVisitorIdentity({ ...identity, displayName: name }));
+      }}
+      title="Choose a name for this review"
+    />
+  );
+}
+
+export function ModeratorNameDialog({
+  onCancel,
+  onSaved,
+}: {
+  readonly onCancel: () => void;
+  readonly onSaved: (displayName: string) => void;
+}) {
+  return (
+    <ReviewNameDialog
+      description="Shown beside your comments instead of “Shelf team”. Leave empty to use the default."
+      initialName={readModeratorDisplayName()}
+      onCancel={onCancel}
+      onSubmitName={(name) => onSaved(saveModeratorDisplayName(name))}
+      required={false}
+      title="Choose your commenting name"
+    />
   );
 }
