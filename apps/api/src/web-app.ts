@@ -61,7 +61,7 @@ export async function registerWebApp(app: FastifyInstance, options: WebAppOption
     maxAge: '1y',
   });
 
-  for (const path of ['/', '/s/:shareId', '/signin', '/app', '/app/*']) {
+  for (const path of ['/', '/s/:shareId', '/signin', '/app', '/app/*', '/preview/:artifactId']) {
     app.get(path, { schema: { hide: true } }, async (_request, reply) => {
       applyDocumentHeaders(reply, options.rendererOrigin);
       return reply.sendFile('index.html', root, {

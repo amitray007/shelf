@@ -29,12 +29,10 @@ import {
   isErrorEnvelope,
   isFolderTreePage,
   isRestoreResult,
-  isRevisionComparison,
   isShareCreateResult,
   isSharePage,
   isWorkspaceCreateResult,
   type RestoreResult,
-  type RevisionComparison,
   type ShareCreateInput,
   type ShareCreateResult,
   type ShareManagementSummary,
@@ -593,22 +591,6 @@ export async function restoreArtifact(
     jsonRequest('POST', { sourceRevisionId }, { 'idempotency-key': idempotencyKey }),
   );
   if (!isRestoreResult(value)) {
-    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
-  }
-  return value;
-}
-
-export async function compareRevisions(
-  baseRevisionId: string,
-  targetRevisionId: string,
-  cursor?: string,
-): Promise<RevisionComparison> {
-  const query = new URLSearchParams({ limit: '100' });
-  if (cursor !== undefined) query.set('cursor', cursor);
-  const value = await requestJson(
-    `/api/v1/revisions/${encodeURIComponent(baseRevisionId)}/comparisons/${encodeURIComponent(targetRevisionId)}?${query}`,
-  );
-  if (!isRevisionComparison(value)) {
     throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
   }
   return value;
