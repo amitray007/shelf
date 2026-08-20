@@ -104,12 +104,14 @@ export function ReviewAvatar({
   readonly post: CommentPost;
   readonly size?: number;
 }) {
+  // Actor avatars follow the chosen display name so they match the composer
+  // preview; unnamed actor posts share the default team avatar.
+  const seed =
+    post.author.kind === 'actor'
+      ? (post.author.displayName ?? 'shelf-team')
+      : post.author.participantId;
   return (
-    <ReviewAvatarImage
-      alt={`${reviewAuthorName(post)} avatar`}
-      participantId={post.author.participantId}
-      size={size}
-    />
+    <ReviewAvatarImage alt={`${reviewAuthorName(post)} avatar`} participantId={seed} size={size} />
   );
 }
 
