@@ -1,3 +1,5 @@
+/* biome-ignore-all lint/complexity/noImportantStyles: Panel-library inline dimensions need mobile overrides. */
+
 @import "@cloudflare/kumo/styles/standalone";
 
 :root {
@@ -118,6 +120,70 @@ a {
   overflow: hidden;
 }
 
+.viewer-sidebar-split {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.viewer-sidebar-split-sidebar,
+.viewer-sidebar-split-content {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.viewer-sidebar-split > [data-testid="viewer-sidebar"],
+.viewer-sidebar-split-sidebar,
+.viewer-sidebar-split-separator {
+  transition: none !important;
+}
+
+.viewer-sidebar-split-separator {
+  position: relative;
+  width: 10px;
+  min-width: 10px;
+  background: var(--canvas);
+  cursor: col-resize;
+}
+
+.viewer-sidebar-split-separator::before {
+  position: absolute;
+  inset: 0 4px;
+  border-right: 1px solid var(--rule);
+  content: "";
+}
+
+.viewer-sidebar-split-separator span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 38px;
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
+  translate: -50% -50%;
+}
+
+.viewer-sidebar-split-separator:hover::before,
+.viewer-sidebar-split-separator[data-separator="active"]::before,
+.viewer-sidebar-split-separator:focus-visible::before {
+  border-color: var(--accent);
+}
+
+.viewer-sidebar-split-collapsed > [data-testid="viewer-sidebar"] {
+  width: 44px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
+  flex-basis: 44px !important;
+}
+
+.viewer-sidebar-split-collapsed > [data-separator] {
+  display: none;
+}
+
 .review-panel {
   display: flex;
   width: min(348px, 32vw);
@@ -128,6 +194,13 @@ a {
   border-left: 1px solid var(--rule-strong);
   background: var(--canvas);
   color: var(--text);
+}
+
+.viewer-sidebar-split-sidebar .review-panel {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  flex: 1;
 }
 
 .review-panel-public {
@@ -1914,17 +1987,12 @@ a {
 }
 
 .folder-browser {
-  display: grid;
+  display: flex;
   width: 100%;
   min-height: 0;
   flex: 1 1 auto;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
   overflow: hidden;
   background: var(--canvas);
-}
-
-.folder-browser-sidebar-collapsed {
-  grid-template-columns: 44px minmax(0, 1fr);
 }
 
 .folder-browser-tree {
@@ -1935,7 +2003,6 @@ a {
   overflow: hidden;
   flex-direction: column;
   padding: 0;
-  border-right: 1px solid var(--rule);
 }
 
 .folder-browser-pierre-tree {
@@ -2200,6 +2267,10 @@ a {
 }
 
 @media (max-width: 640px) {
+  .viewer-sidebar-split-separator {
+    display: none;
+  }
+
   .rail {
     min-height: var(--bar-size);
     flex: 0 0 var(--bar-size);
@@ -2235,55 +2306,78 @@ a {
     grid-template-columns: 1fr;
   }
 
-  .folder-browser {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(120px, 34vh) minmax(0, 1fr);
+  .viewer-main > .viewer-sidebar-split {
+    display: contents !important;
   }
 
-  .viewer-main > .review-panel {
+  .viewer-main .viewer-sidebar-split > [data-testid="viewer-sidebar"] {
     position: fixed;
     inset: var(--bar-size) 0 0;
     z-index: 8;
     width: auto;
     min-width: 0;
+    height: auto !important;
     border-left: 0;
   }
 
-  .review-panel {
-    width: 100%;
-    min-width: 0;
+  .viewer-main .viewer-sidebar-split > [data-testid="viewer-content"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: 100% !important;
+    flex: 1 1 auto !important;
   }
 
-  .viewer-main > .review-panel-public.review-panel-collapsed {
+  .viewer-main .viewer-sidebar-split-collapsed > [data-testid="viewer-sidebar"] {
     position: static;
     width: 44px;
     min-width: 44px;
+    height: 100% !important;
     flex: 0 0 44px;
+  }
+
+  .viewer-main .viewer-sidebar-split-collapsed > [data-testid="viewer-content"] {
+    width: calc(100% - 44px) !important;
+    height: 100% !important;
+  }
+
+  .folder-browser .viewer-sidebar-split {
+    display: grid !important;
+    grid-template-rows: minmax(120px, 34vh) minmax(0, 1fr);
+  }
+
+  .folder-browser .viewer-sidebar-split > [data-panel] {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    flex: none !important;
+    overflow: visible !important;
+  }
+
+  .folder-browser
+    .folder-browser-sidebar-split-review.viewer-sidebar-split-open
+    > [data-testid="viewer-sidebar"] {
+    position: fixed;
+    inset: var(--bar-size) 0 0;
+    z-index: 8;
+    height: auto !important;
+    background: var(--canvas);
+  }
+
+  .folder-browser
+    .folder-browser-sidebar-split-review.viewer-sidebar-split-collapsed
+    > [data-testid="viewer-sidebar"] {
+    position: static;
+    height: 44px !important;
   }
 
   .folder-browser-tree {
     padding: 0;
     border-right: 0;
     border-bottom: 1px solid var(--rule);
-  }
-
-  .folder-browser-tree:has(> .review-panel) {
-    position: fixed;
-    inset: var(--bar-size) 0 0;
-    z-index: 8;
-    background: var(--canvas);
-  }
-
-  .folder-browser-sidebar-collapsed {
-    grid-template-columns: 1fr;
-    grid-template-rows: 44px minmax(0, 1fr);
-  }
-
-  .folder-browser-tree:has(> .folder-browser-sidebar-content:not([hidden]) > .review-panel) {
-    position: fixed;
-    inset: var(--bar-size) 0 0;
-    z-index: 8;
-    background: var(--canvas);
   }
 
   .folder-browser-tree:has(> [aria-label="Review tools"] [aria-expanded="true"]),

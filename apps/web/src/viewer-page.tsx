@@ -31,6 +31,7 @@ import { readReviewValue, writeReviewValue } from './components/review/persisten
 import type { ReviewSidebarMode } from './components/review/types.js';
 import { reviewPanelStorageKey, useViewerReview } from './components/review/use-review.js';
 import { ViewerRail } from './components/viewer-shell.js';
+import { ViewerSidebarSplit } from './components/viewer-sidebar-split.js';
 import {
   normalizeMediaType,
   type PassiveRenderer,
@@ -313,42 +314,13 @@ export function ViewerPage() {
     <div className="viewer">
       <ViewerRail authority={payload.authority} resolution={payload.resolution} />
       <div className="viewer-main">
-        {review.enabled && payload.kind === 'file' ? (
-          <DiscussionPanel
-            activeThreadId={review.activeThreadId}
-            collapsed={!discussionOpen}
-            collapsible
-            error={review.error}
-            loading={review.loading}
-            loadingOlder={review.loadingOlder}
-            nextCursor={review.nextCursor}
-            newAnchor={
-              review.writable
-                ? { revisionId: payload.resolution.revision.revisionId, kind: 'file' }
-                : undefined
-            }
-            onCollapse={() => setDiscussionVisibility(!discussionOpen)}
-            onLoadOlder={review.loadOlder}
-            onCreateThread={review.createThread}
-            onDeletePost={review.deletePost}
-            onEditPost={review.editPost}
-            onReply={review.reply}
-            onSelectThread={selectReviewThread}
-            onNavigateToThread={navigateToReviewThread}
-            onSetThreadStatus={review.setThreadStatus}
-            publicViewer
-            saving={review.saving}
-            sidebarLabel="file discussions sidebar"
-            sidebarControlsId="viewer-discussion-sidebar"
-            threads={review.threads}
-          />
-        ) : null}
         {payload.kind === 'file' ? (
-          <FileArtifact
-            payload={payload}
-            review={
-              review.enabled
-                ? {
+          review.enabled ? (
+            <ViewerSidebarSplit
+              content={
+                <FileArtifact
+                  payload={payload}
+                  review={{
                     canCreateThread: review.writable,
                     revisionId: payload.resolution.revision.revisionId,
                     threads: review.threads,
@@ -360,10 +332,44 @@ export function ViewerPage() {
                     focusRequestId,
                     onSelectThread: selectReviewThread,
                     saving: review.saving,
+                  }}
+                />
+              }
+              sidebarOpen={discussionOpen}
+              sidebar={
+                <DiscussionPanel
+                  activeThreadId={review.activeThreadId}
+                  collapsed={!discussionOpen}
+                  collapsible
+                  error={review.error}
+                  loading={review.loading}
+                  loadingOlder={review.loadingOlder}
+                  nextCursor={review.nextCursor}
+                  newAnchor={
+                    review.writable
+                      ? { revisionId: payload.resolution.revision.revisionId, kind: 'file' }
+                      : undefined
                   }
-                : undefined
-            }
-          />
+                  onCollapse={() => setDiscussionVisibility(!discussionOpen)}
+                  onLoadOlder={review.loadOlder}
+                  onCreateThread={review.createThread}
+                  onDeletePost={review.deletePost}
+                  onEditPost={review.editPost}
+                  onReply={review.reply}
+                  onSelectThread={selectReviewThread}
+                  onNavigateToThread={navigateToReviewThread}
+                  onSetThreadStatus={review.setThreadStatus}
+                  publicViewer
+                  saving={review.saving}
+                  sidebarLabel="file discussions sidebar"
+                  sidebarControlsId="viewer-discussion-sidebar"
+                  threads={review.threads}
+                />
+              }
+            />
+          ) : (
+            <FileArtifact payload={payload} />
+          )
         ) : (
           <FolderArtifact
             payload={payload}

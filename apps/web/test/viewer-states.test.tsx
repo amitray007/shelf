@@ -34,6 +34,13 @@ import {
   reviewSurfaceVisible,
 } from '../src/components/review/use-review.js';
 import { UnavailableView, ViewerRail } from '../src/components/viewer-shell.js';
+import {
+  clampViewerSidebarWidth,
+  readViewerSidebarWidth,
+  VIEWER_SIDEBAR_WIDTH_STORAGE_KEY,
+  ViewerSidebarSplit,
+  viewerSidebarBounds,
+} from '../src/components/viewer-sidebar-split.js';
 import { readViewerSidebarOpen } from '../src/viewer-page.js';
 
 afterEach(() => {
@@ -165,6 +172,48 @@ describe('viewer content states', () => {
       'Unresolved',
       'Resolved',
     ]);
+  });
+
+  it('clamps the shared viewer sidebar width and falls back for malformed storage', () => {
+    const bounds = viewerSidebarBounds(1440);
+    const storage = reviewTestStorage();
+    expect(clampViewerSidebarWidth(240, bounds)).toBe(280);
+    expect(clampViewerSidebarWidth(600, bounds)).toBe(420);
+    expect(readViewerSidebarWidth(storage, bounds)).toBe(320);
+    storage.setItem(VIEWER_SIDEBAR_WIDTH_STORAGE_KEY, 'not-a-width');
+    expect(readViewerSidebarWidth(storage, bounds)).toBe(320);
+    storage.setItem(VIEWER_SIDEBAR_WIDTH_STORAGE_KEY, '401.8');
+    expect(readViewerSidebarWidth(storage, bounds)).toBe(402);
+    expect(
+      readViewerSidebarWidth(
+        {
+          getItem: () => {
+            throw new Error('storage unavailable');
+          },
+        },
+        bounds,
+      ),
+    ).toBe(320);
+  });
+
+  it('uses the responsive tablet viewer sidebar bounds', () => {
+    expect(viewerSidebarBounds(641)).toEqual({ min: 260, default: 300, max: 360 });
+    expect(viewerSidebarBounds(1023)).toEqual({ min: 260, default: 300, max: 360 });
+    expect(viewerSidebarBounds(1024)).toEqual({ min: 280, default: 320, max: 420 });
+  });
+
+  it('keeps the public viewer split and separator as direct library children', () => {
+    const html = renderToStaticMarkup(
+      <ViewerSidebarSplit
+        content={<main>Preview</main>}
+        sidebarOpen
+        sidebar={<aside>Sidebar</aside>}
+      />,
+    );
+    expect(html).toContain('data-group="true"');
+    expect(html).toContain('data-testid="viewer-sidebar"');
+    expect(html).toContain('data-testid="viewer-sidebar-resize"');
+    expect(html).toContain('data-testid="viewer-content"');
   });
 
   it('resolves public sidebar defaults and explicit state per share revision', () => {
