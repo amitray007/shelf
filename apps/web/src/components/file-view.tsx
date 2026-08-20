@@ -152,7 +152,7 @@ export const DEFAULT_SOURCE_VIEW_SETTINGS: SourceViewSettings = {
   fontSize: 13,
   stickyHeader: true,
   tokenInteractions: true,
-  wrap: false,
+  wrap: true,
 };
 
 export function viewerSessionStorageKey(namespace: string): string {
@@ -208,7 +208,7 @@ function readSourceViewSettings(): SourceViewSettings {
       fontSize: numberSetting(value.fontSize, DEFAULT_SOURCE_VIEW_SETTINGS.fontSize, 11, 18),
       stickyHeader: value.stickyHeader !== false,
       tokenInteractions: value.tokenInteractions !== false,
-      wrap: value.wrap === true,
+      wrap: value.wrap !== false,
     };
   } catch {
     return DEFAULT_SOURCE_VIEW_SETTINGS;

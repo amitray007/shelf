@@ -368,6 +368,8 @@ describe('viewer content states', () => {
     );
     expect(html).not.toContain('Find in source');
     expect(html).toContain('Wrap');
+    expect(html).toContain('aria-label="Disable word wrap"');
+    expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('Lines');
     expect(html).toContain('Copy');
     expect(html).toContain('Source view settings');
