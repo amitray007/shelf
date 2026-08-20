@@ -191,7 +191,10 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
                     revisionId: review.revisionId,
                     threads: review.threads,
                     onCreateThread: review.onCreateThread,
+                    onDeletePost: review.onDeletePost,
+                    onEditPost: review.onEditPost,
                     onSelectThread: review.onSelectThread,
+                    saving: review.saving,
                   },
                 })}
             fileName={revision.originalFileName}

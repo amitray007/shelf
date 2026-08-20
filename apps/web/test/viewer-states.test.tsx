@@ -4,14 +4,18 @@ import { describe, expect, it } from 'vitest';
 
 import { ArtifactContent } from '../src/components/artifact-content.js';
 import {
+  DEFAULT_SOURCE_VIEW_SETTINGS,
   FileLoadingState,
   FileView,
   groupSourceThreadsByLine,
   SourceView,
+  sourceCommentsVisible,
+  toggleSourceComments,
 } from '../src/components/file-view.js';
 import { FolderBrowser, isFolderEntryVisible } from '../src/components/folder-browser.js';
 import {
   formatRelativeReviewTime,
+  ReviewAvatar,
   reviewAvatarUrl,
 } from '../src/components/review/comment-card.js';
 import { DiscussionPanel } from '../src/components/review/discussion-panel.js';
@@ -147,9 +151,33 @@ describe('viewer content states', () => {
     const now = Date.parse('2026-08-20T12:00:00.000Z');
     expect(formatRelativeReviewTime('2026-08-20T11:00:00.000Z', now)).toBe('1h ago');
     expect(formatRelativeReviewTime('2026-08-18T12:00:00.000Z', now)).toBe('2d ago');
-    expect(reviewAvatarUrl('opaque-reviewer')).toContain('/notionists-neutral/svg');
-    expect(reviewAvatarUrl('opaque-reviewer')).toContain('backgroundColor=e4e4e7');
+    expect(reviewAvatarUrl('opaque-reviewer')).toContain('/10.x/voxel-art/svg');
+    expect(reviewAvatarUrl('opaque-reviewer')).toContain('tags=animation');
+    expect(reviewAvatarUrl('opaque-reviewer')).toContain('seed=opaque-reviewer');
     expect(reviewAvatarUrl('opaque-reviewer')).not.toContain('/initials/svg');
+  });
+
+  it('lazy-loads non-composer review avatars without changing their explicit size', () => {
+    const post = sourceThread('avatar', 1).posts[0];
+    if (post === undefined) throw new Error('avatar fixture post is required');
+    const html = renderToStaticMarkup(<ReviewAvatar post={post} />);
+    expect(html).toContain('loading="lazy"');
+    expect(html).toContain('decoding="async"');
+    expect(html).toContain('width="28"');
+    expect(html).toContain('height="28"');
+  });
+
+  it('re-enables annotations when Show comments is activated from an annotations-off state', () => {
+    const hiddenSettings = { annotations: false, comments: true };
+    expect(sourceCommentsVisible(hiddenSettings)).toBe(false);
+
+    const shownSettings = toggleSourceComments({
+      ...DEFAULT_SOURCE_VIEW_SETTINGS,
+      ...hiddenSettings,
+    });
+    expect(shownSettings.annotations).toBe(true);
+    expect(shownSettings.comments).toBe(true);
+    expect(sourceCommentsVisible(shownSettings)).toBe(true);
   });
 
   it('removes a deleted root thread but keeps reply tombstones in the thread', () => {
@@ -499,6 +527,8 @@ describe('viewer content states', () => {
     expect(html).toContain('aria-label="Disable word wrap"');
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('Lines');
+    expect(html).toContain('Comments');
+    expect(html).toContain('aria-label="Hide comments"');
     expect(html).toContain('Copy');
     expect(html).toContain('Source view settings');
   });

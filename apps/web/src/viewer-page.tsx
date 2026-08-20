@@ -308,7 +308,10 @@ export function ViewerPage() {
                     revisionId: payload.resolution.revision.revisionId,
                     threads: review.threads,
                     onCreateThread: review.createThread,
+                    onDeletePost: review.deletePost,
+                    onEditPost: review.editPost,
                     onSelectThread: selectReviewThread,
+                    saving: review.saving,
                   }
                 : undefined
             }

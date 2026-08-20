@@ -28,7 +28,7 @@ export function reviewAuthorName(post: CommentPost): string {
 }
 
 export function reviewAvatarUrl(participantId: string): string {
-  return `https://api.dicebear.com/9.x/notionists-neutral/svg?seed=${encodeURIComponent(participantId)}&backgroundColor=e4e4e7`;
+  return `https://api.dicebear.com/10.x/voxel-art/svg?tags=animation&seed=${encodeURIComponent(participantId)}`;
 }
 
 function formatRelativeReviewTimestamp(timestamp: number, now = Date.now()): string {
@@ -70,6 +70,8 @@ export function ReviewAvatar({
       alt={`${reviewAuthorName(post)} avatar`}
       className="review-avatar"
       height={size}
+      decoding="async"
+      loading="lazy"
       src={reviewAvatarUrl(post.author.participantId)}
       referrerPolicy="no-referrer"
       width={size}
@@ -95,8 +97,10 @@ export function ReviewParticipantAvatar({
     >
       <img
         alt={`${participant.displayName} avatar`}
+        decoding="async"
         height={28}
         referrerPolicy="no-referrer"
+        loading="lazy"
         src={reviewAvatarUrl(participant.participantId)}
         width={28}
       />

@@ -274,6 +274,8 @@
   width: 28px;
   height: 28px;
   border-radius: inherit;
+  background: #f4f4f5;
+  object-fit: cover;
 }
 
 .review-participant-avatar:hover,

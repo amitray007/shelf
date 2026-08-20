@@ -351,7 +351,10 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
                     ...(selected === undefined ? {} : { path: selected.path }),
                     threads: review.threads,
                     onCreateThread: review.onCreateThread,
+                    onDeletePost: review.onDeletePost,
+                    onEditPost: review.onEditPost,
                     onSelectThread: review.onSelectThread,
+                    saving: review.saving,
                   },
                 })}
             key={selected?.path ?? 'empty'}
