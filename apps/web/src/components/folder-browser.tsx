@@ -113,6 +113,10 @@ export function isFolderEntryVisible(path: string, collapsedDirectories: Readonl
   return ancestorDirectories(path).every((directory) => !collapsedDirectories.has(directory));
 }
 
+export function folderFileViewKey(path: string | undefined, loading: boolean): string {
+  return `${path ?? 'empty'}:${loading ? 'loading' : 'loaded'}`;
+}
+
 export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps) {
   const firstFile = entries.find((entry) => entry.kind === 'file');
   const paths = useMemo(
@@ -375,7 +379,7 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
                     saving: review.saving,
                   },
                 })}
-            key={selected?.path ?? 'empty'}
+            key={folderFileViewKey(selected?.path, bytes === undefined)}
             preview={preview}
           />
         </div>

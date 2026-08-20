@@ -13,7 +13,11 @@ import {
   sourceLineSelectionEnabled,
   toggleSourceComments,
 } from '../src/components/file-view.js';
-import { FolderBrowser, isFolderEntryVisible } from '../src/components/folder-browser.js';
+import {
+  FolderBrowser,
+  folderFileViewKey,
+  isFolderEntryVisible,
+} from '../src/components/folder-browser.js';
 import {
   formatRelativeReviewTime,
   ReviewAvatar,
@@ -588,6 +592,12 @@ describe('viewer content states', () => {
     expect(isFolderEntryVisible('src/nested/example.ts', collapsed)).toBe(false);
     expect(isFolderEntryVisible('README.md', collapsed)).toBe(true);
     expect(isFolderEntryVisible('src', collapsed)).toBe(true);
+  });
+
+  it('remounts a folder file view after its persisted file finishes loading', () => {
+    expect(folderFileViewKey('src/example.ts', true)).not.toBe(
+      folderFileViewKey('src/example.ts', false),
+    );
   });
 
   it('renders an allowlisted raster image without embedding active markup', () => {
