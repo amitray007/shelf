@@ -138,6 +138,7 @@ describe('viewer content states', () => {
     expect(formatRelativeReviewTime('2026-08-20T11:00:00.000Z', now)).toBe('1h ago');
     expect(formatRelativeReviewTime('2026-08-18T12:00:00.000Z', now)).toBe('2d ago');
     expect(reviewAvatarUrl('opaque-reviewer')).toContain('/notionists-neutral/svg');
+    expect(reviewAvatarUrl('opaque-reviewer')).toContain('backgroundColor=e4e4e7');
     expect(reviewAvatarUrl('opaque-reviewer')).not.toContain('/initials/svg');
   });
 

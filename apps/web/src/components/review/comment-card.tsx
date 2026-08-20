@@ -27,7 +27,7 @@ export function reviewAuthorName(post: CommentPost): string {
 }
 
 export function reviewAvatarUrl(participantId: string): string {
-  return `https://api.dicebear.com/9.x/notionists-neutral/svg?seed=${encodeURIComponent(participantId)}&backgroundColor=18181b`;
+  return `https://api.dicebear.com/9.x/notionists-neutral/svg?seed=${encodeURIComponent(participantId)}&backgroundColor=e4e4e7`;
 }
 
 function formatRelativeReviewTimestamp(timestamp: number, now = Date.now()): string {
