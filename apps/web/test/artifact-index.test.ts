@@ -74,5 +74,7 @@ describe('artifact index presentation', () => {
     expect(source).toContain('.artifact-comments-popover');
     expect(source).toContain('.artifact-table th.artifact-updated-cell');
     expect(source).toContain('text-overflow: clip;');
+    expect(source).toContain('.artifact-table th:first-child');
+    expect(source).toContain('calc(12px + 20px + 9px)');
   });
 });
