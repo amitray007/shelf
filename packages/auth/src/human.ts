@@ -28,6 +28,21 @@ export interface CreateHumanAuthOptions {
   secret: string;
 }
 
+function trustedOriginsFor(baseUrl: string): string[] {
+  const base = new URL(baseUrl);
+  const origins = new Set([base.origin]);
+  // Host-local development commonly switches between these equivalent loopback
+  // names. Keep production origin checks strict while allowing that safe pair.
+  if (base.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(base.hostname)) {
+    for (const hostname of ['localhost', '127.0.0.1']) {
+      const alias = new URL(base.origin);
+      alias.hostname = hostname;
+      origins.add(alias.origin);
+    }
+  }
+  return [...origins];
+}
+
 export function createHumanAuth(options: CreateHumanAuthOptions): HumanAuth {
   const pool = new Pool({
     connectionString: options.connectionString,
@@ -38,7 +53,7 @@ export function createHumanAuth(options: CreateHumanAuthOptions): HumanAuth {
     baseURL: options.baseUrl,
     secret: options.secret,
     session: { cookieCache: { enabled: false } },
-    trustedOrigins: [options.baseUrl],
+    trustedOrigins: trustedOriginsFor(options.baseUrl),
   };
   const auth = betterAuth({
     ...shared,

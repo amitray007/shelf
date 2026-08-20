@@ -12,16 +12,27 @@ import { SortDescendingIcon } from '@phosphor-icons/react/SortDescending';
 import { TrashIcon } from '@phosphor-icons/react/Trash';
 import {
   type ArtifactRevision,
+  type CommentThread,
   PUBLISHER_METADATA_KEYS,
   type ShareManagementSummary,
 } from '@shelf/contracts';
-import { type FormEvent, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { Link, useLoaderData, useNavigate, useRevalidator, useSearchParams } from 'react-router';
 
 import { formatBytes } from '../components/format.js';
+import { markReviewThreadRead } from '../components/review/persistence.js';
 import { ordinal, revisionSourceName } from '../components/revision-label.js';
-import { DashboardApiError, renameArtifact, restoreArtifact, revokeShare } from './api.js';
+import {
+  createArtifactCommentReply,
+  DashboardApiError,
+  loadArtifactComments,
+  moderateArtifactCommentPost,
+  renameArtifact,
+  restoreArtifact,
+  revokeShare,
+  updateArtifactCommentThread,
+} from './api.js';
 import { ArtifactShareDialog } from './artifact-share-dialog.js';
 import { DeleteArtifactDialog } from './delete-artifact-dialog.js';
 import { Modal } from './dialogs.js';
@@ -274,6 +285,12 @@ function ShareRow({ share }: { readonly share: ShareManagementSummary }) {
             <dd>{shareSessionUsage(share)}</dd>
           </div>
         ) : null}
+        <div>
+          <dt>Comments</dt>
+          <dd>
+            <span className="share-policy-badge">{share.commentPolicy ?? 'off'}</span>
+          </dd>
+        </div>
       </dl>
       {revocable ? (
         <footer className="share-row-actions">
@@ -328,8 +345,24 @@ export function ArtifactPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [restoreRevision, setRestoreRevision] = useState<ArtifactRevision | null>(null);
+  const [commentThreads, setCommentThreads] = useState<readonly CommentThread[]>(payload.comments);
+  const [commentNextCursor, setCommentNextCursor] = useState<string | null>(
+    payload.commentsNextCursor,
+  );
+  const [loadingOlderComments, setLoadingOlderComments] = useState(false);
+  useEffect(() => setCommentThreads(payload.comments), [payload.comments]);
+  useEffect(() => setCommentNextCursor(payload.commentsNextCursor), [payload.commentsNextCursor]);
   const activePanel = inspectorPanel(searchParams.get('panel'));
   const historyOrder = searchParams.get('historyOrder') === 'oldest' ? 'oldest' : 'newest';
+  const discussionOpen = searchParams.get('discussion') === '1';
+  const activeThreadId = searchParams.get('thread') ?? undefined;
+  useEffect(() => {
+    if (!discussionOpen || activeThreadId === undefined) return;
+    const activeThread = commentThreads.find((thread) => thread.threadId === activeThreadId);
+    if (activeThread !== undefined) {
+      markReviewThreadRead(artifact.artifactId, activeThread.threadId, activeThread.updatedAt);
+    }
+  }, [activeThreadId, artifact.artifactId, commentThreads, discussionOpen]);
   const artifactShares = useMemo(
     () => payload.shares.items.filter((share) => share.artifactId === artifact.artifactId),
     [artifact.artifactId, payload.shares.items],
@@ -373,6 +406,95 @@ export function ArtifactPage() {
     if (revision.revisionId === artifact.latestRevision.revisionId) next.delete('revision');
     else next.set('revision', revision.revisionId);
     setSearchParams(next, { replace: true });
+  };
+  const selectThread = (threadId: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (threadId === '') next.delete('thread');
+    else next.set('thread', threadId);
+    next.set('discussion', '1');
+    setSearchParams(next, { defaultShouldRevalidate: false, replace: true });
+  };
+  const toggleDiscussion = () => {
+    const next = new URLSearchParams(searchParams);
+    if (discussionOpen) {
+      next.delete('discussion');
+      next.delete('thread');
+    } else {
+      next.set('discussion', '1');
+    }
+    setSearchParams(next, { defaultShouldRevalidate: false, replace: true });
+  };
+  const setDiscussionMode = (mode: 'tree' | 'discussion') => {
+    const next = new URLSearchParams(searchParams);
+    if (mode === 'discussion') next.set('discussion', '1');
+    else {
+      next.delete('discussion');
+      next.delete('thread');
+    }
+    setSearchParams(next, { defaultShouldRevalidate: false, replace: true });
+  };
+  const replyToThread = async (threadId: string, body: string) => {
+    const post = await createArtifactCommentReply(
+      artifact.workspaceId,
+      artifact.artifactId,
+      threadId,
+      body,
+    );
+    setCommentThreads((current) =>
+      current.map((thread) =>
+        thread.threadId === threadId ? { ...thread, posts: [...thread.posts, post] } : thread,
+      ),
+    );
+  };
+  const setThreadStatus = async (threadId: string, status: 'resolve' | 'reopen') => {
+    const updated = await updateArtifactCommentThread(
+      artifact.workspaceId,
+      artifact.artifactId,
+      threadId,
+      status,
+    );
+    setCommentThreads((current) =>
+      current.map((thread) => (thread.threadId === updated.threadId ? updated : thread)),
+    );
+  };
+  const moderatePost = async (postId: string, moderation: 'hide' | 'unhide') => {
+    const updated = await moderateArtifactCommentPost(
+      artifact.workspaceId,
+      artifact.artifactId,
+      postId,
+      moderation,
+    );
+    setCommentThreads((current) =>
+      current.map((thread) =>
+        thread.threadId !== updated.threadId
+          ? thread
+          : {
+              ...thread,
+              posts: thread.posts.map((post) => (post.postId === updated.postId ? updated : post)),
+            },
+      ),
+    );
+  };
+  const loadOlderComments = async () => {
+    if (commentNextCursor === null || loadingOlderComments) return;
+    setLoadingOlderComments(true);
+    try {
+      const page = await loadArtifactComments(
+        artifact.workspaceId,
+        artifact.artifactId,
+        viewedRevision.revisionId,
+        undefined,
+        commentNextCursor,
+      );
+      setCommentThreads((current) => {
+        const byId = new Map(current.map((thread) => [thread.threadId, thread]));
+        for (const thread of page.items) byId.set(thread.threadId, thread);
+        return [...byId.values()];
+      });
+      setCommentNextCursor(page.nextCursor);
+    } finally {
+      setLoadingOlderComments(false);
+    }
   };
   const latest = artifact.latestRevision;
   const viewingLatest = viewedRevision.revisionId === latest.revisionId;
@@ -491,7 +613,31 @@ export function ArtifactPage() {
               artifact={artifact}
               bytes={payload.bytes}
               entries={payload.entries}
+              discussionOpen={discussionOpen}
               revision={viewedRevision}
+              review={{
+                activeThreadId,
+                canCreateThread: false,
+                error: undefined,
+                loading: false,
+                loadingOlder: loadingOlderComments,
+                nextCursor: commentNextCursor,
+                moderator: true,
+                mode: discussionOpen ? 'discussion' : 'tree',
+                onCreateThread: async () => {
+                  throw new Error('Moderators reply from an existing discussion.');
+                },
+                onModeratePost: moderatePost,
+                onModeChange: setDiscussionMode,
+                onLoadOlder: loadOlderComments,
+                onReply: replyToThread,
+                onSelectThread: selectThread,
+                onSetThreadStatus: setThreadStatus,
+                saving: false,
+                revisionId: viewedRevision.revisionId,
+                threads: commentThreads,
+              }}
+              onDiscussionToggle={toggleDiscussion}
             />
           </section>
         </Panel>

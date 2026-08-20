@@ -23,6 +23,14 @@ export interface PublicSharedFile {
   read(): Promise<AsyncIterable<Uint8Array>>;
 }
 
+export interface PublicSharedFolderFile {
+  path: string;
+  mediaType: string;
+  byteCount: number;
+  contentHash: string;
+  read(): Promise<AsyncIterable<Uint8Array>>;
+}
+
 function decodeCursor(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
   try {
@@ -225,6 +233,75 @@ export function createShareAccessService(dependencies: {
         fileCount: revision.fileCount,
         items: page.items.map(publicEntry),
         nextCursor: page.nextPath === undefined ? null : encodeCursor(page.nextPath),
+      };
+    },
+
+    async readTreeFile(request: {
+      authority: ShareResolutionAuthority;
+      path: string;
+      signal?: AbortSignal;
+    }): Promise<PublicSharedFolderFile> {
+      const resolved = await resolveShare(request);
+      if (resolved.artifact.kind !== 'folder' || resolved.revision.kind !== 'folder') {
+        throw new ShareNotFoundError();
+      }
+      let revision: StoredFolderRevision | undefined;
+      try {
+        request.signal?.throwIfAborted();
+        revision = await dependencies.folders.findFolderRevision(resolved.revision.revisionId);
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Shared folder lookup failed.', error);
+      }
+      if (
+        !validFolderScope(revision, {
+          artifactId: resolved.artifact.artifactId,
+          revisionId: resolved.revision.revisionId,
+          rootName: resolved.revision.rootName,
+          byteCount: resolved.revision.byteCount,
+          fileCount: resolved.revision.fileCount,
+        })
+      ) {
+        throw new ShareNotFoundError();
+      }
+      let page: Awaited<ReturnType<FolderRevisionRepository['listFolderEntries']>>;
+      try {
+        page = await dependencies.folders.listFolderEntries({
+          installationId: revision.installationId,
+          revisionId: revision.revisionId,
+          limit: FOLDER_LIMITS.maxEntries,
+        });
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Shared folder tree lookup failed.', error);
+      }
+      const entry = page.items.find((candidate) => candidate.path === request.path);
+      if (entry === undefined || entry.kind !== 'file') throw new ShareNotFoundError();
+      const signal = request.signal;
+      return {
+        path: entry.path,
+        mediaType: entry.mediaType,
+        byteCount: entry.content.byteCount,
+        contentHash: entry.content.contentHash,
+        async read() {
+          let source: AsyncIterable<Uint8Array>;
+          try {
+            signal?.throwIfAborted();
+            source = await dependencies.contentReader.read(entry.content, {
+              ...(signal === undefined ? {} : { signal }),
+            });
+          } catch (error) {
+            throw boundaryFailure('CONTENT_UNAVAILABLE', 'Shared content is unavailable.', error);
+          }
+          return (async function* guardedContent() {
+            try {
+              for await (const chunk of source) {
+                signal?.throwIfAborted();
+                yield chunk;
+              }
+            } catch (error) {
+              throw boundaryFailure('CONTENT_UNAVAILABLE', 'Shared content is unavailable.', error);
+            }
+          })();
+        },
       };
     },
   };

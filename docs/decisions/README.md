@@ -18,6 +18,7 @@ The [Product Contract](../plans/2026-08-17-0030-feat-shelf-product-plan.md) owns
 | D9 | Import, export, and portable ownership are core behavior. | R18-R19 and R22-R24 |
 | D10 | Shelf is open source and self-hostable without a mandatory proprietary dependency. | R22-R25 |
 | D11 | Explicit artifact deletion is a recoverable soft deletion for exactly 30 days. It transactionally revokes active shares, hides the artifact from active lifecycle and resolution paths, preserves immutable revision content, and recovery does not restore revoked shares. | R12-R15 and F5 |
+| D12 | Comments are configured per share as Off, Private, or Shared. Prepared default links start Off. A thread snapshots its visibility and revision anchor when created, so later policy or revision changes never broaden old private discussions or erase review history. Shelf provides artifact-level review rather than a workspace-wide comments feed. | R27 and F6 |
 
 ## Accepted technical decisions
 
@@ -35,6 +36,7 @@ The [Product Contract](../plans/2026-08-17-0030-feat-shelf-product-plan.md) owns
 | T9 | Folder revisions use a canonical `shelf-folder-manifest/v1` over independently sealed regular-file objects and explicit directories. PostgreSQL commits the revision and complete entry set atomically. Paths are conservative NFC-normalized relative POSIX paths; symlinks, special files, aliases, and cross-platform-unsafe segments are rejected. Initial defaults cap a snapshot at 1,000 files, 2,000 entries, 10 MiB per file, 100 MiB aggregate bytes, and a 2 MiB transport manifest. | Per-entry immutable objects keep browsing, restore, reconciliation, backup, and later comparison provider-neutral without repeatedly unpacking an archive. Conservative paths make snapshots portable between self-hosted installations and common filesystems. These are the first folder transport limits, not a final decision on revision count, bandwidth, or operator policy. |
 | T10 | Shelf's first revision comparison is a provider-neutral metadata operation over immutable file descriptors and complete folder entry sets. It compares only two revisions of the same artifact and kind, returns at most 100 folder changes per cursor-bound page, and never opens content storage. A moved file is reported only for a unique removed/added pair with the same content hash and byte count; ambiguous duplicates remain additions and removals. | Exact descriptor comparison is deterministic across Local File, R2, and future providers and supplies the stable API/CLI input for later dashboard presentation. It does not choose renderable formats, inspect file contents, infer ambiguous renames, or settle T6/T8 diff and interface adapters. |
 | T11 | Share access is a discriminated policy on one Share aggregate. Protected viewer sessions establish once through a fragment capability, then use a signed tab-scoped token; Public access uses a globally unique 12-character selector and credential-free reads. PostgreSQL linearizes session consumption on the share row and management responses expose canonical lifecycle status. New files prepare one permanent Latest link per access type, while explicit finite Public links remain capped at 30 days. | One aggregate preserves create/list/revoke parity and legacy URLs while separating confidential capability handling from intentionally non-confidential Public links. Preparing defaults at publish time keeps agent uploads immediately share-ready without leaking either URL in an ordinary publish response; Public selectors remain unlisted and non-indexed. |
+| T12 | Review threads and posts are first-class PostgreSQL records scoped to installation, workspace, artifact, share, and originating revision. Anonymous writers use a browser-held high-entropy identity token whose HMAC is persisted; abuse metadata stores only a rotating keyed daily IP digest plus coarse browser and OS labels with a 30-day expiry. The API projects permissions for every thread and post, and the web client renders sanitized Markdown-lite without raw HTML. | Per-share policy and prospective visibility keep authorization explicit: Private history cannot become Shared by changing a link later, while Off blocks writes without deleting authorized history. Revision-bound anchors avoid speculative line remapping and remain inspectable as exact or outdated. Server-projected permissions keep anonymous and moderator behavior consistent across the public viewer and authenticated artifact utility. |
 
 ## Working defaults
 
@@ -71,7 +73,7 @@ These defaults make the current Product Contract coherent, but they may be revis
 
 ## Deferred capabilities
 
-- Comments and anchored annotations
+- Arbitrary preview-canvas annotations beyond file-, line-, and range-level review anchors
 - Live analytics
 - Custom domains
 - Public profiles

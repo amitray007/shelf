@@ -20,6 +20,18 @@ import {
   type ShowArtifactCommandOptions,
 } from './commands/artifacts.js';
 import {
+  executeHideComment,
+  executeListComments,
+  executeReopenComment,
+  executeReplyComment,
+  executeResolveComment,
+  executeUnhideComment,
+  type ListCommentsCommandOptions,
+  type PostModerationCommandOptions,
+  type ReplyCommentCommandOptions,
+  type ThreadStatusCommandOptions,
+} from './commands/comments.js';
+import {
   executeFolderTree,
   executePublishFolder,
   type FolderTreeCommandOptions,
@@ -43,8 +55,10 @@ import {
   executeDefaultShares,
   executeListShares,
   executeRevokeShare,
+  executeSetShareCommentPolicy,
   type ListSharesCommandOptions,
   type RevokeShareCommandOptions,
+  type ShareCommentsCommandOptions,
 } from './commands/shares.js';
 import {
   CliFailure,
@@ -101,6 +115,11 @@ Authentication and output:
   Credentials are read from the configured profile or SHELF_TOKEN; never pass tokens as arguments.
   Success writes one JSON document to stdout. Errors write one redacted JSON document to stderr.
   Run "shelf <command> --help" for command-specific flags and examples.
+
+Review comments:
+  Authenticated artifact review is available through "shelf comments". It lists threads and
+  supports moderator replies, resolve/reopen, and hide/unhide. Visitor identity and public-link
+  capability secrets are intentionally not accepted by the CLI.
 `,
   );
 
@@ -126,6 +145,7 @@ Authentication and output:
     )
     .option('--share', 'return a prepared default or create the requested custom share')
     .option('--access <protected|public>', 'share access policy; defaults to protected')
+    .option('--comments <off|private|shared>', 'comment policy; defaults to off')
     .option(
       '--expires-in <preset>',
       'share duration: never, 5m, 30m, 2hr, 6hr, 24hr, 3d, 7d, 15d, or 30d',
@@ -146,6 +166,8 @@ Metadata:
 Sharing:
   Every new file receives permanent Latest Protected and Public defaults. With --share and no
   finite/session policy, Shelf returns the prepared default for --access (Protected by default).
+  New links default to comments Off. Use --comments private or --comments shared to enable
+  comments; omission leaves a prepared link unchanged, while explicit --comments off disables it.
   Add --expires-in, --expires-at, or --max-sessions to create and return a custom link instead.
 
 Examples:
@@ -167,6 +189,7 @@ Examples:
         if (
           !options.share &&
           (options.access !== undefined ||
+            options.comments !== undefined ||
             options.expiresIn !== undefined ||
             options.expiresAt !== undefined ||
             options.maxSessions !== undefined)
@@ -191,6 +214,7 @@ Examples:
       }
       if (
         options.access !== undefined ||
+        options.comments !== undefined ||
         options.expiresIn !== undefined ||
         options.expiresAt !== undefined ||
         options.maxSessions !== undefined
@@ -292,6 +316,7 @@ Examples:
     .option('--cursor <cursor>')
     .option('--sort <created|updated>', 'sort field; defaults to updated')
     .option('--order <asc|desc>', 'sort direction; defaults to desc')
+    .option('--search <text>', 'search title, description, filename, or artifact name')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: ListArtifactsCommandOptions) => {
       result = await executeListArtifacts(options, runtime);
@@ -370,6 +395,7 @@ Examples:
     .requiredOption('--idempotency-key <key>')
     .option('--revision <revision-id>', 'pin the share to one immutable revision')
     .option('--access <protected|public>', 'access policy; defaults to protected')
+    .option('--comments <off|private|shared>', 'comment policy; defaults to off')
     .option(
       '--expires-in <preset>',
       'duration: never, 5m, 30m, 2hr, 6hr, 24hr, 3d, 7d, 15d, or 30d',
@@ -383,6 +409,10 @@ Examples:
 Access policies:
   protected  Capability URL. May never expire and may set --max-sessions.
   public     Short non-confidential URL. Omission defaults to Never.
+
+Comments:
+  --comments accepts off, private, or shared. New links default to Off; omission leaves a
+  prepared link unchanged, and explicit off disables comments on that link.
 
 Targets default to Latest. Add --revision to pin the link to one immutable revision.
 Use either --expires-in or --expires-at, never both.
@@ -436,6 +466,141 @@ Example:
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: RevokeShareCommandOptions) => {
       result = await executeRevokeShare(options, runtime);
+    });
+  shares
+    .command('comments')
+    .description('Set the comment policy on an existing share')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .requiredOption('--share <share-id>')
+    .requiredOption('--comments <off|private|shared>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Updates one existing share. This requires workspace-scoped authentication and returns the
+canonical share management summary, including its current comment policy. It does not print or
+accept protected capability secrets.
+
+Examples:
+  shelf shares comments --url https://shelf.example --workspace <id> --share shr_<id> --comments shared
+  shelf shares comments --url https://shelf.example --workspace <id> --share shr_<id> --comments off
+`,
+    )
+    .action(async (options: ShareCommentsCommandOptions) => {
+      result = await executeSetShareCommentPolicy(options, runtime);
+    });
+
+  const comments = program
+    .command('comments')
+    .description('Review authenticated artifact comment threads');
+  comments
+    .command('list')
+    .description('List artifact comment threads and their posts')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .requiredOption('--artifact <artifact-id>')
+    .option('--revision <revision-id>', 'evaluate line anchors against this revision')
+    .option('--cursor <cursor>', 'opaque cursor returned by the previous page')
+    .option('--limit <count>', 'number of threads to return (1-50, default 25)')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+The response is structured JSON with thread, anchor, revision, visibility, status, permissions,
+and post data. Without --revision, Shelf uses the artifact's latest revision. Responses include
+items and nextCursor; use --cursor with the previous page's nextCursor to load older discussions.
+
+Example:
+  shelf comments list --url https://shelf.example --workspace <id> --artifact art_<id>
+  shelf comments list --url https://shelf.example --workspace <id> --artifact art_<id> --revision rev_<id>
+`,
+    )
+    .action(async (options: ListCommentsCommandOptions) => {
+      result = await executeListComments(options, runtime);
+    });
+
+  comments
+    .command('reply')
+    .description('Reply to an artifact thread as the authenticated moderator')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .requiredOption('--artifact <artifact-id>')
+    .requiredOption('--thread <thread-id>')
+    .requiredOption('--body <text>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Example:
+  shelf comments reply --url https://shelf.example --workspace <id> --artifact art_<id> --thread thread_<id> --body "Reviewed and fixed."
+`,
+    )
+    .action(async (options: ReplyCommentCommandOptions) => {
+      result = await executeReplyComment(options, runtime);
+    });
+
+  const threadStatusHelp = `
+These commands return the updated thread as structured JSON.
+
+Example:
+  shelf comments STATUS --url https://shelf.example --workspace <id> --artifact art_<id> --thread thread_<id>
+`;
+  comments
+    .command('resolve')
+    .description('Resolve an artifact comment thread')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .requiredOption('--artifact <artifact-id>')
+    .requiredOption('--thread <thread-id>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText('after', threadStatusHelp.replace('STATUS', 'resolve'))
+    .action(async (options: ThreadStatusCommandOptions) => {
+      result = await executeResolveComment(options, runtime);
+    });
+  comments
+    .command('reopen')
+    .description('Reopen an artifact comment thread')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .requiredOption('--artifact <artifact-id>')
+    .requiredOption('--thread <thread-id>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText('after', threadStatusHelp.replace('STATUS', 'reopen'))
+    .action(async (options: ThreadStatusCommandOptions) => {
+      result = await executeReopenComment(options, runtime);
+    });
+
+  const postModerationHelp = `
+Moderation changes visibility without rewriting the visitor's post. The updated post is returned
+as structured JSON.
+
+Example:
+  shelf comments ACTION --url https://shelf.example --workspace <id> --artifact art_<id> --post post_<id>
+`;
+  comments
+    .command('hide')
+    .description('Hide an artifact comment post as moderator')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .requiredOption('--artifact <artifact-id>')
+    .requiredOption('--post <post-id>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText('after', postModerationHelp.replace('ACTION', 'hide'))
+    .action(async (options: PostModerationCommandOptions) => {
+      result = await executeHideComment(options, runtime);
+    });
+  comments
+    .command('unhide')
+    .description('Unhide an artifact comment post as moderator')
+    .requiredOption('--url <url>')
+    .requiredOption('--workspace <workspace>')
+    .requiredOption('--artifact <artifact-id>')
+    .requiredOption('--post <post-id>')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText('after', postModerationHelp.replace('ACTION', 'unhide'))
+    .action(async (options: PostModerationCommandOptions) => {
+      result = await executeUnhideComment(options, runtime);
     });
 
   const profiles = program.command('profiles').description('Configure isolated CLI contexts');

@@ -77,6 +77,26 @@ const shareResult = {
 };
 
 describe('profile-backed shelf publish', () => {
+  it('rejects comment policy options without --share before resolving a profile', async () => {
+    const { file } = await fixture();
+    const stderr: string[] = [];
+    const fetch = vi.fn();
+
+    const exitCode = await runCli(
+      ['node', 'shelf', 'publish', file, '--comments', 'private', '--user-bypass'],
+      {
+        env: {},
+        stdout() {},
+        stderr: (chunk) => stderr.push(chunk),
+        fetch: fetch as typeof globalThis.fetch,
+      },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(stderr.join('')).toContain('Share policy options require --share.');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('publishes a positional file through the default isolated profile and returns browsable URLs', async () => {
     const { config, file } = await fixture();
     const env = {
@@ -374,6 +394,130 @@ describe('profile-backed shelf publish', () => {
     expect(fetch.mock.calls[1]?.[1]).toMatchObject({ method: 'POST' });
     expect(new Headers(fetch.mock.calls[1]?.[1]?.headers).has('idempotency-key')).toBe(false);
     expect(JSON.parse(stdout[0] ?? '{}')).toMatchObject({ share: defaults.public });
+  });
+
+  it('updates an Off prepared default when --share requests comments', async () => {
+    const { config, file } = await fixture();
+    const env = { SHELF_CONFIG_DIR: config, SHELF_PERSONAL_TOKEN: 'personal-secret' };
+    await runCli(
+      [
+        'node',
+        'shelf',
+        'profiles',
+        'set',
+        'default',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'personal',
+        '--credential-env',
+        'SHELF_PERSONAL_TOKEN',
+      ],
+      { env, stdout() {}, stderr() {} },
+    );
+    const { requestId: _requestId, replayed: _replayed, ...protectedDefault } = shareResult;
+    const defaults = {
+      apiVersion: 'v1' as const,
+      workspaceId: 'personal',
+      artifactId: publishResult.artifactId,
+      protected: protectedDefault,
+      public: {
+        ...protectedDefault,
+        shareId: `shr_${'p'.repeat(22)}`,
+        accessType: 'public' as const,
+        publicCode: 'PublicCode12',
+        url: '/s/PublicCode12',
+        maxSessions: undefined,
+        sessionsUsed: undefined,
+        sessionsRemaining: undefined,
+      },
+    };
+    const updated = { ...protectedDefault, commentPolicy: 'shared' as const };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json(publishResult, { status: 201 }))
+      .mockResolvedValueOnce(Response.json(defaults))
+      .mockResolvedValueOnce(Response.json(updated));
+    const stdout: string[] = [];
+
+    const exitCode = await runCli(
+      ['node', 'shelf', 'publish', file, '--share', '--comments', 'shared', '--user-bypass'],
+      { env, fetch, stdout: (chunk) => stdout.push(chunk), stderr() {} },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch.mock.calls[2]?.[0].toString()).toBe(
+      'https://shelf.example/api/v1/workspaces/personal/shares/shr_CCCCCCCCCCCCCCCCCCCCCC/comment-policy',
+    );
+    expect(fetch.mock.calls[2]?.[1]).toMatchObject({
+      method: 'PATCH',
+      body: JSON.stringify({ commentPolicy: 'shared' }),
+    });
+    expect(JSON.parse(stdout[0] ?? '{}')).toMatchObject({ share: updated });
+  });
+
+  it('disables comments on a prepared default when --comments off is explicit', async () => {
+    const { config, file } = await fixture();
+    const env = { SHELF_CONFIG_DIR: config, SHELF_PERSONAL_TOKEN: 'personal-secret' };
+    await runCli(
+      [
+        'node',
+        'shelf',
+        'profiles',
+        'set',
+        'default',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'personal',
+        '--credential-env',
+        'SHELF_PERSONAL_TOKEN',
+      ],
+      { env, stdout() {}, stderr() {} },
+    );
+    const { requestId: _requestId, replayed: _replayed, ...protectedDefault } = shareResult;
+    const sharedDefault = { ...protectedDefault, commentPolicy: 'shared' as const };
+    const defaults = {
+      apiVersion: 'v1' as const,
+      workspaceId: 'personal',
+      artifactId: publishResult.artifactId,
+      protected: sharedDefault,
+      public: {
+        ...protectedDefault,
+        commentPolicy: 'off' as const,
+        shareId: `shr_${'p'.repeat(22)}`,
+        accessType: 'public' as const,
+        publicCode: 'PublicCode12',
+        url: '/s/PublicCode12',
+        maxSessions: undefined,
+        sessionsUsed: undefined,
+        sessionsRemaining: undefined,
+      },
+    };
+    const updated = { ...sharedDefault, commentPolicy: 'off' as const };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json(publishResult, { status: 201 }))
+      .mockResolvedValueOnce(Response.json(defaults))
+      .mockResolvedValueOnce(Response.json(updated));
+    const stdout: string[] = [];
+
+    const exitCode = await runCli(
+      ['node', 'shelf', 'publish', file, '--share', '--comments', 'off', '--user-bypass'],
+      { env, fetch, stdout: (chunk) => stdout.push(chunk), stderr() {} },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch.mock.calls[2]?.[0].toString()).toBe(
+      'https://shelf.example/api/v1/workspaces/personal/shares/shr_CCCCCCCCCCCCCCCCCCCCCC/comment-policy',
+    );
+    expect(fetch.mock.calls[2]?.[1]).toMatchObject({
+      method: 'PATCH',
+      body: JSON.stringify({ commentPolicy: 'off' }),
+    });
+    expect(JSON.parse(stdout[0] ?? '{}')).toMatchObject({ share: updated });
   });
 
   it('never emits success before local recovery cleanup has completed', async () => {

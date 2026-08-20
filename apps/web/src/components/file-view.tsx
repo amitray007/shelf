@@ -1,0 +1,825 @@
+// biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable file content must be keyboard reachable.
+
+import { Button } from '@cloudflare/kumo/components/button';
+import { Tabs } from '@cloudflare/kumo/components/tabs';
+import { CheckIcon } from '@phosphor-icons/react/Check';
+import { CopyIcon } from '@phosphor-icons/react/Copy';
+import { GearSixIcon } from '@phosphor-icons/react/GearSix';
+import { LinkSimpleIcon } from '@phosphor-icons/react/LinkSimple';
+import { ListNumbersIcon } from '@phosphor-icons/react/ListNumbers';
+import { PlusIcon } from '@phosphor-icons/react/Plus';
+import { TextAlignLeftIcon } from '@phosphor-icons/react/TextAlignLeft';
+import type { GetHoveredLineResult, LineAnnotation, SelectedLineRange } from '@pierre/diffs';
+import type { FileContents, FileOptions, FileProps } from '@pierre/diffs/react';
+import type { CommentAnchor, CommentThread } from '@shelf/contracts';
+import {
+  type ComponentType,
+  lazy,
+  type KeyboardEvent as ReactKeyboardEvent,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+
+import { ReviewComposer } from './review/discussion-panel.js';
+
+type SourceLineAnnotationMetadata = {
+  readonly author?: string;
+  readonly body?: string;
+  readonly expanded?: boolean;
+  readonly label: string;
+  readonly participantId?: string;
+  readonly threadId?: string;
+};
+export type SourceLineAnnotation = LineAnnotation<SourceLineAnnotationMetadata>;
+
+export interface FileReviewProps {
+  readonly canCreateThread: boolean;
+  readonly revisionId: string;
+  readonly path?: string;
+  readonly threads: readonly CommentThread[];
+  readonly onCreateThread: (anchor: CommentAnchor, body: string) => Promise<void>;
+  readonly onSelectThread: (threadId: string) => void;
+}
+
+export function sourceGutterAction(reviewEnabled: boolean): 'comment' | 'link' {
+  return reviewEnabled ? 'comment' : 'link';
+}
+
+const PierreFile = lazy(async () => {
+  const module = await import('@pierre/diffs/react');
+  return {
+    default: module.File as ComponentType<FileProps<SourceLineAnnotationMetadata>>,
+  };
+});
+
+function pierreSourceCSS(fontSize: number): string {
+  return `
+:host {
+  --diffs-bg: var(--canvas);
+  --diffs-bg-context-override: var(--canvas);
+  --diffs-bg-context-gutter-override: var(--surface);
+  --diffs-bg-hover-override: var(--surface);
+  --diffs-bg-selection-override: color-mix(in srgb, var(--action) 18%, var(--canvas));
+  --diffs-fg: var(--text);
+  --diffs-fg-number-override: var(--text-muted);
+  --diffs-font-family: "Geist Mono Variable", ui-monospace, monospace;
+  --diffs-font-size: ${fontSize}px;
+  --diffs-line-height: 1.65;
+  --diffs-tab-size: 2;
+}
+`;
+}
+
+export type FileViewMode = 'preview' | 'source';
+
+type LineHoverHighlight = 'disabled' | 'both' | 'number' | 'line';
+
+export interface SourceViewSettings {
+  readonly annotations: boolean;
+  readonly enableGutterUtility: boolean;
+  readonly enableLineSelection: boolean;
+  readonly keyboardNavigation: boolean;
+  readonly lineHoverHighlight: LineHoverHighlight;
+  readonly lineNumbers: boolean;
+  readonly maxTokenizeLength: number;
+  readonly maxTokenizeLineLength: number;
+  readonly fontSize: number;
+  readonly stickyHeader: boolean;
+  readonly tokenInteractions: boolean;
+  readonly wrap: boolean;
+}
+
+export const DEFAULT_SOURCE_VIEW_SETTINGS: SourceViewSettings = {
+  annotations: true,
+  enableGutterUtility: true,
+  enableLineSelection: true,
+  keyboardNavigation: true,
+  lineHoverHighlight: 'line',
+  lineNumbers: true,
+  maxTokenizeLength: 100_000,
+  maxTokenizeLineLength: 1_000,
+  fontSize: 13,
+  stickyHeader: true,
+  tokenInteractions: true,
+  wrap: false,
+};
+
+export function viewerSessionStorageKey(namespace: string): string {
+  if (typeof window === 'undefined') return `shelf:${namespace}:server`;
+  const context = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+  let hash = 2_166_136_261;
+  for (const character of context) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return `shelf:${namespace}:${(hash >>> 0).toString(36)}`;
+}
+
+function readSourceViewSettings(): SourceViewSettings {
+  if (typeof window === 'undefined') return DEFAULT_SOURCE_VIEW_SETTINGS;
+  try {
+    const value = JSON.parse(
+      window.sessionStorage.getItem(viewerSessionStorageKey('source-settings')) ?? 'null',
+    ) as Partial<SourceViewSettings> | null;
+    if (value === null || typeof value !== 'object') return DEFAULT_SOURCE_VIEW_SETTINGS;
+    const lineHoverHighlight =
+      value.lineHoverHighlight === 'disabled' ||
+      value.lineHoverHighlight === 'both' ||
+      value.lineHoverHighlight === 'number' ||
+      value.lineHoverHighlight === 'line'
+        ? value.lineHoverHighlight
+        : DEFAULT_SOURCE_VIEW_SETTINGS.lineHoverHighlight;
+    const numberSetting = (candidate: unknown, fallback: number, min: number, max: number) =>
+      typeof candidate === 'number' && Number.isFinite(candidate)
+        ? Math.min(max, Math.max(min, candidate))
+        : fallback;
+    return {
+      ...DEFAULT_SOURCE_VIEW_SETTINGS,
+      ...value,
+      annotations: value.annotations !== false,
+      enableGutterUtility: value.enableGutterUtility !== false,
+      enableLineSelection: value.enableLineSelection !== false,
+      keyboardNavigation: value.keyboardNavigation !== false,
+      lineHoverHighlight,
+      lineNumbers: value.lineNumbers !== false,
+      maxTokenizeLength: numberSetting(
+        value.maxTokenizeLength,
+        DEFAULT_SOURCE_VIEW_SETTINGS.maxTokenizeLength,
+        10_000,
+        2_000_000,
+      ),
+      maxTokenizeLineLength: numberSetting(
+        value.maxTokenizeLineLength,
+        DEFAULT_SOURCE_VIEW_SETTINGS.maxTokenizeLineLength,
+        256,
+        100_000,
+      ),
+      fontSize: numberSetting(value.fontSize, DEFAULT_SOURCE_VIEW_SETTINGS.fontSize, 11, 18),
+      stickyHeader: value.stickyHeader !== false,
+      tokenInteractions: value.tokenInteractions !== false,
+      wrap: value.wrap === true,
+    };
+  } catch {
+    return DEFAULT_SOURCE_VIEW_SETTINGS;
+  }
+}
+
+export function decodeFileSource(bytes: ArrayBuffer): string | null {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+export function formatJson(value: string): string {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
+}
+
+function PierreCode({
+  fileName,
+  lineNumbers,
+  lineAnnotations,
+  onCopyLine,
+  onAnnotationClick,
+  onAnnotationToggle,
+  onAddComment,
+  onLineSelectionChange,
+  selectedLines,
+  settings,
+  source,
+  wrap,
+}: {
+  readonly fileName: string;
+  readonly lineNumbers: boolean;
+  readonly lineAnnotations?: readonly SourceLineAnnotation[];
+  readonly onCopyLine?: (range: SelectedLineRange) => void;
+  readonly onAnnotationClick?: ((threadId: string) => void) | undefined;
+  readonly onAnnotationToggle?: ((threadId: string) => void) | undefined;
+  readonly onAddComment?: ((range: SelectedLineRange) => void) | undefined;
+  readonly onLineSelectionChange?: (range: SelectedLineRange | null) => void;
+  readonly selectedLines?: SelectedLineRange | null;
+  readonly settings?: SourceViewSettings;
+  readonly source: string;
+  readonly wrap: boolean;
+}) {
+  const file = useMemo<FileContents>(
+    () => ({ name: fileName, contents: source }),
+    [fileName, source],
+  );
+  const options = useMemo<FileOptions<SourceLineAnnotationMetadata>>(
+    () => ({
+      disableFileHeader: true,
+      disableLineNumbers: !lineNumbers,
+      overflow: wrap ? ('wrap' as const) : ('scroll' as const),
+      theme: 'github-dark',
+      themeType: 'dark' as const,
+      unsafeCSS: pierreSourceCSS(settings?.fontSize ?? DEFAULT_SOURCE_VIEW_SETTINGS.fontSize),
+      ...(settings === undefined
+        ? {}
+        : {
+            enableGutterUtility: settings.enableGutterUtility,
+            enableLineSelection: settings.enableLineSelection,
+            enableTokenInteractionsOnWhitespace: settings.tokenInteractions,
+            lineHoverHighlight: settings.lineHoverHighlight,
+            stickyHeader: settings.stickyHeader,
+            tokenizeMaxLength: settings.maxTokenizeLength,
+            tokenizeMaxLineLength: settings.maxTokenizeLineLength,
+            ...(onLineSelectionChange === undefined ? {} : { onLineSelectionChange }),
+          }),
+    }),
+    [lineNumbers, onLineSelectionChange, settings, wrap],
+  );
+
+  const annotationProps =
+    settings?.annotations === true && lineAnnotations !== undefined
+      ? {
+          lineAnnotations: [...lineAnnotations],
+          renderAnnotation: (annotation: SourceLineAnnotation) =>
+            annotation.metadata?.threadId !== undefined && onAnnotationClick !== undefined ? (
+              <div className="pierre-line-annotation-wrap">
+                <button
+                  aria-label={`Open discussion${annotation.metadata.author === undefined ? '' : ` by ${annotation.metadata.author}`}`}
+                  className={`pierre-line-annotation pierre-line-annotation-button${annotation.metadata.expanded ? ' pierre-line-annotation-expanded' : ' pierre-line-annotation-pin'}`}
+                  onClick={() => {
+                    onAnnotationToggle?.(annotation.metadata?.threadId as string);
+                    onAnnotationClick(annotation.metadata?.threadId as string);
+                  }}
+                  type="button"
+                >
+                  {annotation.metadata.expanded ? (
+                    annotation.metadata.label
+                  ) : annotation.metadata.participantId !== undefined ? (
+                    <img
+                      alt={`${annotation.metadata.author ?? 'Reviewer'} avatar`}
+                      className="pierre-line-annotation-avatar"
+                      referrerPolicy="no-referrer"
+                      src={`https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(annotation.metadata.participantId)}`}
+                    />
+                  ) : (
+                    '•'
+                  )}
+                </button>
+                {annotation.metadata.expanded ? (
+                  <span className="pierre-line-root-card">
+                    <strong>{annotation.metadata.author ?? 'Reviewer'}</strong>
+                    <span>{annotation.metadata.body ?? ''}</span>
+                  </span>
+                ) : null}
+              </div>
+            ) : (
+              <span className="pierre-line-annotation">
+                {annotation.metadata?.label ?? `Line ${annotation.lineNumber}`}
+              </span>
+            ),
+        }
+      : {};
+  const gutterAction = sourceGutterAction(onAddComment !== undefined);
+  const gutterProps =
+    settings?.enableGutterUtility === true &&
+    (onAddComment !== undefined || onCopyLine !== undefined)
+      ? {
+          renderGutterUtility: (getHoveredLine: () => GetHoveredLineResult<'file'> | undefined) => (
+            <button
+              aria-label={gutterAction === 'comment' ? 'Add comment on line' : 'Copy line link'}
+              className="pierre-gutter-utility-button"
+              onClick={() => {
+                const line = getHoveredLine()?.lineNumber;
+                if (line === undefined) return;
+                const range = { end: line, start: line };
+                if (onAddComment !== undefined) onAddComment(range);
+                else onCopyLine?.(range);
+              }}
+              style={{
+                alignItems: 'center',
+                background:
+                  gutterAction === 'comment' ? 'var(--accent)' : 'var(--diffs-modified-base)',
+                border: 0,
+                borderRadius: 4,
+                color: 'var(--diffs-bg)',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                height: '1lh',
+                justifyContent: 'center',
+                padding: 0,
+                width: '1lh',
+              }}
+              type="button"
+            >
+              {gutterAction === 'comment' ? (
+                <PlusIcon aria-hidden="true" className="pierre-gutter-utility-icon" size={13} />
+              ) : (
+                <LinkSimpleIcon
+                  aria-hidden="true"
+                  className="pierre-gutter-utility-icon"
+                  size={13}
+                />
+              )}
+            </button>
+          ),
+        }
+      : {};
+  const selectionProps =
+    settings?.enableLineSelection === true
+      ? { selectedLines: selectedLines ?? null }
+      : { selectedLines: null };
+
+  return (
+    <Suspense fallback={<FileLoadingState />}>
+      <PierreFile
+        file={file}
+        options={options}
+        {...annotationProps}
+        {...gutterProps}
+        {...selectionProps}
+      />
+    </Suspense>
+  );
+}
+
+export function CodeView({
+  fileName = 'source.txt',
+  label,
+  source,
+}: {
+  readonly fileName?: string | undefined;
+  readonly label: string;
+  readonly source: string;
+}) {
+  return (
+    <section aria-label={label} className="artifact-surface artifact-code" tabIndex={0}>
+      <PierreCode fileName={fileName} lineNumbers={false} source={source} wrap={false} />
+    </section>
+  );
+}
+
+export function SourceView({
+  annotations = [],
+  fileName = 'source.txt',
+  review,
+  source,
+}: {
+  readonly annotations?: readonly SourceLineAnnotation[];
+  readonly fileName?: string | undefined;
+  readonly review?: FileReviewProps | undefined;
+  readonly source: string;
+}) {
+  const [settings, setSettings] = useState<SourceViewSettings>(readSourceViewSettings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [selectedLines, setSelectedLines] = useState<SelectedLineRange | null>(null);
+  const [expandedThreadId, setExpandedThreadId] = useState<string | undefined>();
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const lineCount = useMemo(() => Math.max(1, source.split(/\r?\n/u).length), [source]);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        viewerSessionStorageKey('source-settings'),
+        JSON.stringify(settings),
+      );
+    } catch {
+      // Session storage can be unavailable in privacy-restricted browser contexts.
+    }
+  }, [settings]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !settingsRef.current?.contains(event.target)) {
+        setSettingsOpen(false);
+      }
+    };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setSettingsOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnPointerDown);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnPointerDown);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    if (!settings.enableLineSelection) setSelectedLines(null);
+  }, [settings.enableLineSelection]);
+
+  const updateSettings = <K extends keyof SourceViewSettings>(
+    key: K,
+    value: SourceViewSettings[K],
+  ) => setSettings((current) => ({ ...current, [key]: value }));
+
+  const copySource = async () => {
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(source);
+    } catch {
+      return;
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+
+  const copyLineLink = useCallback(async (range: SelectedLineRange) => {
+    if (!navigator.clipboard || typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('line', `L${range.start}`);
+      await navigator.clipboard.writeText(url.toString());
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard access is optional, especially in embedded viewers.
+    }
+  }, []);
+
+  const lineAnnotations = useMemo<readonly SourceLineAnnotation[]>(() => {
+    if (review === undefined) return annotations;
+    return [
+      ...annotations,
+      ...review.threads
+        .filter(
+          (thread) =>
+            thread.anchor.startLine !== undefined &&
+            (thread.anchor.path === undefined || thread.anchor.path === fileName),
+        )
+        .map((thread) => ({
+          lineNumber: thread.anchor.startLine as number,
+          metadata: {
+            author: (() => {
+              const first = thread.posts[0];
+              return first?.author.kind === 'visitor' ? first.author.displayName : 'Shelf team';
+            })(),
+            ...(thread.posts[0]?.body === undefined ? {} : { body: thread.posts[0].body }),
+            expanded: expandedThreadId === thread.threadId,
+            label: `${thread.posts.length} ${thread.posts.length === 1 ? 'comment' : 'comments'}`,
+            ...(thread.posts[0] === undefined
+              ? {}
+              : { participantId: thread.posts[0].author.participantId }),
+            threadId: thread.threadId,
+          },
+        })),
+    ];
+  }, [annotations, expandedThreadId, fileName, review]);
+
+  const annotationCount = lineAnnotations.length;
+
+  const handleKeyboardNavigation = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (!settings.keyboardNavigation || !settings.enableLineSelection) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const currentLine = selectedLines?.end ?? 1;
+    let nextLine: number | undefined;
+    if (event.key === 'ArrowUp') nextLine = Math.max(1, currentLine - 1);
+    if (event.key === 'ArrowDown') nextLine = Math.min(lineCount, currentLine + 1);
+    if (event.key === 'Home') nextLine = 1;
+    if (event.key === 'End') nextLine = lineCount;
+    if (nextLine === undefined || nextLine === currentLine) return;
+    event.preventDefault();
+    setSelectedLines({ end: nextLine, start: nextLine });
+  };
+
+  return (
+    <section aria-label="Artifact source" className="source-view">
+      <div
+        className={`source-view-toolbar${settings.stickyHeader ? ' source-view-toolbar-sticky' : ''}`}
+      >
+        <span className="source-view-label">Source</span>
+        <div className="source-view-actions">
+          <Button
+            aria-label={settings.wrap ? 'Disable word wrap' : 'Enable word wrap'}
+            aria-pressed={settings.wrap}
+            icon={TextAlignLeftIcon}
+            onClick={() => updateSettings('wrap', !settings.wrap)}
+            size="sm"
+            title={settings.wrap ? 'Disable word wrap' : 'Enable word wrap'}
+            type="button"
+            variant={settings.wrap ? 'secondary' : 'ghost'}
+          >
+            Wrap
+          </Button>
+          <Button
+            aria-label={settings.lineNumbers ? 'Hide line numbers' : 'Show line numbers'}
+            aria-pressed={settings.lineNumbers}
+            icon={ListNumbersIcon}
+            onClick={() => updateSettings('lineNumbers', !settings.lineNumbers)}
+            size="sm"
+            title={settings.lineNumbers ? 'Hide line numbers' : 'Show line numbers'}
+            type="button"
+            variant={settings.lineNumbers ? 'secondary' : 'ghost'}
+          >
+            Lines
+          </Button>
+          <Button
+            aria-label={copied ? 'Copied source' : 'Copy source'}
+            icon={copied ? CheckIcon : CopyIcon}
+            onClick={() => void copySource()}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            {copied ? 'Copied' : 'Copy'}
+          </Button>
+          <div className="source-view-settings" ref={settingsRef}>
+            <Button
+              aria-expanded={settingsOpen}
+              aria-haspopup="dialog"
+              aria-label="Source view settings"
+              icon={GearSixIcon}
+              onClick={() => setSettingsOpen((value) => !value)}
+              size="sm"
+              title="Source view settings"
+              type="button"
+              variant={settingsOpen ? 'secondary' : 'ghost'}
+            />
+            {settingsOpen ? (
+              <div
+                aria-label="Source view settings"
+                className="source-view-settings-popover"
+                role="dialog"
+              >
+                <div className="source-view-settings-heading">
+                  <strong>Source view</strong>
+                  <span>Saved for this session link</span>
+                </div>
+                <div className="source-view-settings-grid">
+                  <label className="source-view-setting-field">
+                    <span>Font size</span>
+                    <select
+                      onChange={(event) => updateSettings('fontSize', Number(event.target.value))}
+                      value={settings.fontSize}
+                    >
+                      {[11, 12, 13, 14, 15, 16, 18].map((size) => (
+                        <option key={size} value={size}>
+                          {size}px
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="source-view-setting-field">
+                    <span>Line hover</span>
+                    <select
+                      onChange={(event) =>
+                        updateSettings(
+                          'lineHoverHighlight',
+                          event.target.value as LineHoverHighlight,
+                        )
+                      }
+                      value={settings.lineHoverHighlight}
+                    >
+                      <option value="line">Line</option>
+                      <option value="number">Number</option>
+                      <option value="both">Line + number</option>
+                      <option value="disabled">Off</option>
+                    </select>
+                  </label>
+                  <label className="source-view-setting-field">
+                    <span>Long lines</span>
+                    <select
+                      onChange={(event) =>
+                        updateSettings('maxTokenizeLineLength', Number(event.target.value))
+                      }
+                      value={settings.maxTokenizeLineLength}
+                    >
+                      <option value={1000}>Default · 1k</option>
+                      <option value={5000}>5k</option>
+                      <option value={10000}>10k</option>
+                      <option value={25000}>25k</option>
+                    </select>
+                  </label>
+                  <label className="source-view-setting-field">
+                    <span>File limit</span>
+                    <select
+                      onChange={(event) =>
+                        updateSettings('maxTokenizeLength', Number(event.target.value))
+                      }
+                      value={settings.maxTokenizeLength}
+                    >
+                      <option value={100000}>Default · 100k</option>
+                      <option value={250000}>250k</option>
+                      <option value={500000}>500k</option>
+                      <option value={1000000}>1m</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="source-view-settings-section">
+                  <span className="source-view-settings-section-label">Interaction</span>
+                  <label className="source-view-setting-toggle">
+                    <input
+                      checked={settings.stickyHeader}
+                      onChange={(event) => updateSettings('stickyHeader', event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>Sticky file header</span>
+                  </label>
+                  <label className="source-view-setting-toggle">
+                    <input
+                      checked={settings.enableLineSelection}
+                      onChange={(event) =>
+                        updateSettings('enableLineSelection', event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>Line selection</span>
+                  </label>
+                  <label className="source-view-setting-toggle">
+                    <input
+                      checked={settings.keyboardNavigation}
+                      disabled={!settings.enableLineSelection}
+                      onChange={(event) =>
+                        updateSettings('keyboardNavigation', event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>Keyboard navigation</span>
+                  </label>
+                  <label className="source-view-setting-toggle">
+                    <input
+                      checked={settings.enableGutterUtility}
+                      onChange={(event) =>
+                        updateSettings('enableGutterUtility', event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>Gutter line links</span>
+                  </label>
+                  <label className="source-view-setting-toggle">
+                    <input
+                      checked={settings.tokenInteractions}
+                      onChange={(event) =>
+                        updateSettings('tokenInteractions', event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>Token interactions</span>
+                  </label>
+                  <label className="source-view-setting-toggle">
+                    <input
+                      checked={settings.annotations}
+                      disabled={annotationCount === 0}
+                      onChange={(event) => updateSettings('annotations', event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>Annotations {annotationCount === 0 ? '(none available)' : ''}</span>
+                  </label>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      <section
+        aria-label="Source code"
+        className="source-view-content"
+        onKeyDown={handleKeyboardNavigation}
+        tabIndex={0}
+      >
+        <PierreCode
+          fileName={fileName}
+          lineAnnotations={lineAnnotations}
+          lineNumbers={settings.lineNumbers}
+          {...(review?.canCreateThread === true
+            ? {}
+            : { onCopyLine: (range: SelectedLineRange) => void copyLineLink(range) })}
+          onAddComment={review?.canCreateThread === true ? setSelectedLines : undefined}
+          onAnnotationClick={review?.onSelectThread}
+          onAnnotationToggle={setExpandedThreadId}
+          onLineSelectionChange={setSelectedLines}
+          selectedLines={selectedLines}
+          settings={settings}
+          source={source}
+          wrap={settings.wrap}
+        />
+      </section>
+      {review?.canCreateThread === true && selectedLines !== null ? (
+        <div className="source-review-composer">
+          <div className="source-review-selection">
+            Lines {selectedLines.start}–{selectedLines.end}
+          </div>
+          <ReviewComposer
+            onSubmit={async (body) => {
+              await review.onCreateThread(
+                {
+                  revisionId: review.revisionId,
+                  ...(review.path === undefined ? {} : { path: review.path }),
+                  kind: 'range',
+                  startLine: selectedLines.start,
+                  endLine: selectedLines.end,
+                },
+                body,
+              );
+              setSelectedLines(null);
+            }}
+            placeholder="Comment on this selection…"
+          />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+export function FileLoadingState() {
+  return (
+    <div aria-live="polite" className="file-loading-state" role="status">
+      <span aria-hidden="true" className="file-loading-spinner" />
+      <span>Loading file…</span>
+      <div aria-hidden="true" className="file-loading-skeleton">
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  );
+}
+
+export function FileView({
+  annotations,
+  header,
+  fileName,
+  preview,
+  review,
+  source,
+}: {
+  readonly annotations?: readonly SourceLineAnnotation[];
+  readonly header?: React.ReactNode;
+  readonly fileName?: string | undefined;
+  readonly preview?: React.ReactNode;
+  readonly review?: FileReviewProps | undefined;
+  readonly source?: string;
+}) {
+  const initialMode: FileViewMode = preview === undefined ? 'source' : 'preview';
+  const [mode, setMode] = useState<FileViewMode>(initialMode);
+  const hasContent = preview !== undefined || source !== undefined;
+  const hasModes = preview !== undefined && source !== undefined;
+
+  if (!hasContent && header === undefined) return null;
+  if (header === undefined && !hasModes) {
+    if (preview === undefined)
+      return (
+        <SourceView
+          {...(annotations === undefined ? {} : { annotations })}
+          fileName={fileName}
+          review={review}
+          source={source ?? ''}
+        />
+      );
+    return preview;
+  }
+
+  const activeMode = mode === 'source' ? 'source' : 'preview';
+  return (
+    <div className="file-view">
+      <header className="file-view-toolbar">
+        {header === undefined ? null : <div className="file-view-meta">{header}</div>}
+        {hasModes ? (
+          <Tabs
+            activateOnFocus={false}
+            className="file-view-tabs"
+            onValueChange={(value) => setMode(value === 'source' ? 'source' : 'preview')}
+            size="sm"
+            tabs={[
+              { value: 'preview', label: 'Preview' },
+              { value: 'source', label: 'Source' },
+            ]}
+            value={activeMode}
+            variant="segmented"
+          />
+        ) : null}
+      </header>
+      {hasContent ? (
+        <div className="file-view-content">
+          {hasModes ? (
+            activeMode === 'source' ? (
+              <SourceView
+                {...(annotations === undefined ? {} : { annotations })}
+                fileName={fileName}
+                review={review}
+                source={source ?? ''}
+              />
+            ) : (
+              preview
+            )
+          ) : (
+            (preview ?? (
+              <SourceView
+                {...(annotations === undefined ? {} : { annotations })}
+                fileName={fileName}
+                review={review}
+                source={source ?? ''}
+              />
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}

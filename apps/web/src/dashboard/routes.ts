@@ -3,6 +3,7 @@ import type {
   ArtifactPage,
   ArtifactRevision,
   ArtifactRevisionPage,
+  CommentThread,
   DashboardCredentialPage,
   DashboardSession,
   FolderEntry,
@@ -11,11 +12,12 @@ import type {
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { redirect } from 'react-router';
 
-import { selectRenderer } from '../rendering.js';
+import { selectRenderer, supportsSourceView } from '../rendering.js';
 import {
   DashboardApiError,
   DashboardAuthenticationError,
   loadArtifact,
+  loadArtifactComments,
   loadArtifactHistory,
   loadArtifacts,
   loadDashboardCredentials,
@@ -33,6 +35,8 @@ export interface ArtifactDetailPayload {
   shares: SharePage;
   bytes: ArrayBuffer | null;
   entries: readonly FolderEntry[];
+  comments: readonly CommentThread[];
+  commentsNextCursor: string | null;
 }
 
 export interface ArtifactPreviewPayload {
@@ -163,17 +167,41 @@ export async function artifactLoader({
         ? artifact.latestRevision
         : (history.items.find((candidate) => candidate.revisionId === requestedRevisionId) ??
           artifact.latestRevision);
-    let bytes: ArrayBuffer | null = null;
-    let entries: readonly FolderEntry[] = [];
-    if (revision.kind === 'folder') {
-      entries = await loadFolderEntries(revision.revisionId, request.signal);
-    } else {
-      const renderer = selectRenderer(revision.mediaType, undefined);
-      if (['text', 'json', 'markdown', 'image'].includes(renderer.kind)) {
-        bytes = await loadRevisionBytes(revision.revisionId, request.signal);
-      }
-    }
-    return { artifact, revision, history, shares, bytes, entries };
+    const commentsPromise = loadArtifactComments(
+      workspaceId,
+      artifactId,
+      revision.revisionId,
+      request.signal,
+    );
+    const contentPromise =
+      revision.kind === 'folder'
+        ? loadFolderEntries(revision.revisionId, request.signal).then((entries) => ({
+            bytes: null,
+            entries,
+          }))
+        : (() => {
+            const renderer = selectRenderer(revision.mediaType, undefined);
+            if (
+              ['text', 'json', 'markdown', 'image'].includes(renderer.kind) ||
+              supportsSourceView(revision.mediaType)
+            ) {
+              return loadRevisionBytes(revision.revisionId, request.signal).then((bytes) => ({
+                bytes,
+                entries: [] as readonly FolderEntry[],
+              }));
+            }
+            return Promise.resolve({ bytes: null, entries: [] as readonly FolderEntry[] });
+          })();
+    const [comments, content] = await Promise.all([commentsPromise, contentPromise]);
+    return {
+      artifact,
+      revision,
+      history,
+      shares,
+      ...content,
+      comments: comments.items,
+      commentsNextCursor: comments.nextCursor,
+    };
   });
 }
 
@@ -218,7 +246,10 @@ export async function artifactPreviewLoader({
       entries = await loadFolderEntries(revision.revisionId, request.signal);
     } else {
       const renderer = selectRenderer(revision.mediaType, undefined);
-      if (['text', 'json', 'markdown', 'image'].includes(renderer.kind)) {
+      if (
+        ['text', 'json', 'markdown', 'image'].includes(renderer.kind) ||
+        supportsSourceView(revision.mediaType)
+      ) {
         bytes = await loadRevisionBytes(revision.revisionId, request.signal);
       }
     }

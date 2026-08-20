@@ -5,6 +5,7 @@ import { Radio } from '@cloudflare/kumo/components/radio';
 import { Select } from '@cloudflare/kumo/components/select';
 import {
   type ArtifactRevision,
+  type CommentPolicy,
   PROTECTED_SHARE_EXPIRY_OPTIONS,
   PUBLIC_SHARE_EXPIRY_OPTIONS,
 } from '@shelf/contracts';
@@ -43,6 +44,11 @@ const expiryFormatter = new Intl.DateTimeFormat(undefined, {
   timeZoneName: 'short',
 });
 
+export const PRIVATE_COMMENT_POLICY_DESCRIPTION =
+  'Visitors see only discussions they started; admins can see all.';
+export const SHARED_COMMENT_POLICY_DESCRIPTION =
+  'Everyone using this link can see shared discussions.';
+
 export function ShareDialog({
   workspaceId,
   artifactId,
@@ -63,6 +69,7 @@ export function ShareDialog({
   const [expiryChoice, setExpiryChoice] = useState<ShareExpiryChoice>('never');
   const [customExpiresAt, setCustomExpiresAt] = useState('');
   const [maxSessions, setMaxSessions] = useState('');
+  const [commentPolicy, setCommentPolicy] = useState<CommentPolicy>('off');
   const [shareUrl, setShareUrl] = useState<string>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -78,6 +85,7 @@ export function ShareDialog({
       setExpiryChoice(defaults.expiryChoice);
       setCustomExpiresAt(defaults.customExpiresAt);
       setMaxSessions(defaults.maxSessions);
+      setCommentPolicy('off');
       setShareUrl(undefined);
       setError(undefined);
       idempotencyRef.current = undefined;
@@ -104,6 +112,7 @@ export function ShareDialog({
       expiryChoice,
       customExpiresAt,
       maxSessions,
+      commentPolicy,
     });
     if ('error' in built) {
       setError(built.error);
@@ -206,6 +215,36 @@ export function ShareDialog({
               ))}
             </Select>
           ) : null}
+
+          <Radio.Group
+            className="choice-group compact-choice-group"
+            legend="Comments"
+            name="share-comments-policy"
+            onValueChange={(value) =>
+              setCommentPolicy(value === 'private' || value === 'shared' ? value : 'off')
+            }
+            value={commentPolicy}
+          >
+            <Radio.Item label="Off" value="off" />
+            <Radio.Item
+              label={
+                <span>
+                  <strong>Private</strong>
+                  <small>{PRIVATE_COMMENT_POLICY_DESCRIPTION}</small>
+                </span>
+              }
+              value="private"
+            />
+            <Radio.Item
+              label={
+                <span>
+                  <strong>Shared</strong>
+                  <small>{SHARED_COMMENT_POLICY_DESCRIPTION}</small>
+                </span>
+              }
+              value="shared"
+            />
+          </Radio.Group>
 
           <Select<ShareExpiryChoice>
             label="Expiry"

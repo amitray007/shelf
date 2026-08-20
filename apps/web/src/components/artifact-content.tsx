@@ -9,8 +9,9 @@ import { FolderIcon } from '@phosphor-icons/react/Folder';
 import type { FolderEntry, PublicShareResolution } from '@shelf/contracts';
 
 import { type ViewerAuthority, viewerShareActionUrl } from '../api.js';
-import type { PassiveRenderer } from '../rendering.js';
+import { normalizeMediaType, type PassiveRenderer } from '../rendering.js';
 import { isFileShareResolution, isFolderShareResolution } from '../share-types.js';
+import { CodeView, type FileReviewProps, FileView, formatJson } from './file-view.js';
 import { formatBytes } from './format.js';
 import { MarkdownView } from './markdown-view.js';
 import { RendererFrame } from './renderer-frame.js';
@@ -18,10 +19,11 @@ import { RendererFrame } from './renderer-frame.js';
 interface ArtifactContentProps {
   readonly resolution: PublicShareResolution;
   readonly renderer: PassiveRenderer;
-  readonly text?: string;
+  readonly text?: string | undefined;
   readonly entries?: readonly FolderEntry[];
   readonly downloadUrl?: string;
   readonly authority: ViewerAuthority;
+  readonly review?: FileReviewProps | undefined;
 }
 
 export function DownloadAction({
@@ -129,21 +131,14 @@ export function FolderTree({ entries }: { readonly entries: readonly FolderEntry
   );
 }
 
-export function formatJson(value: string): string {
-  try {
-    return JSON.stringify(JSON.parse(value), null, 2);
-  } catch {
-    return value;
-  }
-}
-
 export function ArtifactContent({
   resolution,
   renderer,
-  text = '',
+  text,
   entries = [],
   downloadUrl,
   authority,
+  review,
 }: ArtifactContentProps) {
   if (isFolderShareResolution(resolution)) {
     return (
@@ -159,11 +154,51 @@ export function ArtifactContent({
 
   if (!isFileShareResolution(resolution)) return null;
 
+  const normalizedMediaType = normalizeMediaType(resolution.revision.mediaType);
+  let preview: React.ReactNode | undefined;
   if (renderer.kind === 'html') {
-    return (
+    preview = (
       <div className="artifact-surface artifact-html">
         <RendererFrame authority={authority} renderer={renderer} resolution={resolution} />
       </div>
+    );
+  } else if (renderer.kind === 'image' || normalizedMediaType === 'image/svg+xml') {
+    preview = (
+      <div className="artifact-surface artifact-image">
+        {downloadUrl === undefined ? null : (
+          <img alt={resolution.artifact.name} referrerPolicy="no-referrer" src={downloadUrl} />
+        )}
+      </div>
+    );
+  } else if (renderer.kind === 'markdown' && text !== undefined) {
+    preview = (
+      <main
+        aria-label="Artifact document preview"
+        className="artifact-surface artifact-document"
+        tabIndex={0}
+      >
+        <MarkdownView source={text} />
+      </main>
+    );
+  } else if (renderer.kind === 'json' && text !== undefined) {
+    preview = (
+      <CodeView
+        fileName={resolution.revision.originalFileName}
+        label="Artifact data preview"
+        source={formatJson(text)}
+      />
+    );
+  }
+
+  if (preview !== undefined || text !== undefined) {
+    return (
+      <FileView
+        {...(text === undefined ? {} : { source: text })}
+        fileName={resolution.revision.originalFileName}
+        key={resolution.revision.revisionId}
+        preview={preview}
+        review={review}
+      />
     );
   }
   if (renderer.kind === 'download') {
@@ -177,35 +212,5 @@ export function ArtifactContent({
       </div>
     );
   }
-  if (renderer.kind === 'image') {
-    return (
-      <div className="artifact-surface artifact-image">
-        {downloadUrl === undefined ? null : (
-          <img alt={resolution.artifact.name} src={downloadUrl} />
-        )}
-      </div>
-    );
-  }
-  if (renderer.kind === 'markdown') {
-    return (
-      <main
-        aria-label="Artifact document preview"
-        className="artifact-surface artifact-document"
-        tabIndex={0}
-      >
-        <MarkdownView source={text} />
-      </main>
-    );
-  }
-  return (
-    <main
-      aria-label="Artifact code preview"
-      className="artifact-surface artifact-code"
-      tabIndex={0}
-    >
-      <pre>
-        <code>{renderer.kind === 'json' ? formatJson(text) : text}</code>
-      </pre>
-    </main>
-  );
+  return null;
 }

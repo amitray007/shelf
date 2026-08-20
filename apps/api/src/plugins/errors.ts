@@ -59,10 +59,15 @@ export function registerErrorHandler(app: FastifyInstance): void {
 
     if (error instanceof ShelfCoreError) {
       ({ code, message, retryable, details } = error);
-    } else if (error.validation !== undefined || error.code.startsWith('FST_')) {
+    } else if (
+      error.validation !== undefined ||
+      (typeof error.code === 'string' && error.code.startsWith('FST_'))
+    ) {
       code = 'INVALID_REQUEST';
       message = 'The request is invalid.';
       details = validationDetails(error);
+    } else {
+      request.log.error({ err: error }, 'Unhandled API error.');
     }
 
     const envelope = {

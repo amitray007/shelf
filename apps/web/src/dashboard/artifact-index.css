@@ -112,6 +112,11 @@
 
 .artifact-name-column {
   width: auto;
+  min-width: 220px;
+}
+
+.artifact-comments-column {
+  width: 176px;
 }
 
 .artifact-revision-column {
@@ -231,6 +236,61 @@
   white-space: nowrap;
 }
 
+.artifact-comments-cell {
+  overflow: hidden;
+  padding-right: 12px;
+  padding-left: 12px;
+}
+
+.artifact-comments {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 4px;
+}
+
+.review-participant-avatar,
+.artifact-comments-overflow {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--elevated);
+  color: var(--text-subtle);
+  cursor: pointer;
+  font:
+    500 var(--font-machine) / 1 "Geist Mono Variable",
+    ui-monospace,
+    monospace;
+}
+
+.review-participant-avatar img {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: inherit;
+}
+
+.review-participant-avatar:hover,
+.artifact-comments-overflow:hover {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.artifact-comments-overflow {
+  gap: 1px;
+}
+
+.artifact-comments-empty {
+  color: var(--text-muted);
+  font-size: var(--font-body);
+}
+
 .artifact-created-cell,
 .artifact-updated-cell {
   overflow: hidden;
@@ -341,6 +401,10 @@
   .artifact-created-column {
     display: none;
   }
+
+  .artifact-comments-column {
+    width: 144px;
+  }
 }
 
 @media (max-width: 520px) {
@@ -356,8 +420,9 @@
     display: none;
   }
 
+  .artifact-revision-cell,
   .artifact-revision-column {
-    width: 112px;
+    display: none;
   }
 
   .artifact-actions-column {
@@ -368,6 +433,25 @@
   .artifact-table td {
     padding-right: 7px;
     padding-left: 7px;
+  }
+
+  .artifact-comments-column {
+    width: 96px;
+  }
+
+  .artifact-comments {
+    gap: 2px;
+  }
+
+  .review-participant-avatar,
+  .artifact-comments-overflow {
+    width: 44px;
+    height: 44px;
+  }
+
+  .review-participant-avatar img {
+    width: 30px;
+    height: 30px;
   }
 
   .artifact-row-actions a,

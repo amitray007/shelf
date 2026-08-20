@@ -11,8 +11,13 @@ import { EyeIcon } from '@phosphor-icons/react/Eye';
 import { ShareNetworkIcon } from '@phosphor-icons/react/ShareNetwork';
 import { TerminalWindowIcon } from '@phosphor-icons/react/TerminalWindow';
 import { TrashIcon } from '@phosphor-icons/react/Trash';
-import type { Artifact, ArtifactDeletionResult, ArtifactPage } from '@shelf/contracts';
-import { useEffect, useState } from 'react';
+import type {
+  Artifact,
+  ArtifactDeletionResult,
+  ArtifactPage,
+  CommentSummary,
+} from '@shelf/contracts';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Link,
   useLoaderData,
@@ -22,8 +27,15 @@ import {
   useRevalidator,
   useSearchParams,
 } from 'react-router';
+import { ReviewParticipantAvatar } from '../components/review/comment-card.js';
+import { isReviewThreadRead } from '../components/review/persistence.js';
 import { ordinal } from '../components/revision-label.js';
-import { DashboardApiError, loadArtifact, recoverArtifact } from './api.js';
+import {
+  DashboardApiError,
+  loadArtifact,
+  loadArtifactCommentSummaries,
+  recoverArtifact,
+} from './api.js';
 import { ArtifactIcon } from './artifact-icon.js';
 import { ArtifactShareDialog } from './artifact-share-dialog.js';
 import { DeleteArtifactDialog } from './delete-artifact-dialog.js';
@@ -43,6 +55,7 @@ function dateLabel(value: string): string {
 export function ArtifactsPage() {
   const page = useLoaderData() as ArtifactPage;
   const workspaceId = useParams().workspaceId;
+  if (workspaceId === undefined) throw new Error('Artifact workspace is unavailable.');
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -93,7 +106,6 @@ export function ArtifactsPage() {
         (candidate): candidate is string => typeof candidate === 'string',
       )
     : [];
-  if (workspaceId === undefined) throw new Error('Artifact workspace is unavailable.');
   const normalizedSearch = searchQuery.toLocaleLowerCase();
   const matchesSearch = (artifact: Artifact) => {
     if (normalizedSearch.length === 0) return true;
@@ -125,6 +137,30 @@ export function ArtifactsPage() {
       );
     })
     .slice(0, 10);
+  const visibleArtifactKey = visibleArtifacts.map((artifact) => artifact.artifactId).join('\u0000');
+  const visibleArtifactIds = useMemo(
+    () => (visibleArtifactKey.length === 0 ? [] : visibleArtifactKey.split('\u0000')),
+    [visibleArtifactKey],
+  );
+  const [commentSummaries, setCommentSummaries] = useState<ReadonlyMap<string, CommentSummary>>(
+    new Map(),
+  );
+  useEffect(() => {
+    const controller = new AbortController();
+    if (visibleArtifactIds.length === 0) {
+      setCommentSummaries(new Map());
+      return () => controller.abort();
+    }
+    void loadArtifactCommentSummaries(workspaceId, visibleArtifactIds, controller.signal)
+      .then((summaries) => {
+        if (controller.signal.aborted) return;
+        setCommentSummaries(new Map(summaries.map((summary) => [summary.artifactId, summary])));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCommentSummaries(new Map());
+      });
+    return () => controller.abort();
+  }, [visibleArtifactIds, workspaceId]);
   const sortPath = (field: 'created' | 'updated') => {
     const next = new URLSearchParams(searchParams);
     next.delete('cursor');
@@ -252,6 +288,7 @@ export function ArtifactsPage() {
             <Table aria-label="Artifacts" className="artifact-table" layout="fixed">
               <colgroup>
                 <col className="artifact-name-column" />
+                <col className="artifact-comments-column" />
                 <col className="artifact-revision-column" />
                 <col className="artifact-created-column" />
                 <col className="artifact-updated-column" />
@@ -260,6 +297,7 @@ export function ArtifactsPage() {
               <Table.Header variant="compact">
                 <Table.Row>
                   <Table.Head>Artifact</Table.Head>
+                  <Table.Head>Comments</Table.Head>
                   <Table.Head className="artifact-revision-cell">Revision</Table.Head>
                   <Table.Head
                     aria-sort={
@@ -339,6 +377,68 @@ export function ArtifactsPage() {
                             </span>
                           </span>
                         </div>
+                      </Table.Cell>
+                      <Table.Cell className="artifact-comments-cell">
+                        {(() => {
+                          const summary = commentSummaries.get(artifact.artifactId);
+                          if (summary === undefined || summary.participantCount === 0) {
+                            return (
+                              <span className="artifact-comments-empty" title="No comments">
+                                —
+                              </span>
+                            );
+                          }
+                          const participants = summary.participants.slice(0, 2);
+                          const overflowCount = Math.max(
+                            0,
+                            summary.participantCount - participants.length,
+                          );
+                          const artifactCommentPath = `${artifactPath}?discussion=1`;
+                          const openParticipant = (participant: (typeof participants)[number]) => {
+                            const unreadThread = participant.recentThreads.find(
+                              (thread) =>
+                                !isReviewThreadRead(
+                                  artifact.artifactId,
+                                  thread.threadId,
+                                  thread.latestActivityAt,
+                                ),
+                            );
+                            const threadId = unreadThread?.threadId ?? participant.latestThreadId;
+                            if (threadId === null) return;
+                            void navigate(
+                              `${artifactPath}?discussion=1&thread=${encodeURIComponent(threadId)}`,
+                            );
+                          };
+                          return (
+                            <div className="artifact-comments">
+                              {participants.map((participant) => (
+                                <ReviewParticipantAvatar
+                                  key={participant.participantId}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    openParticipant(participant);
+                                  }}
+                                  participant={participant}
+                                />
+                              ))}
+                              {overflowCount > 0 ? (
+                                <button
+                                  aria-label={`Open all comments for ${artifact.name}`}
+                                  className="artifact-comments-overflow"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void navigate(artifactCommentPath);
+                                  }}
+                                  title="Open all comments"
+                                  type="button"
+                                >
+                                  <span aria-hidden="true">+</span>
+                                  {overflowCount}
+                                </button>
+                              ) : null}
+                            </div>
+                          );
+                        })()}
                       </Table.Cell>
                       <Table.Cell className="artifact-revision-cell">
                         {ordinal(artifact.latestRevision.revisionNumber)}

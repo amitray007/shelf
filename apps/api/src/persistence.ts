@@ -3,6 +3,7 @@ import {
   createPostgresDatabase,
   migratePostgresToLatest,
   PostgresAuthRepository,
+  PostgresCommentRepository,
   type PostgresDatabaseOptions,
   PostgresInstallationInventory,
   PostgresReferencedContentInventory,
@@ -28,6 +29,7 @@ export interface ShelfPersistence {
   revisionRepository: PostgresRevisionRepository;
   artifactDeletionRepository: PostgresRevisionRepository;
   shareRepository: PostgresShareRepository;
+  commentRepository: PostgresCommentRepository;
   referencedContentInventory: PostgresReferencedContentInventory;
   authRepository: PostgresAuthRepository;
   migrate(): Promise<void>;
@@ -58,6 +60,7 @@ export function createShelfPersistence(config: ShelfPersistenceConfig): ShelfPer
     revisionRepository,
     artifactDeletionRepository: revisionRepository,
     shareRepository: new PostgresShareRepository(database),
+    commentRepository: new PostgresCommentRepository(database),
     referencedContentInventory: new PostgresReferencedContentInventory(database),
     authRepository: new PostgresAuthRepository(database),
     async migrate(): Promise<void> {

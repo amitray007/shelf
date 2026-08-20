@@ -1,12 +1,15 @@
-import { useEffect, useMemo } from 'react';
+import { ChatCircleDotsIcon } from '@phosphor-icons/react/ChatCircleDots';
+import type { CommentAnchor } from '@shelf/contracts';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { LoaderFunctionArgs } from 'react-router';
-import { useLoaderData } from 'react-router';
+import { useLoaderData, useRevalidator } from 'react-router';
 
 import {
   establishProtectedSession,
   loadPublicClientConfig,
   loadViewerFileBytes,
   loadViewerFolderEntries,
+  loadViewerFolderEntryBytes,
   type PublicSharePayload,
   PublicShareUnavailableError,
   resolveViewerShare,
@@ -22,8 +25,19 @@ import {
   type ViewerShareReference,
 } from './capability.js';
 import { ArtifactContent } from './components/artifact-content.js';
+import { decodeFileSource } from './components/file-view.js';
+import { FolderBrowser, type FolderBrowserReview } from './components/folder-browser.js';
+import { DiscussionPanel } from './components/review/discussion-panel.js';
+import { readReviewValue, writeReviewValue } from './components/review/persistence.js';
+import type { ReviewSidebarMode } from './components/review/types.js';
+import { reviewPanelStorageKey, useViewerReview } from './components/review/use-review.js';
 import { ViewerRail } from './components/viewer-shell.js';
-import { type PassiveRenderer, selectRenderer } from './rendering.js';
+import {
+  normalizeMediaType,
+  type PassiveRenderer,
+  selectRenderer,
+  supportsSourceView,
+} from './rendering.js';
 import {
   type FileShareResolution,
   isFileShareResolution,
@@ -32,7 +46,14 @@ import {
 
 interface PreparedFile {
   readonly renderer: PassiveRenderer;
-  readonly text: string;
+  readonly text?: string;
+}
+
+export function updateViewerThreadUrl(currentUrl: string, threadId: string): string {
+  const url = new URL(currentUrl, 'https://shelf.invalid');
+  if (threadId === '') url.searchParams.delete('thread');
+  else url.searchParams.set('thread', threadId);
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 function prepareFile(
@@ -41,16 +62,11 @@ function prepareFile(
   rendererOrigin: string | undefined,
 ): PreparedFile {
   const selected = selectRenderer(resolution.revision.mediaType, rendererOrigin);
-  if (selected.kind !== 'text' && selected.kind !== 'json' && selected.kind !== 'markdown') {
-    return { renderer: selected, text: '' };
+  if (bytes === null || !supportsSourceView(resolution.revision.mediaType)) {
+    return { renderer: selected };
   }
-  if (bytes === null) return { renderer: { kind: 'download' }, text: '' };
-
-  try {
-    return { renderer: selected, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
-  } catch {
-    return { renderer: { kind: 'download' }, text: '' };
-  }
+  const text = decodeFileSource(bytes);
+  return text === null ? { renderer: { kind: 'download' } } : { renderer: selected, text };
 }
 
 export async function viewerLoader({
@@ -128,7 +144,9 @@ export async function loadViewerPayload(
   }
   if (!isFileShareResolution(resolution)) throw new PublicShareUnavailableError();
   const renderer = selectRenderer(resolution.revision.mediaType, rendererOrigin);
-  const needsBytes = ['text', 'json', 'markdown', 'image'].includes(renderer.kind);
+  const needsBytes =
+    ['text', 'json', 'markdown', 'image'].includes(renderer.kind) ||
+    supportsSourceView(resolution.revision.mediaType);
   return {
     kind: 'file',
     resolution,
@@ -140,13 +158,17 @@ export async function loadViewerPayload(
 
 function FileArtifact({
   payload,
+  review,
 }: {
   readonly payload: Extract<PublicSharePayload, { kind: 'file' }>;
+  readonly review?: React.ComponentProps<typeof ArtifactContent>['review'];
 }) {
   const downloadUrl = useMemo(
     () =>
       payload.bytes === null ||
-      selectRenderer(payload.resolution.revision.mediaType, payload.rendererOrigin).kind !== 'image'
+      (selectRenderer(payload.resolution.revision.mediaType, payload.rendererOrigin).kind !==
+        'image' &&
+        normalizeMediaType(payload.resolution.revision.mediaType) !== 'image/svg+xml')
         ? undefined
         : URL.createObjectURL(
             new Blob([payload.bytes], { type: payload.resolution.revision.mediaType }),
@@ -167,16 +189,89 @@ function FileArtifact({
   return (
     <ArtifactContent
       {...(downloadUrl === undefined ? {} : { downloadUrl })}
+      {...(prepared.text === undefined ? {} : { text: prepared.text })}
       renderer={prepared.renderer}
       resolution={payload.resolution}
       authority={payload.authority}
-      text={prepared.text}
+      review={review}
     />
   );
 }
 
+function FolderArtifact({
+  payload,
+  review,
+}: {
+  readonly payload: Extract<PublicSharePayload, { kind: 'folder' }>;
+  readonly review?: FolderBrowserReview | undefined;
+}) {
+  const loadFile = useCallback(
+    (path: string, signal: AbortSignal) =>
+      loadViewerFolderEntryBytes(payload.resolution, payload.authority, path, signal),
+    [payload.authority, payload.resolution],
+  );
+  return <FolderBrowser entries={payload.entries} loadFile={loadFile} review={review} />;
+}
+
 export function ViewerPage() {
   const payload = useLoaderData() as PublicSharePayload;
+  const { revalidate } = useRevalidator();
+  const handleRevisionMismatch = useCallback(
+    (anchor: CommentAnchor) => {
+      // A file anchor has no text/range to remap, so refreshing Latest is safe.
+      // Keep line/range viewers on the rendered revision so their draft and
+      // anchor cannot be silently attached to a different revision.
+      if (anchor.kind === 'file') revalidate();
+    },
+    [revalidate],
+  );
+  const review = useViewerReview(
+    payload.resolution,
+    payload.authority,
+    payload.resolution.commentPolicy,
+    handleRevisionMismatch,
+  );
+  const [discussionOpen, setDiscussionOpen] = useState(() => {
+    return readReviewValue(reviewPanelStorageKey(payload.resolution)) === 'open';
+  });
+  const [folderMode, setFolderMode] = useState<ReviewSidebarMode>(() => {
+    return readReviewValue(`${reviewPanelStorageKey(payload.resolution)}:mode`) === 'discussion'
+      ? 'discussion'
+      : 'tree';
+  });
+
+  useEffect(() => {
+    const threadId = new URLSearchParams(window.location.search).get('thread');
+    if (threadId !== null && review.enabled) {
+      review.selectThread(threadId);
+      if (payload.kind === 'file') setDiscussionOpen(true);
+      else setFolderMode('discussion');
+    }
+  }, [payload.kind, review.enabled, review.selectThread]);
+
+  const setDiscussionVisibility = (open: boolean) => {
+    setDiscussionOpen(open);
+    writeReviewValue(reviewPanelStorageKey(payload.resolution), open ? 'open' : 'closed');
+  };
+  const setMode = (mode: ReviewSidebarMode) => {
+    setFolderMode(mode);
+    writeReviewValue(`${reviewPanelStorageKey(payload.resolution)}:mode`, mode);
+  };
+  const selectReviewThread = (threadId: string) => {
+    review.selectThread(threadId);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(
+        window.history.state,
+        '',
+        updateViewerThreadUrl(
+          `${window.location.pathname}${window.location.search}${window.location.hash}`,
+          threadId,
+        ),
+      );
+    }
+    if (payload.kind === 'file') setDiscussionVisibility(true);
+    else if (threadId !== '') setMode('discussion');
+  };
 
   useEffect(() => {
     document.title = `${payload.resolution.artifact.name} · shelf`;
@@ -186,18 +281,94 @@ export function ViewerPage() {
   }, [payload.resolution.artifact.name]);
 
   return (
-    <div className="viewer">
+    <div
+      className={`viewer${review.enabled && discussionOpen && payload.kind === 'file' ? ' viewer-discussion-open' : ''}`}
+    >
       <ViewerRail authority={payload.authority} resolution={payload.resolution} />
-      {payload.kind === 'file' ? (
-        <FileArtifact payload={payload} />
-      ) : (
-        <ArtifactContent
-          entries={payload.entries}
-          authority={payload.authority}
-          renderer={{ kind: 'download' }}
-          resolution={payload.resolution}
-        />
-      )}
+      {review.enabled && payload.kind === 'file' ? (
+        <button
+          aria-expanded={discussionOpen}
+          aria-label={discussionOpen ? 'Hide discussion' : 'Show discussion'}
+          className="viewer-review-toggle"
+          onClick={() => setDiscussionVisibility(!discussionOpen)}
+          title={discussionOpen ? 'Hide discussion' : 'Show discussion'}
+          type="button"
+        >
+          <ChatCircleDotsIcon aria-hidden="true" size={18} weight="regular" />
+          {review.threads.length > 0 ? (
+            <span className="viewer-review-count">
+              {review.threads.length > 99 ? '99+' : review.threads.length}
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+      <div className="viewer-main">
+        {payload.kind === 'file' ? (
+          <FileArtifact
+            payload={payload}
+            review={
+              review.enabled
+                ? {
+                    canCreateThread: review.writable,
+                    revisionId: payload.resolution.revision.revisionId,
+                    threads: review.threads,
+                    onCreateThread: review.createThread,
+                    onSelectThread: selectReviewThread,
+                  }
+                : undefined
+            }
+          />
+        ) : (
+          <FolderArtifact
+            payload={payload}
+            review={
+              review.enabled
+                ? {
+                    canCreateThread: review.writable,
+                    revisionId: payload.resolution.revision.revisionId,
+                    threads: review.threads,
+                    activeThreadId: review.activeThreadId,
+                    loading: review.loading,
+                    saving: review.saving,
+                    error: review.error,
+                    mode: folderMode,
+                    onModeChange: setMode,
+                    onSelectThread: selectReviewThread,
+                    onCreateThread: review.createThread,
+                    onReply: review.reply,
+                    onSetThreadStatus: review.setThreadStatus,
+                    onEditPost: review.editPost,
+                    onDeletePost: review.deletePost,
+                  }
+                : undefined
+            }
+          />
+        )}
+        {review.enabled && payload.kind === 'file' && discussionOpen ? (
+          <DiscussionPanel
+            activeThreadId={review.activeThreadId}
+            error={review.error}
+            loading={review.loading}
+            loadingOlder={review.loadingOlder}
+            nextCursor={review.nextCursor}
+            newAnchor={
+              review.writable
+                ? { revisionId: payload.resolution.revision.revisionId, kind: 'file' }
+                : undefined
+            }
+            onClose={() => setDiscussionVisibility(false)}
+            onLoadOlder={review.loadOlder}
+            onCreateThread={review.createThread}
+            onDeletePost={review.deletePost}
+            onEditPost={review.editPost}
+            onReply={review.reply}
+            onSelectThread={selectReviewThread}
+            onSetThreadStatus={review.setThreadStatus}
+            saving={review.saving}
+            threads={review.threads}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

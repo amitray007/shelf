@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import type { Multipart, MultipartFile, MultipartValue } from '@fastify/multipart';
 import {
   FOLDER_LIMITS,
@@ -6,9 +7,11 @@ import {
   isFolderManifestInput,
   OpaqueArtifactIdSchema,
   OpaqueRevisionIdSchema,
+  PortableFolderPathSchema,
   type PublisherMetadata,
 } from '@shelf/contracts';
 import {
+  createFolderEntryContentService,
   createFolderPublishService,
   createFolderTreeService,
   InvalidPublishRequestError,
@@ -72,6 +75,10 @@ const TreeQuerySchema = Type.Object(
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: FOLDER_LIMITS.treePageSize })),
     cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 2048 })),
   },
+  { additionalProperties: false },
+);
+const EntryQuerySchema = Type.Object(
+  { path: PortableFolderPathSchema },
   { additionalProperties: false },
 );
 const errorResponses = {
@@ -161,6 +168,11 @@ export async function registerFolderRoutes(
   });
   const tree = createFolderTreeService({
     authorizer: dependencies.authorizer,
+    folders: dependencies.revisionRepository,
+  });
+  const readEntry = createFolderEntryContentService({
+    authorizer: dependencies.authorizer,
+    contentReader: dependencies.contentReader,
     folders: dependencies.revisionRepository,
   });
 
@@ -283,6 +295,42 @@ export async function registerFolderRoutes(
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         signal: requestCancellationSignal(request, reply),
       });
+    },
+  );
+  app.get(
+    '/api/v1/revisions/:revisionId/tree/content',
+    {
+      schema: {
+        operationId: 'downloadFolderEntryContentV1',
+        summary: 'Download one file from an immutable folder revision',
+        produces: ['application/octet-stream'],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        params: RevisionParamsSchema,
+        querystring: EntryQuerySchema,
+        response: { 200: { type: 'string', format: 'binary' }, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const signal = requestCancellationSignal(request, reply);
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { revisionId: string };
+      const query = request.query as { path: string };
+      const file = await readEntry({
+        installationId: identity.installationId,
+        actorId: identity.actorId,
+        revisionId: params.revisionId,
+        path: query.path,
+        signal,
+      });
+      return reply
+        .type(file.mediaType)
+        .header(
+          'Content-Disposition',
+          `inline; filename*=UTF-8''${encodeURIComponent(query.path.split('/').at(-1) ?? 'file')}`,
+        )
+        .header('Content-Length', file.byteCount)
+        .header('ETag', `"${file.contentHash}"`)
+        .send(Readable.from(await file.read()));
     },
   );
 }

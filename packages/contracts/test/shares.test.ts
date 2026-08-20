@@ -36,6 +36,7 @@ const summary = {
   revokedAt: null,
   status: 'active',
   accessType: 'protected',
+  commentPolicy: 'off',
   maxSessions: 5,
   sessionsUsed: 2,
   sessionsRemaining: 3,

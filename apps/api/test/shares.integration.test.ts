@@ -735,6 +735,11 @@ describe('share HTTP boundary', () => {
       url: `/api/v1/public/shares/${shareId}/tree?limit=1`,
       payload: { token },
     });
+    const treeFile = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/tree/content?path=${encodeURIComponent('src/index.ts')}`,
+      payload: { token },
+    });
     const content = await app.inject({
       method: 'POST',
       url: `/api/v1/public/shares/${shareId}/content`,
@@ -750,6 +755,9 @@ describe('share HTTP boundary', () => {
     expect(content.statusCode).toBe(404);
     expect(content.json()).toMatchObject({ error: { code: 'SHARE_NOT_FOUND' } });
     publicHeaders(tree);
+    expect(treeFile.statusCode).toBe(200);
+    expect(treeFile.rawPayload.toString()).toBe('export {};');
+    publicHeaders(treeFile);
     publicHeaders(content);
   });
 });

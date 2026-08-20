@@ -262,6 +262,7 @@ describe('anonymous share resolution', () => {
       apiVersion: 'v1',
       shareId: ids.latestShare,
       accessType: 'protected',
+      commentPolicy: 'off',
       target: { mode: 'latest' },
       artifact: { artifactId: ids.artifact, kind: 'file', name: 'Launch notes' },
       revision: {
@@ -341,6 +342,7 @@ describe('anonymous share resolution', () => {
       apiVersion: 'v1',
       shareId: ids.pinnedShare,
       accessType: 'protected',
+      commentPolicy: 'off',
       target: { mode: 'pinned', revisionId: ids.firstRevision },
       artifact: { artifactId: ids.artifact, kind: 'folder', name: 'Prototype' },
       revision: {

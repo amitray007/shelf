@@ -21,6 +21,7 @@ function environment(overrides: Record<string, string | undefined> = {}) {
     SHELF_AUTH_BASE_URL: 'https://shelf.example.test',
     SHELF_AUTH_SECRET: 'a'.repeat(32),
     SHELF_SHARE_SIGNING_KEY: 's'.repeat(32),
+    SHELF_PRIVACY_KEY: 'p'.repeat(32),
     ...overrides,
   };
 }
@@ -33,6 +34,7 @@ describe('loadShelfServerConfig', () => {
       installationId: 'installation-main',
       auth: { baseUrl: 'https://shelf.example.test', secret: 'a'.repeat(32) },
       share: { signingKey: 's'.repeat(32) },
+      privacy: { key: 'p'.repeat(32) },
       persistence: {
         postgres: { connectionString: 'postgresql://shelf@postgres/shelf' },
         content: { driver: 'local', root: '/var/lib/shelf/content' },
@@ -82,6 +84,27 @@ describe('loadShelfServerConfig', () => {
     expect(config.share.signingKey).not.toBe(config.auth.secret);
   });
 
+  it('loads a dedicated privacy key and never derives it from share signing', async () => {
+    const config = await loadShelfServerConfig(
+      environment({ SHELF_SHARE_SIGNING_KEY: 's'.repeat(32), SHELF_PRIVACY_KEY: 'p'.repeat(32) }),
+    );
+    expect(config.privacy?.key).toBe('p'.repeat(32));
+    expect(config.privacy?.key).not.toBe(config.share.signingKey);
+  });
+
+  it('loads the privacy key from a protected file independently', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'shelf-config-'));
+    temporaryRoots.push(root);
+    const keyFile = join(root, 'privacy-key');
+    await writeFile(keyFile, `${'p'.repeat(32)}\n`, { mode: 0o600 });
+
+    const config = await loadShelfServerConfig(
+      environment({ SHELF_PRIVACY_KEY: undefined, SHELF_PRIVACY_KEY_FILE: keyFile }),
+    );
+    expect(config.privacy?.key).toBe('p'.repeat(32));
+    expect(config.privacy?.key).not.toBe(config.share.signingKey);
+  });
+
   it('accepts loopback HTTP on IPv6', async () => {
     const config = await loadShelfServerConfig(
       environment({ SHELF_AUTH_BASE_URL: 'http://[::1]:3000' }),
@@ -110,6 +133,21 @@ describe('loadShelfServerConfig', () => {
     const invalidEnvironment = environment({
       SHELF_SHARE_SIGNING_KEY: key,
       SHELF_SHARE_SIGNING_KEY_FILE: key,
+    });
+
+    await expect(loadShelfServerConfig(invalidEnvironment)).rejects.toThrow('exactly one');
+    try {
+      await loadShelfServerConfig(invalidEnvironment);
+    } catch (error) {
+      expect(String(error)).not.toContain(key);
+    }
+  });
+
+  it('requires exactly one privacy key source without echoing it', async () => {
+    const key = 'privacy-key-canary-that-must-never-be-printed';
+    const invalidEnvironment = environment({
+      SHELF_PRIVACY_KEY: key,
+      SHELF_PRIVACY_KEY_FILE: key,
     });
 
     await expect(loadShelfServerConfig(invalidEnvironment)).rejects.toThrow('exactly one');

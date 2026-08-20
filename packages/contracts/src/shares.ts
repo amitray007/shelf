@@ -3,6 +3,12 @@ import { Check } from 'typebox/value';
 
 import { OpaqueArtifactIdSchema, OpaqueRevisionIdSchema } from './publish.js';
 
+export const COMMENT_POLICIES = ['off', 'private', 'shared'] as const;
+export const CommentPolicySchema = Type.Union(
+  [Type.Literal('off'), Type.Literal('private'), Type.Literal('shared')],
+  { $id: 'CommentPolicy' },
+);
+
 export const SHARE_CREATE_OPERATION = 'share.create' as const;
 
 export const SHARE_EXPIRY_PRESETS = [
@@ -143,8 +149,17 @@ export const ShareAccessPolicyInputSchema = Type.Union([
   PublicShareAccessPolicyInputSchema,
 ]);
 
-const ProtectedCreateFields = { ...ProtectedPolicyFields, target: ShareTargetSchema };
-const PublicCreateFields = { ...PublicPolicyFields, target: ShareTargetSchema };
+const CommentPolicyInputField = { commentPolicy: Type.Optional(CommentPolicySchema) };
+const ProtectedCreateFields = {
+  ...ProtectedPolicyFields,
+  ...CommentPolicyInputField,
+  target: ShareTargetSchema,
+};
+const PublicCreateFields = {
+  ...PublicPolicyFields,
+  ...CommentPolicyInputField,
+  target: ShareTargetSchema,
+};
 
 export const ShareCreateInputSchema = Type.Union(
   [
@@ -179,6 +194,7 @@ const ShareManagementFields = {
   createdAt: IsoInstantSchema,
   revokedAt: NullableIsoInstantSchema,
   status: ShareLifecycleStatusSchema,
+  commentPolicy: Type.Optional(CommentPolicySchema),
 };
 
 export const ProtectedShareUrlSchema = Type.String({
@@ -340,6 +356,7 @@ const PublicShareFields = {
 const ProtectedResolutionFields = {
   ...PublicShareFields,
   accessType: Type.Literal('protected'),
+  commentPolicy: Type.Optional(CommentPolicySchema),
 };
 
 const PublicResolutionFields = {
@@ -347,6 +364,7 @@ const PublicResolutionFields = {
   accessType: Type.Literal('public'),
   publicCode: PublicShareCodeSchema,
   expiresAt: NullableIsoInstantSchema,
+  commentPolicy: Type.Optional(CommentPolicySchema),
 };
 
 const FileArtifactSchema = Type.Object(
@@ -459,6 +477,7 @@ export const ProtectedSessionAuthoritySchema = Type.Object(
 );
 
 export type ShareTarget = Static<typeof ShareTargetSchema>;
+export type CommentPolicy = Static<typeof CommentPolicySchema>;
 export type ShareExpiryPreset = Static<typeof ShareExpiryPresetSchema>;
 export type ShareExpiryPresetWithNever = Static<typeof ShareExpiryPresetWithNeverSchema>;
 export type ProtectedShareExpiryPreset = ShareExpiryPresetWithNever;

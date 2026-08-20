@@ -47,6 +47,7 @@ It is a predictable way to publish an output, immediately receive a readable or 
 - **Explicit artifact deletion has a fixed 30-day recovery window.** Deletion hides the artifact from active catalog, revision, publishing, and share-resolution paths while retaining immutable revision bytes. It transactionally revokes every active share; recovery restores the artifact but never resurrects those capability URLs. Governs R12-R15 and F5.
 - **Folder publishes are atomic snapshots.** A revision represents a complete directory state that actually existed, while comparisons can drill into changed files. Governs R3-R6.
 - **Restore preserves history.** Restoring an earlier state creates a new latest revision rather than rewriting or deleting later revisions. Governs R5.
+- **Review is a per-share capability, not a workspace conversation feed.** Each share chooses Off, Private, or Shared comments independently. Existing discussions retain the visibility captured when they were created; disabling comments blocks new writes without erasing authorized history. Governs R27.
 
 ### Product Model
 
@@ -57,8 +58,10 @@ flowchart TB
   A --> R[Immutable revision]
   S[Share] --> L[Latest target]
   S --> P[Pinned target]
+  S --> C[Review threads]
   L --> A
   P --> R
+  C --> R
 ```
 
 An installation contains isolated workspaces such as personal and work.
@@ -69,7 +72,7 @@ A workspace owns artifacts. An artifact owns immutable revisions, while a share 
 - A1. **Owner:** Configures an installation, its workspaces, policies, and credentials.
 - A2. **Publisher:** Primarily uses the CLI to create, update, and share artifacts; may use the dashboard for occasional management.
 - A3. **Agent:** Publishes and manages artifacts non-interactively under scoped credentials.
-- A4. **Viewer:** Opens a shared file, folder, or exact revision through a readable link.
+- A4. **Viewer:** Opens a shared file, folder, or exact revision through a readable link and may participate in review threads when that share permits comments.
 - A5. **Operator:** Installs, upgrades, backs up, restores, and monitors a self-hosted deployment.
 
 One person may act as the owner, publisher, viewer, and operator of a personal installation.
@@ -107,6 +110,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 - R18. Bulk import must create artifacts and links from a machine-readable manifest and report partial failures without hiding successful items.
 - R19. Export must support one revision, one complete artifact history, or an installation-owned portable archive as permitted by the caller's scope.
 - R26. After a profile selects the installation, credential, and default workspace, the common CLI workflow must accept a file or folder path, optionally request an unlisted share explicitly, and return canonical artifact, revision, and share URLs without prompting. Publishing without an explicit share request must remain private.
+- R27. A share must independently support Off, Private, or Shared review. Private threads are visible only to their visitor author and authenticated owners; Shared threads are visible to everyone using that link. Comments may anchor to a file, line, or line range, remain attached to the revision where they were created, preserve history across later revisions, and expose owner moderation without allowing owners to rewrite visitor text. Disabling comments must reject new threads and replies without deleting already-authorized history.
 
 **Metadata and safety**
 
@@ -156,6 +160,13 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
   - **Steps:** Shelf evaluates independent artifact, revision, and share policies; protects pinned revisions; revokes access when required; and exposes recoverable deletion state before permanent purge.
   - **Outcome:** Cleanup is predictable and never implies that share expiry equals content deletion.
   - **Covered by:** R12-R14.
+
+- F6. Review a shared artifact
+  - **Trigger:** A viewer opens a share whose review policy permits comments.
+  - **Actors:** A4, with A1 or A2 moderating from the artifact utility.
+  - **Steps:** The viewer supplies a browser-persisted display identity, starts a file-, line-, or range-level thread, and may reply to or resolve their own discussion. Shelf captures the thread's visibility and revision anchor at creation. Authenticated owners can reply, resolve, reopen, hide, or unhide without rewriting visitor content.
+  - **Outcome:** Review remains scoped to the share and artifact, later revisions keep earlier discussion history visible as exact or outdated anchors, and turning comments Off prevents new writes without erasing authorized history.
+  - **Covered by:** R14-R16, R27.
 
 ### Acceptance Examples
 
@@ -219,6 +230,12 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
   - **When:** The operator explicitly migrates, bootstraps the owner, issues a scoped credential, starts Shelf, publishes with the CLI, stops Shelf gracefully, and restarts with the same installation identity and volumes.
   - **Then:** Readiness reflects dependency state, the original pinned revision remains byte-exact, and revoked or invalid credentials remain denied.
 
+- AE11. Prospective review visibility
+  - **Covers R27.**
+  - **Given:** A viewer starts a Private thread on revision 1 and the owner later changes the share to Shared before publishing revision 2.
+  - **When:** Another viewer opens the same share and the original viewer opens the discussion history.
+  - **Then:** The other viewer cannot see the earlier Private thread, the original viewer and owner retain access to it, new threads use Shared visibility, and the revision 1 anchor remains visible as outdated rather than being deleted or silently moved.
+
 ### Success Criteria
 
 - A human can publish a folder, receive a readable link, publish an update, compare it with the previous revision, and restore the earlier state without leaving the documented workflow.
@@ -234,7 +251,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 
 **Deferred for later**
 
-- Inline annotations, anchored comments, and general discussion threads.
+- Arbitrary canvas annotations on rendered text, images, and other preview surfaces beyond the first file-, line-, and range-level review anchors.
 - Live analytics beyond the minimum operational and audit information needed to manage shares safely.
 - Custom domains and domain-specific branding.
 - Public profile pages and broader discovery surfaces.

@@ -6,7 +6,7 @@ import {
 } from '@shelf/contracts';
 
 import { boundaryFailure, ShelfCoreError } from '../errors.js';
-import type { Authorizer } from '../publishing/ports.js';
+import type { Authorizer, ContentReader } from '../publishing/ports.js';
 import { RevisionNotFoundError } from '../revisions/read.js';
 import type { FolderRevisionRepository, StoredFolderRevision } from './publish.js';
 import type { StoredFolderEntry } from './snapshot.js';
@@ -120,6 +120,55 @@ export function createFolderTreeService(dependencies: {
       fileCount: revision.fileCount,
       items: page.items.map(entry),
       nextCursor: page.nextPath === undefined ? null : encodeCursor(page.nextPath),
+    };
+  };
+}
+
+export function createFolderEntryContentService(dependencies: {
+  authorizer: Authorizer;
+  contentReader: ContentReader;
+  folders: FolderRevisionRepository;
+}) {
+  return async function readFolderEntry(request: {
+    installationId: string;
+    actorId: string;
+    revisionId: string;
+    path: string;
+    signal?: AbortSignal;
+  }) {
+    const revision = await dependencies.folders.findFolderRevision(request.revisionId);
+    if (
+      revision === undefined ||
+      revision.installationId !== request.installationId ||
+      revision.revisionId !== request.revisionId
+    ) {
+      throw new RevisionNotFoundError();
+    }
+    await dependencies.authorizer.authorize(
+      {
+        installationId: request.installationId,
+        workspaceId: revision.workspaceId,
+        actorId: request.actorId,
+        action: READ_REVISION_OPERATION,
+      },
+      request.signal,
+    );
+    const page = await dependencies.folders.listFolderEntries({
+      installationId: request.installationId,
+      revisionId: request.revisionId,
+      limit: FOLDER_LIMITS.maxEntries,
+    });
+    const entry = page.items.find((candidate) => candidate.path === request.path);
+    if (entry === undefined || entry.kind !== 'file') throw new RevisionNotFoundError();
+    return {
+      path: entry.path,
+      mediaType: entry.mediaType,
+      byteCount: entry.content.byteCount,
+      contentHash: entry.content.contentHash,
+      read: () =>
+        dependencies.contentReader.read(entry.content, {
+          ...(request.signal === undefined ? {} : { signal: request.signal }),
+        }),
     };
   };
 }

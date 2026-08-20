@@ -22,8 +22,19 @@ const SOURCE_MEDIA_TYPES = new Set([
   'application/x-sh',
 ]);
 
-function normalizeMediaType(mediaType: string): string {
+export function normalizeMediaType(mediaType: string): string {
   return mediaType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+}
+
+export function supportsSourceView(mediaType: string): boolean {
+  const normalized = normalizeMediaType(mediaType);
+  return (
+    normalized === 'image/svg+xml' ||
+    normalized === 'application/json' ||
+    normalized.endsWith('+json') ||
+    SOURCE_MEDIA_TYPES.has(normalized) ||
+    (normalized.startsWith('text/') && normalized !== 'text/event-stream')
+  );
 }
 
 function rendererEndpoint(value: string | undefined): { url: string } | null {

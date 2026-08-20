@@ -27,6 +27,10 @@ describe('artifact index presentation', () => {
     expect(source).toContain('Preview artifact');
     expect(source).toContain('Delete artifact');
     expect(source).toContain('<ArtifactShareDialog');
+    expect(source).toContain('<Table.Head>Comments</Table.Head>');
+    expect(source).toContain('loadArtifactCommentSummaries');
+    expect(source).toContain('discussion=1&thread=');
+    expect(source).toContain('Open all comments');
   });
 
   it('guards reusable share modal results against stale requests', async () => {

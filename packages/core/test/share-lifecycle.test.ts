@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -68,6 +70,9 @@ function repository(overrides: Partial<ShareRepository> = {}): ShareRepository {
     async revokeShare() {
       return { status: 'not-found' };
     },
+    async setCommentPolicy() {
+      return { status: 'not-found' as const };
+    },
     async resolveShareTarget() {
       return undefined;
     },
@@ -99,6 +104,7 @@ function storedShare(overrides: Partial<StoredShare> = {}): StoredShare {
     artifactId: ids.artifact,
     visibility: 'unlisted',
     accessType: 'protected',
+    commentPolicy: 'off',
     publicCode: null,
     target: { mode: 'latest' },
     createdByActorId: 'actor-publisher',
@@ -206,6 +212,73 @@ describe('share lifecycle service', () => {
       }),
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
     expect(commitCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('replays a pre-comment-policy fingerprint and upgrades it before future retries', async () => {
+    let idempotency: { fingerprint: string; result: Record<string, unknown> } | undefined;
+    const rewrite = vi.fn(async (input: { fingerprint: string }) => {
+      if (idempotency !== undefined) idempotency.fingerprint = input.fingerprint;
+    });
+    const service = createShareLifecycleService({
+      authorizer: { async authorize() {} },
+      shares: {
+        async findArtifactForShare() {
+          return artifact();
+        },
+        async findRevisionForShare() {
+          return undefined;
+        },
+        async findCreateIdempotency() {
+          return idempotency;
+        },
+        async commitCreate(input) {
+          idempotency = { fingerprint: input.fingerprint, result: input.result };
+          return { status: 'committed' as const, result: input.result };
+        },
+        rewriteCreateIdempotencyFingerprint: rewrite,
+      } as ShareRepository,
+      capabilityCodec,
+      clock: () => new Date('2026-08-17T12:00:00.000Z'),
+      generateShareId: () => ids.share,
+    });
+    const request = {
+      installationId: 'installation-main',
+      workspaceId: 'workspace-main',
+      actorId: 'actor-publisher',
+      artifactId: ids.artifact,
+      target: { mode: 'latest' as const },
+      expiresAt: '2026-08-24T12:00:00.000Z',
+      idempotencyKey: 'legacy-share-key',
+      requestId: 'legacy-first',
+    };
+    await service.createShare(request);
+    expect(idempotency).toBeDefined();
+    const legacyRecord = idempotency;
+    if (legacyRecord === undefined) throw new Error('expected idempotency record');
+    legacyRecord.fingerprint = `share-create-request/v1:sha256:${createHash('sha256')
+      .update(
+        JSON.stringify({
+          version: 1,
+          artifactId: ids.artifact,
+          target: { mode: 'latest' },
+          expiresAt: request.expiresAt,
+        }),
+      )
+      .digest('hex')}`;
+
+    await expect(
+      service.createShare({ ...request, requestId: 'legacy-retry' }),
+    ).resolves.toMatchObject({
+      replayed: true,
+    });
+    expect(rewrite).toHaveBeenCalledOnce();
+    const upgraded = idempotency?.fingerprint;
+    await expect(
+      service.createShare({ ...request, requestId: 'upgraded-retry' }),
+    ).resolves.toMatchObject({
+      replayed: true,
+    });
+    expect(idempotency?.fingerprint).toBe(upgraded);
   });
 
   it('creates a pinned share only when the revision belongs to the artifact scope', async () => {
@@ -342,6 +415,7 @@ describe('share lifecycle service', () => {
           artifactId: ids.artifact,
           visibility: 'unlisted',
           accessType: 'protected',
+          commentPolicy: 'off',
           target: { mode: 'pinned', revisionId: ids.secondRevision, revisionNumber: 2 },
           createdAt: '2026-08-17T12:00:00.000Z',
           expiresAt: null,
@@ -412,6 +486,33 @@ describe('share lifecycle service', () => {
 });
 
 describe('share access policies', () => {
+  it('updates the share comment policy while preserving the projected management contract', async () => {
+    let current = storedShare({ commentPolicy: 'off' });
+    const service = createShareLifecycleService({
+      authorizer: { async authorize() {} },
+      shares: repository({
+        async findShare() {
+          return current;
+        },
+        async setCommentPolicy(request) {
+          current = { ...current, commentPolicy: request.commentPolicy };
+          return { status: 'updated' as const, result: current };
+        },
+      }),
+      capabilityCodec,
+      clock: () => new Date('2026-08-17T12:00:00.000Z'),
+    });
+    await expect(
+      service.setCommentPolicy({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        actorId: 'actor-publisher',
+        shareId: ids.share,
+        commentPolicy: 'shared',
+      }),
+    ).resolves.toMatchObject({ shareId: ids.share, commentPolicy: 'shared' });
+  });
+
   it('reuses active uniqueness winners when concurrent default repair loses the race', async () => {
     const protectedWinner = storedShare({ shareId: 'shr_PPPPPPPPPPPPPPPPPPPPPP' });
     const publicWinner = storedShare({

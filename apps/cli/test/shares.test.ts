@@ -58,6 +58,7 @@ describe('shelf shares', () => {
     expect(output.stdout.value()).toContain('--access <protected|public>');
     expect(output.stdout.value()).toContain('--expires-in <preset>');
     expect(output.stdout.value()).toContain('--max-sessions <count>');
+    expect(output.stdout.value()).toContain('--comments <off|private|shared>');
     expect(output.stdout.value()).toContain('Targets default to Latest');
     expect(output.stdout.value()).toContain('non-confidential');
   });
@@ -106,6 +107,49 @@ describe('shelf shares', () => {
       headers: expect.objectContaining({
         authorization: 'Bearer secret-token',
         'idempotency-key': 'share-launch-notes',
+      }),
+    });
+  });
+
+  it('carries a non-default comment policy in a custom share request', async () => {
+    const result = {
+      ...summary,
+      commentPolicy: 'private' as const,
+      requestId: 'request-comment-share',
+      replayed: false,
+    };
+    const fetch = vi.fn(async () => Response.json(result, { status: 201 }));
+    const output = runtime(fetch);
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'shares',
+        'create',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--artifact',
+        ids.artifact,
+        '--comments',
+        'private',
+        '--expires-in',
+        '24hr',
+        '--idempotency-key',
+        'share-comments',
+      ],
+      output.value,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      body: JSON.stringify({
+        accessType: 'protected',
+        target: { mode: 'latest' },
+        commentPolicy: 'private',
+        expiresIn: '24hr',
       }),
     });
   });
@@ -482,6 +526,10 @@ describe('shelf shares', () => {
         'key',
       ],
     ],
+    [
+      'invalid comment policy',
+      ['create', '--artifact', ids.artifact, '--comments', 'team', '--idempotency-key', 'key'],
+    ],
   ])('rejects an invalid %s before making a network request', async (_case, command) => {
     const fetch = vi.fn();
     const output = runtime(fetch as typeof globalThis.fetch);
@@ -503,6 +551,41 @@ describe('shelf shares', () => {
     expect(exitCode).toBe(2);
     expect(output.stdout.value()).toBe('');
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('updates the comment policy on an existing share', async () => {
+    const result = { ...summary, commentPolicy: 'shared' as const };
+    const fetch = vi.fn(async () => Response.json(result));
+    const output = runtime(fetch);
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'shares',
+        'comments',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--share',
+        ids.share,
+        '--comments',
+        'shared',
+      ],
+      output.value,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(output.stdout.value())).toEqual(result);
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      `https://shelf.example/api/v1/workspaces/workspace-main/shares/${ids.share}/comment-policy`,
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'PATCH',
+      body: JSON.stringify({ commentPolicy: 'shared' }),
+      headers: expect.objectContaining({ authorization: 'Bearer secret-token' }),
+    });
   });
 
   it('redacts a capability URL from a remote error', async () => {

@@ -2,12 +2,13 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-async function sourceText(directory: string): Promise<string> {
+async function sourceText(directory: string, excluded = new Set<string>()): Promise<string> {
   const entries = await readdir(directory, { withFileTypes: true });
   const chunks = await Promise.all(
     entries.map(async (entry) => {
       const entryPath = path.join(directory, entry.name);
-      if (entry.isDirectory()) return sourceText(entryPath);
+      if (excluded.has(entryPath)) return '';
+      if (entry.isDirectory()) return sourceText(entryPath, excluded);
       if (!/\.(css|ts|tsx)$/.test(entry.name)) return '';
       return readFile(entryPath, 'utf8');
     }),
@@ -17,12 +18,29 @@ async function sourceText(directory: string): Promise<string> {
 
 describe('anonymous viewer architecture', () => {
   it('has no server-layer imports or capability-leaking browser APIs', async () => {
-    const source = await sourceText(path.resolve(import.meta.dirname, '../src'));
+    const sourceRoot = path.resolve(import.meta.dirname, '../src');
+    const persistencePath = path.join(sourceRoot, 'components/review/persistence.ts');
+    const source = await sourceText(sourceRoot, new Set([persistencePath]));
     expect(source).not.toMatch(/@shelf\/(?:api|auth|core|postgres|storage)/);
     expect(source).not.toContain('localStorage');
     expect(source).not.toContain('srcDoc');
     expect(source).not.toContain('srcdoc');
     expect(source).not.toContain('console.');
+  });
+
+  it('keeps review persistence narrowly scoped', async () => {
+    const persistence = await readFile(
+      path.resolve(import.meta.dirname, '../src/components/review/persistence.ts'),
+      'utf8',
+    );
+    expect(persistence).toContain('shelf:review-');
+    expect(persistence).not.toMatch(/shelf:(?!review-)[A-Za-z0-9_-]+/);
+    expect(persistence).not.toMatch(
+      /@shelf\/(?:api|auth|core|postgres|storage)|capability|secret|protected.*token|session.*authority/i,
+    );
+    expect(persistence).toContain('shelf:review-read:');
+    expect(persistence).toContain('markReviewThreadRead');
+    expect(persistence).toContain('isReviewThreadRead');
   });
 
   it('ships only a dark token branch and no theme switch', async () => {

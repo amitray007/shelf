@@ -121,6 +121,7 @@ describe('managed dashboard status', () => {
     ).toEqual({
       input: {
         accessType: 'public',
+        commentPolicy: 'off',
         target: { mode: 'latest' },
         expiresIn: 'never',
       },
@@ -140,6 +141,7 @@ describe('managed dashboard status', () => {
     ).toEqual({
       input: {
         accessType: 'protected',
+        commentPolicy: 'off',
         target: { mode: 'pinned', revisionId: `rev_${'a'.repeat(22)}` },
         expiresIn: '7d',
         maxSessions: 5,

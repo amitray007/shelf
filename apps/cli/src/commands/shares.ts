@@ -1,5 +1,6 @@
 import type {
   ArtifactDefaultShares,
+  CommentPolicy,
   ShareCreateInput,
   ShareCreateResult,
   ShareExpiryPresetWithNever,
@@ -7,9 +8,15 @@ import type {
   SharePage,
   ShareTarget,
 } from '@shelf/contracts';
-import { SHARE_EXPIRY_PRESETS, SHARE_SESSION_LIMITS } from '@shelf/contracts';
+import { COMMENT_POLICIES, SHARE_EXPIRY_PRESETS, SHARE_SESSION_LIMITS } from '@shelf/contracts';
 
-import { createShare, ensureArtifactDefaultShares, listShares, revokeShare } from '../client.js';
+import {
+  createShare,
+  ensureArtifactDefaultShares,
+  listShares,
+  revokeShare,
+  setShareCommentPolicy,
+} from '../client.js';
 import { usageFailure } from '../output.js';
 import type { CliRuntime } from '../runtime.js';
 
@@ -22,6 +29,7 @@ interface ShareCommandOptions {
 export interface CreateShareCommandOptions extends ShareCommandOptions {
   artifact: string;
   access?: string;
+  comments?: string;
   revision?: string;
   expiresIn?: string;
   expiresAt?: string;
@@ -31,6 +39,7 @@ export interface CreateShareCommandOptions extends ShareCommandOptions {
 
 export interface SharePolicyCommandOptions {
   access?: string;
+  comments?: string;
   expiresIn?: string;
   expiresAt?: string;
   maxSessions?: string;
@@ -43,6 +52,11 @@ export interface ListSharesCommandOptions extends ShareCommandOptions {
 
 export interface RevokeShareCommandOptions extends ShareCommandOptions {
   share: string;
+}
+
+export interface ShareCommentsCommandOptions extends ShareCommandOptions {
+  share: string;
+  comments: string;
 }
 
 export interface DefaultSharesCommandOptions extends ShareCommandOptions {
@@ -106,6 +120,14 @@ function sessionLimit(value: string | undefined): number | undefined {
   return parsed;
 }
 
+function commentPolicy(value: string | undefined): CommentPolicy | undefined {
+  if (value === undefined) return undefined;
+  if (!(COMMENT_POLICIES as readonly string[]).includes(value)) {
+    throw usageFailure('Comments must be one of: off, private, shared.');
+  }
+  return value as CommentPolicy;
+}
+
 export function shareCreateInput(
   options: SharePolicyCommandOptions,
   shareTarget: ShareTarget,
@@ -118,6 +140,7 @@ export function shareCreateInput(
     throw usageFailure('--expires-in and --expires-at cannot be combined.');
   }
   const maxSessions = sessionLimit(options.maxSessions);
+  const policy = commentPolicy(options.comments);
   if (accessType === 'public' && maxSessions !== undefined) {
     throw usageFailure('--max-sessions is available only for protected shares.');
   }
@@ -138,6 +161,7 @@ export function shareCreateInput(
     return {
       accessType,
       target: shareTarget,
+      ...(policy === undefined ? {} : { commentPolicy: policy }),
       ...(expiresIn === undefined ? {} : { expiresIn }),
       ...(expiresAt === undefined ? {} : { expiresAt }),
     };
@@ -145,6 +169,7 @@ export function shareCreateInput(
   return {
     accessType,
     target: shareTarget,
+    ...(policy === undefined ? {} : { commentPolicy: policy }),
     ...(expiresIn === undefined ? {} : { expiresIn }),
     ...(expiresAt === undefined ? {} : { expiresAt }),
     ...(maxSessions === undefined ? {} : { maxSessions }),
@@ -228,6 +253,22 @@ export function executeRevokeShare(
     {
       ...transport(options, runtime),
       shareId: shareId(options.share),
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
+export function executeSetShareCommentPolicy(
+  options: ShareCommentsCommandOptions,
+  runtime: CliRuntime,
+): Promise<ShareManagementSummary> {
+  const policy = commentPolicy(options.comments);
+  if (policy === undefined) throw usageFailure('--comments is required.');
+  return setShareCommentPolicy(
+    {
+      ...transport(options, runtime),
+      shareId: shareId(options.share),
+      commentPolicy: policy,
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );

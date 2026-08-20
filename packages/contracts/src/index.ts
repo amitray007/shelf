@@ -1,4 +1,5 @@
 export * from './artifacts.js';
+export * from './comments.js';
 export * from './comparisons.js';
 export * from './dashboard.js';
 export * from './errors.js';

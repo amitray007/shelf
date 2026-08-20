@@ -111,6 +111,18 @@ describePostgres('human session authentication', () => {
     const cookie = signIn.headers.get('set-cookie');
     expect(cookie).toContain('HttpOnly');
 
+    const localhostSignIn = await auth.handle(
+      new Request('http://localhost:3000/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'http://localhost:3000' },
+        body: JSON.stringify({
+          email: 'owner@example.test',
+          password: 'correct horse battery staple',
+        }),
+      }),
+    );
+    expect(localhostSignIn.status).toBe(200);
+
     const headers = new Headers({ cookie: cookie ?? '' });
     await expect(auth.authenticate(headers)).resolves.toMatchObject({
       email: 'owner@example.test',

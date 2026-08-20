@@ -4,6 +4,12 @@ import {
   type ArtifactDeletionResult,
   type ArtifactPage,
   type ArtifactRevisionPage,
+  COMMENT_SUMMARY_RECENT_THREAD_LIMIT,
+  type CommentPolicy,
+  type CommentPost,
+  type CommentSummary,
+  type CommentThread,
+  type CommentThreadPage,
   type DashboardCredentialIssue,
   type DashboardCredentialIssueRequest,
   type DashboardCredentialPage,
@@ -15,6 +21,7 @@ import {
   isArtifactDeletionResult,
   isArtifactPage,
   isArtifactRevisionPage,
+  isCommentThread,
   isDashboardCredentialIssue,
   isDashboardCredentialPage,
   isDashboardCredentialRevoke,
@@ -30,6 +37,7 @@ import {
   type RevisionComparison,
   type ShareCreateInput,
   type ShareCreateResult,
+  type ShareManagementSummary,
   type SharePage,
   type WorkspaceCreateResult,
 } from '@shelf/contracts';
@@ -215,6 +223,242 @@ export async function loadWorkspaceShares(
   return value;
 }
 
+function isCommentPost(value: unknown): value is CommentPost {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.postId === 'string' &&
+    typeof candidate.threadId === 'string' &&
+    typeof candidate.body === 'string' &&
+    typeof candidate.author === 'object' &&
+    candidate.author !== null &&
+    typeof candidate.permissions === 'object' &&
+    candidate.permissions !== null &&
+    typeof candidate.createdAt === 'string' &&
+    (candidate.editedAt === null || typeof candidate.editedAt === 'string') &&
+    (candidate.deletedAt === null || typeof candidate.deletedAt === 'string') &&
+    (candidate.hiddenAt === null || typeof candidate.hiddenAt === 'string')
+  );
+}
+
+function isIsoDate(value: unknown): value is string {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const allowed = new Set(keys);
+  return Object.keys(value).every((key) => allowed.has(key));
+}
+
+function isCommentSummary(value: unknown): value is CommentSummary {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  if (
+    !hasOnlyKeys(candidate, [
+      'artifactId',
+      'participantCount',
+      'participants',
+      'openThreadCount',
+      'openReplyCount',
+      'latestActivityAt',
+      'latestThreadId',
+    ]) ||
+    typeof candidate.artifactId !== 'string' ||
+    candidate.artifactId.length === 0 ||
+    !Number.isSafeInteger(candidate.participantCount) ||
+    (candidate.participantCount as number) < 0 ||
+    !Array.isArray(candidate.participants) ||
+    !Number.isSafeInteger(candidate.openThreadCount) ||
+    (candidate.openThreadCount as number) < 0 ||
+    !Number.isSafeInteger(candidate.openReplyCount) ||
+    (candidate.openReplyCount as number) < 0 ||
+    (candidate.latestActivityAt !== null && !isIsoDate(candidate.latestActivityAt)) ||
+    (candidate.latestThreadId !== null &&
+      (typeof candidate.latestThreadId !== 'string' || candidate.latestThreadId.length === 0))
+  ) {
+    return false;
+  }
+  if (candidate.participants.length > 20) return false;
+  return candidate.participants.every((participant) => {
+    if (typeof participant !== 'object' || participant === null) return false;
+    const item = participant as Record<string, unknown>;
+    return (
+      hasOnlyKeys(item, [
+        'participantId',
+        'displayName',
+        'threadCount',
+        'replyCount',
+        'latestThreadId',
+        'latestActivityAt',
+        'recentThreads',
+      ]) &&
+      typeof item.participantId === 'string' &&
+      item.participantId.length > 0 &&
+      typeof item.displayName === 'string' &&
+      item.displayName.length > 0 &&
+      Number.isSafeInteger(item.threadCount) &&
+      (item.threadCount as number) >= 0 &&
+      Number.isSafeInteger(item.replyCount) &&
+      (item.replyCount as number) >= 0 &&
+      (item.latestThreadId === null ||
+        (typeof item.latestThreadId === 'string' && item.latestThreadId.length > 0)) &&
+      (item.latestActivityAt === null || isIsoDate(item.latestActivityAt)) &&
+      Array.isArray(item.recentThreads) &&
+      item.recentThreads.length <= COMMENT_SUMMARY_RECENT_THREAD_LIMIT &&
+      item.recentThreads.every((recentThread) => {
+        if (typeof recentThread !== 'object' || recentThread === null) return false;
+        const thread = recentThread as Record<string, unknown>;
+        return (
+          hasOnlyKeys(thread, ['threadId', 'latestActivityAt']) &&
+          typeof thread.threadId === 'string' &&
+          thread.threadId.length > 0 &&
+          isIsoDate(thread.latestActivityAt)
+        );
+      })
+    );
+  });
+}
+
+export async function loadArtifactCommentSummaries(
+  workspaceId: string,
+  artifactIds: readonly string[],
+  signal?: AbortSignal,
+): Promise<readonly CommentSummary[]> {
+  const value = await requestJson(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/comments/summaries`,
+    {
+      ...jsonRequest('POST', { artifactIds }),
+      ...(signal === undefined ? {} : { signal }),
+    },
+  );
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !hasOnlyKeys(value as Record<string, unknown>, ['items']) ||
+    !('items' in value) ||
+    !Array.isArray(value.items) ||
+    !value.items.every((item) => isCommentSummary(item))
+  ) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned invalid comment summaries.');
+  }
+  const requested = new Set(artifactIds);
+  const seen = new Set<string>();
+  if (
+    value.items.some(
+      (item) =>
+        !requested.has(item.artifactId) || seen.has(item.artifactId) || !seen.add(item.artifactId),
+    )
+  ) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned invalid comment summaries.');
+  }
+  return value.items;
+}
+
+function isShareManagementSummary(value: unknown): value is ShareManagementSummary {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.shareId === 'string' &&
+    (candidate.accessType === 'protected' || candidate.accessType === 'public') &&
+    typeof candidate.workspaceId === 'string' &&
+    typeof candidate.artifactId === 'string'
+  );
+}
+
+export async function loadArtifactComments(
+  workspaceId: string,
+  artifactId: string,
+  currentRevisionId: string,
+  signal?: AbortSignal,
+  cursor?: string,
+  limit?: number,
+): Promise<CommentThreadPage> {
+  const query = new URLSearchParams({ currentRevisionId });
+  if (cursor !== undefined) query.set('cursor', cursor);
+  if (limit !== undefined) query.set('limit', String(limit));
+  const value = await requestJson(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/comments?${query}`,
+    signal === undefined ? undefined : { signal },
+  );
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('items' in value) ||
+    !Array.isArray(value.items) ||
+    !value.items.every((item) => isCommentThread(item))
+  ) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned invalid discussions.');
+  }
+  const nextCursor = 'nextCursor' in value ? value.nextCursor : undefined;
+  if (typeof nextCursor !== 'string' && nextCursor !== null) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid discussion cursor.');
+  }
+  return { items: value.items as CommentThread[], nextCursor };
+}
+
+export async function createArtifactCommentReply(
+  workspaceId: string,
+  artifactId: string,
+  threadId: string,
+  body: string,
+): Promise<CommentPost> {
+  const value = await requestJson(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/comments/threads/${encodeURIComponent(threadId)}/replies`,
+    jsonRequest('POST', { body }),
+  );
+  if (!isCommentPost(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid discussion reply.');
+  }
+  return value;
+}
+
+export async function updateArtifactCommentThread(
+  workspaceId: string,
+  artifactId: string,
+  threadId: string,
+  status: 'resolve' | 'reopen',
+): Promise<CommentThread> {
+  const value = await requestJson(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/comments/threads/${encodeURIComponent(threadId)}`,
+    jsonRequest('PATCH', { status }),
+  );
+  if (!isCommentThread(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid discussion.');
+  }
+  return value;
+}
+
+export async function moderateArtifactCommentPost(
+  workspaceId: string,
+  artifactId: string,
+  postId: string,
+  moderation: 'hide' | 'unhide',
+): Promise<CommentPost> {
+  const value = await requestJson(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/comments/posts/${encodeURIComponent(postId)}`,
+    jsonRequest('PATCH', { moderation }),
+  );
+  if (!isCommentPost(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid moderated post.');
+  }
+  return value;
+}
+
+export async function setShareCommentPolicy(
+  workspaceId: string,
+  shareId: string,
+  commentPolicy: CommentPolicy,
+): Promise<ShareManagementSummary> {
+  const value = await requestJson(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/shares/${encodeURIComponent(shareId)}/comment-policy`,
+    jsonRequest('PATCH', { commentPolicy }),
+  );
+  if (!isShareManagementSummary(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid share link.');
+  }
+  return value;
+}
+
 export async function ensureArtifactDefaultShares(
   workspaceId: string,
   artifactId: string,
@@ -259,6 +503,23 @@ export async function loadFolderEntries(
     if (cursor !== undefined) visited.add(cursor);
   } while (cursor !== undefined);
   return entries;
+}
+
+export async function loadFolderEntryBytes(
+  revisionId: string,
+  path: string,
+  signal?: AbortSignal,
+): Promise<ArrayBuffer> {
+  const query = new URLSearchParams({ path });
+  const response = await dashboardFetch(
+    `/api/v1/revisions/${encodeURIComponent(revisionId)}/tree/content?${query}`,
+    requestOptions(signal === undefined ? undefined : { signal }),
+  );
+  if (response.status === 401) throw new DashboardAuthenticationError();
+  if (!response.ok) {
+    throw new DashboardApiError('CONTENT_UNAVAILABLE', 'The folder file is unavailable.');
+  }
+  return response.arrayBuffer();
 }
 
 export async function loadRevisionBytes(

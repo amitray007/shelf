@@ -65,6 +65,7 @@ function publicResolution(value: ResolvedStoredShare): PublicShareResolution {
     apiVersion: 'v1' as const,
     shareId: share.shareId,
     accessType: access.accessType,
+    commentPolicy: share.commentPolicy ?? 'off',
     target,
     artifact: {
       artifactId: artifact.artifactId,

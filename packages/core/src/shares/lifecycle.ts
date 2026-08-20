@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import {
   type ArtifactDefaultShares,
+  type CommentPolicy,
   PUBLISH_OPERATION,
   READ_REVISION_OPERATION,
   SHARE_CREATE_OPERATION,
@@ -23,6 +24,7 @@ import type {
   CommitShareCreateOutcome,
   PublicShareCodeGenerator,
   RevokeShareOutcome,
+  SetShareCommentPolicyOutcome,
   ShareCapabilityCodec,
   ShareClock,
   ShareCreateIdempotencyNamespace,
@@ -125,6 +127,22 @@ export function createShareFingerprint(input: {
   artifactId: string;
   target: ShareTarget;
   expiresAt: string | null;
+  commentPolicy?: CommentPolicy;
+}): string {
+  const canonical = JSON.stringify({
+    version: 1,
+    artifactId: input.artifactId,
+    target: input.target,
+    expiresAt: input.expiresAt,
+    commentPolicy: input.commentPolicy ?? 'off',
+  });
+  return `share-create-request/v1:sha256:${createHash('sha256').update(canonical).digest('hex')}`;
+}
+
+function createLegacyShareFingerprint(input: {
+  artifactId: string;
+  target: ShareTarget;
+  expiresAt: string | null;
 }): string {
   const canonical = JSON.stringify({
     version: 1,
@@ -141,9 +159,14 @@ export function createSharePolicyFingerprint(input: {
   accessType: 'protected' | 'public';
   expiry: { expiresIn: ShareExpiryPresetWithNever } | { expiresAt: string | null };
   maxSessions: number | null;
+  commentPolicy?: CommentPolicy;
   purpose?: 'artifact-default';
 }): string {
-  const canonical = JSON.stringify({ version: 2, ...input });
+  const canonical = JSON.stringify({
+    version: 3,
+    commentPolicy: input.commentPolicy ?? 'off',
+    ...input,
+  });
   return `share-create-request/v2:sha256:${createHash('sha256').update(canonical).digest('hex')}`;
 }
 
@@ -219,6 +242,7 @@ function summary(
     expiresAt: stored.expiresAt,
     revokedAt: stored.revokedAt,
     status: shareLifecycleStatus(stored, now),
+    commentPolicy: stored.commentPolicy ?? 'off',
     url: capabilityUrl(stored, capabilityCodec),
   };
   if (stored.accessType === 'public') {
@@ -304,6 +328,7 @@ function createResult(
     expiresAt: stored.expiresAt,
     revokedAt: stored.revokedAt,
     status: shareLifecycleStatus(stored, now),
+    commentPolicy: stored.commentPolicy ?? 'off',
     requestId,
     url: capabilityUrl(stored, capabilityCodec),
     replayed,
@@ -419,6 +444,7 @@ export function createShareLifecycleService(dependencies: {
     requestId: string;
     signal?: AbortSignal;
     purpose?: 'artifact-default';
+    commentPolicy?: CommentPolicy;
   }): Promise<ShareCreateResult> => {
     validateIdentity(request, { requestId: true, idempotencyKey: true });
     const target = request.target ?? { mode: 'latest' as const };
@@ -460,6 +486,7 @@ export function createShareLifecycleService(dependencies: {
           artifactId: request.artifactId,
           target,
           expiresAt: request.expiresAt ?? null,
+          ...(request.commentPolicy === undefined ? {} : { commentPolicy: request.commentPolicy }),
         })
       : createSharePolicyFingerprint({
           artifactId: request.artifactId,
@@ -467,8 +494,17 @@ export function createShareLifecycleService(dependencies: {
           accessType,
           expiry: semanticExpiry,
           maxSessions: request.maxSessions ?? null,
+          ...(request.commentPolicy === undefined ? {} : { commentPolicy: request.commentPolicy }),
           ...(request.purpose === undefined ? {} : { purpose: request.purpose }),
         });
+    const legacyFingerprint =
+      legacyEquivalent && request.commentPolicy === undefined
+        ? createLegacyShareFingerprint({
+            artifactId: request.artifactId,
+            target,
+            expiresAt: request.expiresAt ?? null,
+          })
+        : undefined;
 
     let artifact: StoredArtifact | undefined;
     try {
@@ -539,7 +575,21 @@ export function createShareLifecycleService(dependencies: {
       throw boundaryFailure('SERVICE_UNAVAILABLE', 'Share idempotency lookup failed.', error);
     }
     if (existing !== undefined) {
-      if (existing.fingerprint !== fingerprint) throw new IdempotencyConflictError();
+      const compatibleLegacyReplay =
+        legacyFingerprint !== undefined && existing.fingerprint === legacyFingerprint;
+      if (!compatibleLegacyReplay && existing.fingerprint !== fingerprint) {
+        throw new IdempotencyConflictError();
+      }
+      if (compatibleLegacyReplay && dependencies.shares.rewriteCreateIdempotencyFingerprint) {
+        try {
+          await dependencies.shares.rewriteCreateIdempotencyFingerprint({
+            namespace,
+            fingerprint,
+          });
+        } catch (error) {
+          throw boundaryFailure('SERVICE_UNAVAILABLE', 'Share idempotency upgrade failed.', error);
+        }
+      }
       return createResult(
         existing.result,
         request.requestId,
@@ -604,6 +654,7 @@ export function createShareLifecycleService(dependencies: {
       sessionsUsed: 0,
       revokedAt: null,
       revokedByActorId: null,
+      commentPolicy: request.commentPolicy ?? 'off',
     };
     const attempts = accessType === 'public' ? 3 : 1;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -860,6 +911,57 @@ export function createShareLifecycleService(dependencies: {
         });
       } catch (error) {
         throw boundaryFailure('SERVICE_UNAVAILABLE', 'Share revocation failed.', error);
+      }
+      if (outcome.status === 'not-found') throw new ShareNotFoundError();
+      return summary(
+        outcome.result,
+        dependencies.capabilityCodec,
+        clock(),
+        await pinnedRevisionNumber(outcome.result),
+      );
+    },
+
+    async setCommentPolicy(request: {
+      installationId: string;
+      workspaceId: string;
+      actorId: string;
+      shareId: string;
+      commentPolicy: CommentPolicy;
+      signal?: AbortSignal;
+    }): Promise<ShareManagementSummary> {
+      validateIdentity(request, { requestId: false, idempotencyKey: false });
+      if (!SHARE_ID_PATTERN.test(request.shareId)) throw new ShareNotFoundError();
+      let stored: StoredShare | undefined;
+      try {
+        stored = await dependencies.shares.findShare(request.shareId);
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Share lookup failed.', error);
+      }
+      if (
+        stored === undefined ||
+        stored.installationId !== request.installationId ||
+        stored.workspaceId !== request.workspaceId
+      )
+        throw new ShareNotFoundError();
+      await dependencies.authorizer.authorize(
+        {
+          installationId: request.installationId,
+          workspaceId: request.workspaceId,
+          actorId: request.actorId,
+          action: PUBLISH_OPERATION,
+        },
+        request.signal,
+      );
+      let outcome: SetShareCommentPolicyOutcome;
+      try {
+        outcome = await dependencies.shares.setCommentPolicy({
+          installationId: request.installationId,
+          workspaceId: request.workspaceId,
+          shareId: request.shareId,
+          commentPolicy: request.commentPolicy,
+        });
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Share comment policy update failed.', error);
       }
       if (outcome.status === 'not-found') throw new ShareNotFoundError();
       return summary(

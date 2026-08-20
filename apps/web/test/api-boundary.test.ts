@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  createViewerCommentReply,
+  createViewerCommentThread,
   establishProtectedSession,
+  loadViewerComments,
   loadViewerFolderEntries,
   PublicShareUnavailableError,
   resolveViewerShare,
+  updateViewerCommentPost,
+  updateViewerCommentThread,
+  ViewerCommentRevisionMismatchError,
 } from '../src/api.js';
 import {
   capabilityStorageKey,
@@ -12,7 +18,7 @@ import {
   protectedViewerTokenStorageKey,
 } from '../src/capability.js';
 import type { FolderShareResolution } from '../src/share-types.js';
-import { loadViewerPayload, viewerLoader } from '../src/viewer-page.js';
+import { loadViewerPayload, updateViewerThreadUrl, viewerLoader } from '../src/viewer-page.js';
 
 const SHARE_ID = `shr_${'a'.repeat(22)}`;
 const SECRET = 'S'.repeat(43);
@@ -73,7 +79,175 @@ afterEach(() => {
 });
 
 describe('viewer content boundary', () => {
-  it('resolves active HTML without downloading its bytes into the app origin', async () => {
+  it('projects a Latest revision race as an actionable review error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+        Response.json(
+          {
+            error: {
+              code: 'INVALID_REQUEST',
+              message: 'The comment request is invalid.',
+              retryable: false,
+              details: [
+                {
+                  field: 'revisionId',
+                  reason: 'must match the revision rendered by the shared link',
+                },
+              ],
+            },
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    const error = await createViewerCommentThread({
+      resolution: folderResolution(),
+      authority: {
+        accessType: 'protected',
+        shareId: SHARE_ID,
+        sessionId: SESSION_ID,
+        token: TOKEN,
+      },
+      visitorToken: 'V'.repeat(43),
+      displayName: 'A reviewer',
+      anchor: { revisionId: REVISION_ID, kind: 'file' },
+      body: 'Keep this draft.',
+    }).catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(ViewerCommentRevisionMismatchError);
+    expect((error as Error).message).toContain('draft is still here');
+    expect((error as Error).message).toContain('re-anchor');
+  });
+
+  it('updates the thread query while preserving the protected capability hash', () => {
+    expect(updateViewerThreadUrl(`/s/${SHARE_ID}?mode=source#${SECRET}`, 'thread_1')).toBe(
+      `/s/${SHARE_ID}?mode=source&thread=thread_1#${SECRET}`,
+    );
+    expect(updateViewerThreadUrl(`/s/${SHARE_ID}?mode=source&thread=thread_1#${SECRET}`, '')).toBe(
+      `/s/${SHARE_ID}?mode=source#${SECRET}`,
+    );
+  });
+
+  it('keeps visitor credentials in anonymous comment request bodies', async () => {
+    const visitorToken = 'V'.repeat(43);
+    const thread = {
+      threadId: 'thread_1',
+      workspaceId: 'workspace_1',
+      artifactId: `art_${'b'.repeat(22)}`,
+      shareId: SHARE_ID,
+      revisionId: REVISION_ID,
+      visibility: 'shared',
+      anchor: { revisionId: REVISION_ID, kind: 'file' },
+      anchorStatus: 'exact',
+      resolvedAt: null,
+      createdAt: '2026-08-18T12:00:00.000Z',
+      updatedAt: '2026-08-18T12:00:00.000Z',
+      permissions: { canReply: true, canResolve: true, canReopen: false },
+      posts: [
+        {
+          postId: 'post_1',
+          threadId: 'thread_1',
+          body: 'Keep this line.',
+          author: { kind: 'visitor', participantId: 'visitor_1', displayName: 'A reviewer' },
+          permissions: { canEdit: true, canDelete: true, canModerate: false },
+          createdAt: '2026-08-18T12:00:00.000Z',
+          editedAt: null,
+          deletedAt: null,
+          hiddenAt: null,
+        },
+      ],
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ items: [thread], nextCursor: null }))
+      .mockResolvedValueOnce(Response.json(thread, { status: 201 }))
+      .mockResolvedValueOnce(Response.json(thread.posts[0], { status: 201 }))
+      .mockResolvedValueOnce(Response.json(thread))
+      .mockResolvedValueOnce(Response.json(thread.posts[0]))
+      .mockResolvedValueOnce(Response.json(thread.posts[0]));
+    vi.stubGlobal('fetch', fetch);
+    const resolution = folderResolution();
+    const authority = {
+      accessType: 'protected' as const,
+      shareId: SHARE_ID,
+      sessionId: SESSION_ID,
+      token: TOKEN,
+    };
+    const context = { resolution, authority, visitorToken, displayName: 'A reviewer' };
+
+    await expect(loadViewerComments(context)).resolves.toMatchObject({
+      items: [thread],
+      nextCursor: null,
+    });
+    await createViewerCommentThread({
+      ...context,
+      anchor: { revisionId: REVISION_ID, kind: 'file' },
+      body: 'Keep this line.',
+    });
+    await createViewerCommentReply({ ...context, threadId: 'thread_1', body: 'Agreed.' });
+    await updateViewerCommentThread({ ...context, threadId: 'thread_1', status: 'resolve' });
+    await updateViewerCommentPost({
+      ...context,
+      postId: 'post_1',
+      action: 'edit',
+      body: 'Edited.',
+    });
+    await updateViewerCommentPost({ ...context, postId: 'post_1', action: 'delete' });
+
+    expect(fetch.mock.calls.map(([input]) => input)).toEqual([
+      `/api/v1/public/shares/${SHARE_ID}/comments/query`,
+      `/api/v1/public/shares/${SHARE_ID}/comments/threads`,
+      `/api/v1/public/shares/${SHARE_ID}/comments/threads/thread_1/replies`,
+      `/api/v1/public/shares/${SHARE_ID}/comments/threads/thread_1`,
+      `/api/v1/public/shares/${SHARE_ID}/comments/posts/post_1`,
+      `/api/v1/public/shares/${SHARE_ID}/comments/posts/post_1`,
+    ]);
+    for (const [, init] of fetch.mock.calls) {
+      expect(String(init?.body)).toContain(visitorToken);
+      expect(String(init?.body)).toContain(TOKEN);
+      expect(String(init?.body)).not.toContain('http');
+    }
+    expect(JSON.parse(String(fetch.mock.calls[4]?.[1]?.body))).toMatchObject({
+      action: 'edit',
+      body: 'Edited.',
+    });
+    expect(JSON.parse(String(fetch.mock.calls[5]?.[1]?.body))).toMatchObject({ action: 'delete' });
+  });
+
+  it('rejects malformed comment post responses instead of trusting partial shapes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn<typeof globalThis.fetch>()
+        .mockResolvedValueOnce(Response.json({ postId: 'post_1' }, { status: 201 }))
+        .mockResolvedValueOnce(
+          Response.json({ postId: 'post_1', threadId: 'thread_1', permissions: {} }),
+        ),
+    );
+    const context = {
+      resolution: {
+        ...folderResolution(),
+        accessType: 'public' as const,
+        publicCode: PUBLIC_CODE,
+        action: { type: 'tree' as const, path: `/api/v1/public/links/${PUBLIC_CODE}/tree` },
+      },
+      authority: {
+        accessType: 'public' as const,
+        publicCode: PUBLIC_CODE,
+      },
+      visitorToken: 'V'.repeat(43),
+      displayName: 'A reviewer',
+    };
+
+    await expect(
+      createViewerCommentReply({ ...context, threadId: 'thread_1', body: 'Reply' }),
+    ).rejects.toBeInstanceOf(PublicShareUnavailableError);
+    await expect(
+      updateViewerCommentPost({ ...context, postId: 'post_1', action: 'delete' }),
+    ).rejects.toBeInstanceOf(PublicShareUnavailableError);
+  });
+
+  it('loads active HTML source while keeping execution in the isolated renderer', async () => {
     const resolution = {
       apiVersion: 'v1',
       shareId: SHARE_ID,
@@ -99,7 +273,10 @@ describe('viewer content boundary', () => {
         path: `/api/v1/public/shares/${SHARE_ID}/content`,
       },
     };
-    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(resolution));
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json(resolution))
+      .mockResolvedValueOnce(new Response('<h1>Shared source</h1>'));
     vi.stubGlobal('fetch', fetch);
 
     const payload = await loadViewerPayload(
@@ -109,9 +286,12 @@ describe('viewer content boundary', () => {
       'https://renderer.shelf.example/',
     );
 
-    expect(payload).toMatchObject({ kind: 'file', bytes: null });
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(payload).toMatchObject({ kind: 'file' });
+    if (payload.kind !== 'file' || payload.bytes === null) throw new Error('Expected file bytes.');
+    expect(new TextDecoder().decode(payload.bytes)).toBe('<h1>Shared source</h1>');
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch.mock.calls[0]?.[0]).toBe(`/api/v1/public/shares/${SHARE_ID}/resolve`);
+    expect(fetch.mock.calls[1]?.[0]).toBe(`/api/v1/public/shares/${SHARE_ID}/content`);
   });
 
   it('does not buffer download-only bytes before the user requests them', async () => {
@@ -317,7 +497,8 @@ describe('viewer content boundary', () => {
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(Response.json(established))
       .mockResolvedValueOnce(Response.json({ apiVersion: 'v1', rendererOrigin: null }))
-      .mockResolvedValueOnce(Response.json(resolution));
+      .mockResolvedValueOnce(Response.json(resolution))
+      .mockResolvedValueOnce(new Response('<p>Source</p>'));
     vi.stubGlobal('fetch', fetch);
 
     await viewerLoader({
@@ -373,7 +554,8 @@ describe('viewer content boundary', () => {
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(Response.json(renewed))
       .mockResolvedValueOnce(Response.json({ apiVersion: 'v1', rendererOrigin: null }))
-      .mockResolvedValueOnce(Response.json(resolution));
+      .mockResolvedValueOnce(Response.json(resolution))
+      .mockResolvedValueOnce(new Response('<p>Source</p>'));
     vi.stubGlobal('fetch', fetch);
 
     await viewerLoader({

@@ -1,4 +1,4 @@
-import type { ShareTarget } from '@shelf/contracts';
+import type { CommentPolicy, ShareTarget } from '@shelf/contracts';
 
 import type { StoredArtifact, StoredArtifactRevision } from '../artifacts/catalog.js';
 
@@ -10,6 +10,7 @@ export interface StoredShare {
   artifactId: string;
   visibility: 'unlisted';
   accessType: 'protected' | 'public';
+  commentPolicy: CommentPolicy;
   publicCode: string | null;
   target: ShareTarget;
   createdByActorId: string;
@@ -84,12 +85,21 @@ export type RevokeShareOutcome =
   | { status: 'revoked' | 'already-revoked'; result: StoredShare }
   | { status: 'not-found' };
 
+export type SetShareCommentPolicyOutcome =
+  | { status: 'updated'; result: StoredShare }
+  | { status: 'not-found' };
+
 export interface ShareRepository {
   findArtifactForShare(artifactId: string): Promise<StoredArtifact | undefined>;
   findRevisionForShare(revisionId: string): Promise<StoredShareRevision | undefined>;
   findCreateIdempotency(
     namespace: ShareCreateIdempotencyNamespace,
   ): Promise<ShareCreateIdempotencyRecord | undefined>;
+  /** Upgrade an older idempotency fingerprint after a compatible replay. */
+  rewriteCreateIdempotencyFingerprint?(request: {
+    namespace: ShareCreateIdempotencyNamespace;
+    fingerprint: string;
+  }): Promise<void>;
   /** Linearize share creation and the successful idempotency record in one atomic operation. */
   commitCreate(input: CommitShareCreateInput): Promise<CommitShareCreateOutcome>;
   listShares(request: {
@@ -105,6 +115,12 @@ export interface ShareRepository {
     artifactId: string;
   }): Promise<ArtifactDefaultShareState>;
   findShare(shareId: string): Promise<StoredShare | undefined>;
+  /** Batch share lookup for tenant-scoped projections; optional for lightweight adapters. */
+  findSharesByIds?(request: {
+    installationId: string;
+    workspaceId: string;
+    shareIds: readonly string[];
+  }): Promise<StoredShare[]>;
   /** Linearize concurrent revocations and return the canonical persisted result. */
   revokeShare(request: {
     installationId: string;
@@ -113,6 +129,12 @@ export interface ShareRepository {
     revokedByActorId: string;
     revokedAt: string;
   }): Promise<RevokeShareOutcome>;
+  setCommentPolicy(request: {
+    installationId: string;
+    workspaceId: string;
+    shareId: string;
+    commentPolicy: CommentPolicy;
+  }): Promise<SetShareCommentPolicyOutcome>;
   /** Resolve latest or pinned revision selection atomically with the share lookup. */
   resolveShareTarget(shareId: string): Promise<ResolvedStoredShare | undefined>;
   /** Resolve a secret-free Public selector without exposing Protected rows. */

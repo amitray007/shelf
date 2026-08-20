@@ -127,6 +127,7 @@ function storedShare(row: ShareTable): StoredShare {
     artifactId: row.artifact_id,
     visibility: row.visibility,
     accessType: row.access_type,
+    commentPolicy: row.comment_policy ?? 'off',
     publicCode: row.public_code,
     target,
     createdByActorId: row.created_by_actor_id,
@@ -237,6 +238,7 @@ function shareValues(result: StoredShare, purpose: CommitShareCreateInput['purpo
     artifact_id: result.artifactId,
     visibility: result.visibility,
     access_type: result.accessType,
+    comment_policy: result.commentPolicy ?? 'off',
     public_code: result.publicCode,
     target_mode: result.target.mode,
     target_revision_id: result.target.mode === 'pinned' ? result.target.revisionId : null,
@@ -318,6 +320,21 @@ export class PostgresShareRepository implements ShareRepository {
     namespace: ShareCreateIdempotencyNamespace,
   ): Promise<ShareCreateIdempotencyRecord | undefined> {
     return findIdempotency(this.#database, namespace);
+  }
+
+  async rewriteCreateIdempotencyFingerprint(request: {
+    namespace: ShareCreateIdempotencyNamespace;
+    fingerprint: string;
+  }): Promise<void> {
+    await this.#database
+      .updateTable('shelf_share_idempotency')
+      .set({ fingerprint: request.fingerprint })
+      .where('installation_id', '=', request.namespace.installationId)
+      .where('workspace_id', '=', request.namespace.workspaceId)
+      .where('actor_id', '=', request.namespace.actorId)
+      .where('operation', '=', request.namespace.operation)
+      .where('client_key', '=', request.namespace.key)
+      .execute();
   }
 
   async commitCreate(input: CommitShareCreateInput): Promise<CommitShareCreateOutcome> {
@@ -469,6 +486,22 @@ export class PostgresShareRepository implements ShareRepository {
     return findShare(this.#database, shareId);
   }
 
+  async findSharesByIds(request: {
+    installationId: string;
+    workspaceId: string;
+    shareIds: readonly string[];
+  }): Promise<StoredShare[]> {
+    if (request.shareIds.length === 0) return [];
+    const rows = await this.#database
+      .selectFrom('shelf_shares')
+      .selectAll()
+      .where('installation_id', '=', request.installationId)
+      .where('workspace_id', '=', request.workspaceId)
+      .where('share_id', 'in', [...request.shareIds])
+      .execute();
+    return rows.map(storedShare);
+  }
+
   revokeShare(request: {
     installationId: string;
     workspaceId: string;
@@ -501,6 +534,25 @@ export class PostgresShareRepository implements ShareRepository {
         ? { status: 'not-found' }
         : { status: 'already-revoked', result: storedShare(existing) };
     });
+  }
+
+  async setCommentPolicy(request: {
+    installationId: string;
+    workspaceId: string;
+    shareId: string;
+    commentPolicy: 'off' | 'private' | 'shared';
+  }) {
+    const row = await this.#database
+      .updateTable('shelf_shares')
+      .set({ comment_policy: request.commentPolicy })
+      .where('installation_id', '=', request.installationId)
+      .where('workspace_id', '=', request.workspaceId)
+      .where('share_id', '=', request.shareId)
+      .returningAll()
+      .executeTakeFirst();
+    return row === undefined
+      ? { status: 'not-found' as const }
+      : { status: 'updated' as const, result: storedShare(row) };
   }
 
   resolveShareTarget(shareId: string): Promise<ResolvedStoredShare | undefined> {

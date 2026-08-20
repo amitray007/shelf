@@ -1278,6 +1278,22 @@
                       }
                     ]
                   },
+                  "commentPolicy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["off"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["private"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared"]
+                      }
+                    ]
+                  },
                   "accessType": {
                     "type": "string",
                     "enum": ["protected"]
@@ -1428,6 +1444,22 @@
                       }
                     ]
                   },
+                  "commentPolicy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["off"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["private"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared"]
+                      }
+                    ]
+                  },
                   "accessType": {
                     "type": "string",
                     "enum": ["protected"]
@@ -1571,6 +1603,22 @@
                   {
                     "type": "string",
                     "enum": ["revoked"]
+                  }
+                ]
+              },
+              "commentPolicy": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["off"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["private"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared"]
                   }
                 ]
               },
@@ -1736,6 +1784,22 @@
                       }
                     ]
                   },
+                  "commentPolicy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["off"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["private"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared"]
+                      }
+                    ]
+                  },
                   "accessType": {
                     "type": "string",
                     "enum": ["protected"]
@@ -1886,6 +1950,22 @@
                       }
                     ]
                   },
+                  "commentPolicy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["off"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["private"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared"]
+                      }
+                    ]
+                  },
                   "accessType": {
                     "type": "string",
                     "enum": ["protected"]
@@ -2029,6 +2109,22 @@
                   {
                     "type": "string",
                     "enum": ["revoked"]
+                  }
+                ]
+              },
+              "commentPolicy": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["off"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["private"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared"]
                   }
                 ]
               },
@@ -2178,6 +2274,22 @@
                       {
                         "type": "string",
                         "enum": ["revoked"]
+                      }
+                    ]
+                  },
+                  "commentPolicy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["off"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["private"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared"]
                       }
                     ]
                   },
@@ -2333,6 +2445,22 @@
                       {
                         "type": "string",
                         "enum": ["revoked"]
+                      }
+                    ]
+                  },
+                  "commentPolicy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["off"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["private"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared"]
                       }
                     ]
                   },
@@ -2487,6 +2615,22 @@
                   }
                 ]
               },
+              "commentPolicy": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["off"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["private"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared"]
+                  }
+                ]
+              },
               "accessType": {
                 "type": "string",
                 "enum": ["public"]
@@ -2570,6 +2714,22 @@
                 "minimum": 1,
                 "maximum": 1000000
               },
+              "commentPolicy": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["off"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["private"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared"]
+                  }
+                ]
+              },
               "target": {
                 "anyOf": [
                   {
@@ -2616,6 +2776,22 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 1000000
+              },
+              "commentPolicy": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["off"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["private"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared"]
+                  }
+                ]
               },
               "target": {
                 "anyOf": [
@@ -2711,6 +2887,22 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 1000000
+              },
+              "commentPolicy": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["off"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["private"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared"]
+                  }
+                ]
               },
               "target": {
                 "anyOf": [
@@ -2758,6 +2950,22 @@
                 "type": "string",
                 "enum": ["public"]
               },
+              "commentPolicy": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["off"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["private"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared"]
+                  }
+                ]
+              },
               "target": {
                 "anyOf": [
                   {
@@ -2799,6 +3007,22 @@
               "accessType": {
                 "type": "string",
                 "enum": ["public"]
+              },
+              "commentPolicy": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["off"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["private"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared"]
+                  }
+                ]
               },
               "target": {
                 "anyOf": [
@@ -2889,6 +3113,22 @@
               "accessType": {
                 "type": "string",
                 "enum": ["public"]
+              },
+              "commentPolicy": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["off"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["private"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared"]
+                  }
+                ]
               },
               "target": {
                 "anyOf": [
@@ -3024,6 +3264,22 @@
                             {
                               "type": "string",
                               "enum": ["revoked"]
+                            }
+                          ]
+                        },
+                        "commentPolicy": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["off"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["private"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["shared"]
                             }
                           ]
                         },
@@ -3177,6 +3433,22 @@
                             }
                           ]
                         },
+                        "commentPolicy": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["off"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["private"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["shared"]
+                            }
+                          ]
+                        },
                         "accessType": {
                           "type": "string",
                           "enum": ["protected"]
@@ -3320,6 +3592,22 @@
                         {
                           "type": "string",
                           "enum": ["revoked"]
+                        }
+                      ]
+                    },
+                    "commentPolicy": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["off"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["private"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["shared"]
                         }
                       ]
                     },
@@ -3475,6 +3763,22 @@
                   "accessType": {
                     "type": "string",
                     "enum": ["protected"]
+                  },
+                  "commentPolicy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["off"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["private"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared"]
+                      }
+                    ]
                   },
                   "artifact": {
                     "type": "object",
@@ -3635,6 +3939,22 @@
                     "type": "string",
                     "pattern": "^[A-Za-z0-9_-]{12}$"
                   },
+                  "commentPolicy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["off"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["private"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared"]
+                      }
+                    ]
+                  },
                   "artifact": {
                     "type": "object",
                     "required": ["artifactId", "name", "kind"],
@@ -3792,6 +4112,22 @@
                   "accessType": {
                     "type": "string",
                     "enum": ["protected"]
+                  },
+                  "commentPolicy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["off"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["private"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared"]
+                      }
+                    ]
                   },
                   "artifact": {
                     "type": "object",
@@ -3951,6 +4287,22 @@
                   "publicCode": {
                     "type": "string",
                     "pattern": "^[A-Za-z0-9_-]{12}$"
+                  },
+                  "commentPolicy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["off"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["private"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared"]
+                      }
+                    ]
                   },
                   "artifact": {
                     "type": "object",
@@ -4428,6 +4780,984 @@
         },
         "additionalProperties": false,
         "title": "WorkspaceCreateResult"
+      },
+      "def-21": {
+        "type": "object",
+        "required": [
+          "postId",
+          "threadId",
+          "body",
+          "author",
+          "permissions",
+          "createdAt",
+          "editedAt",
+          "deletedAt",
+          "hiddenAt"
+        ],
+        "properties": {
+          "postId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": ["kind", "participantId", "displayName"],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["visitor"]
+                  },
+                  "participantId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "participantId", "actorId"],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["actor"]
+                  },
+                  "participantId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "actorId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "permissions": {
+            "type": "object",
+            "required": ["canEdit", "canDelete", "canModerate"],
+            "properties": {
+              "canEdit": {
+                "type": "boolean"
+              },
+              "canDelete": {
+                "type": "boolean"
+              },
+              "canModerate": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "title": "CommentPostPermissions"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "editedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deletedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hiddenAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "title": "CommentPost"
+      },
+      "def-22": {
+        "type": "object",
+        "required": ["canEdit", "canDelete", "canModerate"],
+        "properties": {
+          "canEdit": {
+            "type": "boolean"
+          },
+          "canDelete": {
+            "type": "boolean"
+          },
+          "canModerate": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "title": "CommentPostPermissions"
+      },
+      "def-23": {
+        "type": "object",
+        "required": [
+          "threadId",
+          "workspaceId",
+          "artifactId",
+          "shareId",
+          "revisionId",
+          "visibility",
+          "anchor",
+          "anchorStatus",
+          "resolvedAt",
+          "createdAt",
+          "updatedAt",
+          "permissions",
+          "posts"
+        ],
+        "properties": {
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "artifactId": {
+            "type": "string",
+            "pattern": "^art_[A-Za-z0-9_-]{22}$",
+            "description": "Opaque artifact identifier containing 128 bits of entropy."
+          },
+          "shareId": {
+            "type": "string",
+            "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+          },
+          "revisionId": {
+            "type": "string",
+            "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["private"]
+              },
+              {
+                "type": "string",
+                "enum": ["shared"]
+              }
+            ]
+          },
+          "anchor": {
+            "type": "object",
+            "required": ["revisionId", "kind"],
+            "properties": {
+              "revisionId": {
+                "type": "string",
+                "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                "description": "Opaque revision identifier containing 128 bits of entropy."
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["file"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["range"]
+                  }
+                ]
+              },
+              "startLine": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "endLine": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "quotedText": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "contentHash": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              }
+            },
+            "additionalProperties": false,
+            "title": "CommentAnchor"
+          },
+          "anchorStatus": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["exact"]
+              },
+              {
+                "type": "string",
+                "enum": ["outdated"]
+              }
+            ]
+          },
+          "resolvedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "permissions": {
+            "type": "object",
+            "required": ["canReply", "canResolve", "canReopen"],
+            "properties": {
+              "canReply": {
+                "type": "boolean"
+              },
+              "canResolve": {
+                "type": "boolean"
+              },
+              "canReopen": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "title": "CommentThreadPermissions"
+          },
+          "posts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "postId",
+                "threadId",
+                "body",
+                "author",
+                "permissions",
+                "createdAt",
+                "editedAt",
+                "deletedAt",
+                "hiddenAt"
+              ],
+              "properties": {
+                "postId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "threadId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "body": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 20000
+                },
+                "author": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "required": ["kind", "participantId", "displayName"],
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["visitor"]
+                        },
+                        "participantId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "displayName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "required": ["kind", "participantId", "actorId"],
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["actor"]
+                        },
+                        "participantId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "actorId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "permissions": {
+                  "type": "object",
+                  "required": ["canEdit", "canDelete", "canModerate"],
+                  "properties": {
+                    "canEdit": {
+                      "type": "boolean"
+                    },
+                    "canDelete": {
+                      "type": "boolean"
+                    },
+                    "canModerate": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "editedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "deletedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "hiddenAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "maxItems": 100
+          }
+        },
+        "additionalProperties": false,
+        "title": "CommentThread"
+      },
+      "def-24": {
+        "type": "object",
+        "required": ["revisionId", "kind"],
+        "properties": {
+          "revisionId": {
+            "type": "string",
+            "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["file"]
+              },
+              {
+                "type": "string",
+                "enum": ["range"]
+              }
+            ]
+          },
+          "startLine": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "endLine": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "quotedText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "contentHash": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "additionalProperties": false,
+        "title": "CommentAnchor"
+      },
+      "def-25": {
+        "type": "object",
+        "required": ["canReply", "canResolve", "canReopen"],
+        "properties": {
+          "canReply": {
+            "type": "boolean"
+          },
+          "canResolve": {
+            "type": "boolean"
+          },
+          "canReopen": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "title": "CommentThreadPermissions"
+      },
+      "def-26": {
+        "type": "object",
+        "required": ["items", "nextCursor"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "threadId",
+                "workspaceId",
+                "artifactId",
+                "shareId",
+                "revisionId",
+                "visibility",
+                "anchor",
+                "anchorStatus",
+                "resolvedAt",
+                "createdAt",
+                "updatedAt",
+                "permissions",
+                "posts"
+              ],
+              "properties": {
+                "threadId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "workspaceId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "artifactId": {
+                  "type": "string",
+                  "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                  "description": "Opaque artifact identifier containing 128 bits of entropy."
+                },
+                "shareId": {
+                  "type": "string",
+                  "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+                },
+                "revisionId": {
+                  "type": "string",
+                  "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                  "description": "Opaque revision identifier containing 128 bits of entropy."
+                },
+                "visibility": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["private"]
+                    },
+                    {
+                      "type": "string",
+                      "enum": ["shared"]
+                    }
+                  ]
+                },
+                "anchor": {
+                  "type": "object",
+                  "required": ["revisionId", "kind"],
+                  "properties": {
+                    "revisionId": {
+                      "type": "string",
+                      "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                      "description": "Opaque revision identifier containing 128 bits of entropy."
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["file"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["range"]
+                        }
+                      ]
+                    },
+                    "startLine": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "endLine": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "quotedText": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    },
+                    "contentHash": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "anchorStatus": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["exact"]
+                    },
+                    {
+                      "type": "string",
+                      "enum": ["outdated"]
+                    }
+                  ]
+                },
+                "resolvedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "permissions": {
+                  "type": "object",
+                  "required": ["canReply", "canResolve", "canReopen"],
+                  "properties": {
+                    "canReply": {
+                      "type": "boolean"
+                    },
+                    "canResolve": {
+                      "type": "boolean"
+                    },
+                    "canReopen": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "posts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "postId",
+                      "threadId",
+                      "body",
+                      "author",
+                      "permissions",
+                      "createdAt",
+                      "editedAt",
+                      "deletedAt",
+                      "hiddenAt"
+                    ],
+                    "properties": {
+                      "postId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "threadId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "body": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 20000
+                      },
+                      "author": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": ["kind", "participantId", "displayName"],
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["visitor"]
+                              },
+                              "participantId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "displayName": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "required": ["kind", "participantId", "actorId"],
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["actor"]
+                              },
+                              "participantId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "actorId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "permissions": {
+                        "type": "object",
+                        "required": ["canEdit", "canDelete", "canModerate"],
+                        "properties": {
+                          "canEdit": {
+                            "type": "boolean"
+                          },
+                          "canDelete": {
+                            "type": "boolean"
+                          },
+                          "canModerate": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "editedAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "deletedAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "hiddenAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "maxItems": 100
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "title": "CommentThreadPage"
+      },
+      "def-27": {
+        "type": "object",
+        "required": [
+          "artifactId",
+          "participantCount",
+          "participants",
+          "openThreadCount",
+          "openReplyCount",
+          "latestActivityAt",
+          "latestThreadId"
+        ],
+        "properties": {
+          "artifactId": {
+            "type": "string",
+            "pattern": "^art_[A-Za-z0-9_-]{22}$",
+            "description": "Opaque artifact identifier containing 128 bits of entropy."
+          },
+          "participantCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "participantId",
+                "displayName",
+                "threadCount",
+                "replyCount",
+                "latestThreadId",
+                "latestActivityAt",
+                "recentThreads"
+              ],
+              "properties": {
+                "participantId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "displayName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "threadCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "replyCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "latestThreadId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "latestActivityAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "recentThreads": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["threadId", "latestActivityAt"],
+                    "properties": {
+                      "threadId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "latestActivityAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "CommentSummaryRecentThread"
+                  },
+                  "maxItems": 8
+                }
+              },
+              "additionalProperties": false
+            },
+            "maxItems": 20
+          },
+          "openThreadCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "openReplyCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "latestActivityAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latestThreadId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "title": "CommentSummary"
+      },
+      "def-28": {
+        "type": "object",
+        "required": ["threadId", "latestActivityAt"],
+        "properties": {
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "latestActivityAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "title": "CommentSummaryRecentThread"
       }
     }
   },
@@ -6110,6 +7440,136 @@
             "description": "Default Response",
             "content": {
               "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/revisions/{revisionId}/tree/content": {
+      "get": {
+        "operationId": "downloadFolderEntryContentV1",
+        "summary": "Download one file from an immutable folder revision",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+            },
+            "in": "query",
+            "name": "path",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "revisionId",
+            "required": true,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/def-3"
                 }
@@ -9096,6 +10556,10 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 1000000
+                  },
+                  "commentPolicy": {
+                    "type": "string",
+                    "enum": ["off", "private", "shared"]
                   }
                 },
                 "required": ["accessType", "target"],
@@ -10682,6 +12146,287 @@
         }
       }
     },
+    "/api/v1/public/shares/{shareId}/tree/content": {
+      "post": {
+        "operationId": "downloadProtectedShareFolderEntryV1",
+        "summary": "Read one file from a Protected shared folder",
+        "tags": ["public shares"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 24,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9._-]+$"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+            },
+            "in": "query",
+            "name": "path",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "shareId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exact immutable file bytes, always delivered as an attachment.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Safe attachment file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Complete immutable byte count."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Exact immutable file bytes, always delivered as an attachment."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/public/links/{publicCode}/resolve": {
       "get": {
         "operationId": "resolvePublicLinkV1",
@@ -11413,6 +13158,3212 @@
                 "description": "Always noindex, nofollow, noarchive."
               }
             },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/links/{publicCode}/tree/content": {
+      "get": {
+        "operationId": "downloadPublicLinkFolderEntryV1",
+        "summary": "Read one file from a secret-free Public shared folder",
+        "tags": ["public links"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+            },
+            "in": "query",
+            "name": "path",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{12}$"
+            },
+            "in": "path",
+            "name": "publicCode",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exact immutable file bytes, always delivered as an attachment.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Safe attachment file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Complete immutable byte count."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Exact immutable file bytes, always delivered as an attachment."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/shares/{shareId}/comments/query": {
+      "post": {
+        "operationId": "protectedShareCommentQueryV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 24,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9._-]+$"
+                  },
+                  "visitorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "currentRevisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "shareId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-26"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/shares/{shareId}/comments/threads": {
+      "post": {
+        "operationId": "protectedShareCommentThreadCreateV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token",
+                  "visitorToken",
+                  "displayName",
+                  "revisionId",
+                  "anchor",
+                  "body"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 24,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9._-]+$"
+                  },
+                  "visitorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "revisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
+                  },
+                  "anchor": {
+                    "type": "object",
+                    "required": ["revisionId", "kind"],
+                    "properties": {
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["file"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["range"]
+                          }
+                        ]
+                      },
+                      "startLine": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "endLine": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "quotedText": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "contentHash": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "shareId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-23"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/shares/{shareId}/comments/threads/{threadId}/replies": {
+      "post": {
+        "operationId": "protectedShareCommentReplyCreateV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token", "visitorToken", "displayName", "body"],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 24,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9._-]+$"
+                  },
+                  "visitorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "shareId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "threadId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-21"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/shares/{shareId}/comments/threads/{threadId}": {
+      "patch": {
+        "operationId": "protectedShareCommentThreadMutationV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token", "visitorToken", "status"],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 24,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9._-]+$"
+                  },
+                  "visitorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["resolve"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["reopen"]
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "shareId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "threadId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-23"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/shares/{shareId}/comments/posts/{postId}": {
+      "patch": {
+        "operationId": "protectedShareCommentPostMutationV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token", "visitorToken"],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 24,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9._-]+$"
+                  },
+                  "visitorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "action": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["edit"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["delete"]
+                      }
+                    ]
+                  },
+                  "deleted": {
+                    "type": "boolean"
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "shareId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "postId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-21"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/links/{publicCode}/comments/query": {
+      "post": {
+        "operationId": "publicShareCommentQueryV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "visitorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "currentRevisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{12}$"
+            },
+            "in": "path",
+            "name": "publicCode",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-26"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/links/{publicCode}/comments/threads": {
+      "post": {
+        "operationId": "publicShareCommentThreadCreateV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["visitorToken", "displayName", "revisionId", "anchor", "body"],
+                "properties": {
+                  "visitorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "revisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
+                  },
+                  "anchor": {
+                    "type": "object",
+                    "required": ["revisionId", "kind"],
+                    "properties": {
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["file"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["range"]
+                          }
+                        ]
+                      },
+                      "startLine": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "endLine": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "quotedText": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "contentHash": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{12}$"
+            },
+            "in": "path",
+            "name": "publicCode",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-23"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/links/{publicCode}/comments/threads/{threadId}/replies": {
+      "post": {
+        "operationId": "publicShareCommentReplyCreateV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["visitorToken", "displayName", "body"],
+                "properties": {
+                  "visitorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{12}$"
+            },
+            "in": "path",
+            "name": "publicCode",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "threadId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-21"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/links/{publicCode}/comments/threads/{threadId}": {
+      "patch": {
+        "operationId": "publicShareCommentThreadMutationV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["visitorToken", "status"],
+                "properties": {
+                  "visitorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["resolve"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["reopen"]
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{12}$"
+            },
+            "in": "path",
+            "name": "publicCode",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "threadId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-23"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/links/{publicCode}/comments/posts/{postId}": {
+      "patch": {
+        "operationId": "publicShareCommentPostMutationV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["visitorToken"],
+                "properties": {
+                  "visitorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 4096,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "action": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["edit"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["delete"]
+                      }
+                    ]
+                  },
+                  "deleted": {
+                    "type": "boolean"
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{12}$"
+            },
+            "in": "path",
+            "name": "publicCode",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "postId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-21"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/comments": {
+      "get": {
+        "operationId": "listArtifactCommentsV1",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "query",
+            "name": "currentRevisionId",
+            "required": false,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "workspaceId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^art_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true,
+            "description": "Opaque artifact identifier containing 128 bits of entropy."
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-26"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/comments/threads/{threadId}/replies": {
+      "post": {
+        "operationId": "createModeratorCommentReplyV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["body"],
+                "properties": {
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "workspaceId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^art_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true,
+            "description": "Opaque artifact identifier containing 128 bits of entropy."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "threadId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-21"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/comments/threads/{threadId}": {
+      "patch": {
+        "operationId": "moderateCommentThreadV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["status"],
+                "properties": {
+                  "status": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["resolve"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["reopen"]
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "workspaceId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^art_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true,
+            "description": "Opaque artifact identifier containing 128 bits of entropy."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "threadId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-23"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/comments/posts/{postId}": {
+      "patch": {
+        "operationId": "moderateCommentPostV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["moderation"],
+                "properties": {
+                  "moderation": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["hide"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["unhide"]
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "workspaceId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^art_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true,
+            "description": "Opaque artifact identifier containing 128 bits of entropy."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "postId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-21"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/comments/summaries": {
+      "post": {
+        "operationId": "summarizeCommentsV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["artifactIds"],
+                "properties": {
+                  "artifactIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^art_[A-Za-z0-9_-]{22}$",
+                      "description": "Opaque artifact identifier containing 128 bits of entropy."
+                    },
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "uniqueItems": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "workspaceId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items"],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/def-27"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/shares/{shareId}/comment-policy": {
+      "patch": {
+        "operationId": "setShareCommentPolicyV1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["commentPolicy"],
+                "properties": {
+                  "commentPolicy": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["off"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["private"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared"]
+                      }
+                    ],
+                    "title": "CommentPolicy"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "workspaceId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "shareId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-8"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {

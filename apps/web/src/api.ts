@@ -1,5 +1,11 @@
 import {
+  type CommentAnchor,
+  type CommentPost,
+  type CommentThread,
+  type CommentThreadPage,
   type FolderEntry,
+  isCommentPost,
+  isCommentThread,
   isFolderTreePage,
   isProtectedSessionAuthority,
   isPublicShareResolution,
@@ -25,6 +31,15 @@ export type ViewerAuthority =
       readonly token: string;
     }
   | { readonly accessType: 'public'; readonly publicCode: string };
+
+export interface ViewerCommentContext {
+  readonly resolution: FileShareResolution | FolderShareResolution;
+  readonly authority: ViewerAuthority;
+  readonly visitorToken?: string;
+  readonly displayName?: string;
+  readonly cursor?: string;
+  readonly limit?: number;
+}
 
 export interface PublicFilePayload {
   readonly kind: 'file';
@@ -52,6 +67,16 @@ export class PublicShareUnavailableError extends Error {
     super('Public artifact unavailable');
     this.name = 'PublicShareUnavailableError';
     this.failure = options.failure ?? 'transient';
+  }
+}
+
+/** The Latest share advanced while this viewer was composing a comment. */
+export class ViewerCommentRevisionMismatchError extends Error {
+  constructor() {
+    super(
+      'This file was updated while you were writing. Your draft is still here; reload the latest revision and re-anchor it before posting.',
+    );
+    this.name = 'ViewerCommentRevisionMismatchError';
   }
 }
 
@@ -85,6 +110,36 @@ function definitiveClientFailure(status: number): boolean {
 
 async function responseJson(response: Response): Promise<unknown> {
   if (!response.ok) {
+    let errorBody: unknown;
+    try {
+      errorBody = await response.json();
+    } catch {
+      // Preserve the generic unavailable projection for non-JSON failures.
+    }
+    if (
+      response.status === 400 &&
+      typeof errorBody === 'object' &&
+      errorBody !== null &&
+      'error' in errorBody &&
+      typeof errorBody.error === 'object' &&
+      errorBody.error !== null &&
+      'code' in errorBody.error &&
+      errorBody.error.code === 'INVALID_REQUEST' &&
+      'details' in errorBody.error &&
+      Array.isArray(errorBody.error.details) &&
+      errorBody.error.details.some(
+        (detail: unknown) =>
+          typeof detail === 'object' &&
+          detail !== null &&
+          'field' in detail &&
+          detail.field === 'revisionId' &&
+          'reason' in detail &&
+          typeof detail.reason === 'string' &&
+          detail.reason.includes('revision rendered by the shared link'),
+      )
+    ) {
+      throw new ViewerCommentRevisionMismatchError();
+    }
     throw new PublicShareUnavailableError({
       failure: definitiveClientFailure(response.status) ? 'terminal' : 'transient',
     });
@@ -234,4 +289,205 @@ export async function loadViewerFolderEntries(
     if (cursor !== undefined) visitedCursors.add(cursor);
   } while (cursor !== undefined);
   return entries;
+}
+
+export async function loadViewerFolderEntryBytes(
+  resolution: FolderShareResolution,
+  authority: ViewerAuthority,
+  path: string,
+  signal?: AbortSignal,
+): Promise<ArrayBuffer> {
+  viewerShareActionUrl(resolution, authority);
+  const query = new URLSearchParams({ path });
+  const url =
+    authority.accessType === 'protected'
+      ? `/api/v1/public/shares/${encodeURIComponent(authority.shareId)}/tree/content?${query}`
+      : `/api/v1/public/links/${encodeURIComponent(authority.publicCode)}/tree/content?${query}`;
+  const init =
+    authority.accessType === 'protected'
+      ? jsonPost({ token: authority.token }, signal)
+      : { ...anonymousRequest(signal), method: 'GET' };
+  const response = await anonymousFetch(url, init);
+  if (!response.ok) throw new PublicShareUnavailableError();
+  return response.arrayBuffer();
+}
+
+function viewerCommentPrefix(authority: ViewerAuthority): string {
+  return authority.accessType === 'protected'
+    ? `/api/v1/public/shares/${encodeURIComponent(authority.shareId)}`
+    : `/api/v1/public/links/${encodeURIComponent(authority.publicCode)}`;
+}
+
+function viewerCommentInit(
+  authority: ViewerAuthority,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): RequestInit {
+  return jsonPost(
+    authority.accessType === 'protected' ? { token: authority.token, ...body } : body,
+    signal,
+  );
+}
+
+function requireCommentThread(value: unknown): CommentThread {
+  if (!isCommentThread(value)) throw new PublicShareUnavailableError();
+  return value;
+}
+
+function requireCommentPage(value: unknown): CommentThreadPage {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('items' in value) ||
+    !Array.isArray(value.items) ||
+    !value.items.every((item: unknown) => isCommentThread(item))
+  ) {
+    throw new PublicShareUnavailableError();
+  }
+  const nextCursor = 'nextCursor' in value ? value.nextCursor : undefined;
+  if (typeof nextCursor !== 'string' && nextCursor !== null) {
+    throw new PublicShareUnavailableError();
+  }
+  return { items: value.items as CommentThread[], nextCursor };
+}
+
+export async function loadViewerComments(
+  context: ViewerCommentContext,
+  signal?: AbortSignal,
+): Promise<CommentThreadPage> {
+  viewerShareActionUrl(context.resolution, context.authority);
+  const currentRevisionId = context.resolution.revision.revisionId;
+  const value = await responseJson(
+    await anonymousFetch(
+      `${viewerCommentPrefix(context.authority)}/comments/query`,
+      viewerCommentInit(
+        context.authority,
+        {
+          ...(context.visitorToken === undefined ? {} : { visitorToken: context.visitorToken }),
+          currentRevisionId,
+          ...(context.cursor === undefined ? {} : { cursor: context.cursor }),
+          ...(context.limit === undefined ? {} : { limit: context.limit }),
+        },
+        signal,
+      ),
+    ),
+  );
+  return requireCommentPage(value);
+}
+
+export async function createViewerCommentThread(
+  context: ViewerCommentContext & {
+    readonly anchor: CommentAnchor;
+    readonly body: string;
+  },
+  signal?: AbortSignal,
+): Promise<CommentThread> {
+  viewerShareActionUrl(context.resolution, context.authority);
+  if (context.visitorToken === undefined || context.displayName === undefined) {
+    throw new PublicShareUnavailableError({ failure: 'terminal' });
+  }
+  const value = await responseJson(
+    await anonymousFetch(
+      `${viewerCommentPrefix(context.authority)}/comments/threads`,
+      viewerCommentInit(
+        context.authority,
+        {
+          visitorToken: context.visitorToken,
+          displayName: context.displayName,
+          revisionId: context.anchor.revisionId,
+          anchor: context.anchor,
+          body: context.body,
+        },
+        signal,
+      ),
+    ),
+  );
+  return requireCommentThread(value);
+}
+
+export async function createViewerCommentReply(
+  context: ViewerCommentContext & { readonly threadId: string; readonly body: string },
+  signal?: AbortSignal,
+): Promise<CommentPost> {
+  viewerShareActionUrl(context.resolution, context.authority);
+  if (context.visitorToken === undefined || context.displayName === undefined) {
+    throw new PublicShareUnavailableError({ failure: 'terminal' });
+  }
+  const value = await responseJson(
+    await anonymousFetch(
+      `${viewerCommentPrefix(context.authority)}/comments/threads/${encodeURIComponent(context.threadId)}/replies`,
+      viewerCommentInit(
+        context.authority,
+        {
+          visitorToken: context.visitorToken,
+          displayName: context.displayName,
+          body: context.body,
+        },
+        signal,
+      ),
+    ),
+  );
+  if (!isCommentPost(value)) throw new PublicShareUnavailableError();
+  return value;
+}
+
+export async function updateViewerCommentThread(
+  context: ViewerCommentContext & {
+    readonly threadId: string;
+    readonly status: 'resolve' | 'reopen';
+  },
+  signal?: AbortSignal,
+): Promise<CommentThread> {
+  viewerShareActionUrl(context.resolution, context.authority);
+  if (context.visitorToken === undefined || context.displayName === undefined) {
+    throw new PublicShareUnavailableError({ failure: 'terminal' });
+  }
+  const value = await responseJson(
+    await anonymousFetch(
+      `${viewerCommentPrefix(context.authority)}/comments/threads/${encodeURIComponent(context.threadId)}`,
+      viewerCommentInit(
+        context.authority,
+        {
+          visitorToken: context.visitorToken,
+          displayName: context.displayName,
+          status: context.status,
+        },
+        signal,
+      ),
+    ),
+  );
+  return requireCommentThread(value);
+}
+
+export async function updateViewerCommentPost(
+  context: ViewerCommentContext & {
+    readonly postId: string;
+    readonly action: 'edit' | 'delete';
+    readonly body?: string;
+  },
+  signal?: AbortSignal,
+): Promise<CommentPost> {
+  viewerShareActionUrl(context.resolution, context.authority);
+  if (context.visitorToken === undefined) {
+    throw new PublicShareUnavailableError({ failure: 'terminal' });
+  }
+  const value = await responseJson(
+    await anonymousFetch(
+      `${viewerCommentPrefix(context.authority)}/comments/posts/${encodeURIComponent(context.postId)}`,
+      viewerCommentInit(
+        context.authority,
+        {
+          visitorToken: context.visitorToken,
+          ...(context.displayName === undefined ? {} : { displayName: context.displayName }),
+          action: context.action,
+          ...(context.action === 'edit' && context.body !== undefined
+            ? { body: context.body }
+            : {}),
+        },
+        signal,
+      ),
+    ),
+  );
+  if (!isCommentPost(value)) throw new PublicShareUnavailableError();
+  return value;
 }

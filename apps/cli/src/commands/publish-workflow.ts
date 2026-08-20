@@ -12,7 +12,12 @@ import type {
   ShareManagementSummary,
 } from '@shelf/contracts';
 
-import { createShare, ensureArtifactDefaultShares, publishFile } from '../client.js';
+import {
+  createShare,
+  ensureArtifactDefaultShares,
+  publishFile,
+  setShareCommentPolicy,
+} from '../client.js';
 import { mediaTypeForPath } from '../media-type.js';
 import {
   type JournalPublishResult,
@@ -206,7 +211,22 @@ export async function executePublishWorkflow(
           },
           runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
         );
-        share = defaults[input.accessType];
+        const prepared = defaults[input.accessType];
+        share =
+          input.commentPolicy !== undefined &&
+          (prepared.commentPolicy ?? 'off') !== input.commentPolicy
+            ? await setShareCommentPolicy(
+                {
+                  installationUrl: profile.installationUrl,
+                  workspaceId: profile.workspaceId,
+                  shareId: prepared.shareId,
+                  commentPolicy: input.commentPolicy,
+                  token: profile.token,
+                  allowInsecureLoopback: profile.allowInsecureLoopback,
+                },
+                runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+              )
+            : prepared;
       } else {
         share = await createShare(
           {

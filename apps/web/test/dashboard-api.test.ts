@@ -8,6 +8,7 @@ import {
   DashboardAuthenticationError,
   deleteArtifact,
   ensureArtifactDefaultShares,
+  loadArtifactCommentSummaries,
   loadArtifacts,
   loadDashboardCredentials,
   loadDashboardSession,
@@ -33,6 +34,69 @@ function json(value: unknown, status = 200): Response {
 }
 
 describe('dashboard API client', () => {
+  it('loads comment summaries in one validated workspace request', async () => {
+    const artifactId = `art_${'a'.repeat(22)}`;
+    const summary = {
+      artifactId,
+      participantCount: 1,
+      participants: [
+        {
+          participantId: 'visitor_1',
+          displayName: 'Ada',
+          threadCount: 2,
+          replyCount: 3,
+          latestThreadId: 'thread_1',
+          latestActivityAt: '2026-08-19T00:00:00.000Z',
+          recentThreads: [{ threadId: 'thread_1', latestActivityAt: '2026-08-19T00:00:00.000Z' }],
+        },
+      ],
+      openThreadCount: 2,
+      openReplyCount: 3,
+      latestActivityAt: '2026-08-19T00:00:00.000Z',
+      latestThreadId: 'thread_1',
+    };
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+      expect(init?.method).toBe('POST');
+      expect(JSON.parse(init?.body as string)).toEqual({ artifactIds: [artifactId] });
+      return json({ items: [summary] });
+    });
+    globalThis.fetch = fetch;
+
+    await expect(loadArtifactCommentSummaries('workspace/main', [artifactId])).resolves.toEqual([
+      summary,
+    ]);
+    expect(fetch.mock.calls[0]?.[0]).toBe('/api/v1/workspaces/workspace%2Fmain/comments/summaries');
+  });
+
+  it('rejects malformed or out-of-request comment summaries', async () => {
+    const requestedId = `art_${'a'.repeat(22)}`;
+    const response = {
+      artifactId: `art_${'b'.repeat(22)}`,
+      participantCount: 0,
+      participants: [],
+      openThreadCount: 0,
+      openReplyCount: 0,
+      latestActivityAt: null,
+      latestThreadId: null,
+      recentThreads: [],
+    };
+    globalThis.fetch = vi.fn(async () => json({ items: [response] }));
+    await expect(
+      loadArtifactCommentSummaries('workspace-main', [requestedId]),
+    ).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    });
+
+    globalThis.fetch = vi.fn(async () =>
+      json({ items: [{ ...response, artifactId: requestedId, unexpected: true }] }),
+    );
+    await expect(
+      loadArtifactCommentSummaries('workspace-main', [requestedId]),
+    ).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    });
+  });
+
   it('loads the human session with same-origin cookies and validates the contract', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async () =>
       json({

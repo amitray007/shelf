@@ -7,6 +7,7 @@ import { parseEnv } from 'node:util';
 const environmentPath = '.env.dev';
 const contentRoot = './data/dev-content';
 const shareSigningKey = randomBytes(32).toString('base64url');
+const privacyKey = randomBytes(32).toString('base64url');
 const legacyRendererPublicOrigin = 'http://127.0.0.1:3001';
 const rendererPublicOrigin = 'http://localhost:3001';
 const rendererPublicOriginAssignment =
@@ -20,6 +21,7 @@ const environment = [
   'SHELF_AUTH_BASE_URL=http://127.0.0.1:5173',
   `SHELF_AUTH_SECRET=${randomBytes(32).toString('base64url')}`,
   `SHELF_SHARE_SIGNING_KEY=${shareSigningKey}`,
+  `SHELF_PRIVACY_KEY=${privacyKey}`,
   'SHELF_HOST=127.0.0.1',
   'SHELF_PORT=3000',
   'SHELF_RENDERER_APP_ORIGIN=http://127.0.0.1:5173',
@@ -83,6 +85,8 @@ try {
       parsed.SHELF_SHARE_SIGNING_KEY_FILE === undefined
     )
       additions.push(`SHELF_SHARE_SIGNING_KEY=${shareSigningKey}`);
+    if (parsed.SHELF_PRIVACY_KEY === undefined && parsed.SHELF_PRIVACY_KEY_FILE === undefined)
+      additions.push(`SHELF_PRIVACY_KEY=${privacyKey}`);
     for (const [name, value] of [
       ['SHELF_RENDERER_APP_ORIGIN', 'http://127.0.0.1:5173'],
       ['SHELF_RENDERER_HOST', '127.0.0.1'],

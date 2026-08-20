@@ -32,7 +32,9 @@ function namespaceKey(namespace: ShareCreateIdempotencyNamespace): string {
 }
 
 function copyShare(value: StoredShare): StoredShare {
-  return structuredClone(value);
+  const copy = structuredClone(value);
+  copy.commentPolicy ??= 'off';
+  return copy;
 }
 
 /** Process-local share adapter. Every mutation has one synchronous linearization point. */
@@ -109,6 +111,16 @@ export class MemoryShareRepository implements ShareRepository {
     return record === undefined
       ? undefined
       : { fingerprint: record.fingerprint, result: copyShare(record.result) };
+  }
+
+  async rewriteCreateIdempotencyFingerprint(request: {
+    namespace: ShareCreateIdempotencyNamespace;
+    fingerprint: string;
+  }): Promise<void> {
+    const key = namespaceKey(request.namespace);
+    const record = this.#idempotency.get(key);
+    if (record !== undefined)
+      this.#idempotency.set(key, { ...record, fingerprint: request.fingerprint });
   }
 
   async commitCreate(input: CommitShareCreateInput): Promise<CommitShareCreateOutcome> {
@@ -234,6 +246,22 @@ export class MemoryShareRepository implements ShareRepository {
     return stored === undefined ? undefined : copyShare(stored);
   }
 
+  async findSharesByIds(request: {
+    installationId: string;
+    workspaceId: string;
+    shareIds: readonly string[];
+  }): Promise<StoredShare[]> {
+    const ids = new Set(request.shareIds);
+    return [...this.#shares.values()]
+      .filter(
+        (share) =>
+          ids.has(share.shareId) &&
+          share.installationId === request.installationId &&
+          share.workspaceId === request.workspaceId,
+      )
+      .map(copyShare);
+  }
+
   async revokeShare(request: {
     installationId: string;
     workspaceId: string;
@@ -259,6 +287,29 @@ export class MemoryShareRepository implements ShareRepository {
       }
     }
     return { status: 'revoked', result: copyShare(revoked) };
+  }
+
+  async setCommentPolicy(request: {
+    installationId: string;
+    workspaceId: string;
+    shareId: string;
+    commentPolicy: 'off' | 'private' | 'shared';
+  }) {
+    const stored = this.#shares.get(request.shareId);
+    if (
+      stored === undefined ||
+      stored.installationId !== request.installationId ||
+      stored.workspaceId !== request.workspaceId
+    )
+      return { status: 'not-found' as const };
+    const updated = { ...stored, commentPolicy: request.commentPolicy };
+    this.#shares.set(request.shareId, updated);
+    for (const [key, record] of this.#idempotency) {
+      if (record.result.shareId === updated.shareId) {
+        this.#idempotency.set(key, { fingerprint: record.fingerprint, result: updated });
+      }
+    }
+    return { status: 'updated' as const, result: copyShare(updated) };
   }
 
   revokeActiveArtifactShares(request: {

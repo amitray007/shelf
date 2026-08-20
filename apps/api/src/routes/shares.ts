@@ -4,6 +4,7 @@ import {
   FOLDER_LIMITS,
   OpaqueArtifactIdSchema,
   OpaqueShareIdSchema,
+  PortableFolderPathSchema,
   type ProtectedSessionEstablishInput,
   PublicShareCodeSchema,
   type ShareCreateInput,
@@ -90,6 +91,7 @@ const HttpShareCreateBodySchema = Type.Unsafe<ShareCreateInput>({
       pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$',
     },
     maxSessions: { type: 'integer', minimum: 1, maximum: 1_000_000 },
+    commentPolicy: { type: 'string', enum: ['off', 'private', 'shared'] },
   },
   required: ['accessType', 'target'],
   additionalProperties: false,
@@ -112,6 +114,10 @@ const PublicTreeQuerySchema = Type.Object(
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: FOLDER_LIMITS.treePageSize })),
     cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 2048 })),
   },
+  { additionalProperties: false },
+);
+const PublicTreeFileQuerySchema = Type.Object(
+  { path: PortableFolderPathSchema },
   { additionalProperties: false },
 );
 
@@ -291,6 +297,9 @@ export async function registerShareRoutes(
         ...('expiresAt' in body ? { expiresAt: body.expiresAt } : {}),
         ...('maxSessions' in body && body.maxSessions !== undefined
           ? { maxSessions: body.maxSessions }
+          : {}),
+        ...('commentPolicy' in body && body.commentPolicy !== undefined
+          ? { commentPolicy: body.commentPolicy }
           : {}),
         idempotencyKey: headers['idempotency-key'],
         requestId: request.id,
@@ -520,6 +529,37 @@ export async function registerShareRoutes(
     },
   );
 
+  app.post(
+    '/api/v1/public/shares/:shareId/tree/content',
+    {
+      schema: {
+        operationId: 'downloadProtectedShareFolderEntryV1',
+        summary: 'Read one file from a Protected shared folder',
+        produces: ['application/octet-stream'],
+        tags: ['public shares'],
+        params: PublicShareParamsSchema,
+        querystring: PublicTreeFileQuerySchema,
+        body: ViewerTokenBodySchema,
+        response: { 200: PublicContentResponseSchema, ...publicErrors },
+      },
+    },
+    async (request, reply) => {
+      const params = request.params as { shareId: string };
+      const query = request.query as { path: string };
+      const body = request.body as { token: string };
+      const file = await access.readTreeFile({
+        authority: protectedAuthority(params.shareId, body.token),
+        path: query.path,
+        signal: requestCancellationSignal(request, reply),
+      });
+      return reply
+        .type(file.mediaType)
+        .header('Content-Length', file.byteCount)
+        .header('ETag', `"${file.contentHash}"`)
+        .send(Readable.from(await file.read()));
+    },
+  );
+
   app.get(
     '/api/v1/public/links/:publicCode/resolve',
     {
@@ -593,6 +633,35 @@ export async function registerShareRoutes(
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         signal: requestCancellationSignal(request, reply),
       });
+    },
+  );
+
+  app.get(
+    '/api/v1/public/links/:publicCode/tree/content',
+    {
+      schema: {
+        operationId: 'downloadPublicLinkFolderEntryV1',
+        summary: 'Read one file from a secret-free Public shared folder',
+        produces: ['application/octet-stream'],
+        tags: ['public links'],
+        params: PublicLinkParamsSchema,
+        querystring: PublicTreeFileQuerySchema,
+        response: { 200: PublicContentResponseSchema, ...publicErrors },
+      },
+    },
+    async (request, reply) => {
+      const params = request.params as { publicCode: string };
+      const query = request.query as { path: string };
+      const file = await access.readTreeFile({
+        authority: { type: 'public', publicCode: params.publicCode },
+        path: query.path,
+        signal: requestCancellationSignal(request, reply),
+      });
+      return reply
+        .type(file.mediaType)
+        .header('Content-Length', file.byteCount)
+        .header('ETag', `"${file.contentHash}"`)
+        .send(Readable.from(await file.read()));
     },
   );
 }

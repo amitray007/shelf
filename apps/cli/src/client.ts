@@ -6,6 +6,9 @@ import {
   type ArtifactDeletionResult,
   type ArtifactPage,
   type ArtifactRevisionPage,
+  type CommentPolicy,
+  type CommentPost,
+  type CommentThread,
   type FolderManifestInput,
   type FolderPublishResult,
   type FolderTreePage,
@@ -14,6 +17,8 @@ import {
   isArtifactDeletionResult,
   isArtifactPage,
   isArtifactRevisionPage,
+  isCommentPost,
+  isCommentThread,
   isErrorEnvelope,
   isFolderPublishResult,
   isFolderTreePage,
@@ -62,6 +67,7 @@ export interface ListArtifactsOptions {
   limit: number;
   sort: 'created' | 'updated';
   order: 'asc' | 'desc';
+  search?: string;
   cursor?: string;
   token: string;
   allowInsecureLoopback?: boolean;
@@ -172,6 +178,49 @@ export interface RevokeShareOptions {
   installationUrl: string;
   workspaceId: string;
   shareId: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface SetShareCommentPolicyOptions {
+  installationUrl: string;
+  workspaceId: string;
+  shareId: string;
+  commentPolicy: CommentPolicy;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface ListArtifactCommentsOptions {
+  installationUrl: string;
+  workspaceId: string;
+  artifactId: string;
+  revisionId?: string;
+  cursor?: string;
+  limit?: number;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface ArtifactCommentMutationOptions {
+  installationUrl: string;
+  workspaceId: string;
+  artifactId: string;
+  threadId: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface ReplyArtifactCommentOptions extends ArtifactCommentMutationOptions {
+  body: string;
+}
+
+export interface ArtifactCommentPostMutationOptions {
+  installationUrl: string;
+  workspaceId: string;
+  artifactId: string;
+  postId: string;
+  moderation: 'hide' | 'unhide';
   token: string;
   allowInsecureLoopback?: boolean;
 }
@@ -344,6 +393,9 @@ export async function listArtifacts(
   url.searchParams.set('limit', String(options.limit));
   url.searchParams.set('sort', options.sort);
   url.searchParams.set('order', options.order);
+  if (options.search !== undefined && options.search.length > 0) {
+    url.searchParams.set('search', options.search);
+  }
   if (options.cursor !== undefined) url.searchParams.set('cursor', options.cursor);
   return requestApiJson(
     url,
@@ -693,6 +745,151 @@ export async function revokeShare(
       isShareManagementSummary(value) &&
       value.workspaceId === options.workspaceId &&
       value.shareId === options.shareId,
+  );
+}
+
+export async function setShareCommentPolicy(
+  options: SetShareCommentPolicyOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<ShareManagementSummary> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/shares/${encodeURIComponent(options.shareId)}/comment-policy`,
+    origin,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'PATCH',
+      body: JSON.stringify({ commentPolicy: options.commentPolicy }),
+      redactShareCapabilities: true,
+    },
+    dependencies,
+    (value): value is ShareManagementSummary =>
+      isShareManagementSummary(value) &&
+      value.workspaceId === options.workspaceId &&
+      value.shareId === options.shareId,
+  );
+}
+
+function isCommentPage(
+  value: unknown,
+): value is { items: CommentThread[]; nextCursor: string | null } {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const items = (value as { items?: unknown }).items;
+  const nextCursor = (value as { nextCursor?: unknown }).nextCursor;
+  return (
+    Array.isArray(items) &&
+    items.every((item) => isCommentThread(item)) &&
+    (typeof nextCursor === 'string' || nextCursor === null)
+  );
+}
+
+function artifactCommentsUrl(
+  origin: URL,
+  workspaceId: string,
+  artifactId: string,
+  threadPath = '',
+): URL {
+  return new URL(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/comments${threadPath}`,
+    origin,
+  );
+}
+
+export async function listArtifactComments(
+  options: ListArtifactCommentsOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<{ items: CommentThread[]; nextCursor: string | null }> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = artifactCommentsUrl(origin, options.workspaceId, options.artifactId);
+  if (options.revisionId !== undefined)
+    url.searchParams.set('currentRevisionId', options.revisionId);
+  if (options.cursor !== undefined) url.searchParams.set('cursor', options.cursor);
+  if (options.limit !== undefined) url.searchParams.set('limit', String(options.limit));
+  return requestApiJson(
+    url,
+    { token: options.token, allowInsecureLoopback },
+    dependencies,
+    isCommentPage,
+  );
+}
+
+export async function replyArtifactComment(
+  options: ReplyArtifactCommentOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<CommentPost> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = artifactCommentsUrl(
+    origin,
+    options.workspaceId,
+    options.artifactId,
+    `/threads/${encodeURIComponent(options.threadId)}/replies`,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'POST',
+      body: JSON.stringify({ body: options.body }),
+      expectedStatus: 201,
+    },
+    dependencies,
+    isCommentPost,
+  );
+}
+
+export async function setArtifactCommentStatus(
+  options: ArtifactCommentMutationOptions & { status: 'resolve' | 'reopen' },
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<CommentThread> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = artifactCommentsUrl(
+    origin,
+    options.workspaceId,
+    options.artifactId,
+    `/threads/${encodeURIComponent(options.threadId)}`,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'PATCH',
+      body: JSON.stringify({ status: options.status }),
+    },
+    dependencies,
+    isCommentThread,
+  );
+}
+
+export async function moderateArtifactCommentPost(
+  options: ArtifactCommentPostMutationOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<CommentPost> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/artifacts/${encodeURIComponent(options.artifactId)}/comments/posts/${encodeURIComponent(options.postId)}`,
+    origin,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'PATCH',
+      body: JSON.stringify({ moderation: options.moderation }),
+    },
+    dependencies,
+    isCommentPost,
   );
 }
 

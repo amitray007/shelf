@@ -51,6 +51,7 @@ test('development setup creates a private local environment and content director
   expect(environment).toMatch(/^SHELF_RENDERER_PUBLIC_ORIGIN=http:\/\/localhost:3001$/mu);
   expect(environment).toMatch(/^SHELF_AUTH_SECRET=[A-Za-z0-9_-]{43}$/mu);
   expect(environment).toMatch(/^SHELF_SHARE_SIGNING_KEY=[A-Za-z0-9_-]{43}$/mu);
+  expect(environment).toMatch(/^SHELF_PRIVACY_KEY=[A-Za-z0-9_-]{43}$/mu);
   expect(environment).toMatch(/^SHELF_HOST=127\.0\.0\.1$/mu);
   expect(environment).toMatch(/^SHELF_PORT=3000$/mu);
 
@@ -232,12 +233,14 @@ test('development preflight accepts a share signing key file', async () => {
     writeFile(`${root}/apps/api/dist/renderer-cli.js`, ''),
     writeFile(`${root}/apps/web/index.html`, ''),
     writeFile(`${root}/share-signing-key`, 's'.repeat(43), { mode: 0o600 }),
+    writeFile(`${root}/privacy-key`, 'p'.repeat(43), { mode: 0o600 }),
     writeFile(
       `${root}/.env.dev`,
       [
         'DATABASE_URL=postgresql:///shelf_dev',
         'SHELF_STORAGE_DRIVER=local',
         'SHELF_SHARE_SIGNING_KEY_FILE=./share-signing-key',
+        'SHELF_PRIVACY_KEY_FILE=./privacy-key',
         'SHELF_RENDERER_APP_ORIGIN=http://127.0.0.1:5173',
         'SHELF_RENDERER_PUBLIC_ORIGIN=http://localhost:3001',
         '',

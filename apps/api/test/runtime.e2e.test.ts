@@ -52,6 +52,7 @@ describePostgres('compiled migrate-to-restart workflow', () => {
     const password = 'runtime-owner-password-canary';
     const authSecret = 'runtime-auth-secret-canary-at-least-32-characters';
     const shareSigningKey = 'runtime-share-signing-key-at-least-32-characters';
+    const privacyKey = 'runtime-privacy-key-at-least-32-characters';
     const environment = {
       ...process.env,
       DATABASE_URL: connectionString,
@@ -61,6 +62,7 @@ describePostgres('compiled migrate-to-restart workflow', () => {
       SHELF_AUTH_BASE_URL: `http://127.0.0.1:${port}`,
       SHELF_AUTH_SECRET: authSecret,
       SHELF_SHARE_SIGNING_KEY: shareSigningKey,
+      SHELF_PRIVACY_KEY: privacyKey,
       SHELF_HOST: '127.0.0.1',
       SHELF_PORT: String(port),
     };

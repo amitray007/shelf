@@ -77,6 +77,8 @@ describe('shelf artifacts', () => {
         'created',
         '--order',
         'asc',
+        '--search',
+        'release notes',
       ],
       {
         env: { SHELF_TOKEN: 'secret-token' },
@@ -90,7 +92,7 @@ describe('shelf artifacts', () => {
     expect(JSON.parse(stdout.value())).toEqual(page);
     expect(stderr.value()).toBe('');
     expect(fetch.mock.calls[0]?.[0].toString()).toBe(
-      'https://shelf.example/api/v1/workspaces/workspace-main/artifacts?limit=10&sort=created&order=asc&cursor=current-page',
+      'https://shelf.example/api/v1/workspaces/workspace-main/artifacts?limit=10&sort=created&order=asc&search=release+notes&cursor=current-page',
     );
   });
 

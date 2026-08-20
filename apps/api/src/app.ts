@@ -6,6 +6,10 @@ import type { DashboardAccessService, HumanAuth } from '@shelf/auth';
 import {
   ArtifactDefaultSharesSchema,
   ArtifactDeletionResultSchema,
+  CommentPostSchema,
+  CommentSummarySchema,
+  CommentThreadPageSchema,
+  CommentThreadSchema,
   DashboardCredentialIssueSchema,
   DashboardCredentialPageSchema,
   DashboardCredentialRevokeSchema,
@@ -30,6 +34,7 @@ import type {
   ArtifactIdentityRepository,
   ArtifactLifecycleRepository,
   Authorizer,
+  CommentRepository,
   ContentReader,
   ContentStore,
   FolderRevisionRepository,
@@ -43,6 +48,7 @@ import type {
 } from '@shelf/core';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import { MemoryArtifactDeletionRepository } from './adapters/memory-artifact-deletion-repository.js';
+import { MemoryCommentRepository } from './adapters/memory-comment-repository.js';
 import { MemoryRevisionRepository } from './adapters/memory-revision-repository.js';
 import { MemoryShareRepository } from './adapters/memory-share-repository.js';
 import { TemporaryContentStore } from './adapters/temporary-content-store.js';
@@ -51,6 +57,7 @@ import type { Authenticator } from './authenticate.js';
 import { type ReadinessState, registerHealthRoutes } from './health.js';
 import { registerErrorHandler } from './plugins/errors.js';
 import { registerArtifactRoutes } from './routes/artifacts.js';
+import { registerCommentRoutes } from './routes/comments.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
 import { FolderMultipartOpenApiSchema, registerFolderRoutes } from './routes/folders.js';
 import { registerPublicConfigRoute } from './routes/public-config.js';
@@ -111,6 +118,7 @@ export interface ShelfAppDependencies {
     FolderRevisionRepository &
     RevisionComparisonRepository;
   shareRepository: ShareRepository;
+  commentRepository: CommentRepository;
   artifactDeletionRepository: ArtifactDeletionRepository;
   artifactClock?: () => Date;
   shareCapabilityCodec: ShareCapabilityCodec;
@@ -118,6 +126,7 @@ export interface ShelfAppDependencies {
   shareClock?: ShareClock;
   generateShareId?: ShareIdGenerator;
   generatePublicCode?: PublicShareCodeGenerator;
+  privacyKey: string | Uint8Array;
 }
 
 export interface CreateShelfAppOptions {
@@ -140,6 +149,8 @@ export interface CreateShelfAppOptions {
   shareClock?: ShareClock;
   generateShareId?: ShareIdGenerator;
   generatePublicCode?: PublicShareCodeGenerator;
+  commentRepository?: CommentRepository;
+  privacyKey?: string | Uint8Array;
   multipartLimits?: Partial<ShelfMultipartLimits>;
   logger?: FastifyServerOptions['logger'];
   humanAuth?: HumanAuth;
@@ -182,6 +193,7 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   const limits = { ...DEFAULT_MULTIPART_LIMITS, ...options.multipartLimits };
   const revisionRepository = options.revisionRepository ?? new MemoryRevisionRepository();
   const shareRepository = options.shareRepository ?? new MemoryShareRepository(revisionRepository);
+  const commentRepository = options.commentRepository ?? new MemoryCommentRepository();
   let artifactDeletionRepository = options.artifactDeletionRepository;
   if (
     artifactDeletionRepository === undefined &&
@@ -211,6 +223,8 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
     contentReader,
     revisionRepository,
     shareRepository,
+    commentRepository,
+    privacyKey: options.privacyKey ?? randomBytes(32),
     artifactDeletionRepository,
     ...(options.artifactClock === undefined ? {} : { artifactClock: options.artifactClock }),
     shareCapabilityCodec: options.shareCapabilityCodec ?? defaultSecurityCodecs.capability,
@@ -265,12 +279,17 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   app.addSchema(withoutNestedSchemaIds(DashboardCredentialIssueSchema));
   app.addSchema(withoutNestedSchemaIds(DashboardCredentialRevokeSchema));
   app.addSchema(WorkspaceCreateResultSchema);
+  app.addSchema(CommentPostSchema);
+  app.addSchema(CommentThreadSchema);
+  app.addSchema(CommentThreadPageSchema);
+  app.addSchema(CommentSummarySchema);
   registerErrorHandler(app);
   await registerPublishRoute(app, dependencies, limits);
   await registerFolderRoutes(app, dependencies);
   await registerArtifactRoutes(app, dependencies);
   await registerRevisionRoutes(app, dependencies);
   await registerShareRoutes(app, dependencies);
+  await registerCommentRoutes(app, dependencies);
   if (options.dashboardAccess !== undefined) {
     registerDashboardRoutes(app, {
       authenticator: dependencies.authenticator,

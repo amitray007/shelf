@@ -1,14 +1,16 @@
 import { Button } from '@cloudflare/kumo/components/button';
+import { Radio } from '@cloudflare/kumo/components/radio';
 import type {
   Artifact,
   ArtifactDefaultShares,
   ArtifactRevision,
+  CommentPolicy,
   ShareManagementSummary,
 } from '@shelf/contracts';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { ordinal } from '../components/revision-label.js';
-import { DashboardApiError, ensureArtifactDefaultShares } from './api.js';
+import { DashboardApiError, ensureArtifactDefaultShares, setShareCommentPolicy } from './api.js';
 import { Modal, SecretReveal } from './dialogs.js';
 import { ShareDialog } from './share-dialog.js';
 import { shareSessionUsage } from './status.js';
@@ -34,6 +36,13 @@ export function ArtifactShareDialog({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [retry, setRetry] = useState(0);
+  const [policyBusy, setPolicyBusy] = useState<ReadonlySet<'protected' | 'public'>>(
+    () => new Set(),
+  );
+  const policyBusyRef = useRef<Set<'protected' | 'public'>>(new Set());
+  const [policyErrors, setPolicyErrors] = useState<Partial<Record<'protected' | 'public', string>>>(
+    {},
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry is an explicit reload trigger.
   useEffect(() => {
@@ -42,6 +51,9 @@ export function ArtifactShareDialog({
     setLoading(true);
     setShares(undefined);
     setError(undefined);
+    setPolicyBusy(new Set());
+    policyBusyRef.current = new Set();
+    setPolicyErrors({});
     void ensureArtifactDefaultShares(artifact.workspaceId, artifact.artifactId, controller.signal)
       .then((defaults) => {
         if (!controller.signal.aborted) setShares(defaults);
@@ -57,6 +69,42 @@ export function ArtifactShareDialog({
       });
     return () => controller.abort();
   }, [artifact.artifactId, artifact.workspaceId, creating, open, retry]);
+
+  const updatePolicy = async (share: ShareManagementSummary, commentPolicy: CommentPolicy) => {
+    if (policyBusyRef.current.has(share.accessType)) return;
+    policyBusyRef.current.add(share.accessType);
+    setPolicyBusy((current) => new Set(current).add(share.accessType));
+    setPolicyErrors((current) => ({ ...current, [share.accessType]: undefined }));
+    try {
+      const updated = await setShareCommentPolicy(
+        artifact.workspaceId,
+        share.shareId,
+        commentPolicy,
+      );
+      setShares((current) => {
+        if (current === undefined) return current;
+        return {
+          ...current,
+          [share.accessType]: updated,
+        } as ArtifactDefaultShares;
+      });
+    } catch (caught) {
+      setPolicyErrors((current) => ({
+        ...current,
+        [share.accessType]:
+          caught instanceof DashboardApiError
+            ? caught.message
+            : 'Comments policy could not be updated.',
+      }));
+    } finally {
+      setPolicyBusy((current) => {
+        const next = new Set(current);
+        next.delete(share.accessType);
+        return next;
+      });
+      policyBusyRef.current.delete(share.accessType);
+    }
+  };
 
   if (creating) {
     return (
@@ -103,6 +151,27 @@ export function ArtifactShareDialog({
             </div>
           ) : null}
         </dl>
+        <div aria-busy={policyBusy.has(share.accessType)} className="share-policy-control">
+          <Radio.Group
+            className="choice-group compact-choice-group"
+            disabled={policyBusy.has(share.accessType)}
+            legend="Comments"
+            name={`default-share-comments-${share.accessType}`}
+            onValueChange={(value) =>
+              void updatePolicy(share, value === 'private' || value === 'shared' ? value : 'off')
+            }
+            value={share.commentPolicy ?? 'off'}
+          >
+            <Radio.Item label="Off" value="off" />
+            <Radio.Item label="Private" value="private" />
+            <Radio.Item label="Shared" value="shared" />
+          </Radio.Group>
+          {policyErrors[share.accessType] === undefined ? null : (
+            <p aria-live="polite" className="form-error">
+              {policyErrors[share.accessType]}
+            </p>
+          )}
+        </div>
         <SecretReveal
           hint="This reusable default link stays available until you revoke it."
           label={share.accessType === 'protected' ? 'Protected URL' : 'Public URL'}

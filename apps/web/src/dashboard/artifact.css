@@ -190,6 +190,51 @@
   padding: 32px 36px 48px;
 }
 
+.managed-file-review-stage {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.managed-discussion-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.managed-file-preview {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.managed-file-review-stage > .review-panel {
+  min-height: 220px;
+  max-height: 42%;
+  flex: 0 0 340px;
+  border-top: 1px solid var(--rule);
+}
+
+.share-policy-badge {
+  display: inline-flex;
+  padding: 3px 7px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font:
+    600 10px / 1 "Geist Mono Variable",
+    ui-monospace,
+    monospace;
+  text-transform: capitalize;
+}
+
 .managed-stage .markdown-body {
   margin: 0;
 }

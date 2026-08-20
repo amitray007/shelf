@@ -31,6 +31,9 @@ if (
   requiredEnvironment.some((name) => process.env[name] === undefined || process.env[name] === '') ||
   [process.env.SHELF_SHARE_SIGNING_KEY, process.env.SHELF_SHARE_SIGNING_KEY_FILE].every(
     (value) => value === undefined || value === '',
+  ) ||
+  [process.env.SHELF_PRIVACY_KEY, process.env.SHELF_PRIVACY_KEY_FILE].every(
+    (value) => value === undefined || value === '',
   )
 ) {
   process.stderr.write(`${JSON.stringify({ error: 'Run pnpm dev:setup before pnpm dev.' })}\n`);

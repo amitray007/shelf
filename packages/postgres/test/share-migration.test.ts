@@ -19,6 +19,7 @@ import { folderSnapshotsMigration } from '../src/migrations/0005_folder_snapshot
 import { sharesMigration } from '../src/migrations/0006_shares.js';
 import { shareAccessPoliciesMigration } from '../src/migrations/0009_share_access_policies.js';
 import { permanentPublicSharesMigration } from '../src/migrations/0010_permanent_public_shares.js';
+import { commentsMigration } from '../src/migrations/0012_comments.js';
 
 const adminConnectionString = process.env.SHELF_TEST_POSTGRES_URL;
 const describePostgres = adminConnectionString === undefined ? describe.skip : describe;
@@ -78,6 +79,7 @@ describePostgres('shares migration', () => {
         { migrationName: '0009_share_access_policies', status: 'Success' },
         { migrationName: '0010_permanent_public_shares', status: 'Success' },
         { migrationName: '0011_artifact_default_shares', status: 'Success' },
+        { migrationName: '0012_comments', status: 'Success' },
       ]);
       await sql`
         insert into shelf_actors (
@@ -138,7 +140,21 @@ describePostgres('shares migration', () => {
         'Cannot remove shares migration while shares exist.',
       );
 
+      await sql`
+        update shelf_shares
+        set comment_policy = 'shared'
+        where share_id = 'shr_DDDDDDDDDDDDDDDDDDDDDD'
+      `.execute(database);
+      await expect(commentsMigration.down?.(database)).rejects.toThrow(
+        'Cannot remove comments migration while comment state exists.',
+      );
+      await sql`
+        update shelf_shares
+        set comment_policy = 'off'
+        where share_id = 'shr_DDDDDDDDDDDDDDDDDDDDDD'
+      `.execute(database);
       await sql`delete from shelf_shares`.execute(database);
+      await commentsMigration.down?.(database);
       await permanentPublicSharesMigration.down?.(database);
       await shareAccessPoliciesMigration.down?.(database);
       await sharesMigration.down?.(database);

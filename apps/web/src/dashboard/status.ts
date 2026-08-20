@@ -1,4 +1,5 @@
 import {
+  type CommentPolicy,
   SHARE_EXPIRY_DURATION_MS,
   type ShareCreateInput,
   type ShareExpiryPreset,
@@ -22,6 +23,7 @@ export interface SharePolicyDraft {
   expiryChoice: ShareExpiryChoice;
   customExpiresAt: string;
   maxSessions: string;
+  readonly commentPolicy?: CommentPolicy;
 }
 
 export function defaultSharePolicy() {
@@ -107,6 +109,7 @@ export function buildShareCreateInput(
     accessType: draft.accessType,
     target,
     ...expiryInput,
+    commentPolicy: draft.commentPolicy ?? 'off',
     ...(maxSessions === undefined ? {} : { maxSessions }),
   } as ShareCreateInput;
   return { input };

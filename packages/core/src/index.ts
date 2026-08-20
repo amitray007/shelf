@@ -1,5 +1,6 @@
 export * from './artifacts/catalog.js';
 export * from './artifacts/lifecycle.js';
+export * from './comments/index.js';
 export * from './errors.js';
 export * from './folders/publish.js';
 export * from './folders/snapshot.js';

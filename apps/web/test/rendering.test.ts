@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { selectRenderer } from '../src/rendering.js';
+import { selectRenderer, supportsSourceView } from '../src/rendering.js';
 
 describe('passive renderer selection', () => {
   it.each([
@@ -35,5 +35,17 @@ describe('passive renderer selection', () => {
     expect(selectRenderer('text/html', 'https://renderer.example/render')).toEqual({
       kind: 'download',
     });
+  });
+
+  it.each([
+    ['text/markdown', true],
+    ['text/html', true],
+    ['application/json', true],
+    ['image/svg+xml', true],
+    ['image/png', false],
+    ['image/jpeg', false],
+    ['application/pdf', false],
+  ] as const)('reports whether %s has a readable source view', (mediaType, expected) => {
+    expect(supportsSourceView(mediaType)).toBe(expected);
   });
 });

@@ -25,6 +25,7 @@ export interface ListArtifactsCommandOptions {
   cursor?: string;
   sort?: string;
   order?: string;
+  search?: string;
   allowInsecureLoopback?: boolean;
 }
 
@@ -131,6 +132,7 @@ export function executeListArtifacts(
       limit: pageLimit(options.limit),
       sort: artifactSort(options.sort),
       order: artifactSortOrder(options.order),
+      ...(options.search === undefined ? {} : { search: options.search }),
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
       token: token(runtime),
       ...(options.allowInsecureLoopback === undefined

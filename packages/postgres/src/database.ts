@@ -80,6 +80,57 @@ export interface ShareTable {
   revoked_at: Date | null;
   revoked_by_actor_id: string | null;
   is_default: boolean;
+  comment_policy: 'off' | 'private' | 'shared';
+}
+
+export interface CommentVisitorTable {
+  installation_id: string;
+  visitor_key: string;
+  display_name: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface CommentThreadTable {
+  thread_id: string;
+  installation_id: string;
+  workspace_id: string;
+  artifact_id: string;
+  share_id: string;
+  revision_id: string;
+  visibility: 'private' | 'shared';
+  anchor_kind: 'file' | 'range';
+  anchor_path: string | null;
+  anchor_start_line: number | null;
+  anchor_end_line: number | null;
+  anchor_quoted_text: string | null;
+  anchor_content_hash: string | null;
+  anchor_status: 'exact' | 'outdated';
+  starter_visitor_key: string | null;
+  resolved_at: Date | null;
+  resolved_by_actor_id: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface CommentPostTable {
+  post_id: string;
+  thread_id: string;
+  installation_id: string;
+  workspace_id: string;
+  author_kind: 'visitor' | 'actor';
+  visitor_key: string | null;
+  actor_id: string | null;
+  display_name: string | null;
+  body: string;
+  created_at: Date;
+  edited_at: Date | null;
+  deleted_at: Date | null;
+  hidden_at: Date | null;
+  abuse_ip_hash: string | null;
+  abuse_browser: string | null;
+  abuse_operating_system: string | null;
+  abuse_expires_at: Date | null;
 }
 
 export interface ShareSessionReceiptTable {
@@ -180,6 +231,9 @@ export interface ShelfPostgresSchema {
   shelf_shares: ShareTable;
   shelf_share_idempotency: ShareIdempotencyTable;
   shelf_share_session_receipts: ShareSessionReceiptTable;
+  shelf_comment_visitors: CommentVisitorTable;
+  shelf_comment_threads: CommentThreadTable;
+  shelf_comment_posts: CommentPostTable;
   shelf_workspaces: WorkspaceTable;
 }
 

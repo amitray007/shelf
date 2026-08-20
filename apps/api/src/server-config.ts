@@ -17,6 +17,15 @@ export interface ShelfServerConfig {
   installationId: string;
   auth: { baseUrl: string; secret: string };
   share: { signingKey: string };
+  /** Privacy hashing is deliberately independent from share capability signing. */
+  privacy?: { key: string };
+  commentAbuseCleanup?: {
+    intervalMs?: number;
+    batchSize?: number;
+    now?: () => Date;
+    setInterval?: typeof setInterval;
+    clearInterval?: typeof clearInterval;
+  };
   rendererPublicOrigin?: string;
   webRoot?: string;
   persistence: ShelfPersistenceConfig;
@@ -58,6 +67,14 @@ export function loadShareSigningKey(environment: ShelfServerEnvironment): Promis
     inlineName: 'SHELF_SHARE_SIGNING_KEY',
     fileName: 'SHELF_SHARE_SIGNING_KEY_FILE',
     label: 'share signing key',
+  });
+}
+
+export function loadPrivacyKey(environment: ShelfServerEnvironment): Promise<string> {
+  return loadSecret(environment, {
+    inlineName: 'SHELF_PRIVACY_KEY',
+    fileName: 'SHELF_PRIVACY_KEY_FILE',
+    label: 'privacy key',
   });
 }
 
@@ -135,6 +152,9 @@ export async function loadShelfServerConfig(
     },
     share: {
       signingKey: await loadShareSigningKey(environment),
+    },
+    privacy: {
+      key: await loadPrivacyKey(environment),
     },
     ...(rendererPublicOrigin === undefined ? {} : { rendererPublicOrigin }),
     ...(webRoot === undefined ? {} : { webRoot }),
