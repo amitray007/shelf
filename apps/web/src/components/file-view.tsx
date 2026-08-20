@@ -30,6 +30,8 @@ import {
 } from './review/comment-card.js';
 import { ReviewComposer } from './review/discussion-panel.js';
 
+const SOURCE_INLINE_COMMENT_LIMIT = 5;
+
 type SourceLineAnnotationMetadata =
   | { readonly kind?: 'label'; readonly label: string }
   | {
@@ -352,7 +354,12 @@ function PierreCode({
                         <strong>Line {annotation.lineNumber}</strong>
                         <span>{metadata.label}</span>
                       </div>
-                      <div className="pierre-inline-messages">
+                      <div
+                        className="pierre-inline-messages"
+                        data-scrollable={
+                          metadata.posts.length > SOURCE_INLINE_COMMENT_LIMIT ? 'true' : undefined
+                        }
+                      >
                         {metadata.posts.map((post) => (
                           <article className="pierre-inline-message" key={post.postId}>
                             <ReviewAvatar post={post} size={24} />

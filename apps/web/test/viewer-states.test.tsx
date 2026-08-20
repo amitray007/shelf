@@ -185,6 +185,9 @@ describe('viewer content states', () => {
     expect(html).toContain('&lt;script&gt;bad&lt;/script&gt;');
     expect(html).not.toContain('<script>bad</script>');
     expect(html).toContain('Start a discussion');
+    expect(html).toContain('review-composer-avatar');
+    expect(html).toContain('review-composer-submit');
+    expect(html).toContain('Submit comment');
   });
 
   it('does not offer anonymous visitors a reopen action for resolved threads', () => {

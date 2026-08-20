@@ -1,7 +1,7 @@
 import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
 import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
+import { ArrowUpIcon } from '@phosphor-icons/react/ArrowUp';
 import { DotsThreeIcon } from '@phosphor-icons/react/DotsThree';
-import { PaperPlaneTiltIcon } from '@phosphor-icons/react/PaperPlaneTilt';
 import type { CommentAnchor, CommentThread } from '@shelf/contracts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -10,6 +10,7 @@ import {
   ReviewThreadCard,
   ReviewTime,
   reviewAuthorName,
+  reviewAvatarUrl,
 } from './comment-card.js';
 import { readReviewVisitorIdentity } from './identity.js';
 import { VisitorNameDialog } from './identity-dialog.js';
@@ -67,7 +68,9 @@ export function ReviewComposer({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
   const submitAfterNameRef = useRef(false);
-  const displayName = readReviewVisitorIdentity().displayName;
+  const identity = readReviewVisitorIdentity();
+  const displayName = identity.displayName;
+  const avatarSeed = moderator ? 'shelf-team' : displayName || identity.visitorToken || 'reviewer';
   const submit = async () => {
     if (body.trim().length === 0 || pending) return;
     if (!moderator && readReviewVisitorIdentity().displayName.trim().length === 0) {
@@ -95,45 +98,53 @@ export function ReviewComposer({
   return (
     <>
       <div className={`review-composer${docked ? ' review-composer-docked' : ''}`}>
-        <textarea
-          aria-label={placeholder}
-          disabled={disabled || pending}
-          maxLength={20_000}
-          onChange={(event) => setBody(event.target.value)}
-          onKeyDown={(event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-              event.preventDefault();
-              void submit();
-            }
-          }}
-          placeholder={placeholder}
-          rows={docked ? 1 : 3}
-          value={body}
-        />
-        <div className="review-composer-footer">
-          <div className="review-composer-meta">
-            {!moderator ? (
-              <button
-                className="review-composer-identity"
-                onClick={() => {
-                  submitAfterNameRef.current = false;
-                  setNameDialog(true);
-                }}
-                type="button"
-              >
-                {displayName === '' ? 'Add your name' : `Commenting as ${displayName}`}
-              </button>
-            ) : null}
-            <span className="review-composer-hint">⌘↵</span>
-          </div>
+        <div className="review-composer-input">
+          {!moderator ? (
+            <button
+              aria-label={displayName === '' ? 'Add your name' : `Change name for ${displayName}`}
+              className="review-composer-avatar"
+              onClick={() => {
+                submitAfterNameRef.current = false;
+                setNameDialog(true);
+              }}
+              title={displayName === '' ? 'Add your name' : `Commenting as ${displayName}`}
+              type="button"
+            >
+              <img alt="" referrerPolicy="no-referrer" src={reviewAvatarUrl(avatarSeed)} />
+            </button>
+          ) : (
+            <span className="review-composer-avatar review-composer-avatar-static">
+              <img
+                alt="Shelf team avatar"
+                referrerPolicy="no-referrer"
+                src={reviewAvatarUrl(avatarSeed)}
+              />
+            </span>
+          )}
+          <textarea
+            aria-label={placeholder}
+            disabled={disabled || pending}
+            maxLength={20_000}
+            onChange={(event) => setBody(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+            placeholder={placeholder}
+            rows={docked ? 1 : 3}
+            value={body}
+          />
           <button
-            className="review-button review-button-primary"
+            aria-label={pending ? 'Saving comment' : 'Submit comment'}
+            className="review-composer-submit"
             disabled={disabled || pending || body.trim() === ''}
             onClick={() => void submit()}
+            title="Submit comment (⌘↵)"
             type="button"
           >
-            <PaperPlaneTiltIcon aria-hidden="true" size={15} weight="regular" />
-            {pending ? 'Saving…' : docked ? 'Send' : 'Comment'}
+            <ArrowUpIcon aria-hidden="true" size={18} weight="bold" />
           </button>
         </div>
         {error ? (
