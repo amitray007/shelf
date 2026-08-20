@@ -10,6 +10,10 @@ import {
   sourceGutterAction,
 } from '../src/components/file-view.js';
 import { FolderBrowser, isFolderEntryVisible } from '../src/components/folder-browser.js';
+import {
+  formatRelativeReviewTime,
+  reviewAvatarUrl,
+} from '../src/components/review/comment-card.js';
 import { DiscussionPanel } from '../src/components/review/discussion-panel.js';
 import { reviewSurfaceVisible } from '../src/components/review/use-review.js';
 import { UnavailableView, ViewerRail } from '../src/components/viewer-shell.js';
@@ -86,6 +90,14 @@ describe('viewer content states', () => {
   it('uses one Pierre gutter utility as a comment action in review mode', () => {
     expect(sourceGutterAction(true)).toBe('comment');
     expect(sourceGutterAction(false)).toBe('link');
+  });
+
+  it('uses compact relative review times and illustrated DiceBear avatars', () => {
+    const now = Date.parse('2026-08-20T12:00:00.000Z');
+    expect(formatRelativeReviewTime('2026-08-20T11:00:00.000Z', now)).toBe('1h ago');
+    expect(formatRelativeReviewTime('2026-08-18T12:00:00.000Z', now)).toBe('2d ago');
+    expect(reviewAvatarUrl('opaque-reviewer')).toContain('/notionists-neutral/svg');
+    expect(reviewAvatarUrl('opaque-reviewer')).not.toContain('/initials/svg');
   });
 
   it('renders safe comment bodies and review controls without raw HTML', () => {

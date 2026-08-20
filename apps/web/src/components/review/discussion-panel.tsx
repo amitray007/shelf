@@ -1,8 +1,9 @@
 import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
+import { DotsThreeIcon } from '@phosphor-icons/react/DotsThree';
 import { PaperPlaneTiltIcon } from '@phosphor-icons/react/PaperPlaneTilt';
 import type { CommentAnchor, CommentThread } from '@shelf/contracts';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ReviewAvatar, ReviewBody, ReviewThreadCard } from './comment-card.js';
+import { ReviewAvatar, ReviewBody, ReviewThreadCard, ReviewTime } from './comment-card.js';
 import { readReviewVisitorIdentity } from './identity.js';
 import { VisitorNameDialog } from './identity-dialog.js';
 import { ReviewSidebarToolbar } from './sidebar-toolbar.js';
@@ -179,6 +180,7 @@ export function DiscussionPanel({
   const [editingPostId, setEditingPostId] = useState<string>();
   const [editBody, setEditBody] = useState('');
   const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string>();
+  const [postMenuId, setPostMenuId] = useState<string>();
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const activeThread = threads.find((thread) => thread.threadId === activeThreadId);
@@ -198,6 +200,23 @@ export function DiscussionPanel({
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus();
   }, [searchOpen]);
+  useEffect(() => {
+    if (postMenuId === undefined) return;
+    const closeMenu = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest('.review-post-menu')) {
+        setPostMenuId(undefined);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPostMenuId(undefined);
+    };
+    document.addEventListener('pointerdown', closeMenu);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeMenu);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [postMenuId]);
   const runAction = async (action: () => Promise<void>) => {
     setActionError(undefined);
     try {
@@ -269,9 +288,63 @@ export function DiscussionPanel({
                     <strong>
                       {post.author.kind === 'visitor' ? post.author.displayName : 'Shelf team'}
                     </strong>
-                    <time dateTime={post.createdAt}>
-                      {new Date(post.createdAt).toLocaleDateString()}
-                    </time>
+                    <ReviewTime value={post.createdAt} />
+                    {post.deletedAt === null &&
+                    post.hiddenAt === null &&
+                    (!moderator || post.author.kind !== 'visitor') &&
+                    (post.permissions.canEdit || post.permissions.canDelete) ? (
+                      <div className="review-post-menu">
+                        <button
+                          aria-expanded={postMenuId === post.postId}
+                          aria-haspopup="menu"
+                          aria-label="Comment actions"
+                          className="review-post-menu-trigger"
+                          onClick={() =>
+                            setPostMenuId((current) =>
+                              current === post.postId ? undefined : post.postId,
+                            )
+                          }
+                          title="Comment actions"
+                          type="button"
+                        >
+                          <DotsThreeIcon aria-hidden="true" size={17} weight="bold" />
+                        </button>
+                        {postMenuId === post.postId ? (
+                          <div
+                            aria-label="Comment actions"
+                            className="review-post-menu-content"
+                            role="menu"
+                          >
+                            {post.permissions.canEdit && onEditPost ? (
+                              <button
+                                onClick={() => {
+                                  setEditingPostId(post.postId);
+                                  setEditBody(post.body);
+                                  setPostMenuId(undefined);
+                                }}
+                                role="menuitem"
+                                type="button"
+                              >
+                                Edit comment
+                              </button>
+                            ) : null}
+                            {post.permissions.canDelete && onDeletePost ? (
+                              <button
+                                className="review-post-menu-danger"
+                                onClick={() => {
+                                  setDeleteConfirmPostId(post.postId);
+                                  setPostMenuId(undefined);
+                                }}
+                                role="menuitem"
+                                type="button"
+                              >
+                                Delete comment
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                   {post.hiddenAt !== null ? (
                     <div className="review-hidden-post">
@@ -321,57 +394,31 @@ export function DiscussionPanel({
                   ) : (
                     <ReviewBody body={post.deletedAt === null ? post.body : 'Comment deleted'} />
                   )}
-                  {post.deletedAt === null &&
-                  post.hiddenAt === null &&
-                  (!moderator || post.author.kind !== 'visitor') &&
-                  (post.permissions.canEdit || post.permissions.canDelete) ? (
-                    <div className="review-post-controls">
-                      {post.permissions.canEdit && onEditPost ? (
+                  {deleteConfirmPostId === post.postId && onDeletePost ? (
+                    <div className="review-delete-confirm">
+                      <span>Delete this comment? This cannot be undone.</span>
+                      <div>
                         <button
-                          className="review-post-action"
-                          onClick={() => {
-                            setEditingPostId(post.postId);
-                            setEditBody(post.body);
-                          }}
+                          className="review-button review-button-quiet"
+                          onClick={() => setDeleteConfirmPostId(undefined)}
                           type="button"
                         >
-                          Edit
+                          Cancel
                         </button>
-                      ) : null}
-                      {post.permissions.canDelete && onDeletePost ? (
-                        deleteConfirmPostId === post.postId ? (
-                          <>
-                            <span className="review-delete-confirm">Delete this comment?</span>
-                            <button
-                              className="review-post-action review-post-action-danger"
-                              onClick={() =>
-                                void runAction(async () => {
-                                  await onDeletePost(post.postId);
-                                  setDeleteConfirmPostId(undefined);
-                                })
-                              }
-                              type="button"
-                            >
-                              Confirm
-                            </button>
-                            <button
-                              className="review-post-action"
-                              onClick={() => setDeleteConfirmPostId(undefined)}
-                              type="button"
-                            >
-                              Cancel
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            className="review-post-action"
-                            onClick={() => setDeleteConfirmPostId(post.postId)}
-                            type="button"
-                          >
-                            Delete
-                          </button>
-                        )
-                      ) : null}
+                        <button
+                          className="review-button review-button-danger"
+                          disabled={saving}
+                          onClick={() =>
+                            void runAction(async () => {
+                              await onDeletePost(post.postId);
+                              setDeleteConfirmPostId(undefined);
+                            })
+                          }
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   ) : null}
                   {moderator &&

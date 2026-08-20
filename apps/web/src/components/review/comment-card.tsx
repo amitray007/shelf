@@ -8,12 +8,44 @@ export interface ReviewParticipant {
   readonly replyCount: number;
 }
 
-function avatarSeed(post: CommentPost): string {
-  return post.author.participantId;
-}
-
 function authorName(post: CommentPost): string {
   return post.author.kind === 'visitor' ? post.author.displayName : 'Shelf team';
+}
+
+export function reviewAvatarUrl(participantId: string): string {
+  return `https://api.dicebear.com/9.x/notionists-neutral/svg?seed=${encodeURIComponent(participantId)}&backgroundColor=18181b`;
+}
+
+export function formatRelativeReviewTime(value: string, now = Date.now()): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return '';
+  const elapsed = now - timestamp;
+  const future = elapsed < 0;
+  const seconds = Math.max(0, Math.floor(Math.abs(elapsed) / 1_000));
+  if (seconds < 60) return future ? 'soon' : 'now';
+  const units = [
+    { duration: 60, suffix: 'm' },
+    { duration: 60 * 60, suffix: 'h' },
+    { duration: 60 * 60 * 24, suffix: 'd' },
+    { duration: 60 * 60 * 24 * 7, suffix: 'w' },
+    { duration: 60 * 60 * 24 * 30, suffix: 'mo' },
+    { duration: 60 * 60 * 24 * 365, suffix: 'y' },
+  ] as const;
+  const unit = [...units].reverse().find(({ duration }) => seconds >= duration) ?? units[0];
+  const count = Math.max(1, Math.floor(seconds / unit.duration));
+  return future ? `in ${count}${unit.suffix}` : `${count}${unit.suffix} ago`;
+}
+
+export function ReviewTime({ value }: { readonly value: string }) {
+  const date = new Date(value);
+  const title = Number.isFinite(date.valueOf())
+    ? date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : value;
+  return (
+    <time dateTime={value} title={title}>
+      {formatRelativeReviewTime(value)}
+    </time>
+  );
 }
 
 export function ReviewAvatar({
@@ -28,7 +60,7 @@ export function ReviewAvatar({
       alt={`${authorName(post)} avatar`}
       className="review-avatar"
       height={size}
-      src={`https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(avatarSeed(post))}`}
+      src={reviewAvatarUrl(post.author.participantId)}
       referrerPolicy="no-referrer"
       width={size}
     />
@@ -55,7 +87,7 @@ export function ReviewParticipantAvatar({
         alt={`${participant.displayName} avatar`}
         height={28}
         referrerPolicy="no-referrer"
-        src={`https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(participant.participantId)}`}
+        src={reviewAvatarUrl(participant.participantId)}
         width={28}
       />
     </button>
@@ -108,7 +140,7 @@ export function ReviewThreadCard({
         <ReviewAvatar post={first} />
         <div className="review-thread-author">
           <strong>{authorName(first)}</strong>
-          <time dateTime={first.createdAt}>{new Date(first.createdAt).toLocaleDateString()}</time>
+          <ReviewTime value={first.createdAt} />
         </div>
         {thread.anchorStatus === 'outdated' ? (
           <span className="review-thread-badge">Outdated</span>
