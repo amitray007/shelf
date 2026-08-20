@@ -295,11 +295,6 @@ export function ViewerPage() {
           type="button"
         >
           <ChatCircleDotsIcon aria-hidden="true" size={18} weight="regular" />
-          {review.threads.length > 0 ? (
-            <span className="viewer-review-count">
-              {review.threads.length > 99 ? '99+' : review.threads.length}
-            </span>
-          ) : null}
         </button>
       ) : null}
       <div className="viewer-main">

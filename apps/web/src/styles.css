@@ -140,22 +140,6 @@ a {
     sans-serif;
 }
 
-.viewer-review-count {
-  position: absolute;
-  top: -3px;
-  right: -3px;
-  min-width: 15px;
-  padding: 2px 3px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--canvas);
-  font:
-    650 9px / 1 "Geist Mono Variable",
-    ui-monospace,
-    monospace;
-  text-align: center;
-}
-
 .viewer-review-toggle:hover {
   border-color: var(--accent);
   color: var(--text);
@@ -185,8 +169,7 @@ a {
 }
 
 .review-sidebar-modes,
-.review-sidebar-actions,
-.review-sidebar-summary {
+.review-sidebar-actions {
   display: flex;
   align-items: center;
   gap: 3px;
@@ -199,21 +182,6 @@ a {
 
 .review-sidebar-actions {
   margin-left: auto;
-}
-
-.review-sidebar-summary {
-  gap: 8px;
-  color: var(--text-muted);
-  font:
-    500 11px / 1 "Geist Mono Variable",
-    ui-monospace,
-    monospace;
-}
-
-.review-sidebar-summary > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .review-sidebar-heading {
@@ -250,22 +218,6 @@ a {
 .review-sidebar-tool:disabled {
   cursor: not-allowed;
   opacity: 0.38;
-}
-
-.review-sidebar-discussion-tool span {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  min-width: 14px;
-  padding: 2px 3px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--canvas);
-  font:
-    650 9px / 1 "Geist Mono Variable",
-    ui-monospace,
-    monospace;
-  text-align: center;
 }
 
 .review-panel-header {

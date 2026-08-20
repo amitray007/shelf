@@ -153,9 +153,6 @@ export function DiscussionPanel({
   const activeThread = threads.find((thread) => thread.threadId === activeThreadId);
   const searchOpen = controlledSearchOpen ?? localSearchOpen;
   const toggleSearch = onSearchToggle ?? (() => setLocalSearchOpen((open) => !open));
-  const participantCount = new Set(
-    threads.flatMap((thread) => thread.posts.map((post) => post.author.participantId)),
-  ).size;
   const filteredThreads = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (normalized === '') return threads;
@@ -181,9 +178,7 @@ export function DiscussionPanel({
         <ReviewSidebarToolbar
           onClose={onClose}
           onSearchToggle={toggleSearch}
-          participantCount={participantCount}
           searchOpen={searchOpen}
-          threadCount={threads.length}
         />
       ) : null}
       {!moderator ? (

@@ -277,16 +277,8 @@ export function FolderBrowser({ entries, loadFile, review }: FolderBrowserProps)
                 ? setDiscussionSearchOpen((open) => !open)
                 : setTreeSearchOpen((open) => !open)
             }
-            participantCount={
-              new Set(
-                review.threads.flatMap((thread) =>
-                  thread.posts.map((post) => post.author.participantId),
-                ),
-              ).size
-            }
             searchLabel={review.mode === 'discussion' ? 'Search discussions' : 'Search files'}
             searchOpen={review.mode === 'discussion' ? discussionSearchOpen : treeSearchOpen}
-            threadCount={review.threads.length}
           />
         ) : null}
         {review?.mode === 'discussion' ? (
