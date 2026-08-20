@@ -1,6 +1,8 @@
 import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
 import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
 import { ArrowUpIcon } from '@phosphor-icons/react/ArrowUp';
+import { CaretDownIcon } from '@phosphor-icons/react/CaretDown';
+import { CaretRightIcon } from '@phosphor-icons/react/CaretRight';
 import { DotsThreeIcon } from '@phosphor-icons/react/DotsThree';
 import type { CommentAnchor, CommentThread } from '@shelf/contracts';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -215,6 +217,7 @@ export function DiscussionPanel({
   const [actionError, setActionError] = useState<string>();
   const [editingPostId, setEditingPostId] = useState<string>();
   const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string>();
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const activeThread = threads.find((thread) => thread.threadId === activeThreadId);
@@ -281,12 +284,40 @@ export function DiscussionPanel({
   );
   const renderThreadGroup = (group: (typeof threadGroups)[number]) => (
     <section className="review-discussion-file-group" key={group.label}>
-      <h3 className="review-discussion-file-heading">{group.label}</h3>
-      {group.unresolved.map(renderThreadButton)}
-      {group.unresolved.length > 0 && group.resolved.length > 0 ? (
-        <div aria-hidden="true" className="review-discussion-status-divider" />
-      ) : null}
-      {group.resolved.map(renderThreadButton)}
+      <h3 className="review-discussion-file-heading">
+        <button
+          aria-controls={`review-discussion-group-${encodeURIComponent(group.label)}`}
+          aria-expanded={!collapsedGroups.has(group.label)}
+          className="review-discussion-file-heading-button"
+          onClick={() => {
+            setCollapsedGroups((current) => {
+              const next = new Set(current);
+              if (next.has(group.label)) next.delete(group.label);
+              else next.add(group.label);
+              return next;
+            });
+          }}
+          type="button"
+        >
+          {collapsedGroups.has(group.label) ? (
+            <CaretRightIcon aria-hidden="true" size={14} weight="bold" />
+          ) : (
+            <CaretDownIcon aria-hidden="true" size={14} weight="bold" />
+          )}
+          <span>{group.label}</span>
+        </button>
+      </h3>
+      <div
+        className="review-discussion-file-group-content"
+        hidden={collapsedGroups.has(group.label)}
+        id={`review-discussion-group-${encodeURIComponent(group.label)}`}
+      >
+        {group.unresolved.map(renderThreadButton)}
+        {group.unresolved.length > 0 && group.resolved.length > 0 ? (
+          <div aria-hidden="true" className="review-discussion-status-divider" />
+        ) : null}
+        {group.resolved.map(renderThreadButton)}
+      </div>
     </section>
   );
   useEffect(() => {

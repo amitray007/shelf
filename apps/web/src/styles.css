@@ -616,14 +616,32 @@ a {
 }
 .review-discussion-file-heading {
   margin: 0;
+  padding: 0;
+}
+.review-discussion-file-heading-button {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
   padding: 12px 14px 7px;
+  border: 0;
+  background: transparent;
   color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
   font:
     560 11px "Geist Mono Variable",
     ui-monospace,
     monospace;
   letter-spacing: 0.01em;
   overflow-wrap: anywhere;
+}
+.review-discussion-file-heading-button:hover {
+  color: var(--text);
+}
+.review-discussion-file-heading-button svg {
+  flex: 0 0 auto;
 }
 .review-discussion-file-group + .review-discussion-file-group {
   border-top: 1px solid var(--rule);

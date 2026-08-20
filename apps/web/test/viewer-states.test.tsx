@@ -561,13 +561,19 @@ describe('viewer content states', () => {
         onReply={async () => undefined}
         onSelectThread={() => undefined}
         onSetThreadStatus={async () => undefined}
-        threads={[resolved, sourceThread('thread_open_list', 5)]}
+        threads={[
+          resolved,
+          sourceThread('thread_open_list', 5),
+          sourceThread('thread_other_list', 6, 'other.md'),
+        ]}
       />,
     );
     expect(html.indexOf('Comment in thread_open_list')).toBeLessThan(
       html.indexOf('Comment in thread_resolved_list'),
     );
-    expect(html.match(/class="review-discussion-file-heading"/gu)).toHaveLength(1);
+    expect(html.match(/class="review-discussion-file-heading"/gu)).toHaveLength(2);
+    expect(html.match(/aria-expanded="true"/gu)).toHaveLength(2);
+    expect(html).toContain('aria-controls="review-discussion-group-idea.md"');
     expect(html).toContain('review-discussion-status-divider');
     expect(html).not.toContain('Resolved (1)');
     expect(html).not.toContain('<details');
