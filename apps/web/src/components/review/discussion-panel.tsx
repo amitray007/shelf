@@ -1,3 +1,5 @@
+import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
+import { PaperPlaneTiltIcon } from '@phosphor-icons/react/PaperPlaneTilt';
 import type { CommentAnchor, CommentThread } from '@shelf/contracts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ReviewAvatar, ReviewBody, ReviewThreadCard } from './comment-card.js';
@@ -77,7 +79,7 @@ export function ReviewComposer({
   };
   return (
     <>
-      <div className="review-composer">
+      <div className="review-composer review-chat-composer">
         <textarea
           aria-label={placeholder}
           disabled={disabled || pending}
@@ -101,6 +103,7 @@ export function ReviewComposer({
             onClick={() => void submit()}
             type="button"
           >
+            <PaperPlaneTiltIcon aria-hidden="true" size={15} weight="fill" />
             {pending ? 'Saving…' : 'Comment'}
           </button>
         </div>
@@ -173,7 +176,7 @@ export function DiscussionPanel({
     }
   };
   return (
-    <aside aria-label="Discussion" className="review-panel">
+    <aside aria-label="Discussion" className="review-panel review-chat-panel">
       {showToolbar ? (
         <ReviewSidebarToolbar
           onClose={onClose}
@@ -228,149 +231,163 @@ export function DiscussionPanel({
           onSaved={() => setNameDialog(false)}
         />
       ) : null}
-      <div className="review-panel-body">
+      <div className="review-panel-body review-chat-body">
         {activeThread ? (
-          <section className="review-thread-detail">
-            <button className="review-back-button" onClick={() => onSelectThread('')} type="button">
-              ← All discussions
-            </button>
-            <div className="review-thread-location">
-              {threadLabel(activeThread)}
-              {activeThread.anchorStatus === 'outdated' ? ' · Outdated' : ''}
-            </div>
-            {activeThread.posts.map((post) => (
-              <div className="review-post" key={post.postId}>
-                <div className="review-post-heading">
-                  <ReviewAvatar post={post} />
-                  <strong>
-                    {post.author.kind === 'visitor' ? post.author.displayName : 'Shelf team'}
-                  </strong>
-                  <time dateTime={post.createdAt}>
-                    {new Date(post.createdAt).toLocaleDateString()}
-                  </time>
-                </div>
-                {post.hiddenAt !== null ? (
-                  <div className="review-hidden-post">
-                    <span className="review-thread-badge">Hidden</span>
-                    <ReviewBody
-                      body={
-                        moderator
-                          ? post.deletedAt === null
-                            ? post.body
-                            : 'Comment deleted'
-                          : 'Comment hidden by a moderator'
-                      }
-                    />
+          <section className="review-thread-detail review-chat-thread">
+            <header className="review-chat-thread-header">
+              <button
+                aria-label="Back to discussions"
+                className="review-back-button"
+                onClick={() => onSelectThread('')}
+                title="Back to discussions"
+                type="button"
+              >
+                <ArrowLeftIcon aria-hidden="true" size={16} />
+                <span>Discussions</span>
+              </button>
+              <span className="review-chat-thread-anchor">
+                {threadLabel(activeThread)}
+                {activeThread.anchorStatus === 'outdated' ? ' · Outdated' : ''}
+              </span>
+            </header>
+            <div className="review-chat-messages">
+              {activeThread.posts.map((post) => (
+                <div
+                  className={`review-post review-chat-message${post.author.kind === 'visitor' ? ' review-chat-message-visitor' : ''}`}
+                  key={post.postId}
+                >
+                  <div className="review-post-heading">
+                    <ReviewAvatar post={post} />
+                    <strong>
+                      {post.author.kind === 'visitor' ? post.author.displayName : 'Shelf team'}
+                    </strong>
+                    <time dateTime={post.createdAt}>
+                      {new Date(post.createdAt).toLocaleDateString()}
+                    </time>
                   </div>
-                ) : editingPostId === post.postId ? (
-                  <div className="review-post-editor">
-                    <textarea
-                      aria-label="Edit comment"
-                      maxLength={20_000}
-                      onChange={(event) => setEditBody(event.target.value)}
-                      rows={3}
-                      value={editBody}
-                    />
+                  {post.hiddenAt !== null ? (
+                    <div className="review-hidden-post">
+                      <span className="review-thread-badge">Hidden</span>
+                      <ReviewBody
+                        body={
+                          moderator
+                            ? post.deletedAt === null
+                              ? post.body
+                              : 'Comment deleted'
+                            : 'Comment hidden by a moderator'
+                        }
+                      />
+                    </div>
+                  ) : editingPostId === post.postId ? (
+                    <div className="review-post-editor">
+                      <textarea
+                        aria-label="Edit comment"
+                        maxLength={20_000}
+                        onChange={(event) => setEditBody(event.target.value)}
+                        rows={3}
+                        value={editBody}
+                      />
+                      <div className="review-post-controls">
+                        <button
+                          className="review-button review-button-quiet"
+                          onClick={() => setEditingPostId(undefined)}
+                          type="button"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="review-button review-button-primary"
+                          disabled={saving || editBody.trim() === ''}
+                          onClick={() =>
+                            void runAction(async () => {
+                              await onEditPost?.(post.postId, editBody.trim());
+                              setEditingPostId(undefined);
+                            })
+                          }
+                          type="button"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <ReviewBody body={post.deletedAt === null ? post.body : 'Comment deleted'} />
+                  )}
+                  {post.deletedAt === null &&
+                  post.hiddenAt === null &&
+                  (!moderator || post.author.kind !== 'visitor') &&
+                  (post.permissions.canEdit || post.permissions.canDelete) ? (
+                    <div className="review-post-controls">
+                      {post.permissions.canEdit && onEditPost ? (
+                        <button
+                          className="review-post-action"
+                          onClick={() => {
+                            setEditingPostId(post.postId);
+                            setEditBody(post.body);
+                          }}
+                          type="button"
+                        >
+                          Edit
+                        </button>
+                      ) : null}
+                      {post.permissions.canDelete && onDeletePost ? (
+                        deleteConfirmPostId === post.postId ? (
+                          <>
+                            <span className="review-delete-confirm">Delete this comment?</span>
+                            <button
+                              className="review-post-action review-post-action-danger"
+                              onClick={() =>
+                                void runAction(async () => {
+                                  await onDeletePost(post.postId);
+                                  setDeleteConfirmPostId(undefined);
+                                })
+                              }
+                              type="button"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              className="review-post-action"
+                              onClick={() => setDeleteConfirmPostId(undefined)}
+                              type="button"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            className="review-post-action"
+                            onClick={() => setDeleteConfirmPostId(post.postId)}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        )
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {moderator &&
+                  post.author.kind === 'visitor' &&
+                  post.permissions.canModerate &&
+                  onModeratePost ? (
                     <div className="review-post-controls">
                       <button
-                        className="review-button review-button-quiet"
-                        onClick={() => setEditingPostId(undefined)}
-                        type="button"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="review-button review-button-primary"
-                        disabled={saving || editBody.trim() === ''}
+                        className="review-post-action"
+                        disabled={saving}
                         onClick={() =>
-                          void runAction(async () => {
-                            await onEditPost?.(post.postId, editBody.trim());
-                            setEditingPostId(undefined);
-                          })
+                          void runAction(() =>
+                            onModeratePost(post.postId, post.hiddenAt === null ? 'hide' : 'unhide'),
+                          )
                         }
                         type="button"
                       >
-                        Save
+                        {post.hiddenAt === null ? 'Hide visitor post' : 'Unhide visitor post'}
                       </button>
                     </div>
-                  </div>
-                ) : (
-                  <ReviewBody body={post.deletedAt === null ? post.body : 'Comment deleted'} />
-                )}
-                {post.deletedAt === null &&
-                post.hiddenAt === null &&
-                (!moderator || post.author.kind !== 'visitor') &&
-                (post.permissions.canEdit || post.permissions.canDelete) ? (
-                  <div className="review-post-controls">
-                    {post.permissions.canEdit && onEditPost ? (
-                      <button
-                        className="review-post-action"
-                        onClick={() => {
-                          setEditingPostId(post.postId);
-                          setEditBody(post.body);
-                        }}
-                        type="button"
-                      >
-                        Edit
-                      </button>
-                    ) : null}
-                    {post.permissions.canDelete && onDeletePost ? (
-                      deleteConfirmPostId === post.postId ? (
-                        <>
-                          <span className="review-delete-confirm">Delete this comment?</span>
-                          <button
-                            className="review-post-action review-post-action-danger"
-                            onClick={() =>
-                              void runAction(async () => {
-                                await onDeletePost(post.postId);
-                                setDeleteConfirmPostId(undefined);
-                              })
-                            }
-                            type="button"
-                          >
-                            Confirm
-                          </button>
-                          <button
-                            className="review-post-action"
-                            onClick={() => setDeleteConfirmPostId(undefined)}
-                            type="button"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          className="review-post-action"
-                          onClick={() => setDeleteConfirmPostId(post.postId)}
-                          type="button"
-                        >
-                          Delete
-                        </button>
-                      )
-                    ) : null}
-                  </div>
-                ) : null}
-                {moderator &&
-                post.author.kind === 'visitor' &&
-                post.permissions.canModerate &&
-                onModeratePost ? (
-                  <div className="review-post-controls">
-                    <button
-                      className="review-post-action"
-                      disabled={saving}
-                      onClick={() =>
-                        void runAction(() =>
-                          onModeratePost(post.postId, post.hiddenAt === null ? 'hide' : 'unhide'),
-                        )
-                      }
-                      type="button"
-                    >
-                      {post.hiddenAt === null ? 'Hide visitor post' : 'Unhide visitor post'}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
+                  ) : null}
+                </div>
+              ))}
+            </div>
             {activeThread.resolvedAt !== null ? (
               <div className="review-thread-actions">
                 <p className="review-thread-resolved">Resolved</p>
@@ -421,7 +438,7 @@ export function DiscussionPanel({
             ) : (
               filteredThreads.map((thread) => (
                 <button
-                  className="review-thread-button"
+                  className="review-thread-button review-chat-preview"
                   key={thread.threadId}
                   onClick={() => onSelectThread(thread.threadId)}
                   type="button"

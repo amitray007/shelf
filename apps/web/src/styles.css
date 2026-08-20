@@ -640,6 +640,166 @@ a {
 .review-composer-footer .review-button {
   min-height: 36px;
 }
+
+/* Chat surface */
+.review-chat-panel {
+  background: var(--surface);
+}
+
+.review-chat-body {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px 14px;
+  background: var(--canvas);
+}
+
+.review-chat-inbox {
+  min-height: 0;
+}
+
+.review-chat-preview .review-thread-card {
+  margin: 4px 0;
+  padding: 10px 11px;
+  border-color: var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.review-chat-preview .review-thread-card:hover {
+  background: var(--elevated);
+}
+
+.review-chat-preview .review-thread-replies {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--canvas);
+  font-size: 10px;
+}
+
+.review-chat-thread {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+.review-chat-thread-header {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -2px -2px 8px;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.review-chat-thread-header .review-back-button {
+  min-height: 30px;
+  gap: 6px;
+  margin: 0;
+  padding: 0 7px 0 2px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.review-chat-thread-anchor {
+  max-width: 52%;
+  overflow: hidden;
+  padding: 4px 7px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font:
+    10px "Geist Mono Variable",
+    ui-monospace,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-chat-messages {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-chat-message {
+  width: min(94%, 330px);
+  margin: 0;
+  padding: 8px 9px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 10px 10px 10px 4px;
+  background: var(--surface);
+}
+
+.review-chat-message-visitor {
+  align-self: flex-end;
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--rule));
+  border-radius: 10px 10px 4px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.review-chat-message .review-post-heading {
+  gap: 6px;
+  min-height: 24px;
+}
+
+.review-chat-message .review-avatar {
+  width: 22px;
+  height: 22px;
+}
+
+.review-chat-message .review-body {
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.review-chat-message .review-post-controls {
+  margin-top: 6px;
+}
+
+.review-chat-message .review-thread-actions {
+  margin-top: 10px;
+}
+
+.review-chat-composer {
+  position: sticky;
+  z-index: 2;
+  bottom: -14px;
+  margin: auto -2px -14px;
+  padding: 8px;
+  border-color: var(--rule-strong);
+  border-radius: 9px 9px 0 0;
+  background: color-mix(in srgb, var(--surface) 96%, var(--canvas));
+  box-shadow: 0 -8px 22px rgb(0 0 0 / 18%);
+}
+
+.review-chat-composer .review-composer-footer {
+  gap: 10px;
+}
+
+.review-chat-composer .review-composer-footer .review-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+}
+
+.review-thread-actions:has(.review-chat-composer) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.review-thread-actions:has(.review-chat-composer) .review-chat-composer {
+  grid-column: 1 / -1;
+}
 .review-dialog-backdrop {
   position: fixed;
   inset: 0;
