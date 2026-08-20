@@ -314,7 +314,11 @@ function PierreCode({
                         ? `Comment on line ${metadata.selection.start}`
                         : `Comment on lines ${metadata.selection.start}–${metadata.selection.end}`}
                     </span>
-                    <button onClick={onCancelInlineComment} type="button">
+                    <button
+                      aria-label="Cancel comment draft"
+                      onClick={onCancelInlineComment}
+                      type="button"
+                    >
                       Cancel
                     </button>
                   </div>
@@ -438,6 +442,7 @@ export function SourceView({
   const [copied, setCopied] = useState(false);
   const [selectedLines, setSelectedLines] = useState<SelectedLineRange | null>(null);
   const [expandedLineNumber, setExpandedLineNumber] = useState<number | undefined>();
+  const inlineDraftOpen = selectedLines !== null;
   const settingsRef = useRef<HTMLDivElement>(null);
   const lineCount = useMemo(() => Math.max(1, source.split(/\r?\n/u).length), [source]);
 
@@ -473,6 +478,15 @@ export function SourceView({
   useEffect(() => {
     if (!settings.enableLineSelection) setSelectedLines(null);
   }, [settings.enableLineSelection]);
+
+  useEffect(() => {
+    if (!inlineDraftOpen) return;
+    const discardInlineDraft = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedLines(null);
+    };
+    document.addEventListener('keydown', discardInlineDraft);
+    return () => document.removeEventListener('keydown', discardInlineDraft);
+  }, [inlineDraftOpen]);
 
   const updateSettings = <K extends keyof SourceViewSettings>(
     key: K,

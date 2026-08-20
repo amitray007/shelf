@@ -232,6 +232,58 @@ describe('viewer content states', () => {
     expect(html).not.toContain('Reopen thread');
   });
 
+  it('shows comment actions only when the projected post permissions allow them', () => {
+    const editableThread = sourceThread('thread_editable', 2);
+    const moderatorHtml = renderToStaticMarkup(
+      <DiscussionPanel
+        activeThreadId={editableThread.threadId}
+        moderator
+        onCreateThread={async () => undefined}
+        onDeletePost={async () => undefined}
+        onEditPost={async () => undefined}
+        onReply={async () => undefined}
+        onSelectThread={() => undefined}
+        onSetThreadStatus={async () => undefined}
+        threads={[editableThread]}
+      />,
+    );
+    expect(moderatorHtml).toContain('Comment actions');
+
+    const noHandlersHtml = renderToStaticMarkup(
+      <DiscussionPanel
+        activeThreadId={editableThread.threadId}
+        moderator
+        onCreateThread={async () => undefined}
+        onReply={async () => undefined}
+        onSelectThread={() => undefined}
+        onSetThreadStatus={async () => undefined}
+        threads={[editableThread]}
+      />,
+    );
+    expect(noHandlersHtml).not.toContain('Comment actions');
+
+    const readOnlyThread = {
+      ...editableThread,
+      posts: editableThread.posts.map((post) => ({
+        ...post,
+        permissions: { canEdit: false, canDelete: false, canModerate: false },
+      })),
+    };
+    const visitorHtml = renderToStaticMarkup(
+      <DiscussionPanel
+        activeThreadId={readOnlyThread.threadId}
+        onCreateThread={async () => undefined}
+        onDeletePost={async () => undefined}
+        onEditPost={async () => undefined}
+        onReply={async () => undefined}
+        onSelectThread={() => undefined}
+        onSetThreadStatus={async () => undefined}
+        threads={[readOnlyThread]}
+      />,
+    );
+    expect(visitorHtml).not.toContain('Comment actions');
+  });
+
   it('distinguishes an unresolved thread that cannot accept replies', () => {
     const thread = {
       threadId: 'thread_locked',

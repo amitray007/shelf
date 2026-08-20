@@ -2,6 +2,7 @@ import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
 import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
 import { ArrowUpIcon } from '@phosphor-icons/react/ArrowUp';
 import { DotsThreeIcon } from '@phosphor-icons/react/DotsThree';
+import { XIcon } from '@phosphor-icons/react/X';
 import type { CommentAnchor, CommentThread } from '@shelf/contracts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -197,6 +198,7 @@ export function DiscussionPanel({
   const [editingPostId, setEditingPostId] = useState<string>();
   const [editBody, setEditBody] = useState('');
   const [deleteConfirmPostId, setDeleteConfirmPostId] = useState<string>();
+  const editRef = useRef<HTMLTextAreaElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const activeThread = threads.find((thread) => thread.threadId === activeThreadId);
@@ -216,6 +218,9 @@ export function DiscussionPanel({
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus();
   }, [searchOpen]);
+  useEffect(() => {
+    if (editingPostId !== undefined) editRef.current?.focus();
+  }, [editingPostId]);
   const runAction = async (action: () => Promise<void>) => {
     setActionError(undefined);
     try {
@@ -288,8 +293,8 @@ export function DiscussionPanel({
                     <ReviewTime value={post.createdAt} />
                     {post.deletedAt === null &&
                     post.hiddenAt === null &&
-                    (!moderator || post.author.kind !== 'visitor') &&
-                    (post.permissions.canEdit || post.permissions.canDelete) ? (
+                    ((post.permissions.canEdit && onEditPost !== undefined) ||
+                      (post.permissions.canDelete && onDeletePost !== undefined)) ? (
                       <DropdownMenu>
                         <DropdownMenu.Trigger
                           render={
@@ -340,24 +345,43 @@ export function DiscussionPanel({
                       />
                     </div>
                   ) : editingPostId === post.postId ? (
-                    <div className="review-post-editor">
+                    <div className="review-message-editor">
                       <textarea
                         aria-label="Edit comment"
                         maxLength={20_000}
                         onChange={(event) => setEditBody(event.target.value)}
-                        rows={3}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') {
+                            event.preventDefault();
+                            setEditingPostId(undefined);
+                          }
+                          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                            event.preventDefault();
+                            if (!saving && editBody.trim() !== '') {
+                              void runAction(async () => {
+                                await onEditPost?.(post.postId, editBody.trim());
+                                setEditingPostId(undefined);
+                              });
+                            }
+                          }
+                        }}
+                        ref={editRef}
+                        rows={1}
                         value={editBody}
                       />
-                      <div className="review-post-controls">
+                      <div className="review-message-editor-actions">
                         <button
-                          className="review-button review-button-quiet"
+                          aria-label="Cancel editing comment"
+                          className="review-message-editor-cancel"
                           onClick={() => setEditingPostId(undefined)}
+                          title="Cancel edit (Esc)"
                           type="button"
                         >
-                          Cancel
+                          <XIcon aria-hidden="true" size={15} weight="bold" />
                         </button>
                         <button
-                          className="review-button review-button-primary"
+                          aria-label="Save edited comment"
+                          className="review-message-editor-submit"
                           disabled={saving || editBody.trim() === ''}
                           onClick={() =>
                             void runAction(async () => {
@@ -365,9 +389,10 @@ export function DiscussionPanel({
                               setEditingPostId(undefined);
                             })
                           }
+                          title="Save edit (⌘↵)"
                           type="button"
                         >
-                          Save
+                          <ArrowUpIcon aria-hidden="true" size={17} weight="bold" />
                         </button>
                       </div>
                     </div>

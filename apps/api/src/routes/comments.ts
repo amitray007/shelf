@@ -21,10 +21,10 @@ import {
   shareLifecycleStatus,
 } from '@shelf/core';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { type TSchema, Type } from 'typebox';
+import { type Static, type TSchema, Type } from 'typebox';
 
 import type { ShelfAppDependencies } from '../app.js';
-import { authenticate } from '../authenticate.js';
+import { authenticate, authenticateHumanSession } from '../authenticate.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
 import { createAuthenticatedShareLifecycle } from '../share-lifecycle.js';
 
@@ -135,6 +135,20 @@ const PublicPostMutationBodySchema = Type.Object(
   },
   { additionalProperties: false },
 );
+const ArtifactPostMutationBodySchema = Type.Union([
+  Type.Object(
+    { moderation: Type.Union([Type.Literal('hide'), Type.Literal('unhide')]) },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { action: Type.Literal('edit'), body: CommentBodySchema },
+    { additionalProperties: false, description: 'Requires a human dashboard session.' },
+  ),
+  Type.Object(
+    { action: Type.Literal('delete') },
+    { additionalProperties: false, description: 'Requires a human dashboard session.' },
+  ),
+]);
 const ArtifactCommentsParamsSchema = Type.Object(
   {
     workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
@@ -801,17 +815,17 @@ export async function registerCommentRoutes(
         operationId: 'moderateCommentPostV1',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         params: ArtifactPostParamsSchema,
-        body: Type.Object(
-          { moderation: Type.Union([Type.Literal('hide'), Type.Literal('unhide')]) },
-          { additionalProperties: false },
-        ),
+        body: ArtifactPostMutationBodySchema,
         response: { 200: Type.Ref('CommentPost'), ...errors },
       },
     },
     async (request) => {
-      const identity = await authenticate(request, dependencies.authenticator);
       const params = request.params as { workspaceId: string; artifactId: string; postId: string };
-      const body = request.body as { moderation: 'hide' | 'unhide' };
+      const body = request.body as Static<typeof ArtifactPostMutationBodySchema>;
+      const identity =
+        'action' in body
+          ? await authenticateHumanSession(request, dependencies.authenticator)
+          : await authenticate(request, dependencies.authenticator);
       await dependencies.authorizer.authorize({
         installationId: identity.installationId,
         workspaceId: params.workspaceId,
@@ -824,6 +838,24 @@ export async function registerCommentRoutes(
         params.artifactId,
         params.postId,
       );
+      const authority = { kind: 'moderator' as const, actorId: identity.actorId };
+      if ('action' in body) {
+        if (body.action === 'delete') {
+          return service.deletePost({
+            installationId: identity.installationId,
+            workspaceId: params.workspaceId,
+            postId: params.postId,
+            authority,
+          });
+        }
+        return service.editPost({
+          installationId: identity.installationId,
+          workspaceId: params.workspaceId,
+          postId: params.postId,
+          authority,
+          body: body.body,
+        });
+      }
       return service.moderatePost({
         installationId: identity.installationId,
         workspaceId: params.workspaceId,

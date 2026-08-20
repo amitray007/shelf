@@ -24,13 +24,14 @@ import { formatBytes } from '../components/format.js';
 import { markReviewThreadRead } from '../components/review/persistence.js';
 import { ordinal, revisionSourceName } from '../components/revision-label.js';
 import {
+  type ArtifactCommentPostMutation,
   createArtifactCommentReply,
   DashboardApiError,
   loadArtifactComments,
-  moderateArtifactCommentPost,
   renameArtifact,
   restoreArtifact,
   revokeShare,
+  updateArtifactCommentPost,
   updateArtifactCommentThread,
 } from './api.js';
 import { ArtifactShareDialog } from './artifact-share-dialog.js';
@@ -477,15 +478,19 @@ export function ArtifactPage() {
       setCommentSaving(false);
     }
   };
-  const moderatePost = async (postId: string, moderation: 'hide' | 'unhide') => {
+  const mutatePost = async (
+    postId: string,
+    mutation: ArtifactCommentPostMutation,
+    fallbackMessage: string,
+  ) => {
     setCommentSaving(true);
     setCommentError(undefined);
     try {
-      const updated = await moderateArtifactCommentPost(
+      const updated = await updateArtifactCommentPost(
         artifact.workspaceId,
         artifact.artifactId,
         postId,
-        moderation,
+        mutation,
       );
       setCommentThreads((current) =>
         current.map((thread) =>
@@ -500,12 +505,18 @@ export function ArtifactPage() {
         ),
       );
     } catch (cause) {
-      setCommentError(cause instanceof Error ? cause.message : 'Could not update this comment.');
+      setCommentError(cause instanceof Error ? cause.message : fallbackMessage);
       throw cause;
     } finally {
       setCommentSaving(false);
     }
   };
+  const moderatePost = (postId: string, moderation: 'hide' | 'unhide') =>
+    mutatePost(postId, { moderation }, 'Could not update this comment.');
+  const editPost = (postId: string, body: string) =>
+    mutatePost(postId, { action: 'edit', body }, 'Could not edit this comment.');
+  const deletePost = (postId: string) =>
+    mutatePost(postId, { action: 'delete' }, 'Could not delete this comment.');
   const loadOlderComments = async () => {
     if (commentNextCursor === null || loadingOlderComments) return;
     setLoadingOlderComments(true);
@@ -658,6 +669,8 @@ export function ArtifactPage() {
                 onCreateThread: async () => {
                   throw new Error('Moderators reply from an existing discussion.');
                 },
+                onDeletePost: deletePost,
+                onEditPost: editPost,
                 onModeratePost: moderatePost,
                 onModeChange: setDiscussionMode,
                 onLoadOlder: loadOlderComments,

@@ -27,7 +27,9 @@ function multipart(value: string) {
   };
 }
 
-async function fixture() {
+async function fixture(
+  authenticationMethod: 'human-session' | 'access-credential' = 'human-session',
+) {
   const root = await mkdtemp(join(tmpdir(), 'shelf-comments-api-test-'));
   roots.push(root);
   let shareIndex = 0;
@@ -36,7 +38,7 @@ async function fixture() {
     stagingRoot: root,
     authenticator: {
       async authenticate() {
-        return { installationId: 'install-main', actorId: 'actor-main' };
+        return { installationId: 'install-main', actorId: 'actor-main', authenticationMethod };
       },
     },
     authorizer: { async authorize() {} },
@@ -105,6 +107,33 @@ function expectAnonymousHeaders(response: {
 }
 
 describe('comment HTTP boundary', () => {
+  it('reserves administrator edit and delete for human sessions', async () => {
+    const app = await fixture('access-credential');
+    const artifactId = `art_${'a'.repeat(22)}`;
+    const url = `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/comments/posts/post-main`;
+
+    for (const payload of [
+      { action: 'edit', body: 'Credential edit.' },
+      { action: 'delete' },
+    ] as const) {
+      const response = await app.inject({
+        method: 'PATCH',
+        url,
+        headers: { authorization: 'Bearer test' },
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(403);
+    }
+
+    const moderation = await app.inject({
+      method: 'PATCH',
+      url,
+      headers: { authorization: 'Bearer test' },
+      payload: { moderation: 'hide' },
+    });
+    expect(moderation.statusCode, moderation.body).toBe(404);
+  });
+
   it('supports protected/public identity reads and authenticated moderation', async () => {
     const app = await fixture();
     const published = await publish(app);
@@ -410,6 +439,18 @@ describe('comment HTTP boundary', () => {
       payload: { token, visitorToken: 'w'.repeat(64), displayName: 'Other', body: 'denied' },
     });
     expect([400, 404]).toContain(protectedDeniedReply.statusCode);
+    const protectedDeniedEdit = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/public/shares/${protectedId}/comments/posts/${protectedPostId}`,
+      payload: { token, visitorToken: 'w'.repeat(64), body: 'not mine' },
+    });
+    expect(protectedDeniedEdit.statusCode).toBe(404);
+    const protectedDeniedDelete = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/public/shares/${protectedId}/comments/posts/${protectedPostId}`,
+      payload: { token, visitorToken: 'w'.repeat(64), action: 'delete' },
+    });
+    expect(protectedDeniedDelete.statusCode).toBe(404);
     const protectedDeniedReopen = await app.inject({
       method: 'PATCH',
       url: `/api/v1/public/shares/${protectedId}/comments/threads/${protectedThreadId}`,
@@ -478,6 +519,22 @@ describe('comment HTTP boundary', () => {
       payload: { moderation: 'unhide' },
     });
     expect(unhidden.statusCode, unhidden.body).toBe(200);
+    const adminEdited = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/comments/posts/${protectedPostId}`,
+      headers: { authorization: 'Bearer test' },
+      payload: { action: 'edit', body: 'Edited by an administrator.' },
+    });
+    expect(adminEdited.statusCode, adminEdited.body).toBe(200);
+    expect(adminEdited.json().body).toBe('Edited by an administrator.');
+    const adminDeleted = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/comments/posts/${protectedPostId}`,
+      headers: { authorization: 'Bearer test' },
+      payload: { action: 'delete' },
+    });
+    expect(adminDeleted.statusCode, adminDeleted.body).toBe(200);
+    expect(adminDeleted.json().deletedAt).not.toBeNull();
 
     const ignoredAnonymousRevisionOverride = await app.inject({
       method: 'POST',

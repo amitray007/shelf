@@ -336,8 +336,8 @@ describe('comment service', () => {
       canReopen: false,
     });
     expect(moderatorThreads.items[0]?.posts[0]?.permissions).toEqual({
-      canEdit: false,
-      canDelete: false,
+      canEdit: true,
+      canDelete: true,
       canModerate: true,
     });
   });
@@ -454,7 +454,7 @@ describe('comment service', () => {
     ).resolves.toMatchObject({ deletedAt: '2026-08-19T11:00:00.000Z' });
   });
 
-  it('requires the expected share, blocks moderator rewrites of visitor posts, and requires reopen before replies', async () => {
+  it('requires the expected share, allows moderator post management, and requires reopen before replies', async () => {
     const h = harness('shared');
     const created = await h.service.createThread({
       installationId: 'installation-main',
@@ -489,9 +489,9 @@ describe('comment service', () => {
         postId: created.posts[0].postId,
         shareId,
         authority: { kind: 'moderator', actorId: 'actor-moderator' },
-        body: 'moderator cannot rewrite visitor content',
+        body: 'moderator edit',
       }),
-    ).rejects.toBeDefined();
+    ).resolves.toMatchObject({ body: 'moderator edit' });
     await expect(
       h.service.deletePost({
         installationId: 'installation-main',
@@ -500,7 +500,7 @@ describe('comment service', () => {
         shareId,
         authority: { kind: 'moderator', actorId: 'actor-moderator' },
       }),
-    ).rejects.toBeDefined();
+    ).resolves.toMatchObject({ deletedAt: '2026-08-19T11:00:00.000Z' });
     await expect(
       h.service.editPost({
         installationId: 'installation-main',

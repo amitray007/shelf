@@ -40,6 +40,8 @@ export interface ManagedArtifactReview {
   readonly onModeratePost?:
     | ((postId: string, moderation: 'hide' | 'unhide') => Promise<void>)
     | undefined;
+  readonly onEditPost?: ((postId: string, body: string) => Promise<void>) | undefined;
+  readonly onDeletePost?: ((postId: string) => Promise<void>) | undefined;
 }
 
 function DownloadOnly({ revision }: { readonly revision: ArtifactRevision }) {
@@ -206,6 +208,8 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
             nextCursor={review.nextCursor}
             moderator={review.moderator}
             onCreateThread={review.onCreateThread}
+            onDeletePost={review.onDeletePost}
+            onEditPost={review.onEditPost}
             {...(review.onLoadOlder === undefined ? {} : { onLoadOlder: review.onLoadOlder })}
             onModeratePost={review.onModeratePost}
             onReply={review.onReply}

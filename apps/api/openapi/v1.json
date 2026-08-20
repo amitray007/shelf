@@ -15972,23 +15972,56 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "required": ["moderation"],
-                "properties": {
-                  "moderation": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "enum": ["hide"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["unhide"]
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": ["moderation"],
+                    "properties": {
+                      "moderation": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["hide"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["unhide"]
+                          }
+                        ]
                       }
-                    ]
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": ["action", "body"],
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["edit"]
+                      },
+                      "body": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 20000
+                      }
+                    },
+                    "additionalProperties": false,
+                    "description": "Requires a human dashboard session."
+                  },
+                  {
+                    "type": "object",
+                    "required": ["action"],
+                    "properties": {
+                      "action": {
+                        "type": "string",
+                        "enum": ["delete"]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "description": "Requires a human dashboard session."
                   }
-                },
-                "additionalProperties": false
+                ]
               }
             }
           }

@@ -428,18 +428,23 @@ export async function updateArtifactCommentThread(
   return value;
 }
 
-export async function moderateArtifactCommentPost(
+export type ArtifactCommentPostMutation =
+  | { readonly moderation: 'hide' | 'unhide' }
+  | { readonly action: 'edit'; readonly body: string }
+  | { readonly action: 'delete' };
+
+export async function updateArtifactCommentPost(
   workspaceId: string,
   artifactId: string,
   postId: string,
-  moderation: 'hide' | 'unhide',
+  mutation: ArtifactCommentPostMutation,
 ): Promise<CommentPost> {
   const value = await requestJson(
     `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/comments/posts/${encodeURIComponent(postId)}`,
-    jsonRequest('PATCH', { moderation }),
+    jsonRequest('PATCH', mutation),
   );
   if (!isCommentPost(value)) {
-    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid moderated post.');
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid updated post.');
   }
   return value;
 }

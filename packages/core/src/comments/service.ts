@@ -225,14 +225,12 @@ function outputPost(
     permissions: {
       canEdit:
         post.deletedAt === null &&
-        (authority.kind === 'visitor'
-          ? currentPolicy !== 'off' && post.visitorKey === authority.visitorKey
-          : post.visitorKey === null && post.actorId === authority.actorId),
+        (authority.kind === 'moderator' ||
+          (currentPolicy !== 'off' && post.visitorKey === authority.visitorKey)),
       canDelete:
         post.deletedAt === null &&
-        (authority.kind === 'visitor'
-          ? currentPolicy !== 'off' && post.visitorKey === authority.visitorKey
-          : post.visitorKey === null && post.actorId === authority.actorId),
+        (authority.kind === 'moderator' ||
+          (currentPolicy !== 'off' && post.visitorKey === authority.visitorKey)),
       canModerate: authority.kind === 'moderator' && post.visitorKey !== null,
     },
     createdAt: post.createdAt,
@@ -774,25 +772,25 @@ export function createCommentService(dependencies: {
       body: string;
     }): Promise<CommentPost> {
       const normalizedBody = body(request.body);
-      if (request.authority.kind === 'visitor') validateVisitorMutationAuthority(request.authority);
-      let context: Awaited<ReturnType<CommentRepository['findPostContext']>>;
-      try {
-        context = await dependencies.comments.findPostContext({
-          installationId: request.installationId,
-          workspaceId: request.workspaceId,
-          postId: request.postId,
-        });
-      } catch (error) {
-        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Comment post lookup failed.', error);
-      }
-      if (context === undefined) throw new CommentNotFoundError();
       let share: StoredShare | undefined;
       if (request.authority.kind === 'visitor') {
+        validateVisitorMutationAuthority(request.authority);
         if (request.shareId === undefined) {
           throw new InvalidCommentRequestError([
             { field: 'shareId', reason: 'is required for visitor writes' },
           ]);
         }
+        let context: Awaited<ReturnType<CommentRepository['findPostContext']>>;
+        try {
+          context = await dependencies.comments.findPostContext({
+            installationId: request.installationId,
+            workspaceId: request.workspaceId,
+            postId: request.postId,
+          });
+        } catch (error) {
+          throw boundaryFailure('SERVICE_UNAVAILABLE', 'Comment post lookup failed.', error);
+        }
+        if (context === undefined) throw new CommentNotFoundError();
         if (
           request.shareId !== context.shareId ||
           context.post.visitorKey !== request.authority.visitorKey
@@ -807,12 +805,6 @@ export function createCommentService(dependencies: {
         if (request.authority.displayName !== undefined) {
           await prepareVisitor(request.authority, request.installationId, clock().toISOString());
         }
-      } else if (context.post.visitorKey !== null) {
-        throw new InvalidCommentRequestError([
-          { field: 'postId', reason: 'moderators must use hide/unhide for visitor posts' },
-        ]);
-      } else if (context.post.actorId !== request.authority.actorId) {
-        throw new CommentNotFoundError();
       }
       let updated: StoredCommentPost | undefined;
       try {
@@ -837,25 +829,25 @@ export function createCommentService(dependencies: {
       authority: CommentAuthority;
       shareId?: string;
     }): Promise<CommentPost> {
-      if (request.authority.kind === 'visitor') validateVisitorMutationAuthority(request.authority);
-      let context: Awaited<ReturnType<CommentRepository['findPostContext']>>;
-      try {
-        context = await dependencies.comments.findPostContext({
-          installationId: request.installationId,
-          workspaceId: request.workspaceId,
-          postId: request.postId,
-        });
-      } catch (error) {
-        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Comment post lookup failed.', error);
-      }
-      if (context === undefined) throw new CommentNotFoundError();
       let share: StoredShare | undefined;
       if (request.authority.kind === 'visitor') {
+        validateVisitorMutationAuthority(request.authority);
         if (request.shareId === undefined) {
           throw new InvalidCommentRequestError([
             { field: 'shareId', reason: 'is required for visitor writes' },
           ]);
         }
+        let context: Awaited<ReturnType<CommentRepository['findPostContext']>>;
+        try {
+          context = await dependencies.comments.findPostContext({
+            installationId: request.installationId,
+            workspaceId: request.workspaceId,
+            postId: request.postId,
+          });
+        } catch (error) {
+          throw boundaryFailure('SERVICE_UNAVAILABLE', 'Comment post lookup failed.', error);
+        }
+        if (context === undefined) throw new CommentNotFoundError();
         if (
           request.shareId !== context.shareId ||
           context.post.visitorKey !== request.authority.visitorKey
@@ -870,12 +862,6 @@ export function createCommentService(dependencies: {
         if (request.authority.displayName !== undefined) {
           await prepareVisitor(request.authority, request.installationId, clock().toISOString());
         }
-      } else if (context.post.visitorKey !== null) {
-        throw new InvalidCommentRequestError([
-          { field: 'postId', reason: 'moderators must use hide/unhide for visitor posts' },
-        ]);
-      } else if (context.post.actorId !== request.authority.actorId) {
-        throw new CommentNotFoundError();
       }
       let deleted: StoredCommentPost | undefined;
       try {
