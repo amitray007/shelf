@@ -321,7 +321,9 @@ function PierreCode({
       ...(settings === undefined
         ? {}
         : {
-            enableGutterUtility: settings.enableGutterUtility,
+            enableGutterUtility:
+              settings.enableGutterUtility &&
+              (onAddComment !== undefined || onCopyLine !== undefined),
             enableLineSelection: sourceLineSelectionEnabled(settings),
             enableTokenInteractionsOnWhitespace: settings.tokenInteractions,
             lineHoverHighlight: settings.lineHoverHighlight,
@@ -672,18 +674,20 @@ export function SourceView({
           >
             Lines
           </Button>
-          <Button
-            aria-label={commentsVisible ? 'Hide comments' : 'Show comments'}
-            aria-pressed={commentsVisible}
-            icon={ChatCircleDotsIcon}
-            onClick={() => setSettings(toggleSourceComments)}
-            size="sm"
-            title={commentsVisible ? 'Hide comments' : 'Show comments'}
-            type="button"
-            variant={commentsVisible ? 'secondary' : 'ghost'}
-          >
-            Comments
-          </Button>
+          {review === undefined ? null : (
+            <Button
+              aria-label={commentsVisible ? 'Hide comments' : 'Show comments'}
+              aria-pressed={commentsVisible}
+              icon={ChatCircleDotsIcon}
+              onClick={() => setSettings(toggleSourceComments)}
+              size="sm"
+              title={commentsVisible ? 'Hide comments' : 'Show comments'}
+              type="button"
+              variant={commentsVisible ? 'secondary' : 'ghost'}
+            >
+              Comments
+            </Button>
+          )}
           <Button
             aria-label={copied ? 'Copied source' : 'Copy source'}
             icon={copied ? CheckIcon : CopyIcon}
@@ -810,12 +814,13 @@ export function SourceView({
                   <label className="source-view-setting-toggle">
                     <input
                       checked={settings.enableGutterUtility}
+                      disabled={review === undefined}
                       onChange={(event) =>
                         updateSettings('enableGutterUtility', event.target.checked)
                       }
                       type="checkbox"
                     />
-                    <span>Gutter line links</span>
+                    <span>Gutter line links {review === undefined ? '(unavailable)' : ''}</span>
                   </label>
                   <label className="source-view-setting-toggle">
                     <input
@@ -852,9 +857,9 @@ export function SourceView({
           fileName={fileName}
           lineAnnotations={lineAnnotations}
           lineNumbers={settings.lineNumbers}
-          {...(canCreateThread
-            ? {}
-            : { onCopyLine: (range: SelectedLineRange) => void copyLineLink(range) })}
+          {...(review !== undefined && !canCreateThread
+            ? { onCopyLine: (range: SelectedLineRange) => void copyLineLink(range) }
+            : {})}
           onAddComment={canCreateThread && commentsVisible ? setSelectedLines : undefined}
           onAnnotationToggle={toggleSourceAnnotation}
           onCancelInlineComment={() => setSelectedLines(null)}

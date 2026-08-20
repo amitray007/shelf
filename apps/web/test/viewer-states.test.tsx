@@ -834,7 +834,7 @@ describe('viewer content states', () => {
     expect(html).toContain('file-loading-skeleton');
   });
 
-  it('exposes practical source controls', () => {
+  it('exposes practical source controls without comment affordances outside review', () => {
     const html = renderToStaticMarkup(
       <SourceView fileName="example.ts" source="const shelf = true;" />,
     );
@@ -843,10 +843,28 @@ describe('viewer content states', () => {
     expect(html).toContain('aria-label="Disable word wrap"');
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('Lines');
-    expect(html).toContain('Comments');
-    expect(html).toContain('aria-label="Hide comments"');
+    expect(html).not.toContain('Comments');
+    expect(html).not.toContain('aria-label="Hide comments"');
     expect(html).toContain('Copy');
     expect(html).toContain('Source view settings');
+  });
+
+  it('offers the comments toggle when a review context is present', () => {
+    const html = renderToStaticMarkup(
+      <SourceView
+        fileName="example.ts"
+        review={{
+          canCreateThread: false,
+          onCreateThread: () => Promise.resolve(),
+          onSelectThread: () => undefined,
+          revisionId: 'rev_example',
+          threads: [],
+        }}
+        source="const shelf = true;"
+      />,
+    );
+    expect(html).toContain('Comments');
+    expect(html).toContain('aria-label="Hide comments"');
   });
 
   it('hides descendants when a folder is collapsed', () => {
