@@ -6,8 +6,8 @@ import { ArtifactContent } from '../src/components/artifact-content.js';
 import {
   FileLoadingState,
   FileView,
+  groupSourceThreadsByLine,
   SourceView,
-  sourceGutterAction,
 } from '../src/components/file-view.js';
 import { FolderBrowser, isFolderEntryVisible } from '../src/components/folder-browser.js';
 import {
@@ -80,6 +80,42 @@ function renderContent(props: Partial<React.ComponentProps<typeof ArtifactConten
   );
 }
 
+function sourceThread(threadId: string, lineNumber: number, path = 'idea.md'): CommentThread {
+  return {
+    threadId,
+    workspaceId: 'workspace_1',
+    artifactId: FILE_RESOLUTION.artifact.artifactId,
+    shareId: FILE_RESOLUTION.shareId,
+    revisionId: FILE_RESOLUTION.revision.revisionId,
+    visibility: 'shared',
+    anchor: {
+      revisionId: FILE_RESOLUTION.revision.revisionId,
+      kind: 'range',
+      path,
+      startLine: lineNumber,
+      endLine: lineNumber,
+    },
+    anchorStatus: 'exact',
+    resolvedAt: null,
+    createdAt: '2026-08-18T12:00:00.000Z',
+    updatedAt: '2026-08-18T12:00:00.000Z',
+    permissions: { canReply: true, canResolve: true, canReopen: false },
+    posts: [
+      {
+        postId: `post_${threadId}`,
+        threadId,
+        body: `Comment in ${threadId}`,
+        author: { kind: 'visitor', participantId: `person_${threadId}`, displayName: 'Reviewer' },
+        permissions: { canEdit: true, canDelete: true, canModerate: false },
+        createdAt: '2026-08-18T12:00:00.000Z',
+        editedAt: null,
+        deletedAt: null,
+        hiddenAt: null,
+      },
+    ],
+  };
+}
+
 describe('viewer content states', () => {
   it('keeps authorized history visible when new writes are off', () => {
     expect(reviewSurfaceVisible('off', 0)).toBe(false);
@@ -87,9 +123,14 @@ describe('viewer content states', () => {
     expect(reviewSurfaceVisible('private', 0)).toBe(true);
   });
 
-  it('uses one Pierre gutter utility as a comment action in review mode', () => {
-    expect(sourceGutterAction(true)).toBe('comment');
-    expect(sourceGutterAction(false)).toBe('link');
+  it('groups multiple source discussions into one annotation per line', () => {
+    const groups = groupSourceThreadsByLine(
+      [sourceThread('one', 4), sourceThread('two', 4), sourceThread('elsewhere', 4, 'other.md')],
+      'idea.md',
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.lineNumber).toBe(4);
+    expect(groups[0]?.threads.map((thread) => thread.threadId)).toEqual(['one', 'two']);
   });
 
   it('uses compact relative review times and illustrated DiceBear avatars', () => {

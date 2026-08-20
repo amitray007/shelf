@@ -5,11 +5,9 @@ import { Tabs } from '@cloudflare/kumo/components/tabs';
 import { CheckIcon } from '@phosphor-icons/react/Check';
 import { CopyIcon } from '@phosphor-icons/react/Copy';
 import { GearSixIcon } from '@phosphor-icons/react/GearSix';
-import { LinkSimpleIcon } from '@phosphor-icons/react/LinkSimple';
 import { ListNumbersIcon } from '@phosphor-icons/react/ListNumbers';
-import { PlusIcon } from '@phosphor-icons/react/Plus';
 import { TextAlignLeftIcon } from '@phosphor-icons/react/TextAlignLeft';
-import type { GetHoveredLineResult, LineAnnotation, SelectedLineRange } from '@pierre/diffs';
+import type { LineAnnotation, SelectedLineRange } from '@pierre/diffs';
 import type { FileContents, FileOptions, FileProps } from '@pierre/diffs/react';
 import type { CommentAnchor, CommentThread } from '@shelf/contracts';
 import {
@@ -23,18 +21,29 @@ import {
   useRef,
   useState,
 } from 'react';
-
+import { ReviewAvatar, ReviewBody, ReviewTime, reviewAvatarUrl } from './review/comment-card.js';
 import { ReviewComposer } from './review/discussion-panel.js';
 
-type SourceLineAnnotationMetadata = {
-  readonly author?: string;
-  readonly body?: string;
-  readonly expanded?: boolean;
-  readonly label: string;
-  readonly participantId?: string;
-  readonly threadId?: string;
-};
+type SourceLineAnnotationMetadata =
+  | { readonly kind?: 'label'; readonly label: string }
+  | {
+      readonly expanded: boolean;
+      readonly kind: 'threads';
+      readonly label: string;
+      readonly lineNumber: number;
+      readonly threads: readonly CommentThread[];
+    }
+  | {
+      readonly kind: 'composer';
+      readonly label: string;
+      readonly selection: SelectedLineRange;
+    };
 export type SourceLineAnnotation = LineAnnotation<SourceLineAnnotationMetadata>;
+
+export interface SourceThreadGroup {
+  readonly lineNumber: number;
+  readonly threads: readonly CommentThread[];
+}
 
 export interface FileReviewProps {
   readonly canCreateThread: boolean;
@@ -45,8 +54,26 @@ export interface FileReviewProps {
   readonly onSelectThread: (threadId: string) => void;
 }
 
-export function sourceGutterAction(reviewEnabled: boolean): 'comment' | 'link' {
-  return reviewEnabled ? 'comment' : 'link';
+export function groupSourceThreadsByLine(
+  threads: readonly CommentThread[],
+  fileName: string,
+): readonly SourceThreadGroup[] {
+  const grouped = new Map<number, CommentThread[]>();
+  for (const thread of threads) {
+    const lineNumber = thread.anchor.startLine;
+    if (
+      lineNumber === undefined ||
+      (thread.anchor.path !== undefined && thread.anchor.path !== fileName)
+    ) {
+      continue;
+    }
+    const lineThreads = grouped.get(lineNumber) ?? [];
+    lineThreads.push(thread);
+    grouped.set(lineNumber, lineThreads);
+  }
+  return [...grouped.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([lineNumber, lineThreads]) => ({ lineNumber, threads: lineThreads }));
 }
 
 const PierreFile = lazy(async () => {
@@ -70,6 +97,18 @@ function pierreSourceCSS(fontSize: number): string {
   --diffs-font-size: ${fontSize}px;
   --diffs-line-height: 1.65;
   --diffs-tab-size: 2;
+}
+
+[data-utility-button] {
+  border: 1px solid color-mix(in srgb, var(--text) 82%, var(--rule-strong));
+  border-radius: 4px;
+  background: var(--text);
+  color: var(--canvas);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 22%);
+}
+
+[data-utility-button]:hover {
+  background: var(--text-subtle);
 }
 `;
 }
@@ -189,9 +228,10 @@ function PierreCode({
   lineNumbers,
   lineAnnotations,
   onCopyLine,
-  onAnnotationClick,
   onAnnotationToggle,
   onAddComment,
+  onCancelInlineComment,
+  onCreateInlineComment,
   onLineSelectionChange,
   selectedLines,
   settings,
@@ -202,9 +242,12 @@ function PierreCode({
   readonly lineNumbers: boolean;
   readonly lineAnnotations?: readonly SourceLineAnnotation[];
   readonly onCopyLine?: (range: SelectedLineRange) => void;
-  readonly onAnnotationClick?: ((threadId: string) => void) | undefined;
-  readonly onAnnotationToggle?: ((threadId: string) => void) | undefined;
+  readonly onAnnotationToggle?: ((lineNumber: number) => void) | undefined;
   readonly onAddComment?: ((range: SelectedLineRange) => void) | undefined;
+  readonly onCancelInlineComment?: (() => void) | undefined;
+  readonly onCreateInlineComment?:
+    | ((range: SelectedLineRange, body: string) => Promise<void>)
+    | undefined;
   readonly onLineSelectionChange?: (range: SelectedLineRange | null) => void;
   readonly selectedLines?: SelectedLineRange | null;
   readonly settings?: SourceViewSettings;
@@ -233,89 +276,113 @@ function PierreCode({
             stickyHeader: settings.stickyHeader,
             tokenizeMaxLength: settings.maxTokenizeLength,
             tokenizeMaxLineLength: settings.maxTokenizeLineLength,
+            ...(onAddComment !== undefined
+              ? { onGutterUtilityClick: onAddComment }
+              : onCopyLine !== undefined
+                ? { onGutterUtilityClick: onCopyLine }
+                : {}),
             ...(onLineSelectionChange === undefined ? {} : { onLineSelectionChange }),
           }),
     }),
-    [lineNumbers, onLineSelectionChange, settings, wrap],
+    [lineNumbers, onAddComment, onCopyLine, onLineSelectionChange, settings, wrap],
   );
 
   const annotationProps =
-    settings?.annotations === true && lineAnnotations !== undefined
+    lineAnnotations !== undefined && lineAnnotations.length > 0
       ? {
           lineAnnotations: [...lineAnnotations],
-          renderAnnotation: (annotation: SourceLineAnnotation) =>
-            annotation.metadata?.threadId !== undefined && onAnnotationClick !== undefined ? (
-              <div className="pierre-line-annotation-wrap">
-                <button
-                  aria-label={`Open discussion${annotation.metadata.author === undefined ? '' : ` by ${annotation.metadata.author}`}`}
-                  className={`pierre-line-annotation pierre-line-annotation-button${annotation.metadata.expanded ? ' pierre-line-annotation-expanded' : ' pierre-line-annotation-pin'}`}
-                  onClick={() => {
-                    onAnnotationToggle?.(annotation.metadata?.threadId as string);
-                    onAnnotationClick(annotation.metadata?.threadId as string);
-                  }}
-                  type="button"
-                >
-                  {annotation.metadata.expanded ? (
-                    annotation.metadata.label
-                  ) : annotation.metadata.participantId !== undefined ? (
-                    <img
-                      alt={`${annotation.metadata.author ?? 'Reviewer'} avatar`}
-                      className="pierre-line-annotation-avatar"
-                      referrerPolicy="no-referrer"
-                      src={`https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(annotation.metadata.participantId)}`}
-                    />
-                  ) : (
-                    '•'
-                  )}
-                </button>
-                {annotation.metadata.expanded ? (
-                  <span className="pierre-line-root-card">
-                    <strong>{annotation.metadata.author ?? 'Reviewer'}</strong>
-                    <span>{annotation.metadata.body ?? ''}</span>
-                  </span>
-                ) : null}
-              </div>
-            ) : (
+          renderAnnotation: (annotation: SourceLineAnnotation) => {
+            const metadata = annotation.metadata;
+            if (metadata?.kind === 'composer' && onCreateInlineComment !== undefined) {
+              return (
+                <div className="pierre-inline-composer">
+                  <div className="pierre-inline-composer-heading">
+                    <span>
+                      {metadata.selection.start === metadata.selection.end
+                        ? `Comment on line ${metadata.selection.start}`
+                        : `Comment on lines ${metadata.selection.start}–${metadata.selection.end}`}
+                    </span>
+                    <button onClick={onCancelInlineComment} type="button">
+                      Cancel
+                    </button>
+                  </div>
+                  <ReviewComposer
+                    docked
+                    onSubmit={(body) => onCreateInlineComment(metadata.selection, body)}
+                    placeholder="Leave a comment…"
+                  />
+                </div>
+              );
+            }
+            if (metadata?.kind === 'threads') {
+              const posts = metadata.threads.flatMap((thread) => thread.posts);
+              const participants = [
+                ...new Map(posts.map((post) => [post.author.participantId, post])).values(),
+              ];
+              return (
+                <div className="pierre-inline-thread">
+                  <button
+                    aria-expanded={metadata.expanded}
+                    aria-label={`${metadata.expanded ? 'Hide' : 'Show'} ${metadata.label} on line ${metadata.lineNumber}`}
+                    className="pierre-inline-thread-trigger"
+                    onClick={() => onAnnotationToggle?.(metadata.lineNumber)}
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="pierre-inline-avatar-stack">
+                      {participants.slice(0, 3).map((post) => (
+                        <img
+                          alt=""
+                          key={post.author.participantId}
+                          referrerPolicy="no-referrer"
+                          src={reviewAvatarUrl(post.author.participantId)}
+                        />
+                      ))}
+                    </span>
+                    <span>{metadata.label}</span>
+                  </button>
+                  {metadata.expanded ? (
+                    <div className="pierre-inline-thread-card">
+                      <div className="pierre-inline-thread-heading">
+                        <strong>Line {metadata.lineNumber}</strong>
+                        <span>{metadata.label}</span>
+                      </div>
+                      <div className="pierre-inline-messages">
+                        {posts.map((post) => (
+                          <article className="pierre-inline-message" key={post.postId}>
+                            <ReviewAvatar post={post} size={24} />
+                            <div className="pierre-inline-message-content">
+                              <div className="pierre-inline-message-heading">
+                                <strong>
+                                  {post.author.kind === 'visitor'
+                                    ? post.author.displayName
+                                    : 'Shelf team'}
+                                </strong>
+                                <ReviewTime value={post.createdAt} />
+                              </div>
+                              <ReviewBody
+                                body={
+                                  post.deletedAt !== null
+                                    ? 'Comment deleted'
+                                    : post.hiddenAt !== null
+                                      ? 'Comment hidden'
+                                      : post.body
+                                }
+                              />
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }
+            return (
               <span className="pierre-line-annotation">
-                {annotation.metadata?.label ?? `Line ${annotation.lineNumber}`}
+                {metadata?.label ?? `Line ${annotation.lineNumber}`}
               </span>
-            ),
-        }
-      : {};
-  const gutterAction = sourceGutterAction(onAddComment !== undefined);
-  const gutterProps =
-    settings?.enableGutterUtility === true &&
-    (onAddComment !== undefined || onCopyLine !== undefined)
-      ? {
-          renderGutterUtility: (getHoveredLine: () => GetHoveredLineResult<'file'> | undefined) => (
-            <button
-              aria-label={gutterAction === 'comment' ? 'Add comment on line' : 'Copy line link'}
-              className="pierre-gutter-utility-button"
-              onClick={() => {
-                const line = getHoveredLine()?.lineNumber;
-                if (line === undefined) return;
-                const range = { end: line, start: line };
-                if (onAddComment !== undefined) onAddComment(range);
-                else onCopyLine?.(range);
-              }}
-              style={{
-                background:
-                  gutterAction === 'comment' ? 'var(--accent)' : 'var(--diffs-modified-base)',
-              }}
-              title={gutterAction === 'comment' ? 'Add comment on line' : 'Copy line link'}
-              type="button"
-            >
-              {gutterAction === 'comment' ? (
-                <PlusIcon aria-hidden="true" className="pierre-gutter-utility-icon" size={13} />
-              ) : (
-                <LinkSimpleIcon
-                  aria-hidden="true"
-                  className="pierre-gutter-utility-icon"
-                  size={13}
-                />
-              )}
-            </button>
-          ),
+            );
+          },
         }
       : {};
   const selectionProps =
@@ -325,13 +392,7 @@ function PierreCode({
 
   return (
     <Suspense fallback={<FileLoadingState />}>
-      <PierreFile
-        file={file}
-        options={options}
-        {...annotationProps}
-        {...gutterProps}
-        {...selectionProps}
-      />
+      <PierreFile file={file} options={options} {...annotationProps} {...selectionProps} />
     </Suspense>
   );
 }
@@ -367,7 +428,7 @@ export function SourceView({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [selectedLines, setSelectedLines] = useState<SelectedLineRange | null>(null);
-  const [expandedThreadId, setExpandedThreadId] = useState<string | undefined>();
+  const [expandedLineNumber, setExpandedLineNumber] = useState<number | undefined>();
   const settingsRef = useRef<HTMLDivElement>(null);
   const lineCount = useMemo(() => Math.max(1, source.split(/\r?\n/u).length), [source]);
 
@@ -433,36 +494,49 @@ export function SourceView({
     }
   }, []);
 
+  const sourceThreadGroups = useMemo(
+    () => groupSourceThreadsByLine(review?.threads ?? [], fileName),
+    [fileName, review?.threads],
+  );
+  const annotationCount = annotations.length + sourceThreadGroups.length;
   const lineAnnotations = useMemo<readonly SourceLineAnnotation[]>(() => {
-    if (review === undefined) return annotations;
-    return [
-      ...annotations,
-      ...review.threads
-        .filter(
-          (thread) =>
-            thread.anchor.startLine !== undefined &&
-            (thread.anchor.path === undefined || thread.anchor.path === fileName),
-        )
-        .map((thread) => ({
-          lineNumber: thread.anchor.startLine as number,
-          metadata: {
-            author: (() => {
-              const first = thread.posts[0];
-              return first?.author.kind === 'visitor' ? first.author.displayName : 'Shelf team';
-            })(),
-            ...(thread.posts[0]?.body === undefined ? {} : { body: thread.posts[0].body }),
-            expanded: expandedThreadId === thread.threadId,
-            label: `${thread.posts.length} ${thread.posts.length === 1 ? 'comment' : 'comments'}`,
-            ...(thread.posts[0] === undefined
-              ? {}
-              : { participantId: thread.posts[0].author.participantId }),
-            threadId: thread.threadId,
-          },
-        })),
-    ];
-  }, [annotations, expandedThreadId, fileName, review]);
-
-  const annotationCount = lineAnnotations.length;
+    const visibleAnnotations: SourceLineAnnotation[] = settings.annotations
+      ? [
+          ...annotations,
+          ...sourceThreadGroups.map(({ lineNumber, threads }) => {
+            const commentCount = threads.reduce((total, thread) => total + thread.posts.length, 0);
+            return {
+              lineNumber,
+              metadata: {
+                expanded: expandedLineNumber === lineNumber,
+                kind: 'threads' as const,
+                label: `${commentCount} ${commentCount === 1 ? 'comment' : 'comments'}`,
+                lineNumber,
+                threads,
+              },
+            };
+          }),
+        ]
+      : [];
+    if (review?.canCreateThread === true && selectedLines !== null) {
+      visibleAnnotations.push({
+        lineNumber: selectedLines.end,
+        metadata: {
+          kind: 'composer',
+          label: 'New comment',
+          selection: selectedLines,
+        },
+      });
+    }
+    return visibleAnnotations;
+  }, [
+    annotations,
+    expandedLineNumber,
+    review?.canCreateThread,
+    selectedLines,
+    settings.annotations,
+    sourceThreadGroups,
+  ]);
 
   const handleKeyboardNavigation = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (!settings.keyboardNavigation || !settings.enableLineSelection) return;
@@ -681,8 +755,27 @@ export function SourceView({
             ? {}
             : { onCopyLine: (range: SelectedLineRange) => void copyLineLink(range) })}
           onAddComment={review?.canCreateThread === true ? setSelectedLines : undefined}
-          onAnnotationClick={review?.onSelectThread}
-          onAnnotationToggle={setExpandedThreadId}
+          onAnnotationToggle={(lineNumber) =>
+            setExpandedLineNumber((current) => (current === lineNumber ? undefined : lineNumber))
+          }
+          onCancelInlineComment={() => setSelectedLines(null)}
+          onCreateInlineComment={
+            review?.canCreateThread === true
+              ? async (range, body) => {
+                  await review.onCreateThread(
+                    {
+                      revisionId: review.revisionId,
+                      ...(review.path === undefined ? {} : { path: review.path }),
+                      kind: 'range',
+                      startLine: range.start,
+                      endLine: range.end,
+                    },
+                    body,
+                  );
+                  setSelectedLines(null);
+                }
+              : undefined
+          }
           onLineSelectionChange={setSelectedLines}
           selectedLines={selectedLines}
           settings={settings}
@@ -690,29 +783,6 @@ export function SourceView({
           wrap={settings.wrap}
         />
       </section>
-      {review?.canCreateThread === true && selectedLines !== null ? (
-        <div className="source-review-composer">
-          <div className="source-review-selection">
-            Lines {selectedLines.start}–{selectedLines.end}
-          </div>
-          <ReviewComposer
-            onSubmit={async (body) => {
-              await review.onCreateThread(
-                {
-                  revisionId: review.revisionId,
-                  ...(review.path === undefined ? {} : { path: review.path }),
-                  kind: 'range',
-                  startLine: selectedLines.start,
-                  endLine: selectedLines.end,
-                },
-                body,
-              );
-              setSelectedLines(null);
-            }}
-            placeholder="Comment on this selection…"
-          />
-        </div>
-      ) : null}
     </section>
   );
 }
