@@ -68,6 +68,7 @@ export function groupSourceThreadsByLine(
 ): readonly SourceThreadGroup[] {
   const grouped = new Map<number, CommentThread[]>();
   for (const thread of threads) {
+    if (thread.posts.length === 0) continue;
     const lineNumber = thread.anchor.startLine;
     if (
       lineNumber === undefined ||

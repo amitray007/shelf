@@ -310,6 +310,16 @@ describe('viewer content states', () => {
     expect(groups[0]?.threads.map((thread) => thread.threadId)).toEqual(['one', 'two']);
   });
 
+  it('omits source annotations when a thread has no visible posts', () => {
+    const hiddenThread = { ...sourceThread('hidden', 4), posts: [] };
+    expect(groupSourceThreadsByLine([hiddenThread], 'idea.md')).toEqual([]);
+    const mixedGroups = groupSourceThreadsByLine(
+      [hiddenThread, sourceThread('visible', 4)],
+      'idea.md',
+    );
+    expect(mixedGroups[0]?.threads.map((thread) => thread.threadId)).toEqual(['visible']);
+  });
+
   it('renders anchored line navigation separately from the discussion message', () => {
     const html = renderToStaticMarkup(
       <DiscussionPanel
