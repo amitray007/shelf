@@ -64,12 +64,14 @@ export interface DiscussionPanelProps {
 }
 
 export function ReviewComposer({
+  autoFocus = false,
   disabled = false,
   docked = false,
   moderator = false,
   onSubmit,
   placeholder = 'Add a note…',
 }: {
+  readonly autoFocus?: boolean;
   readonly disabled?: boolean;
   readonly docked?: boolean;
   readonly moderator?: boolean;
@@ -80,10 +82,14 @@ export function ReviewComposer({
   const [nameDialog, setNameDialog] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const submitAfterNameRef = useRef(false);
   const identity = readReviewVisitorIdentity();
   const displayName = identity.displayName;
   const avatarSeed = moderator ? 'shelf-team' : displayName || identity.visitorToken || 'reviewer';
+  useEffect(() => {
+    if (autoFocus) textareaRef.current?.focus();
+  }, [autoFocus]);
   const submit = async () => {
     if (body.trim().length === 0 || pending) return;
     if (!moderator && readReviewVisitorIdentity().displayName.trim().length === 0) {
@@ -142,6 +148,7 @@ export function ReviewComposer({
               }
             }}
             placeholder={placeholder}
+            ref={textareaRef}
             rows={docked ? 1 : 3}
             value={body}
           />
@@ -549,6 +556,7 @@ export function DiscussionPanel({
               <div className="review-thread-actions review-chat-footer">
                 {activeThread.permissions.canReply ? (
                   <ReviewComposer
+                    autoFocus
                     disabled={saving}
                     docked
                     moderator={moderator}
@@ -600,6 +608,7 @@ export function DiscussionPanel({
                   </p>
                 ) : null}
                 <ReviewComposer
+                  autoFocus
                   disabled={saving}
                   docked
                   moderator={moderator}

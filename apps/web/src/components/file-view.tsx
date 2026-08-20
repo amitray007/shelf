@@ -394,6 +394,7 @@ function PierreCode({
                     </button>
                   </div>
                   <ReviewComposer
+                    autoFocus
                     docked
                     onSubmit={(body) => onCreateInlineComment(metadata.selection, body)}
                     placeholder="Leave a comment…"
