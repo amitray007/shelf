@@ -269,7 +269,6 @@ function PierreCode({
   fileName,
   lineNumbers,
   lineAnnotations,
-  onCopyLine,
   onAnnotationToggle,
   onAddComment,
   onCancelInlineComment,
@@ -288,7 +287,6 @@ function PierreCode({
   readonly fileName: string;
   readonly lineNumbers: boolean;
   readonly lineAnnotations?: readonly SourceLineAnnotation[];
-  readonly onCopyLine?: (range: SelectedLineRange) => void;
   readonly onAnnotationToggle?: ((lineNumber: number) => void) | undefined;
   readonly onAddComment?: ((range: SelectedLineRange) => void) | undefined;
   readonly onCancelInlineComment?: (() => void) | undefined;
@@ -321,20 +319,14 @@ function PierreCode({
       ...(settings === undefined
         ? {}
         : {
-            enableGutterUtility:
-              settings.enableGutterUtility &&
-              (onAddComment !== undefined || onCopyLine !== undefined),
+            enableGutterUtility: settings.enableGutterUtility && onAddComment !== undefined,
             enableLineSelection: sourceLineSelectionEnabled(settings),
             enableTokenInteractionsOnWhitespace: settings.tokenInteractions,
             lineHoverHighlight: settings.lineHoverHighlight,
             stickyHeader: settings.stickyHeader,
             tokenizeMaxLength: settings.maxTokenizeLength,
             tokenizeMaxLineLength: settings.maxTokenizeLineLength,
-            ...(onAddComment !== undefined
-              ? { onGutterUtilityClick: onAddComment }
-              : onCopyLine !== undefined
-                ? { onGutterUtilityClick: onCopyLine }
-                : {}),
+            ...(onAddComment !== undefined ? { onGutterUtilityClick: onAddComment } : {}),
             ...(onLineSelectionChange === undefined ? {} : { onLineSelectionChange }),
             ...(focusLine === undefined
               ? {}
@@ -362,7 +354,6 @@ function PierreCode({
       focusRequestId,
       lineNumbers,
       onAddComment,
-      onCopyLine,
       onLineSelectionChange,
       settings,
       wrap,
@@ -552,19 +543,6 @@ export function SourceView({
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
   };
-
-  const copyLineLink = useCallback(async (range: SelectedLineRange) => {
-    if (!navigator.clipboard || typeof window === 'undefined') return;
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set('line', `L${range.start}`);
-      await navigator.clipboard.writeText(url.toString());
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Clipboard access is optional, especially in embedded viewers.
-    }
-  }, []);
 
   const sourceThreadGroups = useMemo(
     () => groupSourceThreadsByLine(review?.threads ?? [], fileName),
@@ -814,13 +792,13 @@ export function SourceView({
                   <label className="source-view-setting-toggle">
                     <input
                       checked={settings.enableGutterUtility}
-                      disabled={review === undefined}
+                      disabled={!canCreateThread}
                       onChange={(event) =>
                         updateSettings('enableGutterUtility', event.target.checked)
                       }
                       type="checkbox"
                     />
-                    <span>Gutter line links {review === undefined ? '(unavailable)' : ''}</span>
+                    <span>Gutter comment button {canCreateThread ? '' : '(unavailable)'}</span>
                   </label>
                   <label className="source-view-setting-toggle">
                     <input
@@ -857,9 +835,6 @@ export function SourceView({
           fileName={fileName}
           lineAnnotations={lineAnnotations}
           lineNumbers={settings.lineNumbers}
-          {...(review !== undefined && !canCreateThread
-            ? { onCopyLine: (range: SelectedLineRange) => void copyLineLink(range) }
-            : {})}
           onAddComment={canCreateThread && commentsVisible ? setSelectedLines : undefined}
           onAnnotationToggle={toggleSourceAnnotation}
           onCancelInlineComment={() => setSelectedLines(null)}
