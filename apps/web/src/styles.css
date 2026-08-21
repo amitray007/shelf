@@ -2437,3 +2437,16 @@ a {
   line-height: 20px;
   text-transform: none;
 }
+
+/* Chrome paints autofilled inputs with an opaque UA background that clashes
+   with the dark inputs (a lighter inset box inside the ring). Repaint the
+   field surface through the ring's shadow composition and delay the UA
+   background transition so it never becomes visible. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  --tw-inset-shadow: inset 0 0 0 1000px var(--color-kumo-control, var(--surface));
+  caret-color: var(--color-kumo-default, var(--text));
+  transition: background-color 9999999s ease-out 9999999s;
+  -webkit-text-fill-color: var(--color-kumo-default, var(--text));
+}
