@@ -542,7 +542,12 @@ export function ArtifactsPage() {
                               </span>
                             );
                           }
-                          const participants = summary.participants.slice(0, 3);
+                          // With exactly four participants the fourth avatar costs the same
+                          // width as a "+1" chip, so show the person instead.
+                          const participants = summary.participants.slice(
+                            0,
+                            summary.participantCount === 4 ? 4 : 3,
+                          );
                           const overflowCount = Math.max(
                             0,
                             summary.participantCount - participants.length,
