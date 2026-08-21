@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.2](https://github.com/amitray007/shelf/compare/v0.1.1...v0.1.2) (2026-08-21)
+
+
+### Features
+
+* **cli:** fall back to the "default" profile for bare commands ([fbfb749](https://github.com/amitray007/shelf/commit/fbfb749d8fc20a893fe7e622a8219bbaa8e96f95))
+* **cli:** ship the native keyring in the distribution tarball ([026fff9](https://github.com/amitray007/shelf/commit/026fff9beb40641796876d8d4d63fd185dbe2db7))
+
+
+### Performance
+
+* **cli:** per-platform distribution tarballs ([b79683e](https://github.com/amitray007/shelf/commit/b79683e5ae403ad7d8187659e29944c45f3173ff))
+
 ## [0.1.1](https://github.com/amitray007/shelf/compare/v0.1.0...v0.1.1) (2026-08-21)
 
 
