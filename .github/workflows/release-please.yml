@@ -1,0 +1,24 @@
+name: Release Please
+
+# Auto-versioning: release-please reads the conventional-commit history on
+# main, maintains a release PR that bumps the root version and CHANGELOG, and
+# on merge creates the v* tag and GitHub release. Publishing artifacts happens
+# in release.yml, triggered by that release. Merging the release PR is the
+# explicit human authorization for a release.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@a02a34c4d625f9be7cb89156071d8567266a2445 # v4.2.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

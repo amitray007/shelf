@@ -19,7 +19,14 @@ Shelf puts the CLI first, and the CLI is safe for agents to operate. The web das
 
 ## Quick start
 
-Configure one profile, then publish:
+Install the CLI with Homebrew:
+
+```sh
+brew tap amitray007/tap
+brew install amitray007/tap/shelf
+```
+
+Then configure one profile and publish:
 
 ```sh
 export SHELF_PERSONAL_TOKEN='shf_v1...'

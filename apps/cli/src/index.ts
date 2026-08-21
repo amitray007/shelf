@@ -81,6 +81,7 @@ import {
   type SetProfileOptions,
 } from './profiles.js';
 import type { CliRuntime } from './runtime.js';
+import { CLI_VERSION } from './version.js';
 
 export type { CliRuntime } from './runtime.js';
 
@@ -101,6 +102,7 @@ export async function runCli(
   const program = new Command()
     .name('shelf')
     .description('Publish, version, inspect, and share Shelf artifacts')
+    .version(CLI_VERSION, '--version', 'Print the CLI version')
     .showHelpAfterError(false)
     .showSuggestionAfterError(false)
     .exitOverride()
@@ -733,7 +735,10 @@ Example:
     runtime.stdout(jsonLine(result));
     return CLI_EXIT_CODES.success;
   } catch (error) {
-    if (error instanceof CommanderError && error.code === 'commander.helpDisplayed') {
+    if (
+      error instanceof CommanderError &&
+      (error.code === 'commander.helpDisplayed' || error.code === 'commander.version')
+    ) {
       return CLI_EXIT_CODES.success;
     }
     if (error instanceof CliPartialFailure) {

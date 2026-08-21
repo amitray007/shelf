@@ -1,0 +1,132 @@
+name: Release
+
+# Runs when release-please publishes a v* release (the merge of the release PR
+# is the human authorization). Builds the standalone CLI bundle with the
+# release version injected, smoke-tests the produced artifact, attaches the
+# checksummed tarball to the release, and — gated on HOMEBREW_TAP_ENABLED —
+# publishes the tarball to amitray007/homebrew-tap's own release and pushes
+# the rendered formula there (silo/orpheus pattern).
+#
+# Failure path: every step before "upload tarball to this release" is local to
+# the runner, so a failed run publishes nothing. The tap steps are idempotent
+# (delete-and-recreate the tap release tag), so a failed run can be re-run
+# from the release page. Manual recovery: re-run the workflow from the
+# release, or build locally with apps/cli/scripts/bundle.mjs and follow the
+# tap AGENTS.md.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # upload the tarball to this repository's release
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  cli:
+    name: build · verify · publish CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: focused verification
+        run: |
+          pnpm typecheck
+          pnpm exec vitest run apps/cli packages/contracts packages/core
+
+      - name: resolve version from tag
+        id: version
+        run: |
+          TAG='${{ github.event.release.tag_name }}'
+          VERSION="${TAG#v}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$TAG" ] && ! echo "$TAG" | grep -q '^v'; then
+            echo "::error::release tag '$TAG' is not a v* version tag"; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tap_tag=shelf-cli-v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: bundle the CLI
+        run: |
+          pnpm build
+          node apps/cli/scripts/bundle.mjs '${{ steps.version.outputs.version }}'
+
+      - name: smoke-test the produced artifact
+        run: |
+          set -euo pipefail
+          cd apps/cli/dist-standalone
+          node dist/shelf.js --help | grep -q "Publish, version, inspect, and share"
+          node dist/shelf.js --version | grep -qx '${{ steps.version.outputs.version }}'
+          # Errors must still be a single JSON envelope with a usage exit code.
+          set +e
+          OUT=$(node dist/shelf.js artifacts list 2>&1 >/dev/null); CODE=$?
+          set -e
+          [ "$CODE" = "2" ] || { echo "expected usage exit 2, got $CODE"; exit 1; }
+          echo "$OUT" | node -e "JSON.parse(require('node:fs').readFileSync(0,'utf8'))"
+
+      - name: pack tarball + checksum
+        id: pack
+        run: |
+          VERSION='${{ steps.version.outputs.version }}'
+          TARBALL="shelf-cli-${VERSION}.tgz"
+          cp LICENSE apps/cli/dist-standalone/LICENSE
+          tar -czf "$TARBALL" -C apps/cli/dist-standalone dist package.json LICENSE
+          echo "sha=$(shasum -a 256 "$TARBALL" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+
+      - name: upload tarball to this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload '${{ github.event.release.tag_name }}' \
+            '${{ steps.pack.outputs.tarball }}' --clobber
+
+      - name: publish tarball to the homebrew-tap release
+        if: vars.HOMEBREW_TAP_ENABLED == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          TAP_TAG='${{ steps.version.outputs.tap_tag }}'
+          TARBALL='${{ steps.pack.outputs.tarball }}'
+          # The tap has immutable releases: recreate the tag if a retry left one.
+          if gh release view "$TAP_TAG" --repo amitray007/homebrew-tap >/dev/null 2>&1; then
+            gh release delete "$TAP_TAG" --repo amitray007/homebrew-tap --yes --cleanup-tag || \
+              gh release delete "$TAP_TAG" --repo amitray007/homebrew-tap --yes
+            gh api -X DELETE "repos/amitray007/homebrew-tap/git/refs/tags/$TAP_TAG" 2>/dev/null || true
+          fi
+          gh release create "$TAP_TAG" "$TARBALL" \
+            --repo amitray007/homebrew-tap \
+            --title "shelf cli ${{ steps.version.outputs.version }}" \
+            --notes "shelf CLI ${{ steps.version.outputs.version }} — \`brew install amitray007/tap/shelf\`. Source: https://github.com/${{ github.repository }}/releases/tag/${{ github.event.release.tag_name }}"
+
+      - name: checkout homebrew-tap
+        if: vars.HOMEBREW_TAP_ENABLED == 'true'
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          repository: amitray007/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: render + push the formula to the tap
+        if: vars.HOMEBREW_TAP_ENABLED == 'true'
+        run: |
+          VERSION='${{ steps.version.outputs.version }}'
+          URL="https://github.com/amitray007/homebrew-tap/releases/download/${{ steps.version.outputs.tap_tag }}/shelf-cli-${VERSION}.tgz"
+          sed -e "s|{{VERSION}}|${VERSION}|g" \
+              -e "s|{{URL}}|${URL}|g" \
+              -e "s|{{SHA256}}|${{ steps.pack.outputs.sha }}|g" \
+              apps/cli/packaging/shelf-formula.template.rb > homebrew-tap/Formula/shelf.rb
+          cd homebrew-tap
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add Formula/shelf.rb
+          git commit --no-verify -m "shelf: bump to ${VERSION}"
+          git push

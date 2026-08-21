@@ -12,3 +12,4 @@ blob-report/
 secrets/
 data/
 backups/
+dist-standalone/
