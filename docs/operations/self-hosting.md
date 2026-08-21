@@ -6,10 +6,26 @@ volume. The application process serves the built dark web client. It proves expl
 initialization, generated share URLs, and durable restart behavior; it is not yet a
 high-availability or production-hardening guide.
 
-Before hosting data you care about, read the
-[known limitations](../../README.md#known-limitations) in the README. In particular: deletion
-never permanently destroys content yet, and the verified backup/restore drill covers host-native
-PostgreSQL with local content only — not Compose named volumes or R2.
+## Known limitations
+
+These are not planned for the current release cycle. Read them before you trust Shelf with
+critical data:
+
+- **No permanent purge.** Deletion is a soft-delete with a 30-day recovery window. After the
+  window, content and metadata stay on disk invisibly — nothing destroys them yet. Treat
+  "delete" as "hide", not "erase".
+- **Recovery drills cover one profile only.** Verified backup and restore exist for host-native
+  PostgreSQL with local content. There is no qualified recovery procedure for Docker Compose
+  named volumes or for R2-backed content.
+- **R2 is experimental.** The adapter is implemented and tested, but a validation run against
+  live R2 has not been performed. Local storage is the qualified path.
+- **No administrative password recovery.** A lost owner password requires database-level
+  intervention.
+- **No bulk import or export.** Artifacts enter and leave one at a time through the CLI and API.
+- **Revision diffs are structural.** Comparison reports added, removed, changed, and moved
+  entries — not line-level or content-aware differences — and has no web UI.
+- **No TLS or reverse-proxy qualification.** Terminate TLS in front of Shelf with your own proxy
+  configuration.
 
 ## Prerequisites
 
