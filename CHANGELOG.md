@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/amitray007/shelf/compare/v0.1.2...v0.1.3) (2026-08-21)
+
+
+### Features
+
+* **cli:** add machine-readable command schema ([fef0e2d](https://github.com/amitray007/shelf/commit/fef0e2d58d41566456ff20d425e1c9e019a20d99))
+
 ## [0.1.2](https://github.com/amitray007/shelf/compare/v0.1.1...v0.1.2) (2026-08-21)
 
 
