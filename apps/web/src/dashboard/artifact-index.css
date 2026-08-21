@@ -116,7 +116,7 @@
 }
 
 .artifact-comments-column {
-  /* Two participants plus the overflow control, two 4px gaps, and 24px cell padding. */
+  /* Three stacked participants plus the overflow control at -10px overlap, and 24px cell padding. */
   width: 128px;
 }
 
@@ -236,7 +236,33 @@
   min-height: 44px;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+}
+
+/* Stacked avatar group: each circle overlaps its left neighbor, a canvas ring
+   keeps them readable, and the left-most stays on top. */
+.artifact-comments > * + * {
+  margin-left: -10px;
+}
+
+.artifact-comments > :nth-child(1) {
+  z-index: 4;
+}
+
+.artifact-comments > :nth-child(2) {
+  z-index: 3;
+}
+
+.artifact-comments > :nth-child(3) {
+  z-index: 2;
+}
+
+.artifact-comments > :nth-child(4) {
+  z-index: 1;
+}
+
+.artifact-comments > :hover,
+.artifact-comments > :focus-visible {
+  z-index: 5;
 }
 
 .artifact-comments-anchor {
@@ -346,6 +372,7 @@
 
 .review-participant-avatar,
 .artifact-comments-overflow {
+  position: relative;
   display: inline-flex;
   width: 32px;
   height: 32px;
@@ -356,6 +383,7 @@
   border: 1px solid var(--rule);
   border-radius: 999px;
   background: var(--elevated);
+  box-shadow: 0 0 0 2px var(--canvas);
   color: var(--text-subtle);
   cursor: pointer;
   font:
@@ -602,8 +630,8 @@
     grid-area: actions;
   }
 
-  .artifact-comments {
-    gap: 2px;
+  .artifact-comments > * + * {
+    margin-left: -14px;
   }
 
   .review-participant-avatar,

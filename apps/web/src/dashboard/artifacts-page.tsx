@@ -542,7 +542,7 @@ export function ArtifactsPage() {
                               </span>
                             );
                           }
-                          const participants = summary.participants.slice(0, 2);
+                          const participants = summary.participants.slice(0, 3);
                           const overflowCount = Math.max(
                             0,
                             summary.participantCount - participants.length,
