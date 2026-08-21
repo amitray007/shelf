@@ -18,14 +18,30 @@ function json(value: unknown, status = 200): Response {
 
 describe('dashboard workspace deletion client', () => {
   it('deletes a workspace over a same-origin DELETE and validates the confirmation', async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
-      json({
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+      if (
+        new Headers(init?.headers).get('content-type') === 'application/json' &&
+        init?.body === undefined
+      ) {
+        return json(
+          {
+            error: {
+              code: 'INVALID_REQUEST',
+              message: 'The request is invalid.',
+              retryable: false,
+              requestId: 'req-empty-json',
+            },
+          },
+          400,
+        );
+      }
+      return json({
         apiVersion: 'v1',
         workspaceId: 'workspace-work',
         deleted: true,
         alreadyDeleted: false,
-      }),
-    );
+      });
+    });
     globalThis.fetch = fetch;
 
     await expect(deleteWorkspace('workspace-work')).resolves.toEqual({

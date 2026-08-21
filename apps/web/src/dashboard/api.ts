@@ -148,7 +148,7 @@ export async function createWorkspace(workspaceId: string): Promise<WorkspaceCre
 export async function deleteWorkspace(workspaceId: string): Promise<WorkspaceDeleteResult> {
   const value = await requestJson(
     `/api/v1/workspaces/${encodeURIComponent(workspaceId)}`,
-    jsonRequest('DELETE'),
+    { method: 'DELETE' },
   );
   if (!isWorkspaceDeleteResult(value)) {
     throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
