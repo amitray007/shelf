@@ -30,39 +30,64 @@ critical data:
 ## Prerequisites
 
 - Docker Engine with Docker Compose
-- A host directory where an ignored `.env` file and protected secret files can live
+- A host directory where an ignored `.env` file can live, or a deployment platform that supplies
+  Compose environment variables
+- A reverse proxy that can route to Docker services, such as Dokploy's managed Traefik
 - HTTPS at the externally visible `SHELF_AUTH_BASE_URL` unless the installation is loopback-only
 
-Create local configuration without committing it:
+Shelf uses one `docker-compose.yaml` for local single-host and managed Compose deployments. Create
+local configuration without committing it:
 
 ```sh
 cp .env.example .env
-mkdir -p secrets
-openssl rand -base64 48 > secrets/auth-secret.txt
-openssl rand -base64 48 > secrets/share-signing-key.txt
-chmod 600 secrets/auth-secret.txt secrets/share-signing-key.txt
+chmod 600 .env
+openssl rand -hex 32
 ```
 
-Replace `POSTGRES_PASSWORD` in `.env` with a URL-safe random value. Set `SHELF_AUTH_BASE_URL` to
-the application origin users will open and `SHELF_RENDERER_PUBLIC_ORIGIN` to a separately
-reachable renderer origin on a different hostname, not merely another port on the application
-hostname. The renderer receives the share-signing key and persistence settings, but not the
-authentication secret or Shelf session cookie. The authentication and share-signing secrets must
-remain independent; rotating the latter invalidates existing share links. `.env` and `secrets/`
-are ignored by Git. The example uses `127.0.0.1` for Shelf and `localhost` for the renderer during
-loopback-only operation. Shelf's session cookie is host-only. If a custom authentication or proxy
+For a fresh installation, run `openssl rand -hex 32` four times and put a different result in
+`POSTGRES_PASSWORD`, `SHELF_AUTH_SECRET`, `SHELF_SHARE_SIGNING_KEY`, and `SHELF_PRIVACY_KEY`. Set
+`SHELF_AUTH_BASE_URL` to the application origin users will open and
+`SHELF_RENDERER_PUBLIC_ORIGIN` to a separately reachable renderer origin on a different hostname,
+not merely another port on the application hostname. The renderer receives the share-signing key
+and persistence settings, but not the authentication secret, privacy key, or Shelf session cookie.
+The three application secrets must remain independent; rotating the share-signing key invalidates
+existing protected share links. Compose mounts the three application secrets as files inside only
+the services that need them. `.env` is ignored by Git.
+
+In Dokploy, select `./docker-compose.yaml`, put the same variables in the Environment tab, enable
+isolated deployments, and configure two domains: the Shelf hostname routes to service `shelf` on
+port `3000`, while the renderer hostname routes to service `renderer` on port `3001`. The Compose
+file intentionally publishes no host ports because the reverse proxy reaches both services over
+their Docker network. Shelf's session cookie is host-only. If a custom authentication or proxy
 configuration adds a parent-domain `Domain` attribute, place the renderer on an unrelated
 registrable domain rather than a sibling subdomain; otherwise renderer requests fail closed.
+
+When upgrading from the older `compose.yaml`, do not generate replacement values for existing
+credentials. Keep the current `POSTGRES_PASSWORD`, copy the contents of the existing auth,
+share-signing, and privacy key files into `SHELF_AUTH_SECRET`, `SHELF_SHARE_SIGNING_KEY`, and
+`SHELF_PRIVACY_KEY`, then remove the corresponding `_FILE` entries from `.env`. Generate a new
+privacy key only if the old installation never had one. Changing the database password does not
+update an existing PostgreSQL volume, changing the auth secret invalidates sessions, and changing
+the share-signing key invalidates protected links.
+
+Before starting the upgraded stack, remove any leftover `compose.yaml` because Compose prefers it
+over `docker-compose.yaml`. The new Compose file creates container secret files from the inline
+values, so the old local `secrets/` directory is no longer used after its values have been migrated.
 
 ## Start and inspect
 
 ```sh
 docker compose up --build -d
 docker compose ps
-curl --fail http://127.0.0.1:3000/health/live
-curl --fail http://127.0.0.1:3000/health/ready
-curl --fail http://127.0.0.1:3001/
+docker compose exec shelf node -e "fetch('http://127.0.0.1:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)})"
+docker compose exec renderer node -e "fetch('http://127.0.0.1:3001/').then(r=>{if(!r.ok)process.exit(1)})"
+curl --fail https://shelf.example.com/health/live
+curl --fail https://shelf.example.com/health/ready
+curl --fail https://renderer.example.com/
 ```
+
+The two `docker compose exec` checks verify the containers before proxy domains exist. The HTTPS
+checks verify the external routing after the two domains are configured.
 
 Compose waits for PostgreSQL health, runs `shelf-admin migrate` as a successful one-shot
 prerequisite, starts the isolated renderer, and then starts Shelf. API and renderer startup never
@@ -117,7 +142,7 @@ Rotation intentionally leaves the previous credential active so an operator can 
 ```sh
 docker compose stop shelf
 docker compose start shelf
-curl --fail http://127.0.0.1:3000/health/ready
+curl --fail https://shelf.example.com/health/ready
 ```
 
 PostgreSQL metadata lives in `postgres-data`; sealed and staged content lives in `shelf-content`. `docker compose down` preserves them. `docker compose down --volumes` deletes both and is destructive.
