@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/amitray007/shelf/compare/v0.1.0...v0.1.1) (2026-08-21)
+
+
+### Features
+
+* **dashboard:** use a comments select in the share overview ([510fc6a](https://github.com/amitray007/shelf/commit/510fc6a04bcb6f3d471026622724d97ddfbc14f5))
+
 ## 0.1.0 (2026-08-21)
 
 
