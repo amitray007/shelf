@@ -19,8 +19,6 @@ critical data:
   named volumes or for R2-backed content.
 - **R2 is experimental.** The adapter is implemented and tested, but a validation run against
   live R2 has not been performed. Local storage is the qualified path.
-- **No administrative password recovery.** A lost owner password requires database-level
-  intervention.
 - **No bulk import or export.** Artifacts enter and leave one at a time through the CLI and API.
 - **Revision diffs are structural.** Comparison reports added, removed, changed, and moved
   entries — not line-level or content-aware differences — and has no web UI.
@@ -96,9 +94,23 @@ mutate the schema. `/health/live` reports only that the application process is s
 dependency details. Local storage performs its write-and-fsync probe once per process at startup
 rather than on every health poll.
 
-## Bootstrap the owner
+## Set up or reset the owner
 
-Public registration is closed. Bootstrap the one installation owner explicitly. The password travels through standard input and never a command argument:
+Public registration is closed. Open an interactive terminal for the `shelf` service in Dokploy and run:
+
+```sh
+shelf
+```
+
+The same prompt is available from a Compose host:
+
+```sh
+docker compose exec shelf shelf
+```
+
+Choose owner setup for a new installation or owner reset to change the existing email, name, and password. Reset keeps the owner actor ID, grants, workspaces, artifacts, and agent credentials, while signing out existing browser sessions. The password is hidden while entered and never passed as a command argument.
+
+For non-interactive automation, bootstrap the owner through the underlying admin command:
 
 ```sh
 read -s SHELF_OWNER_PASSWORD
@@ -112,7 +124,7 @@ printf '%s' "$SHELF_OWNER_PASSWORD" | docker compose run -T --rm --no-deps shelf
 unset SHELF_OWNER_PASSWORD
 ```
 
-Every grant is explicit. Valid actions in the current slice are `file.publish` and `revision.read`.
+Every bootstrap grant is explicit. Valid actions in the current slice are `file.publish` and `revision.read`. A non-interactive reset uses `node dist/operator/cli.js owner reset` with the same `--email`, `--name`, and `--password-file` options but no grants.
 
 ## Manage agent credentials
 
@@ -163,8 +175,8 @@ This reference runs exactly one writing Shelf application process when local sto
 plus one separately configured renderer process that resolves shared content. Shelf now has a
 verified host-native PostgreSQL/Local File recovery workflow, but the current runtime image does
 not include PostgreSQL client tools and the command does not yet orchestrate Compose named volumes.
-Compose-volume recovery, R2 recovery, destructive orphan cleanup, administrative password
-recovery, TLS/reverse-proxy qualification, rolling upgrades, and a live R2 conformance run remain
+Compose-volume recovery, R2 recovery, destructive orphan cleanup, TLS/reverse-proxy
+qualification, rolling upgrades, and a live R2 conformance run remain
 roadmap work. Least-privilege read-only database/storage credentials for the renderer are also
 still open. Do not scale the local-storage writer horizontally or represent this Compose profile as
 backup-qualified yet.

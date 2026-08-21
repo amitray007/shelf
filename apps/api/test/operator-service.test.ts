@@ -16,6 +16,7 @@ function fixture(owner: HumanActorIdentity | false | null = null) {
     findInstallationCredential: vi.fn(async () => undefined),
     withOwnerBootstrapLock: vi.fn(),
     createHumanActor: vi.fn(),
+    resetHumanOwner: vi.fn(),
     createOwnedWorkspace: vi.fn(async (input) => ({
       workspaceId: input.workspaceId,
       actions: ['file.publish', 'revision.read'] as const,

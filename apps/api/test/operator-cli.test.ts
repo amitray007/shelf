@@ -30,26 +30,28 @@ describe('shelf-admin command boundary', () => {
     });
   });
 
-  it('does not accept a password value on argv or echo its canary', async () => {
-    const output = runtime();
-    const canary = 'password-canary-never-print';
-    await runShelfAdmin(
-      [
-        'node',
-        'shelf-admin',
-        'owner',
-        'bootstrap',
-        '--email',
-        'owner@example.test',
-        '--name',
-        'Owner',
-        '--password',
-        canary,
-        '--grant',
-        'workspace-main:file.publish',
-      ],
-      output.value,
-    );
-    expect(`${output.stdout.join('')} ${output.stderr.join('')}`).not.toContain(canary);
-  });
+  it.each(['bootstrap', 'reset'])(
+    'does not accept an owner %s password on argv',
+    async (action) => {
+      const output = runtime();
+      const canary = 'password-canary-never-print';
+      await runShelfAdmin(
+        [
+          'node',
+          'shelf-admin',
+          'owner',
+          action,
+          '--email',
+          'owner@example.test',
+          '--name',
+          'Owner',
+          '--password',
+          canary,
+          ...(action === 'bootstrap' ? ['--grant', 'workspace-main:file.publish'] : []),
+        ],
+        output.value,
+      );
+      expect(`${output.stdout.join('')} ${output.stderr.join('')}`).not.toContain(canary);
+    },
+  );
 });

@@ -7,6 +7,7 @@ import {
   type HumanAuth,
   type OwnerActorRepository,
   OwnerGrantDeniedError,
+  resetShelfOwner,
   type WorkspaceAdministrationRepository,
 } from '@shelf/auth';
 import type { InstallationCredentialSummary } from '@shelf/postgres';
@@ -58,6 +59,13 @@ export function createOperatorService(options: {
         actorName: input.actorName,
         identity: { email: input.email, name: input.name, password: input.password },
         grants: input.grants,
+      });
+    },
+    reset(input: { email: string; name: string; password: string }) {
+      return resetShelfOwner({
+        actors: options.repository,
+        installationId: options.installationId,
+        identity: input,
       });
     },
     async createWorkspace(workspaceId: string) {

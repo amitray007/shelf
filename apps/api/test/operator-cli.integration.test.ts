@@ -88,6 +88,30 @@ describePostgres('host-local operator CLI', () => {
     );
     expect(bootstrap.code).toBe(0);
     expect(bootstrap.combined).not.toContain(password);
+    const bootstrapped = JSON.parse(bootstrap.stdout) as { actorId: string };
+
+    const replacementPassword = 'replacement-owner-password-canary-long-enough';
+    const reset = await command(
+      env,
+      [
+        'owner',
+        'reset',
+        '--email',
+        'renamed-owner@example.test',
+        '--name',
+        'Renamed Shelf Owner',
+        '--password-file',
+        '-',
+      ],
+      replacementPassword,
+    );
+    expect(reset.code).toBe(0);
+    expect(reset.combined).not.toContain(replacementPassword);
+    expect(JSON.parse(reset.stdout)).toMatchObject({
+      actorId: bootstrapped.actorId,
+      email: 'renamed-owner@example.test',
+      name: 'Renamed Shelf Owner',
+    });
 
     const createdWorkspace = await command(env, ['workspace', 'create', '--id', 'workspace-work']);
     expect(JSON.parse(createdWorkspace.stdout)).toEqual({

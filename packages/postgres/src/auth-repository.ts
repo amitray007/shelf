@@ -220,6 +220,58 @@ export class PostgresAuthRepository implements AccessCredentialRepository {
       : { installationId: actor.installation_id, actorId: actor.actor_id };
   }
 
+  async resetHumanOwner(input: {
+    installationId: string;
+    actorName: string;
+    email: string;
+    name: string;
+    passwordHash: string;
+  }) {
+    return this.#database.transaction().execute(async (transaction) => {
+      const owner = await transaction
+        .selectFrom('shelf_actors')
+        .select(['actor_id', 'auth_user_id'])
+        .where('installation_id', '=', input.installationId)
+        .where('actor_kind', '=', 'human')
+        .where('disabled_at', 'is', null)
+        .executeTakeFirst();
+      if (owner?.auth_user_id === null || owner === undefined) return undefined;
+
+      const user = await sql<{ id: string }>`
+        update auth."user"
+        set email = ${input.email}, name = ${input.name}, "updatedAt" = current_timestamp
+        where id = ${owner.auth_user_id}
+        returning id
+      `.execute(transaction);
+      const account = await sql<{ id: string }>`
+        update auth."account"
+        set password = ${input.passwordHash}, "updatedAt" = current_timestamp
+        where "userId" = ${owner.auth_user_id} and "providerId" = 'credential'
+        returning id
+      `.execute(transaction);
+      if (user.rows.length !== 1 || account.rows.length !== 1) {
+        throw new Error('The owner authentication records are incomplete.');
+      }
+
+      await transaction
+        .updateTable('shelf_actors')
+        .set({ actor_name: input.actorName })
+        .where('installation_id', '=', input.installationId)
+        .where('actor_id', '=', owner.actor_id)
+        .executeTakeFirstOrThrow();
+      await sql`delete from auth."session" where "userId" = ${owner.auth_user_id}`.execute(
+        transaction,
+      );
+
+      return {
+        installationId: input.installationId,
+        actorId: owner.actor_id,
+        email: input.email,
+        name: input.name,
+      };
+    });
+  }
+
   async createActorCredential(input: CreateActorCredentialInput): Promise<void> {
     await this.#database.transaction().execute(async (transaction) => {
       await transaction

@@ -17,6 +17,8 @@ FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /opt/shelf
 COPY --from=build --chown=node:node /opt/shelf ./
+COPY scripts/shelf-container-admin.sh /usr/local/bin/shelf
+RUN chmod 0755 /usr/local/bin/shelf
 RUN mkdir -p /var/lib/shelf/content && chown -R node:node /var/lib/shelf
 
 USER node

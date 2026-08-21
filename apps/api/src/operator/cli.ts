@@ -165,6 +165,21 @@ export async function runShelfAdmin(
       },
     );
   owner
+    .command('reset')
+    .requiredOption('--email <email>')
+    .requiredOption('--name <name>')
+    .requiredOption('--password-file <path>')
+    .action(async (options: { email: string; name: string; passwordFile: string }) => {
+      const password = await readPassword(options.passwordFile, runtime);
+      result = await withOperator(runtime.env, (service) =>
+        service.reset({
+          email: options.email,
+          name: options.name,
+          password,
+        }),
+      );
+    });
+  owner
     .command('grant')
     .requiredOption('--workspace <workspace-id>')
     .requiredOption('--action <action>', 'repeatable workspace action', collect, [])

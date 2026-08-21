@@ -7,7 +7,12 @@ import {
   migratePostgresToLatest,
   PostgresAuthRepository,
 } from '../../postgres/src/index.js';
-import { bootstrapShelfOwner, createHumanAuth, OwnerAlreadyExistsError } from '../src/index.js';
+import {
+  bootstrapShelfOwner,
+  createHumanAuth,
+  OwnerAlreadyExistsError,
+  resetShelfOwner,
+} from '../src/index.js';
 
 const adminConnectionString = process.env.SHELF_TEST_POSTGRES_URL;
 const databaseName = `shelf_auth_test_${randomBytes(8).toString('hex')}`;
@@ -128,8 +133,53 @@ describePostgres('human session authentication', () => {
       email: 'owner@example.test',
     });
 
-    await auth.revokeCurrentSession(headers);
+    await expect(
+      resetShelfOwner({
+        actors,
+        installationId: 'installation-main',
+        identity: {
+          email: 'renamed-owner@example.test',
+          name: 'Renamed Owner',
+          password: 'replacement correct horse battery staple',
+        },
+      }),
+    ).resolves.toMatchObject({
+      actorId: owner.actorId,
+      email: 'renamed-owner@example.test',
+      name: 'Renamed Owner',
+    });
     await expect(auth.authenticate(headers)).resolves.toBeUndefined();
+
+    const oldSignIn = await auth.handle(
+      new Request('http://127.0.0.1:3000/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'http://127.0.0.1:3000' },
+        body: JSON.stringify({
+          email: 'owner@example.test',
+          password: 'correct horse battery staple',
+        }),
+      }),
+    );
+    expect(oldSignIn.status).toBe(401);
+    const replacementSignIn = await auth.handle(
+      new Request('http://127.0.0.1:3000/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'http://127.0.0.1:3000' },
+        body: JSON.stringify({
+          email: 'renamed-owner@example.test',
+          password: 'replacement correct horse battery staple',
+        }),
+      }),
+    );
+    expect(replacementSignIn.status).toBe(200);
+    const replacementCookie = replacementSignIn.headers.get('set-cookie');
+    const replacementHeaders = new Headers({ cookie: replacementCookie ?? '' });
+    await expect(auth.authenticate(replacementHeaders)).resolves.toMatchObject({
+      email: 'renamed-owner@example.test',
+      name: 'Renamed Owner',
+    });
+    await auth.revokeCurrentSession(replacementHeaders);
+    await expect(auth.authenticate(replacementHeaders)).resolves.toBeUndefined();
     await auth.close();
     await database.destroy();
   });
