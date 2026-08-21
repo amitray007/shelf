@@ -21,6 +21,10 @@ describe('production web application boundary', () => {
     roots.push(root);
     await mkdir(join(root, 'assets'));
     await writeFile(join(root, 'index.html'), '<!doctype html><title>shelf</title>');
+    await writeFile(
+      join(root, 'favicon.svg'),
+      '<svg xmlns="http://www.w3.org/2000/svg"><title>Shelf</title></svg>',
+    );
     await writeFile(join(root, 'assets', 'app.js'), 'export {};');
     const app = Fastify();
     apps.push(app);
@@ -36,6 +40,7 @@ describe('production web application boundary', () => {
       url: '/app/w/workspace-main/artifacts/art_test',
     });
     const asset = await app.inject({ method: 'GET', url: '/assets/app.js' });
+    const favicon = await app.inject({ method: 'GET', url: '/favicon.svg' });
     const unknownApi = await app.inject({ method: 'GET', url: '/api/v1/unknown' });
 
     expect(document.statusCode).toBe(200);
@@ -55,6 +60,11 @@ describe('production web application boundary', () => {
     expect(dashboard.headers['cache-control']).toBe('no-store');
     expect(asset.statusCode).toBe(200);
     expect(asset.headers['cache-control']).toContain('immutable');
+    expect(favicon.statusCode).toBe(200);
+    expect(favicon.headers['content-type']).toContain('image/svg+xml');
+    expect(favicon.headers['cache-control']).toBe('public, max-age=86400');
+    expect(favicon.headers['x-content-type-options']).toBe('nosniff');
+    expect(favicon.body).toContain('<title>Shelf</title>');
     expect(unknownApi.statusCode).toBe(404);
     expect(unknownApi.headers['content-type']).toContain('application/json');
   });

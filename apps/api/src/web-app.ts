@@ -40,17 +40,20 @@ export async function registerWebApp(app: FastifyInstance, options: WebAppOption
   if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
     throw new Error('SHELF_WEB_ROOT must identify a real directory.');
   }
-  const [index, assets] = await Promise.all([
+  const [index, favicon, assets] = await Promise.all([
     lstat(join(root, 'index.html')),
+    lstat(join(root, 'favicon.svg')),
     lstat(join(root, 'assets')),
   ]);
   if (
     !index.isFile() ||
     index.isSymbolicLink() ||
+    !favicon.isFile() ||
+    favicon.isSymbolicLink() ||
     !assets.isDirectory() ||
     assets.isSymbolicLink()
   ) {
-    throw new Error('SHELF_WEB_ROOT must contain a real index and asset directory.');
+    throw new Error('SHELF_WEB_ROOT must contain a real index, favicon, and asset directory.');
   }
 
   await app.register(fastifyStatic, {
@@ -60,6 +63,16 @@ export async function registerWebApp(app: FastifyInstance, options: WebAppOption
     immutable: true,
     maxAge: '1y',
     preCompressed: true,
+  });
+
+  app.get('/favicon.svg', { schema: { hide: true } }, async (_request, reply) => {
+    void reply.header('Cache-Control', 'public, max-age=86400');
+    void reply.header('X-Content-Type-Options', 'nosniff');
+    return reply.sendFile('favicon.svg', root, {
+      cacheControl: false,
+      immutable: false,
+      maxAge: 0,
+    });
   });
 
   for (const path of ['/', '/s/:shareId', '/signin', '/app', '/app/*', '/preview/:artifactId']) {
