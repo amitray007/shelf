@@ -90,6 +90,8 @@ describePostgres('artifact lifecycle migration', () => {
         { migrationName: '0010_permanent_public_shares', status: 'Success' },
         { migrationName: '0011_artifact_default_shares', status: 'Success' },
         { migrationName: '0012_comments', status: 'Success' },
+        { migrationName: '0013_actor_display_names', status: 'Success' },
+        { migrationName: '0014_workspace_deletion', status: 'Success' },
       ]);
       await expect(
         new PostgresRevisionRepository(database).findArtifact('art_AAAAAAAAAAAAAAAAAAAAAA'),

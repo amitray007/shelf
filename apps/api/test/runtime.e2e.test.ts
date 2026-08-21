@@ -1,5 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -290,6 +290,10 @@ async function publish(
       sourceFile,
       '--idempotency-key',
       idempotencyKey,
+      '--title',
+      'Runtime workflow artifact',
+      '--description',
+      'Published by the compiled migrate-to-restart workflow test',
       '--allow-insecure-loopback',
     ],
     { ...environment, SHELF_TOKEN: token },
@@ -364,10 +368,19 @@ async function readShare(endpoint: string, shareUrl: string): Promise<string> {
   const segments = parsed.pathname.split('/');
   const shareId = segments.at(-1);
   const secret = parsed.hash.slice(1);
+  // Protected reads establish a bounded viewer session with the capability
+  // secret, then read content with the issued session token.
+  const session = await fetch(`${endpoint}/api/v1/public/shares/${shareId}/sessions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessionId: randomUUID(), secret }),
+  });
+  if (!session.ok) throw new Error(`Share read returned ${session.status}.`);
+  const { token } = (await session.json()) as { token: string };
   const response = await fetch(`${endpoint}/api/v1/public/shares/${shareId}/content`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ secret }),
+    body: JSON.stringify({ token }),
   });
   if (!response.ok) throw new Error(`Share read returned ${response.status}.`);
   return response.text();
