@@ -1,3 +1,10 @@
+# Single-host deployment profile for Shelf.
+#
+# Supply configuration through a local .env file or the deployment platform's
+# environment editor. Route external traffic through a reverse proxy:
+#   Shelf    -> shelf:3000
+#   Renderer -> renderer:3001
+
 name: shelf
 
 services:
@@ -29,6 +36,8 @@ services:
   shelf:
     build: .
     restart: unless-stopped
+    expose:
+      - "3000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SHELF_INSTALLATION_ID: ${SHELF_INSTALLATION_ID:?set SHELF_INSTALLATION_ID}
@@ -41,11 +50,11 @@ services:
       SHELF_AUTH_BASE_URL: ${SHELF_AUTH_BASE_URL:?set SHELF_AUTH_BASE_URL}
       SHELF_AUTH_SECRET_FILE: /run/secrets/shelf_auth_secret
       SHELF_SHARE_SIGNING_KEY_FILE: /run/secrets/shelf_share_signing_key
+      SHELF_PRIVACY_KEY_FILE: /run/secrets/shelf_privacy_key
     secrets:
       - shelf_auth_secret
       - shelf_share_signing_key
-    ports:
-      - "3000:3000"
+      - shelf_privacy_key
     volumes:
       - shelf-content:/var/lib/shelf/content
     depends_on:
@@ -71,6 +80,8 @@ services:
     build: .
     restart: unless-stopped
     command: ["node", "dist/renderer-cli.js"]
+    expose:
+      - "3001"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SHELF_INSTALLATION_ID: ${SHELF_INSTALLATION_ID:?set SHELF_INSTALLATION_ID}
@@ -82,8 +93,6 @@ services:
       SHELF_RENDERER_PORT: 3001
     secrets:
       - shelf_share_signing_key
-    ports:
-      - "3001:3001"
     volumes:
       - shelf-content:/var/lib/shelf/content
     depends_on:
@@ -105,9 +114,11 @@ services:
 
 secrets:
   shelf_auth_secret:
-    file: ${SHELF_AUTH_SECRET_FILE:-./secrets/auth-secret.txt}
+    environment: SHELF_AUTH_SECRET
   shelf_share_signing_key:
-    file: ${SHELF_SHARE_SIGNING_KEY_FILE:-./secrets/share-signing-key.txt}
+    environment: SHELF_SHARE_SIGNING_KEY
+  shelf_privacy_key:
+    environment: SHELF_PRIVACY_KEY
 
 volumes:
   postgres-data:
