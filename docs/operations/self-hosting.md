@@ -6,6 +6,11 @@ volume. The application process serves the built dark web client. It proves expl
 initialization, generated share URLs, and durable restart behavior; it is not yet a
 high-availability or production-hardening guide.
 
+Before hosting data you care about, read the
+[known limitations](../../README.md#known-limitations) in the README. In particular: deletion
+never permanently destroys content yet, and the verified backup/restore drill covers host-native
+PostgreSQL with local content only — not Compose named volumes or R2.
+
 ## Prerequisites
 
 - Docker Engine with Docker Compose
