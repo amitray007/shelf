@@ -349,15 +349,7 @@ function PierreCode({
                 }),
           }),
     }),
-    [
-      focusLine,
-      focusRequestId,
-      lineNumbers,
-      onAddComment,
-      onLineSelectionChange,
-      settings,
-      wrap,
-    ],
+    [focusLine, focusRequestId, lineNumbers, onAddComment, onLineSelectionChange, settings, wrap],
   );
   const mutableLineAnnotations = useMemo(
     () => (lineAnnotations === undefined ? undefined : [...lineAnnotations]),

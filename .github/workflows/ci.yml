@@ -52,6 +52,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Workspace packages resolve through their dist entry points.
+      - run: pnpm build
       - run: pnpm test
         env:
           SHELF_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/postgres

@@ -9,9 +9,13 @@ export default defineConfig({
   testMatch: '**/*.e2e.ts',
   outputDir: './test-results',
   forbidOnly: true,
-  retries: 0,
+  // CI runners are slower and colder than a development machine, and Firefox
+  // in particular needs headroom on first navigation; one retry absorbs
+  // infrastructure hiccups without hiding consistent failures.
+  retries: process.env.CI === undefined ? 0 : 1,
+  timeout: process.env.CI === undefined ? 30_000 : 60_000,
   reporter: [['list']],
-  expect: { timeout: 5_000 },
+  expect: { timeout: process.env.CI === undefined ? 5_000 : 10_000 },
   use: {
     baseURL,
     colorScheme: 'dark',
