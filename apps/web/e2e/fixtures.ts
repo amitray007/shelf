@@ -3,6 +3,8 @@ import type {
   ArtifactPage,
   ArtifactRevision,
   ArtifactRevisionPage,
+  CommentSummary,
+  CommentThread,
   DashboardCredentialPage,
   DashboardSession,
   FolderTreePage,
@@ -542,3 +544,59 @@ function publicFileResolution(
 export const markdownResolution = publicFileResolution(markdownShareId, 'text/markdown', 'idea.md');
 
 export const htmlResolution = publicFileResolution(htmlShareId, 'text/html', 'idea.html');
+
+export const commentThreadId = 'thread-browser-fixture';
+
+export const commentThreads = [
+  {
+    threadId: commentThreadId,
+    workspaceId,
+    artifactId,
+    shareId: `shr_${'n'.repeat(22)}`,
+    revisionId,
+    visibility: 'shared',
+    anchor: { revisionId, kind: 'file' },
+    anchorStatus: 'exact',
+    resolvedAt: null,
+    createdAt: '2026-08-18T11:00:00.000Z',
+    updatedAt: '2026-08-18T11:05:00.000Z',
+    permissions: { canReply: true, canResolve: true, canReopen: false },
+    posts: [
+      {
+        postId: 'post-browser-fixture',
+        threadId: commentThreadId,
+        body: 'The launch readiness section needs one more revision.',
+        author: { kind: 'visitor', participantId: 'participant-ada', displayName: 'Ada' },
+        permissions: { canEdit: false, canDelete: false, canModerate: true },
+        createdAt: '2026-08-18T11:00:00.000Z',
+        editedAt: null,
+        deletedAt: null,
+        hiddenAt: null,
+      },
+    ],
+  },
+] satisfies CommentThread[];
+
+export const commentSummaries = [
+  {
+    artifactId,
+    participantCount: 1,
+    participants: [
+      {
+        participantId: 'participant-ada',
+        displayName: 'Ada',
+        threadCount: 1,
+        replyCount: 0,
+        latestThreadId: commentThreadId,
+        latestActivityAt: '2026-08-18T11:05:00.000Z',
+        recentThreads: [
+          { threadId: commentThreadId, latestActivityAt: '2026-08-18T11:05:00.000Z' },
+        ],
+      },
+    ],
+    openThreadCount: 1,
+    openReplyCount: 0,
+    latestActivityAt: '2026-08-18T11:05:00.000Z',
+    latestThreadId: commentThreadId,
+  },
+] satisfies CommentSummary[];

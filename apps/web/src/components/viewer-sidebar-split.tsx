@@ -20,17 +20,19 @@ export function clampViewerSidebarWidth(width: number, bounds: ViewerSidebarBoun
   return Math.round(Math.min(bounds.max, Math.max(bounds.min, width)));
 }
 
-function browserLocalStorage(): Storage | undefined {
+// The anonymous viewer keeps its layout preference in tab-local session storage. Durable
+// browser storage in the viewer graph stays confined to the audited review persistence module.
+function browserSessionStorage(): Storage | undefined {
   if (typeof window === 'undefined') return undefined;
   try {
-    return window.localStorage;
+    return window.sessionStorage;
   } catch {
     return undefined;
   }
 }
 
 export function readViewerSidebarWidth(
-  storage: Pick<Storage, 'getItem'> | undefined = browserLocalStorage(),
+  storage: Pick<Storage, 'getItem'> | undefined = browserSessionStorage(),
   bounds: ViewerSidebarBounds = viewerSidebarBounds(
     typeof window === 'undefined' ? 1024 : window.innerWidth,
   ),
@@ -46,7 +48,7 @@ export function readViewerSidebarWidth(
 
 export function writeViewerSidebarWidth(
   width: number,
-  storage: Pick<Storage, 'setItem'> | undefined = browserLocalStorage(),
+  storage: Pick<Storage, 'setItem'> | undefined = browserSessionStorage(),
   bounds: ViewerSidebarBounds = viewerSidebarBounds(
     typeof window === 'undefined' ? 1024 : window.innerWidth,
   ),

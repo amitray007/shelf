@@ -7,6 +7,8 @@ import axe from 'axe-core';
 
 import {
   artifactPage,
+  commentSummaries,
+  commentThreads,
   createdCredentialId,
   createdCredentialToken,
   createdShareId,
@@ -91,11 +93,20 @@ async function body(request) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+// Playwright projects share this fixture process, so mutable state is scoped to the per-project
+// session cookie. Without it, whichever project runs first would win every create-once flow.
+function fixtureSession(request) {
+  return (
+    /(?:^|;\s*)shelf-browser-state=([^;]+)/u.exec(request.headers.cookie ?? '')?.[1] ?? 'default'
+  );
+}
+
 function deletedArtifactKey(request, artifactId) {
-  const fixtureSession = /(?:^|;\s*)shelf-browser-state=([^;]+)/u.exec(
-    request.headers.cookie ?? '',
-  )?.[1];
-  return `${fixtureSession ?? 'default'}:${artifactId}`;
+  return `${fixtureSession(request)}:${artifactId}`;
+}
+
+function createdWorkspaceKey(request, requestedWorkspaceId) {
+  return `${fixtureSession(request)}:${requestedWorkspaceId}`;
 }
 
 async function api(request, response, url) {
@@ -110,10 +121,12 @@ async function api(request, response, url) {
       ...dashboardSession,
       workspaces: [
         ...dashboardSession.workspaces,
-        ...[...createdWorkspaces].map((createdWorkspaceId) => ({
-          workspaceId: createdWorkspaceId,
-          actions: ['file.publish', 'revision.read'],
-        })),
+        ...[...createdWorkspaces]
+          .filter((key) => key.startsWith(`${fixtureSession(request)}:`))
+          .map((key) => ({
+            workspaceId: key.slice(key.indexOf(':') + 1),
+            actions: ['file.publish', 'revision.read'],
+          })),
       ],
     });
     return;
@@ -130,7 +143,10 @@ async function api(request, response, url) {
       });
       return;
     }
-    if (value.workspaceId === workspaceId || createdWorkspaces.has(value.workspaceId)) {
+    if (
+      value.workspaceId === workspaceId ||
+      createdWorkspaces.has(createdWorkspaceKey(request, value.workspaceId))
+    ) {
       json(response, 409, {
         apiVersion: 'v1',
         error: {
@@ -140,7 +156,7 @@ async function api(request, response, url) {
       });
       return;
     }
-    createdWorkspaces.add(value.workspaceId);
+    createdWorkspaces.add(createdWorkspaceKey(request, value.workspaceId));
     json(response, 201, {
       apiVersion: 'v1',
       workspaceId: value.workspaceId,
@@ -170,7 +186,10 @@ async function api(request, response, url) {
     return;
   }
   const createdWorkspaceArtifacts = /^\/api\/v1\/workspaces\/([^/]+)\/artifacts$/u.exec(path);
-  if (createdWorkspaceArtifacts !== null && createdWorkspaces.has(createdWorkspaceArtifacts[1])) {
+  if (
+    createdWorkspaceArtifacts !== null &&
+    createdWorkspaces.has(createdWorkspaceKey(request, createdWorkspaceArtifacts[1]))
+  ) {
     json(response, 200, { apiVersion: 'v1', items: [], nextCursor: null });
     return;
   }
@@ -340,8 +359,54 @@ async function api(request, response, url) {
     json(response, 200, sharePage);
     return;
   }
+  const commentsMatch =
+    /^\/api\/v1\/workspaces\/([^/]+)\/artifacts\/(art_[A-Za-z0-9_-]{22})\/comments$/u.exec(path);
+  if (request.method === 'GET' && commentsMatch !== null) {
+    const requestedArtifactId = commentsMatch[2];
+    json(response, 200, {
+      items: commentThreads.filter((thread) => thread.artifactId === requestedArtifactId),
+      nextCursor: null,
+    });
+    return;
+  }
+  if (
+    request.method === 'POST' &&
+    path === `/api/v1/workspaces/${workspaceId}/comments/summaries`
+  ) {
+    const value = JSON.parse(await body(request));
+    const requestedArtifactIds = Array.isArray(value.artifactIds) ? value.artifactIds : [];
+    json(response, 200, {
+      items: commentSummaries.filter((summary) =>
+        requestedArtifactIds.includes(summary.artifactId),
+      ),
+    });
+    return;
+  }
   if (path === `/api/v1/revisions/${folderTreePage.revisionId}/tree`) {
     json(response, 200, folderTreePage);
+    return;
+  }
+  if (path === `/api/v1/revisions/${folderTreePage.revisionId}/tree/content`) {
+    const requestedPath = url.searchParams.get('path');
+    const entry = folderTreePage.items.find(
+      (item) => item.kind === 'file' && item.path === requestedPath,
+    );
+    if (entry === undefined) {
+      json(response, 404, {
+        apiVersion: 'v1',
+        error: { code: 'NOT_FOUND', message: 'The folder file is unavailable.' },
+      });
+      return;
+    }
+    response.writeHead(200, {
+      'cache-control': 'no-store',
+      'content-type': `${entry.mediaType}; charset=utf-8`,
+    });
+    response.end(
+      entry.mediaType === 'application/json'
+        ? JSON.stringify({ artifact: entry.path, bytes: entry.byteCount })
+        : `Contents of ${entry.path}`,
+    );
     return;
   }
   const contentMatch = /^\/api\/v1\/revisions\/(rev_[A-Za-z0-9_-]{22})\/content$/u.exec(path);
@@ -446,17 +511,41 @@ async function api(request, response, url) {
     json(response, 200, path.includes(markdownShareId) ? markdownResolution : htmlResolution);
     return;
   }
-  if (request.method === 'POST' && path === `/api/v1/public/shares/${markdownShareId}/content`) {
+  if (
+    request.method === 'POST' &&
+    (path === `/api/v1/public/shares/${markdownShareId}/content` ||
+      path === `/api/v1/public/shares/${htmlShareId}/content`)
+  ) {
     const value = JSON.parse(await body(request));
     if (value.token !== viewerToken || Object.keys(value).length !== 1) {
       json(response, 404, {});
       return;
     }
+    const isMarkdown = path.includes(markdownShareId);
     response.writeHead(200, {
       'cache-control': 'no-store',
-      'content-type': 'text/markdown; charset=utf-8',
+      'content-type': isMarkdown ? 'text/markdown; charset=utf-8' : 'text/html; charset=utf-8',
     });
-    response.end('# One useful idea\n\nA durable artifact should stay quick to share.');
+    response.end(
+      isMarkdown
+        ? '# One useful idea\n\nA durable artifact should stay quick to share.'
+        : '<!doctype html><html lang="en"><title>One useful idea</title><body><p>A durable artifact should stay quick to share.</p></body></html>',
+    );
+    return;
+  }
+  // The viewer queries discussions on mount. Neither fixture share enables a comment policy, so
+  // the fixture answers with an empty page instead of a 404 the viewer would surface as an error.
+  const viewerCommentsMatch =
+    /^\/api\/v1\/public\/(?:shares\/shr_[A-Za-z0-9_-]{22}|links\/[A-Za-z0-9_-]{12})\/comments\/query$/u.test(
+      path,
+    );
+  if (request.method === 'POST' && viewerCommentsMatch) {
+    const value = JSON.parse(await body(request));
+    if (path.includes('/shares/') && value.token !== viewerToken) {
+      json(response, 404, {});
+      return;
+    }
+    json(response, 200, { items: [], nextCursor: null });
     return;
   }
   json(response, 404, {

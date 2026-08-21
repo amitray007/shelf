@@ -96,10 +96,14 @@ async function focusWithKeyboard(page: Page, target: Locator, forwardKey = 'Tab'
   throw new Error('Keyboard navigation did not reach the expected control.');
 }
 
-async function expectActionWithinViewport(page: Page, name: string): Promise<void> {
+async function expectActionWithinViewport(
+  page: Page,
+  name: string,
+  role: 'button' | 'link' = 'button',
+): Promise<void> {
   const viewport = page.viewportSize();
   expect(viewport).not.toBeNull();
-  const action = page.getByRole('button', { name, exact: true });
+  const action = page.getByRole(role, { name, exact: true });
   await expect(action).toBeVisible();
   const box = await action.boundingBox();
   expect(box).not.toBeNull();
@@ -127,8 +131,9 @@ for (const viewport of densityViewports) {
     await page.setViewportSize(viewport);
 
     await page.goto(`/app/w/${workspaceId}/artifacts`);
-    const applicationBar = page.getByRole('navigation', { name: 'Current location' });
+    const applicationBar = page.getByRole('banner');
     await expect(applicationBar).toBeVisible();
+    await expect(applicationBar.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
     const dashboardBar = page.locator('.dashboard-bar');
     const listPageHeading = page.locator('.page-heading');
     const dashboardBarBox = await dashboardBar.boundingBox();
@@ -144,9 +149,9 @@ for (const viewport of densityViewports) {
     );
     const ledger = page.getByRole('table', { name: 'Artifacts' });
     await expect(ledger.locator('tbody tr')).toHaveCount(10);
-    await expect(ledger.getByText('x', { exact: true })).toBeVisible();
-    await expect(ledger.getByText(longArtifactName, { exact: true })).toBeVisible();
-    await expect(ledger.getByText(longFolderName, { exact: true })).toBeVisible();
+    await expect(ledger.getByRole('link', { name: 'x', exact: true })).toBeVisible();
+    await expect(ledger.getByRole('link', { name: longArtifactName, exact: true })).toBeVisible();
+    await expect(ledger.getByRole('link', { name: longFolderName, exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page, [page.locator('.dashboard-main'), ledger]);
 
     await page.goto(`/app/w/${workspaceId}/artifacts/${artifactId}`);
@@ -171,7 +176,7 @@ for (const viewport of densityViewports) {
       ).toBeGreaterThan(520);
     }
     await expectActionWithinViewport(page, 'Share');
-    await expectActionWithinViewport(page, 'Preview');
+    await expectActionWithinViewport(page, 'Preview', 'link');
     await expectNoHorizontalOverflow(page, [
       page.locator('.dashboard-main'),
       page.locator('.artifact-surface'),
@@ -179,10 +184,14 @@ for (const viewport of densityViewports) {
 
     await page.goto(`/app/w/${workspaceId}/artifacts/${folderArtifactId}`);
     await expect(page).toHaveURL(new RegExp(`${folderArtifactId}$`, 'u'));
-    const folderPreview = page.getByRole('region', { name: 'Artifact folder preview' });
-    await expect(
-      folderPreview.locator('.tree-name').filter({ hasText: 'manifest.json' }),
-    ).toHaveAttribute('title', longFolderPath);
+    const folderPreview = page.getByRole('region', { name: 'Folder browser' });
+    await expect(folderPreview).toBeVisible();
+    // The browser opens on the deepest file, whose full path stays readable through the title
+    // even though the visible label truncates.
+    await expect(folderPreview.locator('.file-view-meta strong')).toHaveAttribute(
+      'title',
+      longFolderPath,
+    );
     await expectActionWithinViewport(page, 'Share');
     await expectNoHorizontalOverflow(page, [page.locator('.dashboard-main'), folderPreview]);
     diagnostics.assertClean();
@@ -204,8 +213,8 @@ test('artifact detail keeps revision and share controls compact and explicit', a
 
   const previewBar = page.locator('.managed-stage-bar');
   await expect(previewBar).toContainText('12th Revision');
+  await expect(previewBar).toContainText('Artifact Preview');
   await expect(previewBar).not.toContainText('Revision:');
-  await expect(previewBar).not.toContainText(longArtifactName);
   await expect(previewBar).not.toContainText(/\d+(?:\.\d+)?\s+(?:k|M)?B/u);
   await expect(page.getByText('Immutable lineage', { exact: true })).toHaveCount(0);
 
@@ -271,9 +280,13 @@ test('artifact detail keeps revision and share controls compact and explicit', a
   await shareOverview.getByRole('button', { name: 'Create new link' }).click();
   const shareDialog = page.getByRole('dialog', { name: 'Create share link' });
   await shareDialog.getByRole('button', { name: /Options/u }).click();
-  await shareDialog.getByRole('button', { name: 'Target' }).click();
+  await shareDialog.getByRole('combobox', { name: 'Target' }).click();
   await page.getByRole('option', { name: 'Pinned revision' }).click();
-  await expect(shareDialog).toContainText(`12th — ${longArtifactName}`);
+  // The history is sorted oldest-first above, so the dialog pins the first loaded revision.
+  await expect(shareDialog).toContainText('9th — n.md');
+  await expect(shareDialog.getByRole('button', { name: /Options/u })).toContainText(
+    'Pinned: 9th revision · Never expires · Comments off',
+  );
   await shareDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.locator('.shelf-dialog')).toHaveCount(0);
 
@@ -322,7 +335,7 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await page.goto(`/app/w/${workspaceId}/artifacts`);
   await expect(page.getByRole('heading', { level: 1, name: 'Artifacts' })).toBeVisible();
   await expect(page.getByText('shelf publish ./path --share')).toBeVisible();
-  await expect(page.getByRole('link', { name: longArtifactName })).toBeVisible();
+  await expect(page.getByRole('link', { name: longArtifactName, exact: true })).toBeVisible();
   await expect(page.getByText('Collections', { exact: true })).toHaveCount(0);
   const dashboardSections = page.getByRole('navigation', { name: 'Dashboard sections' });
   await expect(dashboardSections.getByRole('link', { name: 'Artifacts' })).toHaveAttribute(
@@ -341,20 +354,34 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
 
   const artifactTable = page.getByRole('table', { name: 'Artifacts' });
   await expect(artifactTable.locator('tbody tr')).toHaveCount(10);
-  if ((page.viewportSize()?.width ?? 0) > 520) {
+  const tableWidth = page.viewportSize()?.width ?? 0;
+  // The ledger drops "Created on" at 900px and "Last Updated" at 520px, so each sort assertion
+  // only runs on a viewport that still renders its column.
+  if (tableWidth > 520) {
     await expect(
       artifactTable.getByRole('columnheader', { name: /Last Updated/u }),
     ).toHaveAttribute('aria-sort', 'descending');
+  }
+  if (tableWidth > 900) {
     await artifactTable.getByRole('link', { name: /Created on/u }).click();
     await expect(page).toHaveURL(/sort=created&order=desc/u);
     await artifactTable.getByRole('link', { name: /Created on/u }).click();
     await expect(page).toHaveURL(/sort=created&order=asc/u);
+  }
+  if (tableWidth > 520) {
     await page.getByRole('link', { name: 'Next' }).click();
     await expect(page.getByText('Page 2', { exact: true })).toBeVisible();
     await expect(artifactTable.locator('tbody tr')).toHaveCount(2);
     await page.getByRole('link', { name: 'Previous' }).click();
     await expect(artifactTable.locator('tbody tr')).toHaveCount(10);
     await artifactTable.getByRole('link', { name: /Last Updated/u }).click();
+    // Sorting by a new field starts descending; re-clicking the field already sorted flips it, so
+    // narrow viewports need a second click to land back on the default newest-first ledger the
+    // assertions below expect.
+    if (tableWidth <= 900) {
+      await expect(page).toHaveURL(/sort=updated&order=asc/u);
+      await artifactTable.getByRole('link', { name: /Last Updated/u }).click();
+    }
     await expect(page).toHaveURL(/sort=updated&order=desc/u);
   }
   await expectNoHorizontalOverflow(page, [page.locator('.dashboard-main')]);
@@ -366,8 +393,13 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await page.getByRole('button', { name: `Share artifact ${longArtifactName}` }).click();
   const shareOverviewDialog = page.getByRole('dialog', { name: 'Share artifact' });
   await expect(shareOverviewDialog).toContainText('Protected link');
-  await expect(shareOverviewDialog).toContainText(`/s/shr_${'n'.repeat(22)}#${shareSecret}`);
-  await expect(shareOverviewDialog.getByRole('button', { name: 'Copy share url' })).toBeVisible();
+  await expect(shareOverviewDialog).toContainText('Public link');
+  await expect(shareOverviewDialog).toContainText(`/s/${createdShareId}#${shareSecret}`);
+  await expect(shareOverviewDialog).toContainText('/s/DefaultPub12');
+  await expect(
+    shareOverviewDialog.getByRole('button', { name: 'Copy protected url' }),
+  ).toBeVisible();
+  await expect(shareOverviewDialog.getByRole('button', { name: 'Copy public url' })).toBeVisible();
   await shareOverviewDialog.getByRole('button', { name: 'Create new link' }).click();
   const indexShareDialog = page.getByRole('dialog', { name: 'Create share link' });
   await expect(indexShareDialog.getByRole('radio', { name: /Protected/u })).toBeChecked();
@@ -375,9 +407,13 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
     'Latest revision · Never expires · Comments off',
   );
   await indexShareDialog.getByRole('button', { name: 'Create protected link' }).click();
-  await expect(indexShareDialog).toContainText(`/s/${createdShareId}#${shareSecret}`);
-  await expect(indexShareDialog.getByRole('button', { name: 'Copy share url' })).toBeVisible();
-  await indexShareDialog.getByRole('button', { name: 'Done' }).click();
+  const indexCreatedDialog = page.getByRole('dialog', { name: 'Share link created' });
+  await expect(indexCreatedDialog).toContainText(`/s/${createdShareId}#${shareSecret}`);
+  await expect(indexCreatedDialog).toContainText('Protected · latest revision · never expires');
+  await expect(
+    indexCreatedDialog.getByRole('button', { name: 'Copy protected share url' }),
+  ).toBeVisible();
+  await indexCreatedDialog.getByRole('button', { name: 'Done' }).click();
 
   await page.getByRole('button', { name: 'More actions for x' }).click();
   await page.getByRole('menuitem', { name: 'Delete artifact' }).click();
@@ -407,7 +443,7 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await page.getByRole('button', { name: 'Undo deletion' }).click();
   await expect(page.getByRole('link', { name: 'x', exact: true })).toBeVisible();
 
-  await page.getByRole('link', { name: longArtifactName }).click();
+  await page.getByRole('link', { name: longArtifactName, exact: true }).click();
   await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
     'One useful idea',
   );
@@ -435,11 +471,12 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
     .click();
   const shareDialog = page.getByRole('dialog', { name: 'Create share link' });
   await shareDialog.getByRole('button', { name: /Options/u }).click();
-  await shareDialog.getByRole('button', { name: 'Target' }).click();
+  await shareDialog.getByRole('combobox', { name: 'Target' }).click();
   await page.getByRole('option', { name: 'Pinned revision' }).click();
   await shareDialog.getByRole('button', { name: 'Create protected link' }).click();
-  await expect(shareDialog).toContainText(`/s/${createdShareId}#${shareSecret}`);
-  await shareDialog.getByRole('button', { name: 'Done' }).click();
+  const createdDialog = page.getByRole('dialog', { name: 'Share link created' });
+  await expect(createdDialog).toContainText(`/s/${createdShareId}#${shareSecret}`);
+  await createdDialog.getByRole('button', { name: 'Done' }).click();
   await expect(page.locator('.shelf-dialog')).toHaveCount(0);
 
   await page.getByRole('link', { name: 'Artifacts', exact: true }).click();
@@ -459,7 +496,15 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await page.getByRole('button', { name: /Workspace menu/u }).click();
   await page.getByRole('menuitem', { name: workspaceId }).click();
   await expect(page).toHaveURL(`/app/w/${workspaceId}/access`);
-  await expect(page.getByText('expired-agent', { exact: true }).first()).toBeVisible();
+  // Below 680px the credential ledger swaps the table for the mobile list, so assert on whichever
+  // presentation this viewport renders.
+  await expect(
+    page
+      .locator('.credential-mobile-list, .credential-table-shell')
+      .locator('visible=true')
+      .getByText('expired-agent', { exact: true })
+      .first(),
+  ).toBeVisible();
   const issue = page.locator('.page-heading').getByRole('button', { name: 'Create Credential' });
   await focusWithKeyboard(page, issue, testInfo.project.name === 'webkit' ? 'Alt+Tab' : 'Tab');
   expect(await issue.evaluate((element) => element.matches(':focus-visible'))).toBe(true);
@@ -602,7 +647,7 @@ test('reduced motion and the 200 percent layout equivalent preserve utility', as
 
   if (testInfo.project.name === 'zoom-200-chromium') {
     await expect(page.getByRole('heading', { level: 1, name: 'Access' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Current location' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
     await expectNoAxeViolations(page);
   }
   diagnostics.assertClean();

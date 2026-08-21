@@ -56,13 +56,13 @@ const commentPolicySummaries: Record<CommentPolicy, string> = {
   shared: 'Shared comments',
 };
 
-function expirySummary(choice: ShareExpiryChoice): string {
+export function expirySummary(choice: ShareExpiryChoice): string {
   if (choice === 'never') return 'Never expires';
   if (choice === 'custom') return 'Custom expiry';
   return `Expires in ${expiryLabels[choice].toLocaleLowerCase()}`;
 }
 
-function targetSummary(
+export function targetSummary(
   mode: 'latest' | 'pinned',
   revisions: readonly ArtifactRevision[],
   revisionId: string,

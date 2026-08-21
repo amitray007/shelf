@@ -670,6 +670,45 @@ describe('comment service', () => {
     expect(h.visitorUpserts()).toBe(before);
   });
 
+  it('trims, requires, and bounds an optional moderator display name', async () => {
+    const h = harness('shared');
+    const created = await h.service.createThread({
+      installationId: 'installation-main',
+      workspaceId: 'workspace-main',
+      shareId,
+      revisionId,
+      anchor,
+      authority: { kind: 'visitor', visitorKey: 'visitor_digest_a_123456', displayName: 'A' },
+      body: 'starter',
+    });
+    const reply = (displayName?: string) =>
+      h.service.createReply({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        shareId,
+        threadId: created.threadId,
+        authority: {
+          kind: 'moderator',
+          actorId: 'actor-moderator',
+          ...(displayName === undefined ? {} : { displayName }),
+        },
+        body: 'moderator reply',
+      });
+
+    await expect(reply('  Grace Hopper  ')).resolves.toMatchObject({
+      author: { kind: 'actor', actorId: 'actor-moderator', displayName: 'Grace Hopper' },
+    });
+    await expect(reply('n'.repeat(128))).resolves.toMatchObject({
+      author: { displayName: 'n'.repeat(128) },
+    });
+    await expect(reply(' ')).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    await expect(reply('n'.repeat(129))).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+
+    const anonymous = await reply();
+    expect(anonymous.author).toMatchObject({ kind: 'actor', actorId: 'actor-moderator' });
+    expect(anonymous.author).not.toHaveProperty('displayName');
+  });
+
   it('maps comment repository failures to retryable service unavailable errors', async () => {
     const h = harness('shared');
     h.comments.createThread = async () => {

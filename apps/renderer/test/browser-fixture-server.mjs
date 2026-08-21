@@ -1,7 +1,8 @@
 import { createRendererServer } from '../dist/server.js';
 
 const shareId = `shr_${'d'.repeat(22)}`;
-const secret = 's'.repeat(43);
+// Matches the viewer session token the web browser fixture server issues for protected shares.
+const viewerToken = `${'v'.repeat(24)}.${'t'.repeat(43)}`;
 const authoredHtml = `<!doctype html><html><head><title>Isolated artifact</title></head><body>
   <h1>Rendered idea</h1>
   <script>
@@ -37,7 +38,9 @@ const server = await createRendererServer({
   port: 43874,
   resolver: {
     async resolveHtml(request) {
-      return request.shareId === shareId && request.secret === secret
+      return request.accessType === 'protected' &&
+        request.shareId === shareId &&
+        request.viewerToken === viewerToken
         ? { status: 'available', html: authoredHtml }
         : { status: 'unavailable' };
     },

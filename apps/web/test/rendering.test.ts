@@ -1,6 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { selectRenderer, supportsSourceView } from '../src/rendering.js';
+import {
+  type prefetchRendererModules,
+  selectRenderer,
+  supportsSourceView,
+} from '../src/rendering.js';
+
+// The lazy renderer chunks pull in React and heavy view code, so the prefetch tests observe the
+// dynamic imports through stubs rather than loading the real modules.
+const prefetchedModules: string[] = [];
+vi.mock('../src/components/folder-browser.js', () => {
+  prefetchedModules.push('folder-browser');
+  return { FolderBrowser: () => null };
+});
+vi.mock('../src/components/markdown-view.js', () => {
+  prefetchedModules.push('markdown-view');
+  return { MarkdownView: () => null };
+});
 
 describe('passive renderer selection', () => {
   it.each([
@@ -47,5 +63,43 @@ describe('passive renderer selection', () => {
     ['application/pdf', false],
   ] as const)('reports whether %s has a readable source view', (mediaType, expected) => {
     expect(supportsSourceView(mediaType)).toBe(expected);
+  });
+});
+
+describe('renderer module prefetching', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    prefetchedModules.length = 0;
+  });
+
+  afterEach(() => {
+    vi.resetModules();
+  });
+
+  async function prefetch(revision: Parameters<typeof prefetchRendererModules>[0]) {
+    const rendering = await import('../src/rendering.js');
+    rendering.prefetchRendererModules(revision);
+    // The prefetch fires a floating dynamic import, so let the module graph settle first.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return prefetchedModules;
+  }
+
+  it('warms the folder browser chunk for folder revisions', async () => {
+    expect(await prefetch({ kind: 'folder' })).toEqual(['folder-browser']);
+  });
+
+  it('warms the markdown chunk for markdown revisions', async () => {
+    expect(await prefetch({ kind: 'file', mediaType: 'text/markdown' })).toEqual(['markdown-view']);
+  });
+
+  it.each(['text/plain', 'application/json', 'image/png', 'text/html', 'application/pdf'])(
+    'prefetches nothing for %s',
+    async (mediaType) => {
+      expect(await prefetch({ kind: 'file', mediaType })).toEqual([]);
+    },
+  );
+
+  it('prefetches nothing for a file revision without a known media type', async () => {
+    expect(await prefetch({ kind: 'file' })).toEqual([]);
   });
 });

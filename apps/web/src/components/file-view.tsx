@@ -967,9 +967,12 @@ export function FileView({
   }
 
   const activeMode = mode === 'source' ? 'source' : 'preview';
+  // The toolbar is its own labelled region rather than a <header>: outside the viewer's <main> a
+  // <header> would claim a second banner landmark beside the viewer rail, and a bare <div> would
+  // leave the toolbar controls outside every landmark.
   return (
     <div className="file-view">
-      <header className="file-view-toolbar">
+      <section aria-label={`${fileName ?? 'File'} view controls`} className="file-view-toolbar">
         {header === undefined && !showSidebarToggle ? null : (
           <div className="file-view-meta">
             {showSidebarToggle ? (
@@ -1003,7 +1006,7 @@ export function FileView({
             variant="segmented"
           />
         ) : null}
-      </header>
+      </section>
       {hasContent ? (
         <div className="file-view-content">
           {hasModes ? (
