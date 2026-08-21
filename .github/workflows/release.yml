@@ -89,6 +89,8 @@ jobs:
           HELP="$(node dist/shelf.js --help)"
           echo "$HELP" | grep -q "Publish, version, inspect, and share"
           [ "$(node dist/shelf.js --version)" = '${{ steps.version.outputs.version }}' ]
+          # The vendored keyring loader must resolve beside the bundle.
+          node -e "import('@napi-rs/keyring').then((m) => { if (typeof m.Entry !== 'function') process.exit(1); })"
           # Errors must still be a single JSON envelope with a usage exit code.
           set +e
           OUT=$(node dist/shelf.js artifacts list 2>&1 >/dev/null); CODE=$?
@@ -102,7 +104,7 @@ jobs:
           VERSION='${{ steps.version.outputs.version }}'
           TARBALL="shelf-${VERSION}.tgz"
           cp LICENSE apps/cli/dist-standalone/LICENSE
-          tar -czf "$TARBALL" -C apps/cli/dist-standalone dist package.json LICENSE
+          tar -czf "$TARBALL" -C apps/cli/dist-standalone dist node_modules package.json LICENSE
           echo "sha=$(shasum -a 256 "$TARBALL" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
           echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
 
