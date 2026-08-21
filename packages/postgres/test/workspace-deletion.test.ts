@@ -18,6 +18,22 @@ const describePostgres = adminConnectionString === undefined ? describe.skip : d
 const owner = 'act_owner_0000000000000000000000';
 const installationId = 'installation-main';
 
+async function waitForDatabaseConnectionsToClose(admin: Pool, databaseName: string) {
+  const deadline = Date.now() + 5_000;
+  while (true) {
+    const result = await admin.query<{ has_connections: boolean }>(
+      `select exists (
+        select 1 from pg_stat_activity where datname = $1
+      ) as has_connections`,
+      [databaseName],
+    );
+    if (result.rows[0]?.has_connections === false) return;
+    if (Date.now() >= deadline)
+      throw new Error(`Timed out waiting for PostgreSQL connections to ${databaseName} to close.`);
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 async function withDatabase<T>(run: (database: ReturnType<typeof createPostgresDatabase>) => T) {
   const databaseName = `shelf_workspace_deletion_${randomBytes(8).toString('hex')}`;
   const targetUrl = new URL(adminConnectionString as string);
@@ -39,7 +55,8 @@ async function withDatabase<T>(run: (database: ReturnType<typeof createPostgresD
     return await run(database);
   } finally {
     await database.destroy();
-    await admin.query(`DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`);
+    await waitForDatabaseConnectionsToClose(admin, databaseName);
+    await admin.query(`DROP DATABASE IF EXISTS ${databaseName}`);
     await admin.end();
   }
 }
