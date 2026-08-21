@@ -81,6 +81,13 @@ import {
   type SetProfileOptions,
 } from './profiles.js';
 import type { CliRuntime } from './runtime.js';
+import {
+  describeCommandAt,
+  executeSchema,
+  resolveCommandPath,
+  SCHEMA_FLAG,
+  subcommandsOf,
+} from './schema.js';
 import { CLI_VERSION } from './version.js';
 
 export type { CliRuntime } from './runtime.js';
@@ -99,6 +106,11 @@ export async function runCli(
     stderr: (chunk) => process.stderr.write(chunk),
   },
 ): Promise<number> {
+  // Commander reports "no command given" by writing help to stderr and throwing
+  // commander.help. Capture that text so it can be re-emitted on stdout instead of
+  // surfacing Commander's internal "(outputHelp)" sentinel as an error message.
+  let suppressedHelp = '';
+
   const program = new Command()
     .name('shelf')
     .description('Publish, version, inspect, and share Shelf artifacts')
@@ -106,7 +118,12 @@ export async function runCli(
     .showHelpAfterError(false)
     .showSuggestionAfterError(false)
     .exitOverride()
-    .configureOutput({ writeOut: runtime.stdout, writeErr() {} })
+    .configureOutput({
+      writeOut: runtime.stdout,
+      writeErr(chunk) {
+        suppressedHelp += chunk;
+      },
+    })
     .allowExcessArguments(false);
 
   program.addHelpText(
@@ -144,10 +161,13 @@ Review comments:
     .description('Publish one immutable file or folder revision')
     .argument('[path]', 'file or directory to publish through a configured profile')
     .option('--profile <name>', 'use one configured profile')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .option('--file <path>')
-    .option('--idempotency-key <key>')
+    .option('--url <url>', 'installation origin for legacy publishing; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID for legacy publishing; requires --url')
+    .option('--file <path>', 'file to publish in legacy mode; use the path argument instead')
+    .option(
+      '--idempotency-key <key>',
+      'stable key that makes retries safe (1-128 characters); derived from the operation journal when omitted',
+    )
     .option('--artifact <artifact-id>', 'publish another revision to this artifact')
     .option('--metadata <key=value>', 'publisher metadata; repeatable', collect, [])
     .option('--title <title>', 'human-readable artifact title stored as metadata')
@@ -182,6 +202,21 @@ Sharing:
   New links default to comments Off. Use --comments private or --comments shared to enable
   comments; omission leaves a prepared link unchanged, while explicit --comments off disables it.
   Add --expires-in, --expires-at, or --max-sessions to create and return a custom link instead.
+
+Output:
+  Success returns urls.artifact and urls.revision, plus urls.share when --share is used. Report
+  those URLs rather than raw IDs.
+
+Partial success:
+  With --share, the publish can succeed while the share fails. The CLI then exits non-zero and
+  writes "status": "partial" to stderr, carrying the completed publish result and its urls. The
+  revision already exists. Retry only the share with "shelf shares create"; do not re-publish.
+
+Idempotency:
+  --idempotency-key is optional here. Omit it and Shelf derives a stable key from the crash-safe
+  operation journal, so re-running an interrupted publish resumes instead of duplicating. Supply
+  your own key to make retries of the SAME logical publish safe; reuse it verbatim when retrying,
+  and use a NEW key when publishing a new revision of an existing artifact.
 
 Examples:
   shelf publish ./notes.md --title "Release notes" --description "Changes in this build"
@@ -246,10 +281,13 @@ Examples:
     .command('publish')
     .description('Publish one complete immutable folder snapshot')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .requiredOption('--directory <path>')
-    .requiredOption('--idempotency-key <key>')
+    .option('--url <url>', 'installation origin to publish to; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--directory <path>', 'local directory to snapshot and publish')
+    .requiredOption(
+      '--idempotency-key <key>',
+      'stable key that makes retries of this snapshot safe (1-128 characters)',
+    )
     .option('--artifact <artifact-id>', 'publish another snapshot to this folder artifact')
     .option('--metadata <key=value>', 'publisher metadata; repeatable', collect, [])
     .option('--title <title>', 'human-readable artifact title stored as metadata')
@@ -265,6 +303,15 @@ Examples:
 Metadata:
   Agent publishes require --title and --description. Add arbitrary strings with repeatable
   --metadata key=value. Humans may intentionally omit title/description with --user-bypass.
+
+Idempotency:
+  --idempotency-key is required. Supply any stable string of 1-128 characters and reuse it
+  verbatim when retrying the SAME snapshot; that is what makes a retry safe after a timeout or
+  crash. Use a NEW key to publish a new snapshot of an existing folder artifact.
+
+Examples:
+  shelf folders publish --profile default --directory ./site --title "Site" --description "Static build" --idempotency-key site-2026-02-01
+  shelf folders publish --profile default --directory ./site --artifact art_<id> --title "Site" --description "Rebuild" --idempotency-key site-2026-02-02
 `,
     )
     .action(async (options: PublishFolderCommandOptions) => {
@@ -274,11 +321,19 @@ Metadata:
     .command('tree')
     .description('Read one immutable folder revision tree')
     .option('--profile <name>', 'use one configured profile instead of --url')
-    .option('--url <url>')
-    .requiredOption('--revision <revision-id>')
-    .option('--limit <count>')
-    .option('--cursor <cursor>')
+    .option('--url <url>', 'installation origin to read from; conflicts with --profile')
+    .requiredOption('--revision <revision-id>', 'folder revision to read the tree from')
+    .option('--limit <count>', 'entries to return (1-100, default 100)')
+    .option('--cursor <cursor>', 'opaque cursor returned by the previous page')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  shelf folders tree --profile default --revision rev_<id>
+  shelf folders tree --profile default --revision rev_<id> --limit 50 --cursor <cursor>
+`,
+    )
     .action(async (options: FolderTreeCommandOptions) => {
       result = await executeFolderTree(options, runtime);
     });
@@ -286,8 +341,8 @@ Metadata:
     .command('download')
     .description('Download one file from inside an immutable folder revision')
     .option('--profile <name>', 'use one configured profile instead of --url')
-    .option('--url <url>')
-    .requiredOption('--revision <revision-id>')
+    .option('--url <url>', 'installation origin to read from; conflicts with --profile')
+    .requiredOption('--revision <revision-id>', 'folder revision that contains the entry')
     .requiredOption('--path <entry-path>', 'portable folder entry path to download')
     .requiredOption('--output <path>', 'explicit local file path to write')
     .option('--overwrite', 'atomically replace an existing file; default refuses to replace')
@@ -314,12 +369,20 @@ Examples:
     .command('compare')
     .description('Compare two revisions of one artifact')
     .option('--profile <name>', 'use one configured profile instead of --url')
-    .option('--url <url>')
-    .requiredOption('--base <revision-id>')
-    .requiredOption('--target <revision-id>')
-    .option('--limit <count>')
-    .option('--cursor <cursor>')
+    .option('--url <url>', 'installation origin to read from; conflicts with --profile')
+    .requiredOption('--base <revision-id>', 'revision to compare from')
+    .requiredOption('--target <revision-id>', 'revision to compare against the base')
+    .option('--limit <count>', 'comparison entries to return (1-100, default 100)')
+    .option('--cursor <cursor>', 'opaque cursor returned by the previous page')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  shelf revisions compare --profile default --base rev_<id> --target rev_<id>
+  shelf revisions compare --profile default --base rev_<id> --target rev_<id> --limit 25
+`,
+    )
     .action(async (options: CompareRevisionsCommandOptions) => {
       result = await executeCompareRevisions(options, runtime);
     });
@@ -327,8 +390,8 @@ Examples:
     .command('download')
     .description('Download one exact immutable file revision')
     .option('--profile <name>', 'use one configured profile instead of --url')
-    .option('--url <url>')
-    .requiredOption('--revision <revision-id>')
+    .option('--url <url>', 'installation origin to read from; conflicts with --profile')
+    .requiredOption('--revision <revision-id>', 'exact immutable revision to download')
     .requiredOption('--output <path>', 'explicit local file path to write')
     .option('--overwrite', 'atomically replace an existing file; default refuses to replace')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
@@ -355,14 +418,25 @@ Examples:
     .command('list')
     .description('List a workspace artifact page')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .option('--limit <count>')
-    .option('--cursor <cursor>')
+    .option('--url <url>', 'installation origin to read from; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID to list artifacts from; requires --url')
+    .option('--limit <count>', 'artifacts to return (1-100, default 20)')
+    .option('--cursor <cursor>', 'opaque cursor returned by the previous page')
     .option('--sort <created|updated>', 'sort field; defaults to updated')
     .option('--order <asc|desc>', 'sort direction; defaults to desc')
     .option('--search <text>', 'search title, description, filename, or artifact name')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Responses include items and nextCursor; pass nextCursor back with --cursor to page further.
+
+Examples:
+  shelf artifacts list --profile default
+  shelf artifacts list --profile default --search "release notes" --limit 50
+  shelf artifacts list --profile default --sort created --order asc
+`,
+    )
     .action(async (options: ListArtifactsCommandOptions) => {
       result = await executeListArtifacts(options, runtime);
     });
@@ -370,9 +444,18 @@ Examples:
     .command('show')
     .description('Show one artifact and its latest revision')
     .option('--profile <name>', 'use one configured profile instead of --url')
-    .option('--url <url>')
-    .requiredOption('--artifact <artifact-id>')
+    .option('--url <url>', 'installation origin to read from; conflicts with --profile')
+    .requiredOption('--artifact <artifact-id>', 'artifact to show')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Returns the artifact and its latest revision as one JSON document.
+
+Example:
+  shelf artifacts show --profile default --artifact art_<id>
+`,
+    )
     .action(async (options: ShowArtifactCommandOptions) => {
       result = await executeShowArtifact(options, runtime);
     });
@@ -380,12 +463,22 @@ Examples:
     .command('history')
     .description('List immutable revision history')
     .option('--profile <name>', 'use one configured profile instead of --url')
-    .option('--url <url>')
-    .requiredOption('--artifact <artifact-id>')
-    .option('--limit <count>')
-    .option('--order <newest|oldest>')
-    .option('--cursor <cursor>')
+    .option('--url <url>', 'installation origin to read from; conflicts with --profile')
+    .requiredOption('--artifact <artifact-id>', 'artifact whose revision history to list')
+    .option('--limit <count>', 'revisions to return (1-100, default 20)')
+    .option('--order <newest|oldest>', 'history order; defaults to newest')
+    .option('--cursor <cursor>', 'opaque cursor returned by the previous page')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Each item is one immutable revision. Page with --cursor using the previous response's nextCursor.
+
+Examples:
+  shelf artifacts history --profile default --artifact art_<id>
+  shelf artifacts history --profile default --artifact art_<id> --order oldest --limit 100
+`,
+    )
     .action(async (options: ArtifactHistoryCommandOptions) => {
       result = await executeArtifactHistory(options, runtime);
     });
@@ -393,10 +486,19 @@ Examples:
     .command('rename')
     .description('Rename an artifact without changing revision content')
     .option('--profile <name>', 'use one configured profile instead of --url')
-    .option('--url <url>')
-    .requiredOption('--artifact <artifact-id>')
-    .requiredOption('--name <name>')
+    .option('--url <url>', 'installation origin to write to; conflicts with --profile')
+    .requiredOption('--artifact <artifact-id>', 'artifact to rename')
+    .requiredOption('--name <name>', 'new display name (1-255 characters, no control characters)')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Renaming updates the display name only. Existing revisions and share links are unaffected.
+
+Example:
+  shelf artifacts rename --profile default --artifact art_<id> --name "Q3 release notes"
+`,
+    )
     .action(async (options: RenameArtifactCommandOptions) => {
       result = await executeRenameArtifact(options, runtime);
     });
@@ -404,12 +506,29 @@ Examples:
     .command('restore')
     .description('Create a new revision from an earlier immutable revision')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .requiredOption('--artifact <artifact-id>')
-    .requiredOption('--revision <revision-id>')
-    .requiredOption('--idempotency-key <key>')
+    .option('--url <url>', 'installation origin to write to; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact to restore a revision into')
+    .requiredOption('--revision <revision-id>', 'earlier revision to copy into a new revision')
+    .requiredOption(
+      '--idempotency-key <key>',
+      'stable key that makes retries of this restore safe (1-128 characters)',
+    )
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Restoring never rewrites history. It copies the chosen revision's content into a new revision at
+the head of the artifact.
+
+Idempotency:
+  --idempotency-key is required. Reuse the same key verbatim when retrying the SAME restore so a
+  timeout cannot create two revisions. Use a NEW key for a subsequent, distinct restore.
+
+Example:
+  shelf artifacts restore --profile default --artifact art_<id> --revision rev_<id> --idempotency-key restore-art-rev-1
+`,
+    )
     .action(async (options: RestoreArtifactCommandOptions) => {
       result = await executeRestoreArtifact(options, runtime);
     });
@@ -417,10 +536,21 @@ Examples:
     .command('delete')
     .description('Soft-delete an artifact and revoke its active shares')
     .option('--profile <name>', 'use one configured profile instead of --url')
-    .option('--url <url>')
-    .requiredOption('--artifact <artifact-id>')
+    .option('--url <url>', 'installation origin to write to; conflicts with --profile')
+    .requiredOption('--artifact <artifact-id>', 'artifact to soft-delete')
     .requiredOption('--confirm <artifact-id>', 'confirm the exact artifact ID to delete')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Deletion is a soft delete: active shares are revoked immediately and the artifact stays
+recoverable with "shelf artifacts recover" during its recovery window. --confirm must repeat the
+same artifact ID passed to --artifact.
+
+Example:
+  shelf artifacts delete --profile default --artifact art_<id> --confirm art_<id>
+`,
+    )
     .action(async (options: DeleteArtifactCommandOptions) => {
       result = await executeDeleteArtifact(options, runtime);
     });
@@ -428,10 +558,27 @@ Examples:
     .command('recover')
     .description('Recover a soft-deleted artifact during its recovery window')
     .option('--profile <name>', 'use one configured profile instead of --url')
-    .option('--url <url>')
-    .requiredOption('--artifact <artifact-id>')
-    .option('--idempotency-key <key>')
+    .option('--url <url>', 'installation origin to write to; conflicts with --profile')
+    .requiredOption('--artifact <artifact-id>', 'soft-deleted artifact to recover')
+    .option(
+      '--idempotency-key <key>',
+      'stable key that makes retries safe (1-128 characters); a fresh key is generated when omitted',
+    )
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Recovery only succeeds while the artifact is inside its recovery window. Shares revoked by the
+delete are not restored.
+
+Idempotency:
+  --idempotency-key is optional. Omitted, the CLI generates a fresh key per invocation. Pass your
+  own stable key and reuse it verbatim to make retries of the SAME recovery safe.
+
+Example:
+  shelf artifacts recover --profile default --artifact art_<id>
+`,
+    )
     .action(async (options: RecoverArtifactCommandOptions) => {
       result = await executeRecoverArtifact(options, runtime);
     });
@@ -441,10 +588,13 @@ Examples:
     .command('create')
     .description('Create a reusable Protected or Public share link')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .requiredOption('--artifact <artifact-id>')
-    .requiredOption('--idempotency-key <key>')
+    .option('--url <url>', 'installation origin to write to; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact to share')
+    .requiredOption(
+      '--idempotency-key <key>',
+      'stable key that makes retries of this share safe (1-128 characters)',
+    )
     .option('--revision <revision-id>', 'pin the share to one immutable revision')
     .option('--access <protected|public>', 'access policy; defaults to protected')
     .option('--comments <off|private|shared>', 'comment policy; defaults to off')
@@ -469,6 +619,10 @@ Comments:
 Targets default to Latest. Add --revision to pin the link to one immutable revision.
 Use either --expires-in or --expires-at, never both.
 
+Idempotency:
+  --idempotency-key is required. Reuse the same key verbatim when retrying the SAME share so a
+  timeout cannot mint two links. Use a NEW key for every additional distinct link.
+
 Examples:
   shelf shares create --url <url> --workspace <id> --artifact <artifact-id> --idempotency-key <key>
   shelf shares create --url <url> --workspace <id> --artifact <artifact-id> --access protected --max-sessions 5 --expires-in 7d --idempotency-key <key>
@@ -482,9 +636,9 @@ Examples:
     .command('defaults')
     .description('Get or repair both permanent Latest defaults for one artifact')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .requiredOption('--artifact <artifact-id>')
+    .option('--url <url>', 'installation origin to read from; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact whose default links to get or repair')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .addHelpText(
       'after',
@@ -503,11 +657,22 @@ Example:
     .command('list')
     .description('List reusable share URLs, lifecycle state, and usage')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .option('--limit <count>')
-    .option('--cursor <cursor>')
+    .option('--url <url>', 'installation origin to read from; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID to list shares from; requires --url')
+    .option('--limit <count>', 'shares to return (1-100, default 20)')
+    .option('--cursor <cursor>', 'opaque cursor returned by the previous page')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Lists reusable links with lifecycle state and usage counts. Protected capability secrets are
+never printed.
+
+Examples:
+  shelf shares list --profile default
+  shelf shares list --profile default --limit 50 --cursor <cursor>
+`,
+    )
     .action(async (options: ListSharesCommandOptions) => {
       result = await executeListShares(options, runtime);
     });
@@ -515,10 +680,20 @@ Example:
     .command('revoke')
     .description('Revoke one share immediately')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .requiredOption('--share <share-id>')
+    .option('--url <url>', 'installation origin to write to; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the share; requires --url')
+    .requiredOption('--share <share-id>', 'share to revoke')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Revocation takes effect immediately and cannot be undone. Permanent Latest defaults are recreated
+on demand by "shelf shares defaults".
+
+Example:
+  shelf shares revoke --profile default --share shr_<id>
+`,
+    )
     .action(async (options: RevokeShareCommandOptions) => {
       result = await executeRevokeShare(options, runtime);
     });
@@ -526,10 +701,10 @@ Example:
     .command('comments')
     .description('Set the comment policy on an existing share')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .requiredOption('--share <share-id>')
-    .requiredOption('--comments <off|private|shared>')
+    .option('--url <url>', 'installation origin to write to; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the share; requires --url')
+    .requiredOption('--share <share-id>', 'share whose comment policy to set')
+    .requiredOption('--comments <off|private|shared>', 'new comment policy for this share')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .addHelpText(
       'after',
@@ -554,9 +729,9 @@ Examples:
     .command('list')
     .description('List artifact comment threads and their posts')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .requiredOption('--artifact <artifact-id>')
+    .option('--url <url>', 'installation origin to use; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact that owns the thread or post')
     .option('--revision <revision-id>', 'evaluate line anchors against this revision')
     .option('--cursor <cursor>', 'opaque cursor returned by the previous page')
     .option('--limit <count>', 'number of threads to return (1-50, default 25)')
@@ -581,11 +756,11 @@ Example:
     .command('reply')
     .description('Reply to an artifact thread as the authenticated moderator')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .requiredOption('--artifact <artifact-id>')
-    .requiredOption('--thread <thread-id>')
-    .requiredOption('--body <text>')
+    .option('--url <url>', 'installation origin to use; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact that owns the thread or post')
+    .requiredOption('--thread <thread-id>', 'comment thread to act on')
+    .requiredOption('--body <text>', 'reply body text (1-20000 characters)')
     .option('--display-name <name>', 'moderator display name shown on the reply (1-128 characters)')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .addHelpText(
@@ -595,8 +770,8 @@ The reply is posted as the authenticated moderator and returned as one structure
 are limited to 20000 characters. Add --display-name to override the recorded moderator name.
 
 Example:
-  shelf comments reply --url https://shelf.example --workspace <id> --artifact art_<id> --thread thread_<id> --body "Reviewed and fixed."
-  shelf comments reply --profile default --artifact art_<id> --thread thread_<id> --body "Fixed." --display-name "Release bot"
+  shelf comments reply --url https://shelf.example --workspace <id> --artifact art_<id> --thread <thread-id> --body "Reviewed and fixed."
+  shelf comments reply --profile default --artifact art_<id> --thread <thread-id> --body "Fixed." --display-name "Release bot"
 `,
     )
     .action(async (options: ReplyCommentCommandOptions) => {
@@ -607,8 +782,8 @@ Example:
     .command('summaries')
     .description('Summarize comment activity for a batch of workspace artifacts')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
+    .option('--url <url>', 'installation origin to use; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
     .requiredOption('--artifact <artifact-id>', 'artifact to summarize; repeatable', collect, [])
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .addHelpText(
@@ -631,16 +806,16 @@ Examples:
 These commands return the updated thread as structured JSON.
 
 Example:
-  shelf comments STATUS --url https://shelf.example --workspace <id> --artifact art_<id> --thread thread_<id>
+  shelf comments STATUS --url https://shelf.example --workspace <id> --artifact art_<id> --thread <thread-id>
 `;
   comments
     .command('resolve')
     .description('Resolve an artifact comment thread')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .requiredOption('--artifact <artifact-id>')
-    .requiredOption('--thread <thread-id>')
+    .option('--url <url>', 'installation origin to use; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact that owns the thread or post')
+    .requiredOption('--thread <thread-id>', 'comment thread to act on')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .addHelpText('after', threadStatusHelp.replace('STATUS', 'resolve'))
     .action(async (options: ThreadStatusCommandOptions) => {
@@ -650,10 +825,10 @@ Example:
     .command('reopen')
     .description('Reopen an artifact comment thread')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .requiredOption('--artifact <artifact-id>')
-    .requiredOption('--thread <thread-id>')
+    .option('--url <url>', 'installation origin to use; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact that owns the thread or post')
+    .requiredOption('--thread <thread-id>', 'comment thread to act on')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .addHelpText('after', threadStatusHelp.replace('STATUS', 'reopen'))
     .action(async (options: ThreadStatusCommandOptions) => {
@@ -665,16 +840,16 @@ Moderation changes visibility without rewriting the visitor's post. The updated 
 as structured JSON.
 
 Example:
-  shelf comments ACTION --url https://shelf.example --workspace <id> --artifact art_<id> --post post_<id>
+  shelf comments ACTION --url https://shelf.example --workspace <id> --artifact art_<id> --post <post-id>
 `;
   comments
     .command('hide')
     .description('Hide an artifact comment post as moderator')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .requiredOption('--artifact <artifact-id>')
-    .requiredOption('--post <post-id>')
+    .option('--url <url>', 'installation origin to use; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact that owns the thread or post')
+    .requiredOption('--post <post-id>', 'comment post to moderate')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .addHelpText('after', postModerationHelp.replace('ACTION', 'hide'))
     .action(async (options: PostModerationCommandOptions) => {
@@ -684,10 +859,10 @@ Example:
     .command('unhide')
     .description('Unhide an artifact comment post as moderator')
     .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
-    .option('--url <url>')
-    .option('--workspace <workspace>')
-    .requiredOption('--artifact <artifact-id>')
-    .requiredOption('--post <post-id>')
+    .option('--url <url>', 'installation origin to use; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact that owns the thread or post')
+    .requiredOption('--post <post-id>', 'comment post to moderate')
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .addHelpText('after', postModerationHelp.replace('ACTION', 'unhide'))
     .action(async (options: PostModerationCommandOptions) => {
@@ -698,38 +873,156 @@ Example:
   profiles
     .command('set')
     .description('Create or update an isolated CLI context')
-    .argument('<name>')
-    .requiredOption('--url <url>')
-    .requiredOption('--workspace <workspace>')
-    .option('--credential-env <variable>')
-    .option('--store-token-from-env <variable>')
+    .argument('<name>', 'profile name to create or overwrite')
+    .requiredOption('--url <url>', 'installation origin, HTTPS unless --allow-insecure-loopback')
+    .requiredOption('--workspace <workspace>', 'workspace ID this profile is scoped to')
+    .option(
+      '--credential-env <variable>',
+      'record the NAME of an env var; the token is read from it on every invocation',
+    )
+    .option(
+      '--store-token-from-env <variable>',
+      'read the token from this env var ONCE and copy it into the OS keyring',
+    )
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Credentials:
+  Choose exactly one of --credential-env or --store-token-from-env; they are mutually exclusive.
+
+  --credential-env <VAR>        Stores only the variable NAME in the profile. The token is never
+                                written to disk and is read from the environment at each
+                                invocation, so <VAR> must be exported whenever you run shelf.
+  --store-token-from-env <VAR>  Reads the token out of <VAR> ONCE and copies it into the OS native
+                                keyring. <VAR> need not be set afterward. The keyring is
+                                unavailable on some systems, including many headless and CI hosts;
+                                use --credential-env there.
+
+  Tokens are never accepted as command arguments.
+
+Examples:
+  shelf profiles set default --url https://shelf.example --workspace <id> --credential-env SHELF_TOKEN
+  shelf profiles set release --url https://shelf.example --workspace <id> --store-token-from-env SHELF_TOKEN
+`,
+    )
     .action(async (name: string, options: Omit<SetProfileOptions, 'name'>) => {
       result = await executeSetProfile({ name, ...options }, runtime);
     });
   profiles
     .command('list')
     .description('List configured profile names and contexts')
+    .addHelpText(
+      'after',
+      `
+Lists each profile's installation URL, workspace, and credential reference. Tokens are never
+printed.
+
+Example:
+  shelf profiles list
+`,
+    )
     .action(async () => {
       result = await executeListProfiles(runtime.env);
     });
   profiles
     .command('show')
     .description('Show one profile without revealing its credential')
-    .argument('<name>')
+    .argument('<name>', 'profile name to show')
+    .addHelpText(
+      'after',
+      `
+Reports the credential reference (env variable name or keyring account), never the token itself.
+
+Example:
+  shelf profiles show default
+`,
+    )
     .action(async (name: string) => {
       result = await executeShowProfile(name, runtime.env);
     });
   profiles
     .command('remove')
     .description('Remove one profile and its stored credential reference')
-    .argument('<name>')
+    .argument('<name>', 'profile name to remove')
     .option('--yes', 'confirm removal without prompting')
+    .addHelpText(
+      'after',
+      `
+Removes the profile entry and deletes its keyring credential when one was stored. Nothing on the
+Shelf installation is changed.
+
+Example:
+  shelf profiles remove default --yes
+`,
+    )
     .action(async (name: string, options: { yes?: boolean }) => {
       result = await executeRemoveProfile(name, options.yes, runtime);
     });
 
+  program
+    .command('schema')
+    .description('Print the full command tree as JSON for programmatic discovery')
+    .argument(
+      '[command...]',
+      'command path to describe on its own, e.g. "artifacts list"; omit for the full tree',
+    )
+    .addHelpText(
+      'after',
+      `
+Pass no argument for the whole tree with its exit-code and error-code tables. Pass a command path
+to get just that command's contract, which is the same document "<command> --schema" prints.
+
+Examples:
+  shelf schema
+  shelf schema artifacts list
+  shelf artifacts list --schema
+`,
+    )
+    .action(async (segments: string[]) => {
+      if (segments.length === 0) {
+        result = await executeSchema(program);
+        return;
+      }
+      const resolved = resolveCommandPath(program, segments);
+      if (resolved === undefined) {
+        throw usageFailure(`Unknown command path "${segments.join(' ')}".`);
+      }
+      result = describeCommandAt(resolved.command, resolved.path);
+    });
+
+  // Register --schema on every command by walking the tree, so a new command
+  // inherits it automatically and the flag can never drift from the surface.
+  const registerSchemaFlag = (command: Command): void => {
+    command.option(SCHEMA_FLAG, "print this command's JSON contract and exit");
+    for (const child of subcommandsOf(command, true)) registerSchemaFlag(child);
+  };
+  registerSchemaFlag(program);
+
   try {
+    // Answer --schema before Commander parses, because parsing enforces
+    // requiredOption and would reject "shelf artifacts show --schema" for a
+    // missing --artifact. Resolving the path off the live tree keeps the
+    // required options intact while still letting an agent read the contract.
+    const userArgs = argv.slice(2);
+    if (userArgs.includes(SCHEMA_FLAG)) {
+      const segments: string[] = [];
+      for (const token of userArgs) {
+        if (token.startsWith('-')) break;
+        segments.push(token);
+      }
+      if (segments.length === 0) {
+        runtime.stdout(jsonLine(await executeSchema(program)));
+        return CLI_EXIT_CODES.success;
+      }
+      const resolved = resolveCommandPath(program, segments);
+      if (resolved === undefined) {
+        throw usageFailure(`Unknown command path "${segments.join(' ')}".`);
+      }
+      runtime.stdout(jsonLine(describeCommandAt(resolved.command, resolved.path)));
+      return CLI_EXIT_CODES.success;
+    }
+
     await program.parseAsync([...argv]);
     if (result === undefined) throw usageFailure('A command is required.');
     await finalizeResult?.();
@@ -741,6 +1034,12 @@ Example:
       (error.code === 'commander.helpDisplayed' || error.code === 'commander.version')
     ) {
       return CLI_EXIT_CODES.success;
+    }
+    // A bare "shelf" or bare command group displays help but runs no command. Write the
+    // help text to stdout and exit with the usage code.
+    if (error instanceof CommanderError && error.code === 'commander.help') {
+      if (suppressedHelp.length > 0) runtime.stdout(suppressedHelp);
+      return CLI_EXIT_CODES.usage;
     }
     if (error instanceof CliPartialFailure) {
       runtime.stderr(

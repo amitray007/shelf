@@ -55,9 +55,10 @@ The product CLI is named `shelf`. It talks only to the public `/api/v1` contract
 The CLI contract for programs and agents:
 
 - Success writes one JSON document to stdout. Failure writes one redacted error envelope to stderr.
-- Exit codes: `0` success, `2` usage, `3` authentication, `4` authorization, `5` validation, `6` transient (retry is safe).
+- Exit codes: `0` success, `1` unexpected, `2` usage, `3` authentication, `4` authorization, `5` validation, `6` transient (retry is safe). Every error envelope also carries a `retryable` boolean.
 - There are no interactive prompts. Destructive commands need explicit flags: `--confirm <artifact-id>`, `--yes`, or `--overwrite`.
 - Profile-mode publishing keeps a crash-safe journal. If a run is interrupted, the next run resumes it. It does not publish twice.
+- `shelf publish --share` can partly succeed. If the publish lands but the share does not, the CLI exits non-zero and writes `"status": "partial"` to stderr with the completed `publish` result and its `urls`. The revision already exists, so retry only the share with `shelf shares create`. Re-running the publish is not needed.
 - Tokens are never command-line arguments. Error output redacts tokens and protected share URLs.
 
 Every remote command accepts `--profile <name>`. The explicit `--url` + `SHELF_TOKEN` form also works for automation that manages its own credentials. In this repository, run the built CLI with `pnpm shelf ...`.
@@ -92,17 +93,17 @@ shelf shares revoke --profile default --share shr_...
 # Discussions (moderator authority)
 shelf comments summaries --profile default --artifact art_... --artifact art_...
 shelf comments list --profile default --artifact art_...
-shelf comments reply --profile default --artifact art_... --thread thr_... \
+shelf comments reply --profile default --artifact art_... --thread <thread-id> \
   --body "Fixed in the 4th revision." --display-name "Amit"
-shelf comments resolve --profile default --artifact art_... --thread thr_...
-shelf comments hide --profile default --artifact art_... --post post_...
+shelf comments resolve --profile default --artifact art_... --thread <thread-id>
+shelf comments hide --profile default --artifact art_... --post <post-id>
 ```
 
 Publishing rules:
 
 - Positional publishing requires `--title` and `--description`. A human can skip them with `--user-bypass`.
 - Add repeatable string metadata with `--metadata key=value`.
-- To publish a new revision of an existing artifact, add `--artifact art_...` and use a new idempotency key.
+- To publish a new revision of an existing artifact, add `--artifact art_...`. Positional profile-mode publishing derives its own key from a content fingerprint, so `--idempotency-key` is not needed. The legacy `--file` form and `folders publish` require a new `--idempotency-key` for each new revision.
 - Folder publishing includes regular files and empty directories. It rejects symlinks and special files. It never uploads an absolute host path.
 
 The CLI has deliberate limits. Credential issuance, rotation, and revocation belong to the dashboard and `shelf-admin`. Workspace creation needs a human session. The CLI never accepts visitor capability secrets as arguments.
