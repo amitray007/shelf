@@ -119,9 +119,10 @@ Agent workflow:
 
 Context and authentication:
   Every remote command accepts --profile <name> to resolve the installation URL, workspace, and
-  credential from a configured profile. Without --profile, pass --url (and --workspace where the
-  command is workspace-scoped) and export SHELF_TOKEN. Mixing --profile with --url, --workspace,
-  or --allow-insecure-loopback is a usage error. Never pass tokens as arguments.
+  credential from a configured profile. A bare command with no context flags uses the profile
+  named "default" when it is configured. Otherwise pass --url (and --workspace where the command
+  is workspace-scoped) and export SHELF_TOKEN. Mixing --profile with --url, --workspace, or
+  --allow-insecure-loopback is a usage error. Never pass tokens as arguments.
 
 Output:
   Success writes one JSON document to stdout. Errors write one redacted JSON document to stderr.

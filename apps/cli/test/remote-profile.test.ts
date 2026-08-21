@@ -266,7 +266,7 @@ describe('shelf remote commands with --profile', () => {
         fetch,
       }),
     ).toBe(2);
-    expect(stderr.value()).toContain('--url or --profile is required.');
+    expect(stderr.value()).toContain('--url or --profile is required');
 
     const missingWorkspace = capture();
     expect(
@@ -302,5 +302,55 @@ describe('shelf remote commands with --profile', () => {
       }),
     ).toBe(0);
     expect(command.value()).toContain('--profile <name>');
+  });
+});
+
+describe('default profile fallback', () => {
+  it('uses the profile named "default" for a bare command', async () => {
+    const configDirectory = await configuredProfile();
+    const stdout = capture();
+    const fetch = vi.fn(async () => Response.json(artifactPage));
+
+    const exitCode = await runCli(['node', 'shelf', 'artifacts', 'list'], {
+      env: profileEnv(configDirectory),
+      stdout: stdout.write,
+      stderr() {},
+      fetch,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      'https://profile.example/api/v1/workspaces/profile-workspace/artifacts?limit=20&sort=updated&order=desc',
+    );
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get('authorization')).toBe(
+      'Bearer profile-secret',
+    );
+  });
+
+  it('keeps the usage error when no default profile is configured', async () => {
+    const configDirectory = await temporaryDirectory('shelf-cli-no-default-');
+    const stderr = capture();
+
+    const exitCode = await runCli(['node', 'shelf', 'artifacts', 'list'], {
+      env: { SHELF_CONFIG_DIR: configDirectory },
+      stdout() {},
+      stderr: stderr.write,
+    });
+
+    expect(exitCode).toBe(2);
+    expect(stderr.value()).toContain('configure a profile named');
+  });
+
+  it('does not fall back when explicit context flags are present', async () => {
+    const configDirectory = await configuredProfile();
+    const stderr = capture();
+
+    const exitCode = await runCli(
+      ['node', 'shelf', 'artifacts', 'list', '--workspace', 'other-workspace'],
+      { env: profileEnv(configDirectory), stdout() {}, stderr: stderr.write },
+    );
+
+    expect(exitCode).toBe(2);
+    expect(stderr.value()).toContain('--url');
   });
 });

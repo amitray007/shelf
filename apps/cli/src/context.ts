@@ -1,5 +1,5 @@
 import { usageFailure } from './output.js';
-import { resolveProfile } from './profiles.js';
+import { hasProfile, resolveProfile } from './profiles.js';
 import type { CliRuntime } from './runtime.js';
 
 export interface RemoteContextOptions {
@@ -34,12 +34,23 @@ function workspaceId(value: string): string {
 /**
  * Resolves one remote command context from either a configured profile or explicit flags.
  * Mixing --profile with --url, --workspace, or --allow-insecure-loopback is a usage error.
+ * A bare command with no context flags falls back to the profile named "default".
  */
 export async function resolveRemoteContext(
   options: RemoteContextOptions,
   runtime: CliRuntime,
 ): Promise<RemoteContext> {
-  if (options.profile !== undefined) {
+  let profileName = options.profile;
+  if (
+    profileName === undefined &&
+    options.url === undefined &&
+    options.workspace === undefined &&
+    options.allowInsecureLoopback === undefined &&
+    (await hasProfile('default', runtime))
+  ) {
+    profileName = 'default';
+  }
+  if (profileName !== undefined) {
     if (
       options.url !== undefined ||
       options.workspace !== undefined ||
@@ -49,7 +60,7 @@ export async function resolveRemoteContext(
         '--profile cannot be combined with --url, --workspace, or --allow-insecure-loopback.',
       );
     }
-    const profile = await resolveProfile(options.profile, runtime);
+    const profile = await resolveProfile(profileName, runtime);
     return {
       installationUrl: profile.installationUrl,
       workspaceId: profile.workspaceId,
@@ -57,7 +68,11 @@ export async function resolveRemoteContext(
       allowInsecureLoopback: profile.allowInsecureLoopback,
     };
   }
-  if (options.url === undefined) throw usageFailure('--url or --profile is required.');
+  if (options.url === undefined) {
+    throw usageFailure(
+      '--url or --profile is required, or configure a profile named "default" for bare commands.',
+    );
+  }
   return {
     installationUrl: options.url,
     workspaceId: options.workspace === undefined ? undefined : workspaceId(options.workspace),

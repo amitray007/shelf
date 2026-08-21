@@ -282,6 +282,12 @@ export async function executeRemoveProfile(
   return { apiVersion: 'v1', removed: { name } };
 }
 
+/** Reports whether a profile with this name is configured, without resolving its credential. */
+export async function hasProfile(name: string, runtime: CliRuntime): Promise<boolean> {
+  if (!PROFILE_NAME.test(name)) return false;
+  return (await readConfiguration(runtime.env)).profiles[name] !== undefined;
+}
+
 export async function resolveProfile(
   requestedName: string | undefined,
   runtime: CliRuntime,
