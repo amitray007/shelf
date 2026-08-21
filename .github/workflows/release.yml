@@ -84,8 +84,11 @@ jobs:
         run: |
           set -euo pipefail
           cd apps/cli/dist-standalone
-          node dist/shelf.js --help | grep -q "Publish, version, inspect, and share"
-          node dist/shelf.js --version | grep -qx '${{ steps.version.outputs.version }}'
+          # Capture before matching: grep -q on a live pipe closes it early and
+          # the CLI's remaining writes die with EPIPE.
+          HELP="$(node dist/shelf.js --help)"
+          echo "$HELP" | grep -q "Publish, version, inspect, and share"
+          [ "$(node dist/shelf.js --version)" = '${{ steps.version.outputs.version }}' ]
           # Errors must still be a single JSON envelope with a usage exit code.
           set +e
           OUT=$(node dist/shelf.js artifacts list 2>&1 >/dev/null); CODE=$?
