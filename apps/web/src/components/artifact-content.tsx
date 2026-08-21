@@ -13,7 +13,7 @@ import { normalizeMediaType, type PassiveRenderer } from '../rendering.js';
 import { isFileShareResolution, isFolderShareResolution } from '../share-types.js';
 import { CodeView, type FileReviewProps, FileView, formatJson } from './file-view.js';
 import { formatBytes } from './format.js';
-import { MarkdownView } from './markdown-view.js';
+import { LazyMarkdownView as MarkdownView } from './lazy-views.js';
 import { RendererFrame } from './renderer-frame.js';
 
 interface ArtifactContentProps {

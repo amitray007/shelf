@@ -12,8 +12,10 @@ import type {
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { CodeView, decodeFileSource, FileView, formatJson } from '../components/file-view.js';
-import { FolderBrowser } from '../components/folder-browser.js';
-import { MarkdownView } from '../components/markdown-view.js';
+import {
+  LazyFolderBrowser as FolderBrowser,
+  LazyMarkdownView as MarkdownView,
+} from '../components/lazy-views.js';
 import { DiscussionPanel } from '../components/review/discussion-panel.js';
 import type { ReviewSidebarMode } from '../components/review/types.js';
 import { normalizeMediaType, selectRenderer, supportsSourceView } from '../rendering.js';

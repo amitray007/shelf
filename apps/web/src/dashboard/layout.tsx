@@ -164,10 +164,24 @@ export function DashboardLayout() {
 export function DashboardLoading() {
   return (
     <div aria-busy="true" className="dashboard-loading">
-      <span className="wordmark">shelf</span>
-      <div className="dashboard-loading-state">
-        <span aria-hidden="true" className="loading-mark" />
-        <p>Opening workspace…</p>
+      <div className="dashboard-loading-bar">
+        <span className="wordmark">shelf</span>
+        <span aria-hidden="true" className="dashboard-skeleton-pill" />
+        <span aria-hidden="true" className="dashboard-skeleton-pill dashboard-skeleton-pill-end" />
+      </div>
+      <div className="dashboard-loading-body">
+        <p className="visually-hidden" role="status">
+          Opening workspace…
+        </p>
+        <span aria-hidden="true" className="dashboard-skeleton-heading" />
+        <div aria-hidden="true" className="dashboard-skeleton-rows">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
       </div>
     </div>
   );

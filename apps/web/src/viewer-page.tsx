@@ -25,7 +25,8 @@ import {
 } from './capability.js';
 import { ArtifactContent } from './components/artifact-content.js';
 import { decodeFileSource } from './components/file-view.js';
-import { FolderBrowser, type FolderBrowserReview } from './components/folder-browser.js';
+import type { FolderBrowserReview } from './components/folder-browser.js';
+import { LazyFolderBrowser as FolderBrowser } from './components/lazy-views.js';
 import { DiscussionPanel } from './components/review/discussion-panel.js';
 import { readReviewValue, writeReviewValue } from './components/review/persistence.js';
 import type { ReviewSidebarMode } from './components/review/types.js';

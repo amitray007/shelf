@@ -789,7 +789,9 @@ describe('viewer content states', () => {
     });
     expect(markdown).toContain('Preview');
     expect(markdown).toContain('Source');
-    expect(markdown).toContain('A readable artifact');
+    // The markdown pipeline is lazy-loaded; a static render shows its
+    // loading state where the rendered document will appear.
+    expect(markdown).toContain('Loading file…');
 
     const raster = renderContent({ renderer: { kind: 'image' }, text: undefined });
     expect(raster).not.toContain('Source');

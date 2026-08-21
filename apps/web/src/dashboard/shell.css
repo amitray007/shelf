@@ -15,16 +15,62 @@
   padding: 0 24px;
 }
 
-.dashboard-loading > .wordmark {
-  align-self: center;
+.dashboard-loading-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid var(--rule);
 }
 
-.dashboard-loading-state {
+.dashboard-skeleton-pill {
+  width: 120px;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--raised);
+  animation: loading-pulse 1.2s ease-in-out infinite;
+}
+
+.dashboard-skeleton-pill-end {
+  width: 72px;
+  margin-left: auto;
+  animation-delay: 80ms;
+}
+
+.dashboard-loading-body {
   display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 14px;
-  color: var(--text-muted);
+  align-content: start;
+  gap: 20px;
+  padding: 28px 0;
+}
+
+.dashboard-skeleton-heading {
+  width: min(220px, 40vw);
+  height: 18px;
+  border-radius: 6px;
+  background: var(--raised);
+  animation: loading-pulse 1.2s ease-in-out infinite;
+}
+
+.dashboard-skeleton-rows {
+  display: grid;
+  gap: 12px;
+  opacity: 0.75;
+}
+
+.dashboard-skeleton-rows span {
+  display: block;
+  height: 36px;
+  border-radius: 6px;
+  background: var(--raised);
+  animation: loading-pulse 1.2s ease-in-out infinite;
+}
+
+.dashboard-skeleton-rows span:nth-child(2n) {
+  animation-delay: 100ms;
+}
+
+.dashboard-skeleton-rows span:nth-child(3n) {
+  animation-delay: 200ms;
 }
 
 .dashboard-bar {

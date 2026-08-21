@@ -15,7 +15,7 @@ import {
   viewerSessionStorageKey,
 } from './file-view.js';
 import { formatBytes } from './format.js';
-import { MarkdownView } from './markdown-view.js';
+import { LazyMarkdownView as MarkdownView } from './lazy-views.js';
 import { DiscussionPanel } from './review/discussion-panel.js';
 import { ReviewSidebarToolbar } from './review/sidebar-toolbar.js';
 import type { ReviewSidebarMode, ReviewThreadFilter } from './review/types.js';

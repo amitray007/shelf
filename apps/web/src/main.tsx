@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router';
 
 import { captureShareCapability, shareReferenceFromViewerPath } from './capability.js';
-import { LoadingView, UnavailableView } from './components/viewer-shell.js';
+import { LoadingView, UnavailableView } from './components/boot-views.js';
 import './styles.css';
 
 function captureCurrentCapability(): string | null {

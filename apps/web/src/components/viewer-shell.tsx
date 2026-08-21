@@ -1,5 +1,3 @@
-import { Loader } from '@cloudflare/kumo/components/loader';
-import { WarningCircleIcon } from '@phosphor-icons/react/WarningCircle';
 import type { PublicShareResolution } from '@shelf/contracts';
 
 import type { ViewerAuthority } from '../api.js';
@@ -7,38 +5,7 @@ import { isFileShareResolution } from '../share-types.js';
 import { DownloadAction } from './artifact-content.js';
 import { revisionLabel } from './revision-label.js';
 
-export function LoadingView() {
-  return (
-    <div className="viewer viewer-pending" aria-busy="true">
-      <div className="rail rail-placeholder">
-        <span className="wordmark">shelf</span>
-      </div>
-      <div className="state-center">
-        <Loader aria-hidden="true" size="sm" />
-        <p>Opening artifact…</p>
-      </div>
-    </div>
-  );
-}
-
-export function UnavailableView() {
-  return (
-    <div className="viewer viewer-unavailable">
-      <div className="rail">
-        <span className="wordmark">shelf</span>
-        <span className="rail-separator" aria-hidden="true">
-          /
-        </span>
-        <span className="rail-muted">Shared artifact</span>
-      </div>
-      <main className="state-center">
-        <WarningCircleIcon aria-hidden="true" className="unavailable-mark" size={28} />
-        <h1>This artifact is unavailable</h1>
-        <p>The link may no longer be available, or it may be incomplete.</p>
-      </main>
-    </div>
-  );
-}
+export { LoadingView, UnavailableView } from './boot-views.js';
 
 export function ViewerRail({
   authority,
