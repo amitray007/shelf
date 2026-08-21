@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.3](https://github.com/amitray007/shelf/compare/v0.1.2...v0.1.3) (2026-08-21)
+
+
+### Features
+
+* **deploy:** unify Compose deployments behind reverse proxy ([ba3ce44](https://github.com/amitray007/shelf/commit/ba3ce4496462e0b707d13f304c957485d410d6e2))
+* **deploy:** unify Compose deployments behind reverse proxy ([3b7fb16](https://github.com/amitray007/shelf/commit/3b7fb16c40f700d1d99fef31855b8eccd8128496))
+
+
+### Bug Fixes
+
+* **ci:** make share session assertion order-independent ([d7d567b](https://github.com/amitray007/shelf/commit/d7d567b676bd632f60b2e54698dcc92e56817030))
+* **ci:** stabilize automated checks ([3afa58b](https://github.com/amitray007/shelf/commit/3afa58b80429cd0610b7e35d989c3b65657e0f54))
+* **ci:** wait for PostgreSQL teardown ([03ee5c3](https://github.com/amitray007/shelf/commit/03ee5c3dff2b6e92314d760360ea530e981fd0e3))
+* **deploy:** disable automatic peer installation ([dc647e0](https://github.com/amitray007/shelf/commit/dc647e0d3c27510abd03446c95648645bfd36110))
+
 ## [0.1.2](https://github.com/amitray007/shelf/compare/v0.1.1...v0.1.2) (2026-08-21)
 
 
