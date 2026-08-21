@@ -7,7 +7,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json biome.js
 COPY packages ./packages
 COPY apps ./apps
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm --config.auto-install-peers=false install --frozen-lockfile
 RUN pnpm build
 RUN pnpm --filter @shelf/api deploy --prod --legacy /opt/shelf
 RUN mkdir -p /opt/shelf/web && cp -R apps/web/dist/. /opt/shelf/web/
