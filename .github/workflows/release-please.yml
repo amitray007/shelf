@@ -1,9 +1,9 @@
 name: Release Please
 
-# Auto-versioning: release-please reads the conventional-commit history on
-# main, maintains a release PR that bumps the root version and CHANGELOG, and
-# on merge creates the v* tag and GitHub release. Merging the release PR is the
-# explicit human authorization for a release.
+# Auto-versioning: release-please reads conventional commits that touch the CLI
+# package, maintains a release PR that bumps the CLI and root distribution
+# versions plus CHANGELOG, and on merge creates the v* tag and GitHub release.
+# Merging the release PR is the explicit human authorization for a release.
 #
 # The publish job calls release.yml directly: the release is created with the
 # workflow GITHUB_TOKEN, and GitHub does not fire workflow triggers for events
@@ -21,8 +21,8 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      release_created: ${{ steps.release.outputs['apps/cli--release_created'] }}
+      tag_name: ${{ steps.release.outputs['apps/cli--tag_name'] }}
     steps:
       - uses: googleapis/release-please-action@a02a34c4d625f9be7cb89156071d8567266a2445 # v4.2.0
         id: release
