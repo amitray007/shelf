@@ -440,7 +440,11 @@ describe('share HTTP boundary', () => {
     });
 
     expect(unfurl.statusCode).toBe(400);
-    expect(beforeEstablishment.json().items[0]).toMatchObject({ sessionsUsed: 0 });
+    expect(
+      beforeEstablishment
+        .json()
+        .items.find((item: { shareId: string }) => item.shareId === shareId),
+    ).toMatchObject({ sessionsUsed: 0 });
     expect(established.statusCode, established.body).toBe(200);
     expect(created.json()).toMatchObject({ accessType: 'protected', maxSessions: 1 });
     expect(reused.statusCode, reused.body).toBe(200);
