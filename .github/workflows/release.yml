@@ -52,7 +52,7 @@ jobs:
             echo "::error::release tag '$TAG' is not a v* version tag"; exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tap_tag=shelf-cli-v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tap_tag=shelf-v$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: bundle the CLI
         run: |
