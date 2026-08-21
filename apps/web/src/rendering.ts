@@ -55,6 +55,24 @@ function rendererEndpoint(value: string | undefined): { url: string } | null {
   }
 }
 
+// Route loaders call this once the content kind is known so the matching
+// lazy renderer chunk downloads in parallel with the content bytes.
+export function prefetchRendererModules(revision: {
+  readonly kind: 'file' | 'folder';
+  readonly mediaType?: string;
+}): void {
+  if (revision.kind === 'folder') {
+    void import('./components/folder-browser.js');
+    return;
+  }
+  if (
+    revision.mediaType !== undefined &&
+    selectRenderer(revision.mediaType, undefined).kind === 'markdown'
+  ) {
+    void import('./components/markdown-view.js');
+  }
+}
+
 export function selectRenderer(
   mediaType: string,
   rendererOrigin: string | undefined,

@@ -59,6 +59,7 @@ export async function registerWebApp(app: FastifyInstance, options: WebAppOption
     index: false,
     immutable: true,
     maxAge: '1y',
+    preCompressed: true,
   });
 
   for (const path of ['/', '/s/:shareId', '/signin', '/app', '/app/*', '/preview/:artifactId']) {

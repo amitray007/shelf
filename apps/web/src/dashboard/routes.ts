@@ -12,7 +12,7 @@ import type {
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { redirect } from 'react-router';
 
-import { selectRenderer, supportsSourceView } from '../rendering.js';
+import { prefetchRendererModules, selectRenderer, supportsSourceView } from '../rendering.js';
 import {
   DashboardApiError,
   DashboardAuthenticationError,
@@ -173,6 +173,7 @@ export async function artifactLoader({
       revision.revisionId,
       request.signal,
     );
+    prefetchRendererModules(revision);
     const contentPromise =
       revision.kind === 'folder'
         ? loadFolderEntries(revision.revisionId, request.signal).then((entries) => ({
@@ -242,6 +243,7 @@ export async function artifactPreviewLoader({
     }
     let bytes: ArrayBuffer | null = null;
     let entries: readonly FolderEntry[] = [];
+    prefetchRendererModules(revision);
     if (revision.kind === 'folder') {
       entries = await loadFolderEntries(revision.revisionId, request.signal);
     } else {

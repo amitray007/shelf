@@ -5,7 +5,7 @@ import { PlusIcon } from '@phosphor-icons/react/Plus';
 import { SignOutIcon } from '@phosphor-icons/react/SignOut';
 import { StackIcon } from '@phosphor-icons/react/Stack';
 import type { DashboardSession } from '@shelf/contracts';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   isRouteErrorResponse,
   Link,
@@ -26,6 +26,21 @@ import './responsive.css';
 export function DashboardLayout() {
   const session = useLoaderData() as DashboardSession;
   const params = useParams();
+  // Warm the sibling route chunks while the browser is idle so in-app
+  // navigation resolves from cache instead of the network.
+  useEffect(() => {
+    const prefetch = () => {
+      void import('./artifacts-page.js');
+      void import('./artifact-page.js');
+      void import('./access-page.js');
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(prefetch);
+      return () => window.cancelIdleCallback(handle);
+    }
+    const handle = window.setTimeout(prefetch, 1500);
+    return () => window.clearTimeout(handle);
+  }, []);
   const location = useLocation();
   const navigate = useNavigate();
   const revalidator = useRevalidator();

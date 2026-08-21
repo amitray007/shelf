@@ -36,6 +36,7 @@ import { ViewerSidebarSplit } from './components/viewer-sidebar-split.js';
 import {
   normalizeMediaType,
   type PassiveRenderer,
+  prefetchRendererModules,
   selectRenderer,
   supportsSourceView,
 } from './rendering.js';
@@ -146,6 +147,7 @@ export async function loadViewerPayload(
 ): Promise<PublicSharePayload> {
   const resolution = await resolveViewerShare(reference, authority, signal);
   if (isFolderShareResolution(resolution)) {
+    prefetchRendererModules({ kind: 'folder' });
     return {
       kind: 'folder',
       resolution,
@@ -154,6 +156,7 @@ export async function loadViewerPayload(
     };
   }
   if (!isFileShareResolution(resolution)) throw new PublicShareUnavailableError();
+  prefetchRendererModules({ kind: 'file', mediaType: resolution.revision.mediaType });
   const renderer = selectRenderer(resolution.revision.mediaType, rendererOrigin);
   const needsBytes =
     ['text', 'json', 'markdown', 'image'].includes(renderer.kind) ||
