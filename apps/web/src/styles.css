@@ -93,6 +93,12 @@ a {
 
 :focus-visible {
   outline: none;
+}
+
+/* Form controls draw their own focus ring (Kumo inputs, composer textarea);
+   painting the offset halo over them replaces their border ring and makes the
+   field look punched out of the panel. */
+:focus-visible:not(input):not(textarea):not(select) {
   box-shadow:
     0 0 0 2px var(--canvas),
     0 0 0 4px var(--focus-ring);
@@ -1387,6 +1393,12 @@ a {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 560;
+}
+
+.source-view-setting-field select:focus-visible,
+.source-view-setting-toggle input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .source-view-setting-field select {
