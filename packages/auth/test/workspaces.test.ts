@@ -15,6 +15,8 @@ describe('workspace administration', () => {
         actions: ['file.publish', 'revision.read'] as const,
       })),
       workspaceExists: vi.fn(async () => true),
+      workspaceHasActiveArtifacts: vi.fn(async () => false),
+      softDeleteWorkspace: vi.fn(),
       grantOwnerAction: vi.fn(),
       hasGrant: vi.fn(async () => true),
     };
@@ -47,6 +49,8 @@ describe('workspace administration', () => {
     const repository = {
       createOwnedWorkspace: vi.fn(),
       workspaceExists: vi.fn(async () => false),
+      workspaceHasActiveArtifacts: vi.fn(async () => false),
+      softDeleteWorkspace: vi.fn(),
       grantOwnerAction: vi.fn(),
       hasGrant: vi.fn(async () => false),
     };

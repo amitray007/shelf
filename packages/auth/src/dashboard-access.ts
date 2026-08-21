@@ -11,7 +11,11 @@ import {
   type AccessCredentialSummary,
   type CredentialGrant,
 } from './access-credentials.js';
-import { InvalidWorkspaceIdError, type WorkspaceAdministrationRepository } from './workspaces.js';
+import {
+  createWorkspaceAdministrationService,
+  InvalidWorkspaceIdError,
+  type WorkspaceAdministrationRepository,
+} from './workspaces.js';
 
 export interface ManagedAccessCredentialSummary extends AccessCredentialSummary {
   actorName: string;
@@ -49,7 +53,13 @@ export class InvalidCredentialPageError extends Error {
 export function createDashboardAccessService(options: {
   repository: CredentialAdministrationRepository;
   credentials: AccessCredentialService;
+  now?: () => Date;
 }) {
+  const workspaces = createWorkspaceAdministrationService({
+    repository: options.repository,
+    ...(options.now === undefined ? {} : { now: options.now }),
+  });
+
   async function grantsFor(input: {
     installationId: string;
     actorId: string;
@@ -135,6 +145,17 @@ export function createDashboardAccessService(options: {
         createdAt: new Date(),
       });
       return { workspaceId: created.workspaceId, actions: [...created.actions] };
+    },
+
+    async deleteWorkspace(input: {
+      installationId: string;
+      actorId: string;
+      workspaceId: string;
+    }): Promise<{ workspaceId: string; deleted: true; alreadyDeleted: boolean }> {
+      return workspaces.delete({
+        owner: { installationId: input.installationId, actorId: input.actorId },
+        workspaceId: input.workspaceId,
+      });
     },
 
     async revoke(input: {

@@ -1220,6 +1220,15 @@ export class PostgresRevisionRepository
       if (artifact === undefined) {
         return { status: 'not-found' as const };
       }
+      const workspace = await transaction
+        .selectFrom('shelf_workspaces')
+        .select('deleted_at')
+        .where('installation_id', '=', request.namespace.installationId)
+        .where('workspace_id', '=', request.namespace.workspaceId)
+        .executeTakeFirst();
+      if (workspace?.deleted_at != null) {
+        return { status: 'not-found' as const };
+      }
 
       const existing = await findRecoveryIdempotency(transaction, request.namespace);
       if (existing !== undefined) {

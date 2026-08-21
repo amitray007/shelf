@@ -49,6 +49,11 @@ function accessService(): DashboardAccessService {
       workspaceId: input.workspaceId,
       actions: ['file.publish', 'revision.read'] as const,
     })),
+    deleteWorkspace: vi.fn(async (input) => ({
+      workspaceId: input.workspaceId,
+      deleted: true as const,
+      alreadyDeleted: false,
+    })),
   };
 }
 
@@ -108,6 +113,7 @@ describe('dashboard HTTP API', () => {
         url: '/api/v1/workspaces',
         payload: { workspaceId: 'workspace-work' },
       },
+      { method: 'DELETE' as const, url: '/api/v1/workspaces/workspace-main' },
     ]) {
       const response = await bearer.app.inject(request);
       expect(response.statusCode).toBe(403);
@@ -117,6 +123,7 @@ describe('dashboard HTTP API', () => {
     expect(bearer.dashboardAccess.list).not.toHaveBeenCalled();
     expect(bearer.dashboardAccess.revoke).not.toHaveBeenCalled();
     expect(bearer.dashboardAccess.createWorkspace).not.toHaveBeenCalled();
+    expect(bearer.dashboardAccess.deleteWorkspace).not.toHaveBeenCalled();
   });
 
   it('discovers workspaces and manages credentials with no-store responses', async () => {

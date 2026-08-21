@@ -5,10 +5,14 @@ import {
   InvalidCredentialPageError,
   InvalidWorkspaceIdError,
   type ManagedAccessCredentialSummary,
+  OwnerGrantDeniedError,
   WorkspaceAlreadyExistsError,
+  WorkspaceNotEmptyError,
+  WorkspaceNotFoundError,
 } from '@shelf/auth';
 import {
   DashboardCredentialIssueRequestSchema,
+  WORKSPACE_ID_PATTERN,
   WorkspaceCreateRequestSchema,
 } from '@shelf/contracts';
 import { AuthorizationDeniedError, ShelfCoreError } from '@shelf/core';
@@ -30,6 +34,10 @@ const CredentialParamsSchema = Type.Object(
   { credentialId: Type.String({ pattern: '^crd_[A-Za-z0-9_-]{22}$' }) },
   { additionalProperties: false },
 );
+const WorkspaceParamsSchema = Type.Object(
+  { workspaceId: Type.String({ minLength: 1, maxLength: 128, pattern: WORKSPACE_ID_PATTERN }) },
+  { additionalProperties: false },
+);
 const errors = {
   400: Type.Ref('ErrorEnvelope'),
   401: Type.Ref('ErrorEnvelope'),
@@ -38,6 +46,7 @@ const errors = {
   500: Type.Ref('ErrorEnvelope'),
   503: Type.Ref('ErrorEnvelope'),
 };
+const workspaceDeletionErrors = { ...errors, 409: Type.Ref('ErrorEnvelope') };
 
 function noStore(reply: FastifyReply): void {
   void reply.header('Cache-Control', 'no-store');
@@ -77,6 +86,17 @@ function mapDashboardError(error: unknown): never {
       },
     );
   }
+  if (error instanceof WorkspaceNotEmptyError) {
+    throw new ShelfCoreError(
+      'WORKSPACE_NOT_EMPTY',
+      'This workspace still holds artifacts. Delete them first, then delete the workspace.',
+      { retryable: false, details: [{ field: 'workspaceId', reason: 'not-empty' }] },
+    );
+  }
+  // A held owner grant without a workspace row is a race or a stale grant; the
+  // dashboard never distinguishes that from a workspace the actor cannot reach.
+  if (error instanceof WorkspaceNotFoundError) throw new AuthorizationDeniedError();
+  if (error instanceof OwnerGrantDeniedError) throw new AuthorizationDeniedError();
   if (error instanceof DashboardGrantDeniedError) throw new AuthorizationDeniedError();
   if (error instanceof InvalidCredentialPageError) {
     throw new ShelfCoreError('INVALID_REQUEST', 'The credential page cursor is invalid.', {
@@ -157,6 +177,37 @@ export function registerDashboardRoutes(
             workspaceId: body.workspaceId,
           })),
         });
+      } catch (error) {
+        mapDashboardError(error);
+      }
+    },
+  );
+
+  app.delete(
+    '/api/v1/workspaces/:workspaceId',
+    {
+      schema: {
+        operationId: 'deleteWorkspaceV1',
+        summary: 'Idempotently delete one empty workspace the owner controls',
+        security: [{ cookieAuth: [] }],
+        tags: ['dashboard'],
+        params: WorkspaceParamsSchema,
+        response: { 200: Type.Ref('WorkspaceDeleteResult'), ...workspaceDeletionErrors },
+      },
+    },
+    async (request, reply) => {
+      noStore(reply);
+      const identity = await authenticateHumanSession(request, dependencies.authenticator);
+      const params = request.params as { workspaceId: string };
+      try {
+        return {
+          apiVersion: 'v1' as const,
+          ...(await dependencies.access.deleteWorkspace({
+            installationId: identity.installationId,
+            actorId: identity.actorId,
+            workspaceId: params.workspaceId,
+          })),
+        };
       } catch (error) {
         mapDashboardError(error);
       }

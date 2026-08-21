@@ -336,6 +336,18 @@ export class PostgresAuthRepository implements AccessCredentialRepository {
       .where('actor_grant.installation_id', '=', input.installationId)
       .where('actor_grant.actor_id', '=', input.actorId)
       .where('actor.disabled_at', 'is', null)
+      .where((builder) =>
+        builder.not(
+          builder.exists(
+            builder
+              .selectFrom('shelf_workspaces as workspace')
+              .select('workspace.workspace_id')
+              .whereRef('workspace.installation_id', '=', 'actor_grant.installation_id')
+              .whereRef('workspace.workspace_id', '=', 'actor_grant.workspace_id')
+              .where('workspace.deleted_at', 'is not', null),
+          ),
+        ),
+      )
       .orderBy('actor_grant.workspace_id')
       .orderBy('actor_grant.action')
       .execute();
@@ -353,8 +365,59 @@ export class PostgresAuthRepository implements AccessCredentialRepository {
       .select('workspace_id')
       .where('installation_id', '=', input.installationId)
       .where('workspace_id', '=', input.workspaceId)
+      .where('deleted_at', 'is', null)
       .executeTakeFirst();
     return found !== undefined;
+  }
+
+  async workspaceHasActiveArtifacts(input: {
+    installationId: string;
+    workspaceId: string;
+  }): Promise<boolean> {
+    const found = await this.#database
+      .selectFrom('shelf_artifacts')
+      .select('artifact_id')
+      .where('installation_id', '=', input.installationId)
+      .where('workspace_id', '=', input.workspaceId)
+      .where('deleted_at', 'is', null)
+      .limit(1)
+      .executeTakeFirst();
+    return found !== undefined;
+  }
+
+  async softDeleteWorkspace(input: {
+    installationId: string;
+    actorId: string;
+    workspaceId: string;
+    deletedAt: Date;
+  }): Promise<{ workspaceId: string; alreadyDeleted: boolean } | undefined> {
+    return this.#database.transaction().execute(async (transaction) => {
+      const workspace = await transaction
+        .selectFrom('shelf_workspaces')
+        .select(['workspace_id', 'deleted_at'])
+        .where('installation_id', '=', input.installationId)
+        .where('workspace_id', '=', input.workspaceId)
+        .forUpdate()
+        .executeTakeFirst();
+      if (workspace === undefined) return undefined;
+      if (workspace.deleted_at !== null) {
+        return { workspaceId: workspace.workspace_id, alreadyDeleted: true };
+      }
+      await transaction
+        .updateTable('shelf_workspaces')
+        .set({ deleted_at: input.deletedAt, deleted_by_actor_id: input.actorId })
+        .where('installation_id', '=', input.installationId)
+        .where('workspace_id', '=', input.workspaceId)
+        .executeTakeFirstOrThrow();
+      await appendEvent(transaction, {
+        eventType: 'workspace.deleted',
+        installationId: input.installationId,
+        actorId: input.actorId,
+        performedByActorId: input.actorId,
+        occurredAt: input.deletedAt,
+      });
+      return { workspaceId: workspace.workspace_id, alreadyDeleted: false };
+    });
   }
 
   async createOwnedWorkspace(input: {

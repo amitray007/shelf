@@ -14,6 +14,7 @@ import { permanentPublicSharesMigration } from './migrations/0010_permanent_publ
 import { artifactDefaultSharesMigration } from './migrations/0011_artifact_default_shares.js';
 import { commentsMigration } from './migrations/0012_comments.js';
 import { actorDisplayNamesMigration } from './migrations/0013_actor_display_names.js';
+import { workspaceDeletionMigration } from './migrations/0014_workspace_deletion.js';
 
 const migrations = Object.freeze<Record<string, Migration>>({
   '0001_initial': initialMigration,
@@ -29,6 +30,7 @@ const migrations = Object.freeze<Record<string, Migration>>({
   '0011_artifact_default_shares': artifactDefaultSharesMigration,
   '0012_comments': commentsMigration,
   '0013_actor_display_names': actorDisplayNamesMigration,
+  '0014_workspace_deletion': workspaceDeletionMigration,
 });
 
 const provider: MigrationProvider = {

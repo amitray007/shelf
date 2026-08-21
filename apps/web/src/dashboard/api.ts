@@ -32,12 +32,14 @@ import {
   isShareCreateResult,
   isSharePage,
   isWorkspaceCreateResult,
+  isWorkspaceDeleteResult,
   type RestoreResult,
   type ShareCreateInput,
   type ShareCreateResult,
   type ShareManagementSummary,
   type SharePage,
   type WorkspaceCreateResult,
+  type WorkspaceDeleteResult,
 } from '@shelf/contracts';
 
 export class DashboardAuthenticationError extends Error {
@@ -138,6 +140,17 @@ export async function signOut(): Promise<void> {
 export async function createWorkspace(workspaceId: string): Promise<WorkspaceCreateResult> {
   const value = await requestJson('/api/v1/workspaces', jsonRequest('POST', { workspaceId }));
   if (!isWorkspaceCreateResult(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
+  }
+  return value;
+}
+
+export async function deleteWorkspace(workspaceId: string): Promise<WorkspaceDeleteResult> {
+  const value = await requestJson(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}`,
+    jsonRequest('DELETE'),
+  );
+  if (!isWorkspaceDeleteResult(value)) {
     throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
   }
   return value;

@@ -4,6 +4,7 @@ import { CaretDownIcon } from '@phosphor-icons/react/CaretDown';
 import { PlusIcon } from '@phosphor-icons/react/Plus';
 import { SignOutIcon } from '@phosphor-icons/react/SignOut';
 import { StackIcon } from '@phosphor-icons/react/Stack';
+import { TrashIcon } from '@phosphor-icons/react/Trash';
 import type { DashboardSession } from '@shelf/contracts';
 import { useEffect, useState } from 'react';
 import {
@@ -19,6 +20,7 @@ import {
 } from 'react-router';
 
 import { signOut } from './api.js';
+import { DeleteWorkspaceDialog } from './delete-workspace-dialog.js';
 import { CreateWorkspaceDialog } from './workspace-dialog.js';
 import './shell.css';
 import './responsive.css';
@@ -45,6 +47,7 @@ export function DashboardLayout() {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const [createOpen, setCreateOpen] = useState(false);
+  const [deletingWorkspaceId, setDeletingWorkspaceId] = useState<string>();
   const [signOutFailed, setSignOutFailed] = useState(false);
   const readableWorkspaces = session.workspaces.filter((workspace) =>
     workspace.actions.includes('revision.read'),
@@ -70,6 +73,13 @@ export function DashboardLayout() {
     setCreateOpen(false);
     void revalidator.revalidate();
     changeWorkspace(workspaceId);
+  };
+  const deletedWorkspace = () => {
+    setDeletingWorkspaceId(undefined);
+    void revalidator.revalidate();
+    // /app redirects to the first remaining workspace, or to the access page
+    // when this session no longer reaches any workspace.
+    void navigate('/app', { replace: true });
   };
   const leave = async () => {
     setSignOutFailed(false);
@@ -133,6 +143,18 @@ export function DashboardLayout() {
                 <DropdownMenu.Item icon={PlusIcon} onClick={() => setCreateOpen(true)}>
                   New workspace
                 </DropdownMenu.Item>
+                {activeWorkspace === undefined ? null : (
+                  <>
+                    <DropdownMenu.Separator />
+                    <DropdownMenu.Item
+                      icon={TrashIcon}
+                      onClick={() => setDeletingWorkspaceId(activeWorkspace.workspaceId)}
+                      variant="danger"
+                    >
+                      Delete workspace…
+                    </DropdownMenu.Item>
+                  </>
+                )}
               </DropdownMenu.Content>
             </DropdownMenu>
           </nav>
@@ -171,6 +193,13 @@ export function DashboardLayout() {
         onCreated={createdWorkspace}
         onOpenChange={setCreateOpen}
         open={createOpen}
+      />
+      <DeleteWorkspaceDialog
+        onDeleted={deletedWorkspace}
+        onOpenChange={(open) => {
+          if (!open) setDeletingWorkspaceId(undefined);
+        }}
+        workspaceId={deletingWorkspaceId}
       />
     </div>
   );

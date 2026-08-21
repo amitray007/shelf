@@ -388,6 +388,7 @@
                   "SHARE_NOT_FOUND",
                   "ACCESS_CREDENTIAL_NOT_FOUND",
                   "WORKSPACE_ALREADY_EXISTS",
+                  "WORKSPACE_NOT_EMPTY",
                   "RANGE_NOT_SATISFIABLE",
                   "MULTI_RANGE_UNSUPPORTED",
                   "REQUEST_CANCELLED",
@@ -452,6 +453,7 @@
           "SHARE_NOT_FOUND",
           "ACCESS_CREDENTIAL_NOT_FOUND",
           "WORKSPACE_ALREADY_EXISTS",
+          "WORKSPACE_NOT_EMPTY",
           "RANGE_NOT_SATISFIABLE",
           "MULTI_RANGE_UNSUPPORTED",
           "REQUEST_CANCELLED",
@@ -4783,6 +4785,31 @@
       },
       "def-21": {
         "type": "object",
+        "required": ["apiVersion", "workspaceId", "deleted", "alreadyDeleted"],
+        "properties": {
+          "apiVersion": {
+            "type": "string",
+            "enum": ["v1"]
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+          },
+          "deleted": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "alreadyDeleted": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "title": "WorkspaceDeleteResult"
+      },
+      "def-22": {
+        "type": "object",
         "required": [
           "postId",
           "threadId",
@@ -4919,7 +4946,7 @@
         "additionalProperties": false,
         "title": "CommentPost"
       },
-      "def-22": {
+      "def-23": {
         "type": "object",
         "required": ["canEdit", "canDelete", "canModerate"],
         "properties": {
@@ -4936,7 +4963,7 @@
         "additionalProperties": false,
         "title": "CommentPostPermissions"
       },
-      "def-23": {
+      "def-24": {
         "type": "object",
         "required": [
           "threadId",
@@ -5232,7 +5259,7 @@
         "additionalProperties": false,
         "title": "CommentThread"
       },
-      "def-24": {
+      "def-25": {
         "type": "object",
         "required": ["revisionId", "kind"],
         "properties": {
@@ -5282,7 +5309,7 @@
         "additionalProperties": false,
         "title": "CommentAnchor"
       },
-      "def-25": {
+      "def-26": {
         "type": "object",
         "required": ["canReply", "canResolve", "canReopen"],
         "properties": {
@@ -5299,7 +5326,7 @@
         "additionalProperties": false,
         "title": "CommentThreadPermissions"
       },
-      "def-26": {
+      "def-27": {
         "type": "object",
         "required": ["items", "nextCursor"],
         "properties": {
@@ -5615,7 +5642,7 @@
         "additionalProperties": false,
         "title": "CommentThreadPage"
       },
-      "def-27": {
+      "def-28": {
         "type": "object",
         "required": [
           "artifactId",
@@ -5757,7 +5784,7 @@
         "additionalProperties": false,
         "title": "CommentSummary"
       },
-      "def-28": {
+      "def-29": {
         "type": "object",
         "required": ["threadId", "latestActivityAt"],
         "properties": {
@@ -13506,7 +13533,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-26"
+                  "$ref": "#/components/schemas/def-27"
                 }
               }
             }
@@ -13759,7 +13786,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-23"
+                  "$ref": "#/components/schemas/def-24"
                 }
               }
             }
@@ -13961,7 +13988,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-21"
+                  "$ref": "#/components/schemas/def-22"
                 }
               }
             }
@@ -14170,7 +14197,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-23"
+                  "$ref": "#/components/schemas/def-24"
                 }
               }
             }
@@ -14387,7 +14414,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-21"
+                  "$ref": "#/components/schemas/def-22"
                 }
               }
             }
@@ -14577,7 +14604,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-26"
+                  "$ref": "#/components/schemas/def-27"
                 }
               }
             }
@@ -14817,7 +14844,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-23"
+                  "$ref": "#/components/schemas/def-24"
                 }
               }
             }
@@ -15013,7 +15040,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-21"
+                  "$ref": "#/components/schemas/def-22"
                 }
               }
             }
@@ -15216,7 +15243,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-23"
+                  "$ref": "#/components/schemas/def-24"
                 }
               }
             }
@@ -15427,7 +15454,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-21"
+                  "$ref": "#/components/schemas/def-22"
                 }
               }
             }
@@ -15632,7 +15659,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-26"
+                  "$ref": "#/components/schemas/def-27"
                 }
               }
             }
@@ -15773,7 +15800,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-21"
+                  "$ref": "#/components/schemas/def-22"
                 }
               }
             }
@@ -15916,7 +15943,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-23"
+                  "$ref": "#/components/schemas/def-24"
                 }
               }
             }
@@ -16092,7 +16119,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/def-21"
+                  "$ref": "#/components/schemas/def-22"
                 }
               }
             }
@@ -16220,7 +16247,7 @@
                     "items": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/def-27"
+                        "$ref": "#/components/schemas/def-28"
                       }
                     }
                   }
@@ -16584,6 +16611,113 @@
             }
           },
           "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}": {
+      "delete": {
+        "operationId": "deleteWorkspaceV1",
+        "summary": "Idempotently delete one empty workspace the owner controls",
+        "tags": ["dashboard"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+            },
+            "in": "path",
+            "name": "workspaceId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-21"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Default Response",
             "content": {
               "application/json": {

@@ -21,6 +21,11 @@ function fixture(owner: HumanActorIdentity | false | null = null) {
       actions: ['file.publish', 'revision.read'] as const,
     })),
     workspaceExists: vi.fn(async () => true),
+    workspaceHasActiveArtifacts: vi.fn(async () => false),
+    softDeleteWorkspace: vi.fn(async (input) => ({
+      workspaceId: input.workspaceId,
+      alreadyDeleted: false,
+    })),
     grantOwnerAction: vi.fn(),
     hasGrant: vi.fn(async () => true),
   };

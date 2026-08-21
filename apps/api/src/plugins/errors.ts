@@ -18,6 +18,7 @@ function statusFor(code: ErrorCode): number {
       return 400;
     case 'IDEMPOTENCY_CONFLICT':
     case 'WORKSPACE_ALREADY_EXISTS':
+    case 'WORKSPACE_NOT_EMPTY':
       return 409;
     case 'ARTIFACT_NOT_FOUND':
     case 'REVISION_NOT_FOUND':

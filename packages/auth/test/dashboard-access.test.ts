@@ -49,6 +49,12 @@ function fixture(overrides: Partial<CredentialAdministrationRepository> = {}) {
     async workspaceExists() {
       return true;
     },
+    async workspaceHasActiveArtifacts() {
+      return false;
+    },
+    async softDeleteWorkspace(input) {
+      return { workspaceId: input.workspaceId, alreadyDeleted: false };
+    },
     async grantOwnerAction() {},
     async hasGrant() {
       return true;

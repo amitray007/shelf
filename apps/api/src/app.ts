@@ -27,6 +27,7 @@ import {
   ShareManagementSummarySchema,
   SharePageSchema,
   WorkspaceCreateResultSchema,
+  WorkspaceDeleteResultSchema,
 } from '@shelf/contracts';
 import type {
   ArtifactCatalogRepository,
@@ -279,6 +280,7 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   app.addSchema(withoutNestedSchemaIds(DashboardCredentialIssueSchema));
   app.addSchema(withoutNestedSchemaIds(DashboardCredentialRevokeSchema));
   app.addSchema(WorkspaceCreateResultSchema);
+  app.addSchema(WorkspaceDeleteResultSchema);
   app.addSchema(CommentPostSchema);
   app.addSchema(CommentThreadSchema);
   app.addSchema(CommentThreadPageSchema);

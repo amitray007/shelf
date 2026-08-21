@@ -81,7 +81,8 @@ export type AuthEventType =
   | 'access-credential.issued'
   | 'access-credential.rotated'
   | 'access-credential.revoked'
-  | 'workspace.created';
+  | 'workspace.created'
+  | 'workspace.deleted';
 
 export interface AuthEvent {
   eventType: AuthEventType;

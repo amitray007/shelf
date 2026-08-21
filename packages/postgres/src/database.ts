@@ -179,6 +179,8 @@ export interface WorkspaceTable {
   workspace_id: string;
   created_by_actor_id: string;
   created_at: Date;
+  deleted_at: Date | null;
+  deleted_by_actor_id: string | null;
 }
 
 export interface ActorGrantTable {
@@ -210,7 +212,8 @@ export interface AuthEventTable {
     | 'access-credential.issued'
     | 'access-credential.rotated'
     | 'access-credential.revoked'
-    | 'workspace.created';
+    | 'workspace.created'
+    | 'workspace.deleted';
   installation_id: string;
   actor_id: string;
   credential_id: string | null;

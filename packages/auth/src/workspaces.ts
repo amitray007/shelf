@@ -37,6 +37,13 @@ export class OwnerGrantDeniedError extends Error {
   }
 }
 
+export class WorkspaceNotEmptyError extends Error {
+  constructor() {
+    super('Delete the artifacts in this workspace before deleting the workspace.');
+    this.name = 'WorkspaceNotEmptyError';
+  }
+}
+
 export interface WorkspaceAdministrationRepository {
   createOwnedWorkspace(input: {
     installationId: string;
@@ -45,6 +52,16 @@ export interface WorkspaceAdministrationRepository {
     createdAt: Date;
   }): Promise<{ workspaceId: string; actions: readonly CredentialAction[] }>;
   workspaceExists(input: { installationId: string; workspaceId: string }): Promise<boolean>;
+  workspaceHasActiveArtifacts(input: {
+    installationId: string;
+    workspaceId: string;
+  }): Promise<boolean>;
+  softDeleteWorkspace(input: {
+    installationId: string;
+    actorId: string;
+    workspaceId: string;
+    deletedAt: Date;
+  }): Promise<{ workspaceId: string; alreadyDeleted: boolean } | undefined>;
   grantOwnerAction(input: {
     installationId: string;
     actorId: string;
@@ -75,6 +92,42 @@ export function createWorkspaceAdministrationService(options: {
       return {
         workspaceId: created.workspaceId,
         actions: [...created.actions],
+      };
+    },
+
+    async delete(input: {
+      owner: HumanActorIdentity;
+      workspaceId: string;
+    }): Promise<{ workspaceId: string; deleted: true; alreadyDeleted: boolean }> {
+      if (!isWorkspaceId(input.workspaceId)) throw new InvalidWorkspaceIdError();
+      for (const action of OWNER_WORKSPACE_ACTIONS) {
+        const allowed = await options.repository.hasGrant({
+          installationId: input.owner.installationId,
+          actorId: input.owner.actorId,
+          workspaceId: input.workspaceId,
+          action,
+        });
+        if (!allowed) throw new OwnerGrantDeniedError();
+      }
+      if (
+        await options.repository.workspaceHasActiveArtifacts({
+          installationId: input.owner.installationId,
+          workspaceId: input.workspaceId,
+        })
+      ) {
+        throw new WorkspaceNotEmptyError();
+      }
+      const outcome = await options.repository.softDeleteWorkspace({
+        installationId: input.owner.installationId,
+        actorId: input.owner.actorId,
+        workspaceId: input.workspaceId,
+        deletedAt: now(),
+      });
+      if (outcome === undefined) throw new WorkspaceNotFoundError();
+      return {
+        workspaceId: outcome.workspaceId,
+        deleted: true,
+        alreadyDeleted: outcome.alreadyDeleted,
       };
     },
 

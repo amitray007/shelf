@@ -23,6 +23,9 @@ const app = await createShelfApp({
     async createWorkspace() {
       throw new Error('OpenAPI fixture does not create workspaces.');
     },
+    async deleteWorkspace() {
+      throw new Error('OpenAPI fixture does not delete workspaces.');
+    },
   },
 });
 
