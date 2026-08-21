@@ -1,32 +1,54 @@
 # Homebrew formula TEMPLATE for the shelf CLI.
 #
-# This is a template — the release pipeline (.github/workflows/release.yml on a
-# v* release) renders it (substituting {{VERSION}} / {{URL}} / {{SHA256}}) and
-# pushes the result to amitray007/homebrew-tap as Formula/shelf.rb. Do NOT
-# hand-edit the rendered formula in the tap — this template is the source.
+# This is a template — the release pipeline (.github/workflows/release.yml)
+# renders it (substituting {{VERSION}} and the per-platform {{URL_*}} /
+# {{SHA_*}} pairs) and pushes the result to amitray007/homebrew-tap as
+# Formula/shelf.rb. Do NOT hand-edit the rendered formula in the tap — this
+# template is the source.
 #
 # Install (once released):
 #   brew tap amitray007/tap
 #   brew install amitray007/tap/shelf
 #
-# The tarball is hosted on the PUBLIC homebrew-tap's own release (mirroring the
+# Tarballs are hosted on the PUBLIC homebrew-tap's own release (mirroring the
 # silo pattern), so brew install works without auth regardless of whether the
-# shelf source repo is public or private. The bundle inlines every runtime
-# dependency except the optional native keyring; without it, profiles that use
-# --credential-env work unchanged.
+# shelf source repo is public or private. Each tarball carries the platform's
+# own prebuilt keyring binary, so --store-token-from-env stores credentials in
+# the macOS Keychain or the Linux Secret Service out of the box.
 class Shelf < Formula
   desc "Publish, version, inspect, and share Shelf artifacts from the terminal"
   homepage "https://github.com/amitray007/shelf"
   version "{{VERSION}}"
-  url "{{URL}}"
-  sha256 "{{SHA256}}"
   license "MIT"
 
   depends_on "node"
 
+  on_macos do
+    on_arm do
+      url "{{URL_DARWIN_ARM64}}"
+      sha256 "{{SHA_DARWIN_ARM64}}"
+    end
+    on_intel do
+      url "{{URL_DARWIN_X64}}"
+      sha256 "{{SHA_DARWIN_X64}}"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "{{URL_LINUX_ARM64_GNU}}"
+      sha256 "{{SHA_LINUX_ARM64_GNU}}"
+    end
+    on_intel do
+      url "{{URL_LINUX_X64_GNU}}"
+      sha256 "{{SHA_LINUX_X64_GNU}}"
+    end
+  end
+
   def install
-    # Tarball contains dist/ + package.json. Install into libexec, then expose
-    # a launcher that runs the bundle with Homebrew's node.
+    # Tarball contains dist/ + node_modules/ + package.json. Install into
+    # libexec, then expose a launcher that runs the bundle with Homebrew's
+    # node.
     libexec.install Dir["*"]
     (bin/"shelf").write <<~SH
       #!/bin/bash

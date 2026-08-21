@@ -83,7 +83,8 @@ jobs:
       - name: smoke-test the produced artifact
         run: |
           set -euo pipefail
-          cd apps/cli/dist-standalone
+          # Exercise the platform directory matching this runner.
+          cd apps/cli/dist-standalone/linux-x64-gnu
           # Capture before matching: grep -q on a live pipe closes it early and
           # the CLI's remaining writes die with EPIPE.
           HELP="$(node dist/shelf.js --help)"
@@ -98,37 +99,41 @@ jobs:
           [ "$CODE" = "2" ] || { echo "expected usage exit 2, got $CODE"; exit 1; }
           echo "$OUT" | node -e "JSON.parse(require('node:fs').readFileSync(0,'utf8'))"
 
-      - name: pack tarball + checksum
+      - name: pack per-platform tarballs + checksums
         id: pack
         run: |
+          set -euo pipefail
           VERSION='${{ steps.version.outputs.version }}'
-          TARBALL="shelf-${VERSION}.tgz"
-          cp LICENSE apps/cli/dist-standalone/LICENSE
-          tar -czf "$TARBALL" -C apps/cli/dist-standalone dist node_modules package.json LICENSE
-          echo "sha=$(shasum -a 256 "$TARBALL" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
-          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          mkdir -p tarballs
+          for TARGET in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu linux-x64-musl linux-arm64-musl; do
+            cp LICENSE "apps/cli/dist-standalone/${TARGET}/LICENSE"
+            TARBALL="tarballs/shelf-${VERSION}-${TARGET}.tgz"
+            tar -czf "$TARBALL" -C "apps/cli/dist-standalone/${TARGET}" dist node_modules package.json LICENSE
+            SHA="$(shasum -a 256 "$TARBALL" | awk '{print $1}')"
+            KEY="$(echo "$TARGET" | tr 'a-z-' 'A-Z_')"
+            echo "sha_${KEY}=${SHA}" >> "$GITHUB_OUTPUT"
+          done
+          ls -la tarballs
 
-      - name: upload tarball to this release
+      - name: upload tarballs to this release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload 'v${{ steps.version.outputs.version }}' \
-            '${{ steps.pack.outputs.tarball }}' --clobber
+          gh release upload 'v${{ steps.version.outputs.version }}' tarballs/*.tgz --clobber
 
-      - name: publish tarball to the homebrew-tap release
+      - name: publish tarballs to the homebrew-tap release
         if: vars.HOMEBREW_TAP_ENABLED == 'true'
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           TAP_TAG='${{ steps.version.outputs.tap_tag }}'
-          TARBALL='${{ steps.pack.outputs.tarball }}'
           # The tap has immutable releases: recreate the tag if a retry left one.
           if gh release view "$TAP_TAG" --repo amitray007/homebrew-tap >/dev/null 2>&1; then
             gh release delete "$TAP_TAG" --repo amitray007/homebrew-tap --yes --cleanup-tag || \
               gh release delete "$TAP_TAG" --repo amitray007/homebrew-tap --yes
             gh api -X DELETE "repos/amitray007/homebrew-tap/git/refs/tags/$TAP_TAG" 2>/dev/null || true
           fi
-          gh release create "$TAP_TAG" "$TARBALL" \
+          gh release create "$TAP_TAG" tarballs/*.tgz \
             --repo amitray007/homebrew-tap \
             --title "shelf cli ${{ steps.version.outputs.version }}" \
             --notes "shelf CLI ${{ steps.version.outputs.version }} — \`brew install amitray007/tap/shelf\`. Source: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}"
@@ -145,11 +150,20 @@ jobs:
         if: vars.HOMEBREW_TAP_ENABLED == 'true'
         run: |
           VERSION='${{ steps.version.outputs.version }}'
-          URL="https://github.com/amitray007/homebrew-tap/releases/download/${{ steps.version.outputs.tap_tag }}/shelf-${VERSION}.tgz"
+          BASE="https://github.com/amitray007/homebrew-tap/releases/download/${{ steps.version.outputs.tap_tag }}"
           sed -e "s|{{VERSION}}|${VERSION}|g" \
-              -e "s|{{URL}}|${URL}|g" \
-              -e "s|{{SHA256}}|${{ steps.pack.outputs.sha }}|g" \
+              -e "s|{{URL_DARWIN_ARM64}}|${BASE}/shelf-${VERSION}-darwin-arm64.tgz|g" \
+              -e "s|{{SHA_DARWIN_ARM64}}|${{ steps.pack.outputs.sha_DARWIN_ARM64 }}|g" \
+              -e "s|{{URL_DARWIN_X64}}|${BASE}/shelf-${VERSION}-darwin-x64.tgz|g" \
+              -e "s|{{SHA_DARWIN_X64}}|${{ steps.pack.outputs.sha_DARWIN_X64 }}|g" \
+              -e "s|{{URL_LINUX_ARM64_GNU}}|${BASE}/shelf-${VERSION}-linux-arm64-gnu.tgz|g" \
+              -e "s|{{SHA_LINUX_ARM64_GNU}}|${{ steps.pack.outputs.sha_LINUX_ARM64_GNU }}|g" \
+              -e "s|{{URL_LINUX_X64_GNU}}|${BASE}/shelf-${VERSION}-linux-x64-gnu.tgz|g" \
+              -e "s|{{SHA_LINUX_X64_GNU}}|${{ steps.pack.outputs.sha_LINUX_X64_GNU }}|g" \
               apps/cli/packaging/shelf-formula.template.rb > homebrew-tap/Formula/shelf.rb
+          # Every placeholder must be substituted; an unrendered one would
+          # publish a broken formula.
+          ! grep -q '{{' homebrew-tap/Formula/shelf.rb
           cd homebrew-tap
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
