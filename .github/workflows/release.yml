@@ -14,9 +14,27 @@ name: Release
 # release, or build locally with apps/cli/scripts/bundle.mjs and follow the
 # tap AGENTS.md.
 
+# release-please publishes the release with the workflow GITHUB_TOKEN, and
+# GitHub suppresses workflow triggers for events that token creates — so the
+# release event alone never fires this workflow. The Release Please workflow
+# calls this one directly (workflow_call) when it cuts a release; the release
+# trigger stays for manually published releases and workflow_dispatch covers
+# re-runs for an existing tag.
 on:
   release:
     types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: The v* release tag to build and publish
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The v* release tag to build and publish
+        required: true
+        type: string
 
 permissions:
   contents: write # upload the tarball to this repository's release
@@ -31,6 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          # Build the released code, not the branch tip, on every trigger path.
+          ref: ${{ inputs.tag || github.event.release.tag_name }}
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -46,7 +67,7 @@ jobs:
       - name: resolve version from tag
         id: version
         run: |
-          TAG='${{ github.event.release.tag_name }}'
+          TAG='${{ inputs.tag || github.event.release.tag_name }}'
           VERSION="${TAG#v}"
           if [ -z "$VERSION" ] || [ "$VERSION" = "$TAG" ] && ! echo "$TAG" | grep -q '^v'; then
             echo "::error::release tag '$TAG' is not a v* version tag"; exit 1
@@ -86,7 +107,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload '${{ github.event.release.tag_name }}' \
+          gh release upload 'v${{ steps.version.outputs.version }}' \
             '${{ steps.pack.outputs.tarball }}' --clobber
 
       - name: publish tarball to the homebrew-tap release
@@ -105,7 +126,7 @@ jobs:
           gh release create "$TAP_TAG" "$TARBALL" \
             --repo amitray007/homebrew-tap \
             --title "shelf cli ${{ steps.version.outputs.version }}" \
-            --notes "shelf CLI ${{ steps.version.outputs.version }} — \`brew install amitray007/tap/shelf\`. Source: https://github.com/${{ github.repository }}/releases/tag/${{ github.event.release.tag_name }}"
+            --notes "shelf CLI ${{ steps.version.outputs.version }} — \`brew install amitray007/tap/shelf\`. Source: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}"
 
       - name: checkout homebrew-tap
         if: vars.HOMEBREW_TAP_ENABLED == 'true'
