@@ -347,7 +347,7 @@ export function ArtifactPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  const [folderSidebarOpen, setFolderSidebarOpen] = useState(true);
+  const [folderSidebarOpen, setFolderSidebarOpen] = useState(false);
   const [restoreRevision, setRestoreRevision] = useState<ArtifactRevision | null>(null);
   const [commentThreads, setCommentThreads] = useState<readonly CommentThread[]>(payload.comments);
   const [commentNextCursor, setCommentNextCursor] = useState<string | null>(
