@@ -259,9 +259,11 @@
   place-items: center;
 }
 
+/* No overflow clipping here: the inputs' ring and focus halo are box-shadows
+   drawn just outside their border box, and the form has no horizontal
+   padding, so clipping would slice the rounded edges flat. */
 .signin-panel {
   width: min(100%, 420px);
-  overflow: hidden;
   background: transparent;
 }
 
