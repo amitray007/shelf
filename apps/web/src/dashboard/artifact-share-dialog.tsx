@@ -1,5 +1,5 @@
 import { Button } from '@cloudflare/kumo/components/button';
-import { Radio } from '@cloudflare/kumo/components/radio';
+import { Select } from '@cloudflare/kumo/components/select';
 import type {
   Artifact,
   ArtifactDefaultShares,
@@ -151,20 +151,22 @@ export function ArtifactShareDialog({
           ) : null}
         </dl>
         <div aria-busy={policyBusy.has(share.accessType)} className="share-policy-control">
-          <Radio.Group
-            className="choice-group compact-choice-group share-policy-choice-group"
+          <Select<CommentPolicy>
+            className="share-option-select"
             disabled={policyBusy.has(share.accessType)}
-            legend="Comments"
-            name={`default-share-comments-${share.accessType}`}
+            label="Comments"
             onValueChange={(value) =>
               void updatePolicy(share, value === 'private' || value === 'shared' ? value : 'off')
             }
+            renderValue={(value) =>
+              value === 'private' ? 'Private' : value === 'shared' ? 'Shared' : 'Off'
+            }
             value={share.commentPolicy ?? 'off'}
           >
-            <Radio.Item label="Off" value="off" />
-            <Radio.Item label="Private" value="private" />
-            <Radio.Item label="Shared" value="shared" />
-          </Radio.Group>
+            <Select.Option value="off">Off</Select.Option>
+            <Select.Option value="private">Private</Select.Option>
+            <Select.Option value="shared">Shared</Select.Option>
+          </Select>
           {policyErrors[share.accessType] === undefined ? null : (
             <p aria-live="polite" className="form-error">
               {policyErrors[share.accessType]}

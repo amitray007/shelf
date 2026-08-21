@@ -74,60 +74,6 @@
   margin-top: 2px;
 }
 
-.choice-group {
-  display: grid;
-  gap: 7px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.choice-group > label {
-  display: grid;
-  min-height: 48px;
-  grid-template-columns: 18px 1fr;
-  align-items: start;
-  gap: 9px;
-  padding: 9px 2px;
-  border-bottom: 1px solid var(--rule);
-  cursor: pointer;
-}
-
-.choice-group > label:has(input:checked) {
-  color: var(--text);
-}
-
-.choice-group input {
-  margin: 2px 0 0;
-  accent-color: var(--accent);
-}
-
-.choice-group span {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.choice-group strong {
-  color: var(--text-subtle);
-  font-size: 12px;
-}
-
-.choice-group small {
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.choice-group > label:has(input:checked) small {
-  color: var(--text-subtle);
-}
-
-.compact-choice-group > label {
-  min-height: 40px;
-  align-items: center;
-}
-
 fieldset.share-access-group {
   gap: 10px;
 }
@@ -199,7 +145,7 @@ fieldset.share-access-group {
   min-width: 0;
 }
 
-.share-option-cell button.share-option-select {
+button.share-option-select {
   width: 100%;
 }
 
@@ -283,41 +229,6 @@ fieldset.share-access-group {
   border-left: 1px solid var(--rule);
 }
 
-.share-policy-choice-group {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.share-policy-choice-group > legend {
-  grid-column: 1 / -1;
-}
-
-.share-policy-choice-group > label {
-  min-height: 34px;
-  grid-template-columns: 16px 1fr;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 8px;
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  background: color-mix(in oklch, var(--canvas) 72%, var(--surface));
-}
-
-.share-policy-choice-group > label:has(input:checked) {
-  border-color: color-mix(in oklch, var(--accent) 60%, var(--rule));
-  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
-}
-
-.share-policy-choice-group > label + label {
-  margin-top: 0;
-}
-
-.share-policy-choice-group > label span {
-  display: block;
-  color: var(--text-subtle);
-  font-size: var(--font-meta);
-}
-
 .share-policy-help {
   margin: 0;
   color: var(--text-muted);
@@ -349,14 +260,6 @@ fieldset.share-access-group {
 @media (max-width: 430px) {
   .share-access-group > div {
     grid-template-columns: 1fr;
-  }
-
-  .artifact-share-overview .share-policy-choice-group {
-    grid-template-columns: 1fr;
-  }
-
-  .share-policy-choice-group > label {
-    min-height: 40px;
   }
 }
 
