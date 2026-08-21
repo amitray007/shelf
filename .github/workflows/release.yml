@@ -76,7 +76,7 @@ jobs:
         id: pack
         run: |
           VERSION='${{ steps.version.outputs.version }}'
-          TARBALL="shelf-cli-${VERSION}.tgz"
+          TARBALL="shelf-${VERSION}.tgz"
           cp LICENSE apps/cli/dist-standalone/LICENSE
           tar -czf "$TARBALL" -C apps/cli/dist-standalone dist package.json LICENSE
           echo "sha=$(shasum -a 256 "$TARBALL" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
@@ -119,7 +119,7 @@ jobs:
         if: vars.HOMEBREW_TAP_ENABLED == 'true'
         run: |
           VERSION='${{ steps.version.outputs.version }}'
-          URL="https://github.com/amitray007/homebrew-tap/releases/download/${{ steps.version.outputs.tap_tag }}/shelf-cli-${VERSION}.tgz"
+          URL="https://github.com/amitray007/homebrew-tap/releases/download/${{ steps.version.outputs.tap_tag }}/shelf-${VERSION}.tgz"
           sed -e "s|{{VERSION}}|${VERSION}|g" \
               -e "s|{{URL}}|${URL}|g" \
               -e "s|{{SHA256}}|${{ steps.pack.outputs.sha }}|g" \
