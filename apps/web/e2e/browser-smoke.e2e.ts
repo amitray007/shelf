@@ -141,14 +141,18 @@ for (const viewport of densityViewports) {
     await expect(dashboardSections.getByRole('link', { name: 'Access' })).toBeVisible();
     await expect(dashboardSections.getByRole('link', { name: 'Trash' })).toHaveCount(0);
     const trashLink = applicationBar.getByRole('link', { name: 'Trash', exact: true });
+    const signOutButton = applicationBar.getByRole('button', { name: 'Sign out' });
     await expect(trashLink).toBeVisible();
+    await expect(signOutButton).toBeVisible();
     await expect(trashLink.locator('svg')).toHaveCount(1);
     const sectionBox = await dashboardSections.boundingBox();
     const trashBox = await trashLink.boundingBox();
+    const signOutBox = await signOutButton.boundingBox();
     expect(sectionBox).not.toBeNull();
     expect(trashBox).not.toBeNull();
-    expect(trashBox?.x ?? 0).toBeGreaterThan((sectionBox?.x ?? 0) + (sectionBox?.width ?? 0));
-    expect(Math.abs((trashBox?.y ?? 0) - (sectionBox?.y ?? 0))).toBeLessThanOrEqual(4);
+    expect(signOutBox).not.toBeNull();
+    expect(signOutBox?.x ?? 0).toBeGreaterThan((trashBox?.x ?? 0) + (trashBox?.width ?? 0));
+    expect(Math.abs((trashBox?.y ?? 0) - (signOutBox?.y ?? 0))).toBeLessThanOrEqual(4);
     if (viewport.width > 430) {
       const workspaceBox = await applicationBar
         .getByRole('button', { name: /Workspace menu/u })

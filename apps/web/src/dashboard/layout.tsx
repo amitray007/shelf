@@ -182,19 +182,19 @@ export function DashboardLayout() {
                   Access
                 </Link>
               </nav>
-              <Link
-                aria-current={trashActive ? 'page' : undefined}
-                aria-label="Trash"
-                className="dashboard-trash-link"
-                to={trashPath}
-              >
-                <TrashIcon aria-hidden="true" size={16} />
-                <span>Trash</span>
-              </Link>
             </div>
           </div>
 
           <div className="dashboard-actions">
+            <Link
+              aria-current={trashActive ? 'page' : undefined}
+              aria-label="Trash"
+              className="dashboard-trash-link"
+              to={trashPath}
+            >
+              <TrashIcon aria-hidden="true" size={16} />
+              <span>Trash</span>
+            </Link>
             <Button
               className="dashboard-sign-out"
               icon={SignOutIcon}
