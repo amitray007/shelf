@@ -550,6 +550,7 @@ describePostgres('PostgresShareRepository', () => {
           actorId: 'actor-publisher',
           deletedAt: '2026-08-18T12:00:00.000Z',
           recoverableUntil: '2026-09-17T12:00:00.000Z',
+          reason: 'manual',
         }),
       ]);
       expect(deletion.status).toBe('deleted');
@@ -607,6 +608,7 @@ describePostgres('PostgresShareRepository', () => {
         actorId: 'actor-publisher',
         deletedAt: '2026-08-19T12:00:00.000Z',
         recoverableUntil: '2026-09-18T12:00:00.000Z',
+        reason: 'manual' as const,
       };
       const concurrent = new PostgresRevisionRepository(secondDatabase);
       const [left, right] = await Promise.all([

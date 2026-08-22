@@ -120,7 +120,9 @@ describePostgres('artifact lifecycle migration', () => {
           set deleted_at = '2026-03-01 12:00:00-05'::timestamptz,
               recoverable_until = '2026-03-31 13:00:00-04'::timestamptz,
               deleted_by_actor_id = 'actor-agent',
-              deleted_share_count = 0
+              deleted_share_count = 0,
+              deletion_reason = 'manual',
+              auto_trash_at = null
           where artifact_id = 'art_AAAAAAAAAAAAAAAAAAAAAA'
         `.execute(database),
       ).resolves.toBeDefined();
@@ -136,7 +138,8 @@ describePostgres('artifact lifecycle migration', () => {
         set deleted_at = null,
             recoverable_until = null,
             deleted_by_actor_id = null,
-            deleted_share_count = null
+            deleted_share_count = null,
+            deletion_reason = null
         where artifact_id = 'art_AAAAAAAAAAAAAAAAAAAAAA'
       `.execute(database);
       await expect(
@@ -152,7 +155,9 @@ describePostgres('artifact lifecycle migration', () => {
           set deleted_at = '2026-03-01 12:00:00-05'::timestamptz,
               recoverable_until = '2026-03-31 13:00:00-04'::timestamptz,
               deleted_by_actor_id = 'actor-agent',
-              deleted_share_count = null
+              deleted_share_count = null,
+              deletion_reason = 'manual',
+              auto_trash_at = null
           where artifact_id = 'art_AAAAAAAAAAAAAAAAAAAAAA'
         `.execute(database),
       ).rejects.toThrow(/shelf_artifacts_deletion_state/u);

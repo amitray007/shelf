@@ -6,7 +6,7 @@ import { Migrator } from 'kysely/migration';
 import { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 
-import { createPostgresDatabase, PostgresRevisionRepository } from '../src/index.js';
+import { createPostgresDatabase } from '../src/index.js';
 import { initialMigration } from '../src/migrations/0001_initial.js';
 import { humanAuthMigration } from '../src/migrations/0002_human_auth.js';
 import { accessCredentialsMigration } from '../src/migrations/0003_access_credentials.js';
@@ -75,16 +75,35 @@ describePostgres('share access policy migration', () => {
         },
         publisherMetadata: {},
       };
-      await new PostgresRevisionRepository(database).commitPublish({
-        namespace: {
-          installationId: publish.installationId,
-          workspaceId: publish.workspaceId,
-          actorId: 'actor-publisher',
-          operation: 'file.publish',
-          key: 'legacy-policy-fixture',
-        },
-        fingerprint: `publish-request/v1:sha256:${'a'.repeat(64)}`,
-        result: publish,
+      await database.transaction().execute(async (transaction) => {
+        await sql`
+          insert into shelf_artifacts (
+            artifact_id, installation_id, workspace_id, latest_revision_id, name, kind
+          ) values (
+            ${publish.artifactId}, ${publish.installationId}, ${publish.workspaceId},
+            null, ${publish.originalFileName}, 'file'
+          )
+        `.execute(transaction);
+        await sql`
+          insert into shelf_revisions (
+            revision_id, installation_id, workspace_id, artifact_id, revision_number,
+            content_id, content_hash, byte_count, original_file_name, media_type,
+            provenance_classification, actor_id, operation, publisher_metadata,
+            source_revision_id, kind, total_byte_count, file_count
+          ) values (
+            ${publish.revisionId}, ${publish.installationId}, ${publish.workspaceId},
+            ${publish.artifactId}, 1, ${publish.content.contentId}, ${publish.content.contentHash},
+            ${publish.content.byteCount}, ${publish.originalFileName}, ${publish.mediaType},
+            'direct-publish', 'actor-publisher', 'file.publish',
+            ${JSON.stringify(publish.publisherMetadata)}::jsonb, null, 'file',
+            ${publish.content.byteCount}, 1
+          )
+        `.execute(transaction);
+        await sql`
+          update shelf_artifacts
+          set latest_revision_id = ${publish.revisionId}
+          where artifact_id = ${publish.artifactId}
+        `.execute(transaction);
       });
       const legacyFingerprint = `share-create-request/v1:sha256:${'b'.repeat(64)}`;
       await database.transaction().execute(async (transaction) => {

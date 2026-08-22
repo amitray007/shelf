@@ -1173,12 +1173,15 @@ export class PostgresRevisionRepository
                       AND share.artifact_id = shelf_artifacts.artifact_id
                       AND share.retention_role = 'custom'
                       AND share.revoked_at IS NULL
-                      AND (share.expires_at IS NULL OR share.expires_at > ${changedAt})
+                      AND (
+                        share.expires_at IS NULL
+                        OR share.expires_at > ${changedAt}::timestamptz
+                      )
                       AND (share.max_sessions IS NULL OR share.sessions_used < share.max_sessions)
                       AND share.expires_at IS NULL
                   ) THEN NULL
                   ELSE GREATEST(
-                    ${changedAt} + interval '30 days',
+                    ${changedAt}::timestamptz + interval '30 days',
                     COALESCE((
                       SELECT MAX(share.expires_at + interval '30 days')
                       FROM shelf_shares AS share
@@ -1187,9 +1190,9 @@ export class PostgresRevisionRepository
                         AND share.artifact_id = shelf_artifacts.artifact_id
                         AND share.retention_role = 'custom'
                         AND share.revoked_at IS NULL
-                        AND share.expires_at > ${changedAt}
+                        AND share.expires_at > ${changedAt}::timestamptz
                         AND (share.max_sessions IS NULL OR share.sessions_used < share.max_sessions)
-                    ), ${changedAt} + interval '30 days')
+                    ), ${changedAt}::timestamptz + interval '30 days')
                   )
                 END
               )`,
@@ -1640,7 +1643,7 @@ export class PostgresRevisionRepository
                       and (share.max_sessions is null or share.sessions_used < share.max_sessions)
                   ) then null
                   else greatest(
-                    ${now} + interval '30 days',
+                    ${now}::timestamptz + interval '30 days',
                     coalesce((
                       select max(share.expires_at + interval '30 days')
                       from shelf_shares as share
@@ -1649,9 +1652,9 @@ export class PostgresRevisionRepository
                         and share.artifact_id = ${artifact.artifact_id}
                         and share.retention_role = 'custom'
                         and share.revoked_at is null
-                        and share.expires_at > ${now}
+                        and share.expires_at > ${now}::timestamptz
                         and (share.max_sessions is null or share.sessions_used < share.max_sessions)
-                    ), ${now} + interval '30 days')
+                    ), ${now}::timestamptz + interval '30 days')
                   )
                 end
               `,

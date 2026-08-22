@@ -618,6 +618,7 @@ describePostgres('PostgresRevisionRepository', () => {
           actorId,
           deletedAt: '2026-08-18T12:00:00.000Z',
           recoverableUntil: '2026-09-17T12:00:00.000Z',
+          reason: 'manual',
         }),
       ).resolves.toMatchObject({ status: 'deleted' });
     }
@@ -689,9 +690,23 @@ describePostgres('PostgresRevisionRepository', () => {
       ...stored('rev_retention_BBBBBBBBBBBBB', 'art_retention_BBBBBBBBBBBBB'),
       content: sharedContent,
     };
+    await database
+      .insertInto('shelf_actors')
+      .values({
+        actor_id: 'actor-agent',
+        installation_id: 'installation-main',
+        actor_kind: 'service',
+        actor_name: 'Retention test actor',
+        auth_user_id: null,
+        created_by_actor_id: null,
+        created_at: new Date('2026-08-18T12:00:00.000Z'),
+        disabled_at: null,
+      })
+      .onConflict((conflict) => conflict.column('actor_id').doNothing())
+      .execute();
     await repository.commitPublish(commitInput(first, 'retention-first'));
     await repository.commitPublish(commitInput(second, 'retention-second'));
-    const dueAt = new Date('2026-08-20T00:00:00.000Z');
+    const dueAt = new Date('2026-08-16T00:00:00.000Z');
     await database
       .updateTable('shelf_artifacts')
       .set({ auto_trash_at: dueAt })
@@ -714,7 +729,7 @@ describePostgres('PostgresRevisionRepository', () => {
       ],
     });
 
-    const afterRecoveryWindow = new Date('2026-09-20T00:00:00.000Z');
+    const afterRecoveryWindow = new Date('2026-09-15T00:00:00.000Z');
     await expect(repository.purgeExpiredArtifacts(afterRecoveryWindow, 1)).resolves.toBe(1);
     await expect(repository.listQueuedContentPurges(10)).resolves.toEqual([]);
     await expect(repository.purgeExpiredArtifacts(afterRecoveryWindow, 1)).resolves.toBe(1);

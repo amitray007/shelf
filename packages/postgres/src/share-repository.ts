@@ -284,12 +284,12 @@ async function refreshArtifactAutoTrash(
               and share.artifact_id = shelf_artifacts.artifact_id
               and share.retention_role = 'custom'
               and share.revoked_at is null
-              and (share.expires_at is null or share.expires_at > ${request.now})
+              and (share.expires_at is null or share.expires_at > ${request.now}::timestamptz)
               and (share.max_sessions is null or share.sessions_used < share.max_sessions)
               and share.expires_at is null
           ) then null
           else greatest(
-            ${request.now} + interval '30 days',
+            ${request.now}::timestamptz + interval '30 days',
             coalesce((
               select max(share.expires_at + interval '30 days')
               from shelf_shares as share
@@ -298,9 +298,9 @@ async function refreshArtifactAutoTrash(
                 and share.artifact_id = shelf_artifacts.artifact_id
                 and share.retention_role = 'custom'
                 and share.revoked_at is null
-                and share.expires_at > ${request.now}
+                and share.expires_at > ${request.now}::timestamptz
                 and (share.max_sessions is null or share.sessions_used < share.max_sessions)
-            ), ${request.now} + interval '30 days')
+            ), ${request.now}::timestamptz + interval '30 days')
           )
         end
       `,

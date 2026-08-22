@@ -8,19 +8,7 @@ export const artifactRetentionMigration: Migration = {
         drop constraint shelf_artifacts_deletion_state,
         add column retention_mode text not null default 'automatic',
         add column auto_trash_at timestamptz,
-        add column deletion_reason text
-    `.execute(database);
-    await sql`
-      update shelf_artifacts
-      set
-        auto_trash_at = case
-          when deleted_at is null then transaction_timestamp() + interval '30 days'
-          else null
-        end,
-        deletion_reason = case when deleted_at is null then null else 'manual' end
-    `.execute(database);
-    await sql`
-      alter table shelf_artifacts
+        add column deletion_reason text,
         add constraint shelf_artifacts_retention_mode check (
           retention_mode in ('automatic', 'keep')
         ),
@@ -48,7 +36,21 @@ export const artifactRetentionMigration: Migration = {
             and deletion_reason is not null
             and auto_trash_at is null
           )
-        )
+        ) not valid
+    `.execute(database);
+    await sql`
+      update shelf_artifacts
+      set
+        auto_trash_at = case
+          when deleted_at is null then transaction_timestamp() + interval '30 days'
+          else null
+        end,
+        deletion_reason = case when deleted_at is null then null else 'manual' end
+    `.execute(database);
+    await sql`set constraints all immediate`.execute(database);
+    await sql`
+      alter table shelf_artifacts
+        validate constraint shelf_artifacts_deletion_state
     `.execute(database);
     await sql`
       create index shelf_artifacts_auto_trash_idx
