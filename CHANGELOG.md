@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.4](https://github.com/amitray007/shelf/compare/v0.1.3...v0.1.4) (2026-08-22)
+
+
+### Features
+
+* add artifact retention and Trash lifecycle ([15ee7c0](https://github.com/amitray007/shelf/commit/15ee7c06955e5e3a1f17c3707b5ddf502670af41))
+* add artifact retention and Trash lifecycle ([802642a](https://github.com/amitray007/shelf/commit/802642a8b416cdf4e40195505a243ff6930028f6))
+
 ## [0.1.3](https://github.com/amitray007/shelf/compare/v0.1.2...v0.1.3) (2026-08-21)
 
 
