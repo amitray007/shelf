@@ -94,6 +94,10 @@
     justify-self: start;
   }
 
+  .dashboard-section-actions {
+    grid-row: 2;
+  }
+
   .dashboard-trash-link {
     width: 36px;
     justify-content: center;

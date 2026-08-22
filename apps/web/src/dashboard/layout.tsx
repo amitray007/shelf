@@ -170,28 +170,31 @@ export function DashboardLayout() {
               </DropdownMenu>
             </nav>
 
-            <nav aria-label="Dashboard sections" className="dashboard-section-tabs">
+            <div className="dashboard-section-actions">
+              <nav aria-label="Dashboard sections" className="dashboard-section-tabs">
+                <Link
+                  aria-current={!accessActive && !trashActive ? 'page' : undefined}
+                  to={artifactsPath}
+                >
+                  Artifacts
+                </Link>
+                <Link aria-current={accessActive ? 'page' : undefined} to={accessPath}>
+                  Access
+                </Link>
+              </nav>
               <Link
-                aria-current={!accessActive && !trashActive ? 'page' : undefined}
-                to={artifactsPath}
+                aria-current={trashActive ? 'page' : undefined}
+                aria-label="Trash"
+                className="dashboard-trash-link"
+                to={trashPath}
               >
-                Artifacts
+                <TrashIcon aria-hidden="true" size={16} />
+                <span>Trash</span>
               </Link>
-              <Link aria-current={accessActive ? 'page' : undefined} to={accessPath}>
-                Access
-              </Link>
-            </nav>
+            </div>
           </div>
 
           <div className="dashboard-actions">
-            <Link
-              aria-current={trashActive ? 'page' : undefined}
-              className="dashboard-trash-link"
-              to={trashPath}
-            >
-              <TrashIcon aria-hidden="true" size={16} />
-              <span>Trash</span>
-            </Link>
             <Button
               className="dashboard-sign-out"
               icon={SignOutIcon}

@@ -100,6 +100,7 @@
 .dashboard-primary,
 .dashboard-context,
 .dashboard-actions,
+.dashboard-section-actions,
 .dashboard-section-tabs {
   display: flex;
   min-width: 0;
@@ -108,6 +109,10 @@
 
 .dashboard-primary {
   gap: 10px;
+}
+
+.dashboard-section-actions {
+  gap: 8px;
 }
 
 .dashboard-context {
