@@ -46,7 +46,7 @@ export interface CommitShareCreateInput {
   namespace: ShareCreateIdempotencyNamespace;
   fingerprint: string;
   result: StoredShare;
-  purpose: 'user-created' | 'artifact-default';
+  purpose: 'user-created' | 'artifact-default' | 'artifact-recovery';
 }
 
 export type CommitShareCreateOutcome =
@@ -115,6 +115,7 @@ export interface ShareRepository {
     artifactId: string;
   }): Promise<ArtifactDefaultShareState>;
   findShare(shareId: string): Promise<StoredShare | undefined>;
+  findShareByPublicCode(publicCode: string): Promise<StoredShare | undefined>;
   /** Batch share lookup for tenant-scoped projections; optional for lightweight adapters. */
   findSharesByIds?(request: {
     installationId: string;

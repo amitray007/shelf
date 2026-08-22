@@ -160,7 +160,7 @@ export function createSharePolicyFingerprint(input: {
   expiry: { expiresIn: ShareExpiryPresetWithNever } | { expiresAt: string | null };
   maxSessions: number | null;
   commentPolicy?: CommentPolicy;
-  purpose?: 'artifact-default';
+  purpose?: 'artifact-default' | 'artifact-recovery';
 }): string {
   const canonical = JSON.stringify({
     version: 3,
@@ -443,7 +443,7 @@ export function createShareLifecycleService(dependencies: {
     idempotencyKey: string;
     requestId: string;
     signal?: AbortSignal;
-    purpose?: 'artifact-default';
+    purpose?: 'artifact-default' | 'artifact-recovery';
     commentPolicy?: CommentPolicy;
   }): Promise<ShareCreateResult> => {
     validateIdentity(request, { requestId: true, idempotencyKey: true });
@@ -864,6 +864,57 @@ export function createShareLifecycleService(dependencies: {
         ),
         nextCursor: page.next === undefined ? null : encodeCursor(page.next),
       };
+    },
+
+    async resolveManagedShare(request: {
+      installationId: string;
+      workspaceId: string;
+      actorId: string;
+      shareId?: string;
+      publicCode?: string;
+      signal?: AbortSignal;
+    }): Promise<ShareManagementSummary> {
+      validateIdentity(request, { requestId: false, idempotencyKey: false });
+      const hasShareId = request.shareId !== undefined;
+      const hasPublicCode = request.publicCode !== undefined;
+      if (
+        hasShareId === hasPublicCode ||
+        (request.shareId !== undefined && !SHARE_ID_PATTERN.test(request.shareId)) ||
+        (request.publicCode !== undefined && !PUBLIC_CODE_PATTERN.test(request.publicCode))
+      ) {
+        throw new ShareNotFoundError();
+      }
+      let stored: StoredShare | undefined;
+      try {
+        stored =
+          request.shareId === undefined
+            ? await dependencies.shares.findShareByPublicCode(request.publicCode as string)
+            : await dependencies.shares.findShare(request.shareId);
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Share lookup failed.', error);
+      }
+      if (
+        stored === undefined ||
+        stored.installationId !== request.installationId ||
+        stored.workspaceId !== request.workspaceId
+      ) {
+        throw new ShareNotFoundError();
+      }
+      await dependencies.authorizer.authorize(
+        {
+          installationId: request.installationId,
+          workspaceId: request.workspaceId,
+          actorId: request.actorId,
+          action: READ_REVISION_OPERATION,
+        },
+        request.signal,
+      );
+      return summary(
+        stored,
+        dependencies.capabilityCodec,
+        clock(),
+        await pinnedRevisionNumber(stored),
+      );
     },
 
     async revokeShare(request: {

@@ -1,6 +1,7 @@
 import type {
   ArtifactCatalogRepository,
   ArtifactLifecycleRepository,
+  ArtifactRetentionRepository,
   CommitFolderPublishInput,
   CommitFolderPublishOutcome,
   CommitPublishInput,
@@ -22,6 +23,7 @@ import type {
   StoredFolderRevision,
   StoredRestore,
   StoredRevision,
+  StoredTrashedArtifact,
 } from '@shelf/core';
 import { initialArtifactNameFromFileName } from '@shelf/core';
 
@@ -47,6 +49,7 @@ export class MemoryRevisionRepository
     RevisionRepository,
     ArtifactCatalogRepository,
     ArtifactLifecycleRepository,
+    ArtifactRetentionRepository,
     FolderRevisionRepository,
     RevisionComparisonRepository
 {
@@ -60,7 +63,12 @@ export class MemoryRevisionRepository
   readonly #revisions = new Map<string, StoredRevision>();
   readonly #deletions = new Map<
     string,
-    { deletedAt: string; recoverableUntil: string; revokedShareCount: number }
+    {
+      deletedAt: string;
+      recoverableUntil: string;
+      revokedShareCount: number;
+      reason: 'manual' | 'retention';
+    }
   >();
 
   #isActive(artifactId: string): boolean {
@@ -115,6 +123,11 @@ export class MemoryRevisionRepository
       name: previous?.name ?? initialArtifactNameFromFileName(input.result.originalFileName),
       createdAt: previous?.createdAt ?? createdAt,
       updatedAt: createdAt,
+      retentionMode: previous?.retentionMode ?? 'automatic',
+      autoTrashAt:
+        previous?.retentionMode === 'keep'
+          ? null
+          : new Date(Date.parse(createdAt) + 30 * 24 * 60 * 60 * 1_000).toISOString(),
       latestRevision: revision,
     });
     this.#revisions.set(input.result.revisionId, input.result);
@@ -175,6 +188,11 @@ export class MemoryRevisionRepository
       name: previous?.name ?? initialArtifactNameFromFileName(input.result.rootName),
       createdAt: previous?.createdAt ?? createdAt,
       updatedAt: createdAt,
+      retentionMode: previous?.retentionMode ?? 'automatic',
+      autoTrashAt:
+        previous?.retentionMode === 'keep'
+          ? null
+          : new Date(Date.parse(createdAt) + 30 * 24 * 60 * 60 * 1_000).toISOString(),
       latestRevision: revision,
     });
     this.#folderRevisions.set(input.result.revisionId, input.result);
@@ -333,6 +351,10 @@ export class MemoryRevisionRepository
       this.#artifacts.set(result.artifactId, {
         ...artifact,
         updatedAt: createdAt,
+        autoTrashAt:
+          artifact.retentionMode === 'keep'
+            ? null
+            : new Date(Date.parse(createdAt) + 30 * 24 * 60 * 60 * 1_000).toISOString(),
         latestRevision: revision,
       });
       this.#folderRevisions.set(result.revisionId, result);
@@ -366,6 +388,10 @@ export class MemoryRevisionRepository
     this.#artifacts.set(result.artifactId, {
       ...artifact,
       updatedAt: createdAt,
+      autoTrashAt:
+        artifact.retentionMode === 'keep'
+          ? null
+          : new Date(Date.parse(createdAt) + 30 * 24 * 60 * 60 * 1_000).toISOString(),
       latestRevision: revision,
     });
     this.#revisions.set(result.revisionId, result);
@@ -393,6 +419,7 @@ export class MemoryRevisionRepository
           artifact.workspaceId === request.workspaceId &&
           (request.search === undefined ||
             [
+              artifact.artifactId,
               artifact.name,
               artifact.latestRevision.publisherMetadata.title,
               artifact.latestRevision.publisherMetadata.description,
@@ -428,6 +455,112 @@ export class MemoryRevisionRepository
       items,
       ...(hasMore && last !== undefined
         ? { next: { timestamp: timestamp(last), artifactId: last.artifactId } }
+        : {}),
+    };
+  }
+
+  async setArtifactRetention(request: {
+    installationId: string;
+    workspaceId: string;
+    artifactId: string;
+    mode: 'automatic' | 'keep';
+    changedAt: string;
+  }): Promise<StoredArtifact | undefined> {
+    const artifact = this.#artifacts.get(request.artifactId);
+    if (
+      artifact === undefined ||
+      !this.#isActive(request.artifactId) ||
+      artifact.installationId !== request.installationId ||
+      artifact.workspaceId !== request.workspaceId
+    ) {
+      return undefined;
+    }
+    const updated: StoredArtifact = {
+      ...artifact,
+      retentionMode: request.mode,
+      autoTrashAt:
+        request.mode === 'keep'
+          ? null
+          : new Date(Date.parse(request.changedAt) + 30 * 24 * 60 * 60 * 1_000).toISOString(),
+      updatedAt: request.changedAt,
+    };
+    this.#artifacts.set(request.artifactId, updated);
+    return structuredClone(updated);
+  }
+
+  async findTrashedArtifact(artifactId: string): Promise<StoredTrashedArtifact | undefined> {
+    const artifact = this.#artifacts.get(artifactId);
+    const deletion = this.#deletions.get(artifactId);
+    if (artifact === undefined || deletion === undefined) return undefined;
+    return {
+      artifact: structuredClone(artifact),
+      deletedAt: deletion.deletedAt,
+      purgeAt: deletion.recoverableUntil,
+      reason: deletion.reason,
+    };
+  }
+
+  async listTrashedArtifacts(request: {
+    installationId: string;
+    workspaceId: string;
+    limit: number;
+    search?: string;
+    after?: { deletedAt: string; artifactId: string };
+  }) {
+    const search = request.search?.toLocaleLowerCase();
+    const ordered = [...this.#deletions.entries()]
+      .flatMap(([artifactId, deletion]): StoredTrashedArtifact[] => {
+        const artifact = this.#artifacts.get(artifactId);
+        if (
+          artifact === undefined ||
+          artifact.installationId !== request.installationId ||
+          artifact.workspaceId !== request.workspaceId
+        ) {
+          return [];
+        }
+        if (
+          search !== undefined &&
+          ![
+            artifact.artifactId,
+            artifact.name,
+            artifact.latestRevision.publisherMetadata.title,
+            artifact.latestRevision.publisherMetadata.description,
+            'rootName' in artifact.latestRevision
+              ? artifact.latestRevision.rootName
+              : artifact.latestRevision.originalFileName,
+          ].some((value) => value?.toLocaleLowerCase().includes(search) === true)
+        ) {
+          return [];
+        }
+        return [
+          {
+            artifact: structuredClone(artifact),
+            deletedAt: deletion.deletedAt,
+            purgeAt: deletion.recoverableUntil,
+            reason: deletion.reason,
+          },
+        ];
+      })
+      .sort(
+        (left, right) =>
+          right.deletedAt.localeCompare(left.deletedAt) ||
+          left.artifact.artifactId.localeCompare(right.artifact.artifactId),
+      )
+      .filter((item) => {
+        if (request.after === undefined) return true;
+        return (
+          item.deletedAt < request.after.deletedAt ||
+          (item.deletedAt === request.after.deletedAt &&
+            item.artifact.artifactId > request.after.artifactId)
+        );
+      });
+    const hasMore = ordered.length > request.limit;
+    const items = ordered.slice(0, request.limit);
+    const last = items.at(-1);
+    return {
+      items,
+      ...(hasMore && last !== undefined
+        ? { next: { deletedAt: last.deletedAt, artifactId: last.artifact.artifactId } }
         : {}),
     };
   }
@@ -476,6 +609,7 @@ export class MemoryRevisionRepository
       deletedAt: deletion?.deletedAt ?? null,
       recoverableUntil: deletion?.recoverableUntil ?? null,
       revokedShareCount: deletion?.revokedShareCount ?? null,
+      deletionReason: deletion?.reason ?? null,
     };
   }
 
@@ -486,6 +620,7 @@ export class MemoryRevisionRepository
     deletedAt: string;
     recoverableUntil: string;
     revokedShareCount: number;
+    reason: 'manual' | 'retention';
   }) {
     const artifact = this.#artifacts.get(request.artifactId);
     if (
@@ -501,6 +636,7 @@ export class MemoryRevisionRepository
       deletedAt: request.deletedAt,
       recoverableUntil: request.recoverableUntil,
       revokedShareCount: request.revokedShareCount,
+      reason: request.reason,
     };
     this.#deletions.set(request.artifactId, deletion);
     return { ...deletion };
@@ -526,7 +662,14 @@ export class MemoryRevisionRepository
       return { status: 'expired' as const };
     }
     this.#deletions.delete(request.artifactId);
-    const recovered = { ...artifact, updatedAt: request.recoveredAt };
+    const recovered = {
+      ...artifact,
+      updatedAt: request.recoveredAt,
+      retentionMode: 'automatic' as const,
+      autoTrashAt: new Date(
+        Date.parse(request.recoveredAt) + 7 * 24 * 60 * 60 * 1_000,
+      ).toISOString(),
+    };
     this.#artifacts.set(request.artifactId, recovered);
     return { status: 'recovered' as const, artifact: structuredClone(recovered) };
   }

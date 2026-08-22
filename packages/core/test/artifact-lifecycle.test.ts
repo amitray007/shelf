@@ -533,6 +533,7 @@ describe('recoverable artifact deletion', () => {
       status: 'deleted' as const,
       deletedAt: request.deletedAt,
       recoverableUntil: request.recoverableUntil,
+      reason: request.reason,
       revokedShareCount: 2,
     }));
     const lifecycle = createArtifactLifecycleService({
@@ -566,6 +567,7 @@ describe('recoverable artifact deletion', () => {
       artifactId: artifact.artifactId,
       deletedAt: '2026-08-18T12:00:00.000Z',
       recoverableUntil: '2026-09-17T12:00:00.000Z',
+      reason: 'manual',
       revokedShareCount: 2,
     });
     expect(deleteArtifact).toHaveBeenCalledWith({
@@ -575,6 +577,7 @@ describe('recoverable artifact deletion', () => {
       actorId: 'actor-publisher',
       deletedAt: '2026-08-18T12:00:00.000Z',
       recoverableUntil: '2026-09-17T12:00:00.000Z',
+      reason: 'manual',
     });
     expect(authorization).toEqual([
       {

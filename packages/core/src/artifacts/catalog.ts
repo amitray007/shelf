@@ -1,6 +1,7 @@
 import {
   type Artifact,
   type ArtifactPage,
+  type ArtifactRetentionMode,
   type ArtifactRevision,
   type ArtifactRevisionPage,
   type PublisherMetadata,
@@ -50,6 +51,8 @@ export interface StoredArtifact {
   name: string;
   createdAt: string;
   updatedAt: string;
+  retentionMode: ArtifactRetentionMode;
+  autoTrashAt: string | null;
   latestRevision: StoredArtifactRevision;
 }
 
@@ -219,6 +222,10 @@ export function storedArtifactToArtifact(stored: StoredArtifact): Artifact {
     name: stored.name,
     createdAt: stored.createdAt,
     updatedAt: stored.updatedAt,
+    retention: {
+      mode: stored.retentionMode,
+      trashAt: stored.autoTrashAt,
+    },
     latestRevision: storedRevisionToArtifactRevision(stored.latestRevision),
     paths: {
       artifact: `/api/v1/artifacts/${stored.artifactId}`,

@@ -203,6 +203,7 @@ describe('dashboard API client', () => {
           name: 'Renamed',
           createdAt: '2026-08-18T00:00:00.000Z',
           updatedAt: '2026-08-18T00:00:00.000Z',
+          retention: { mode: 'automatic', trashAt: '2026-09-17T00:00:00.000Z' },
           latestRevision: {
             kind: 'file',
             revisionId: `rev_${'b'.repeat(22)}`,
@@ -384,6 +385,7 @@ describe('dashboard API client', () => {
       artifactId,
       deletedAt: '2026-08-18T12:00:00.000Z',
       recoverableUntil: '2026-09-17T12:00:00.000Z',
+      reason: 'manual',
       revokedShareCount: 1,
     };
     const recovered = {
@@ -394,6 +396,7 @@ describe('dashboard API client', () => {
       name: 'idea.md',
       createdAt: '2026-08-18T10:00:00.000Z',
       updatedAt: '2026-08-18T10:00:00.000Z',
+      retention: { mode: 'automatic', trashAt: '2026-08-25T10:00:00.000Z' },
       latestRevision: {
         kind: 'file',
         revisionId: `rev_${'b'.repeat(22)}`,
@@ -419,14 +422,38 @@ describe('dashboard API client', () => {
         revisions: `/api/v1/artifacts/${artifactId}/revisions`,
       },
     };
+    const recovery = {
+      apiVersion: 'v1',
+      artifact: recovered,
+      recoveryShare: {
+        apiVersion: 'v1',
+        workspaceId: 'workspace-main',
+        artifactId,
+        shareId: `shr_${'d'.repeat(22)}`,
+        visibility: 'unlisted',
+        accessType: 'protected',
+        commentPolicy: 'off',
+        target: { mode: 'latest' },
+        createdAt: '2026-08-18T12:00:00.000Z',
+        expiresAt: '2026-08-25T12:00:00.000Z',
+        maxSessions: null,
+        sessionsUsed: 0,
+        sessionsRemaining: null,
+        revokedAt: null,
+        status: 'active',
+        url: `/s/shr_${'d'.repeat(22)}#${'e'.repeat(32)}`,
+        requestId: 'request-recovery',
+        replayed: false,
+      },
+    };
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(json(deleted))
-      .mockResolvedValueOnce(json(recovered));
+      .mockResolvedValueOnce(json(recovery));
     globalThis.fetch = fetch;
 
     await expect(deleteArtifact(artifactId)).resolves.toEqual(deleted);
-    await expect(recoverArtifact(artifactId, 'recovery-key')).resolves.toEqual(recovered);
+    await expect(recoverArtifact(artifactId, 'recovery-key')).resolves.toEqual(recovery);
     expect(fetch.mock.calls[0]?.[0]).toBe(`/api/v1/artifacts/${artifactId}`);
     expect(fetch.mock.calls[0]?.[1]).toMatchObject({ method: 'DELETE' });
     expect(fetch.mock.calls[1]?.[0]).toBe(`/api/v1/artifacts/${artifactId}/recovery`);

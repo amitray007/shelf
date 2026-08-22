@@ -34,6 +34,7 @@ export function DashboardLayout() {
     const prefetch = () => {
       void import('./artifacts-page.js');
       void import('./artifact-page.js');
+      void import('./trash-page.js');
       void import('./access-page.js');
     };
     if (typeof window.requestIdleCallback === 'function') {
@@ -63,10 +64,15 @@ export function DashboardLayout() {
     activeWorkspace === undefined
       ? '/app/access'
       : `/app/w/${encodeURIComponent(activeWorkspace.workspaceId)}/access`;
+  const trashPath =
+    activeWorkspace === undefined
+      ? '/app'
+      : `/app/w/${encodeURIComponent(activeWorkspace.workspaceId)}/trash`;
   const accessActive = location.pathname.endsWith('/access');
+  const trashActive = location.pathname.endsWith('/trash');
 
   const changeWorkspace = (workspaceId: string) => {
-    const section = accessActive ? 'access' : 'artifacts';
+    const section = accessActive ? 'access' : trashActive ? 'trash' : 'artifacts';
     void navigate(`/app/w/${encodeURIComponent(workspaceId)}/${section}`);
   };
   const createdWorkspace = (workspaceId: string) => {
@@ -95,79 +101,100 @@ export function DashboardLayout() {
     <div className="dashboard-shell">
       <header className="dashboard-bar">
         <div className="dashboard-location">
-          <nav className="dashboard-context" aria-label="Workspace">
-            <Link className="wordmark dashboard-wordmark" to={artifactsPath}>
-              shelf
-            </Link>
-            <span className="location-separator" aria-hidden="true">
-              /
-            </span>
-            <DropdownMenu>
-              <DropdownMenu.Trigger
-                render={
-                  <Button
-                    aria-label={`Workspace menu, ${activeWorkspace?.workspaceId ?? 'no workspace grant'}`}
-                    className="workspace-menu-trigger"
-                    icon={StackIcon}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <span className="workspace-menu-label">
-                      {activeWorkspace?.workspaceId ?? 'No workspace grant'}
-                    </span>
-                    <CaretDownIcon aria-hidden="true" className="workspace-menu-caret" size={12} />
-                  </Button>
-                }
-              />
-              <DropdownMenu.Content align="start" className="workspace-menu-content">
-                <DropdownMenu.Group>
-                  <DropdownMenu.Label>
-                    <span>Workspaces</span>
-                    <span>{readableWorkspaces.length}</span>
-                  </DropdownMenu.Label>
-                  {readableWorkspaces.length === 0 ? (
-                    <DropdownMenu.Item disabled>No readable workspaces</DropdownMenu.Item>
-                  ) : (
-                    readableWorkspaces.map((workspace) => (
-                      <DropdownMenu.Item
-                        key={workspace.workspaceId}
-                        onClick={() => changeWorkspace(workspace.workspaceId)}
-                        selected={workspace.workspaceId === activeWorkspace?.workspaceId}
-                      >
-                        {workspace.workspaceId}
-                      </DropdownMenu.Item>
-                    ))
-                  )}
-                </DropdownMenu.Group>
-                <DropdownMenu.Separator />
-                <DropdownMenu.Item icon={PlusIcon} onClick={() => setCreateOpen(true)}>
-                  New workspace
-                </DropdownMenu.Item>
-                {activeWorkspace === undefined ? null : (
-                  <>
-                    <DropdownMenu.Separator />
-                    <DropdownMenu.Item
-                      icon={TrashIcon}
-                      onClick={() => setDeletingWorkspaceId(activeWorkspace.workspaceId)}
-                      variant="danger"
+          <div className="dashboard-primary">
+            <nav className="dashboard-context" aria-label="Workspace">
+              <Link className="wordmark dashboard-wordmark" to={artifactsPath}>
+                shelf
+              </Link>
+              <span className="location-separator" aria-hidden="true">
+                /
+              </span>
+              <DropdownMenu>
+                <DropdownMenu.Trigger
+                  render={
+                    <Button
+                      aria-label={`Workspace menu, ${activeWorkspace?.workspaceId ?? 'no workspace grant'}`}
+                      className="workspace-menu-trigger"
+                      icon={StackIcon}
+                      size="sm"
+                      variant="ghost"
                     >
-                      Delete workspace…
-                    </DropdownMenu.Item>
-                  </>
-                )}
-              </DropdownMenu.Content>
-            </DropdownMenu>
-          </nav>
+                      <span className="workspace-menu-label">
+                        {activeWorkspace?.workspaceId ?? 'No workspace grant'}
+                      </span>
+                      <CaretDownIcon
+                        aria-hidden="true"
+                        className="workspace-menu-caret"
+                        size={12}
+                      />
+                    </Button>
+                  }
+                />
+                <DropdownMenu.Content align="start" className="workspace-menu-content">
+                  <DropdownMenu.Group>
+                    <DropdownMenu.Label>
+                      <span>Workspaces</span>
+                      <span>{readableWorkspaces.length}</span>
+                    </DropdownMenu.Label>
+                    {readableWorkspaces.length === 0 ? (
+                      <DropdownMenu.Item disabled>No readable workspaces</DropdownMenu.Item>
+                    ) : (
+                      readableWorkspaces.map((workspace) => (
+                        <DropdownMenu.Item
+                          key={workspace.workspaceId}
+                          onClick={() => changeWorkspace(workspace.workspaceId)}
+                          selected={workspace.workspaceId === activeWorkspace?.workspaceId}
+                        >
+                          {workspace.workspaceId}
+                        </DropdownMenu.Item>
+                      ))
+                    )}
+                  </DropdownMenu.Group>
+                  <DropdownMenu.Separator />
+                  <DropdownMenu.Item icon={PlusIcon} onClick={() => setCreateOpen(true)}>
+                    New workspace
+                  </DropdownMenu.Item>
+                  {activeWorkspace === undefined ? null : (
+                    <>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item
+                        icon={TrashIcon}
+                        onClick={() => setDeletingWorkspaceId(activeWorkspace.workspaceId)}
+                        variant="danger"
+                      >
+                        Delete workspace…
+                      </DropdownMenu.Item>
+                    </>
+                  )}
+                </DropdownMenu.Content>
+              </DropdownMenu>
+            </nav>
+
+            <div className="dashboard-section-actions">
+              <nav aria-label="Dashboard sections" className="dashboard-section-tabs">
+                <Link
+                  aria-current={!accessActive && !trashActive ? 'page' : undefined}
+                  to={artifactsPath}
+                >
+                  Artifacts
+                </Link>
+                <Link aria-current={accessActive ? 'page' : undefined} to={accessPath}>
+                  Access
+                </Link>
+              </nav>
+              <Link
+                aria-current={trashActive ? 'page' : undefined}
+                aria-label="Trash"
+                className="dashboard-trash-link"
+                to={trashPath}
+              >
+                <TrashIcon aria-hidden="true" size={16} />
+                <span>Trash</span>
+              </Link>
+            </div>
+          </div>
 
           <div className="dashboard-actions">
-            <nav aria-label="Dashboard sections" className="dashboard-section-tabs">
-              <Link aria-current={accessActive ? undefined : 'page'} to={artifactsPath}>
-                Artifacts
-              </Link>
-              <Link aria-current={accessActive ? 'page' : undefined} to={accessPath}>
-                Access
-              </Link>
-            </nav>
             <Button
               className="dashboard-sign-out"
               icon={SignOutIcon}

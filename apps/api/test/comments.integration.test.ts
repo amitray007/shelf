@@ -107,7 +107,7 @@ function expectAnonymousHeaders(response: {
 }
 
 describe('comment HTTP boundary', () => {
-  it('reserves administrator edit and delete for human sessions', async () => {
+  it('allows credentials to reach actor-owned edit and delete without a human-only gate', async () => {
     const app = await fixture('access-credential');
     const artifactId = `art_${'a'.repeat(22)}`;
     const url = `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/comments/posts/post-main`;
@@ -122,7 +122,7 @@ describe('comment HTTP boundary', () => {
         headers: { authorization: 'Bearer test' },
         payload,
       });
-      expect(response.statusCode, response.body).toBe(403);
+      expect(response.statusCode, response.body).toBe(404);
     }
 
     const moderation = await app.inject({
@@ -519,17 +519,32 @@ describe('comment HTTP boundary', () => {
       payload: { moderation: 'unhide' },
     });
     expect(unhidden.statusCode, unhidden.body).toBe(200);
-    const adminEdited = await app.inject({
+    const visitorEditDenied = await app.inject({
       method: 'PATCH',
       url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/comments/posts/${protectedPostId}`,
       headers: { authorization: 'Bearer test' },
       payload: { action: 'edit', body: 'Edited by an administrator.' },
     });
+    expect(visitorEditDenied.statusCode, visitorEditDenied.body).toBe(404);
+    const actorReply = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/comments/threads/${protectedThreadId}/replies`,
+      headers: { authorization: 'Bearer test' },
+      payload: { body: 'Actor-owned reply.' },
+    });
+    expect(actorReply.statusCode, actorReply.body).toBe(201);
+    const actorPostId = actorReply.json().postId as string;
+    const adminEdited = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/comments/posts/${actorPostId}`,
+      headers: { authorization: 'Bearer test' },
+      payload: { action: 'edit', body: 'Edited by its actor.' },
+    });
     expect(adminEdited.statusCode, adminEdited.body).toBe(200);
-    expect(adminEdited.json().body).toBe('Edited by an administrator.');
+    expect(adminEdited.json().body).toBe('Edited by its actor.');
     const adminDeleted = await app.inject({
       method: 'PATCH',
-      url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/comments/posts/${protectedPostId}`,
+      url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/comments/posts/${actorPostId}`,
       headers: { authorization: 'Bearer test' },
       payload: { action: 'delete' },
     });

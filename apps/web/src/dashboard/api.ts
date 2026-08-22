@@ -3,6 +3,8 @@ import {
   type ArtifactDefaultShares,
   type ArtifactDeletionResult,
   type ArtifactPage,
+  type ArtifactRecoveryResult,
+  type ArtifactRetentionMode,
   type ArtifactRevisionPage,
   COMMENT_SUMMARY_RECENT_THREAD_LIMIT,
   type CommentPolicy,
@@ -20,6 +22,7 @@ import {
   isArtifactDefaultShares,
   isArtifactDeletionResult,
   isArtifactPage,
+  isArtifactRecoveryResult,
   isArtifactRevisionPage,
   isCommentThread,
   isDashboardCredentialIssue,
@@ -31,6 +34,7 @@ import {
   isRestoreResult,
   isShareCreateResult,
   isSharePage,
+  isTrashPage,
   isWorkspaceCreateResult,
   isWorkspaceDeleteResult,
   type RestoreResult,
@@ -38,6 +42,7 @@ import {
   type ShareCreateResult,
   type ShareManagementSummary,
   type SharePage,
+  type TrashPage,
   type WorkspaceCreateResult,
   type WorkspaceDeleteResult,
 } from '@shelf/contracts';
@@ -581,13 +586,47 @@ export async function deleteArtifact(artifactId: string): Promise<ArtifactDeleti
 export async function recoverArtifact(
   artifactId: string,
   idempotencyKey: string,
-): Promise<Artifact> {
+): Promise<ArtifactRecoveryResult> {
   const value = await requestJson(
     `/api/v1/artifacts/${encodeURIComponent(artifactId)}/recovery`,
     requestOptions({ method: 'POST', headers: { 'Idempotency-Key': idempotencyKey } }),
   );
+  if (!isArtifactRecoveryResult(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
+  }
+  return value;
+}
+
+export async function setArtifactRetention(
+  workspaceId: string,
+  artifactId: string,
+  mode: ArtifactRetentionMode,
+): Promise<Artifact> {
+  const value = await requestJson(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/retention`,
+    jsonRequest('PATCH', { mode }),
+  );
   if (!isArtifact(value)) {
     throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
+  }
+  return value;
+}
+
+export async function loadTrash(
+  workspaceId: string,
+  cursor?: string,
+  signal?: AbortSignal,
+  search?: string,
+): Promise<TrashPage> {
+  const query = new URLSearchParams({ limit: '20' });
+  if (cursor !== undefined) query.set('cursor', cursor);
+  if (search !== undefined && search.length > 0) query.set('search', search);
+  const value = await requestJson(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/trash?${query}`,
+    signal === undefined ? undefined : { signal },
+  );
+  if (!isTrashPage(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid Trash response.');
   }
   return value;
 }

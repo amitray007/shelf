@@ -14,6 +14,9 @@ export interface ArtifactTable {
   recoverable_until: Date | null;
   deleted_by_actor_id: string | null;
   deleted_share_count: number | null;
+  retention_mode: 'automatic' | 'keep';
+  auto_trash_at: Date | null;
+  deletion_reason: 'manual' | 'retention' | null;
 }
 
 export interface RevisionTable {
@@ -81,6 +84,15 @@ export interface ShareTable {
   revoked_by_actor_id: string | null;
   is_default: boolean;
   comment_policy: 'off' | 'private' | 'shared';
+  retention_role: 'default' | 'custom' | 'recovery-lease';
+}
+
+export interface ContentPurgeQueueTable {
+  content_id: string;
+  artifact_id: string;
+  queued_at: Date;
+  attempts: number;
+  last_attempt_at: Date | null;
 }
 
 export interface CommentVisitorTable {
@@ -237,6 +249,7 @@ export interface ShelfPostgresSchema {
   shelf_comment_visitors: CommentVisitorTable;
   shelf_comment_threads: CommentThreadTable;
   shelf_comment_posts: CommentPostTable;
+  shelf_content_purge_queue: ContentPurgeQueueTable;
   shelf_workspaces: WorkspaceTable;
 }
 

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 
 import {
@@ -10,6 +11,7 @@ import {
   type ShareCreateInput,
 } from '@shelf/contracts';
 import {
+  createArtifactLifecycleService,
   createProtectedSessionEstablishmentService,
   createShareAccessService,
   createShareResolutionService,
@@ -41,6 +43,13 @@ const WorkspaceShareParamsSchema = Type.Object(
   {
     workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
     shareId: OpaqueShareIdSchema,
+  },
+  { additionalProperties: false },
+);
+const ShareResolveQuerySchema = Type.Object(
+  {
+    shareId: Type.Optional(OpaqueShareIdSchema),
+    publicCode: Type.Optional(PublicShareCodeSchema),
   },
   { additionalProperties: false },
 );
@@ -210,6 +219,12 @@ export async function registerShareRoutes(
     },
   );
   const lifecycle = createAuthenticatedShareLifecycle(dependencies);
+  const artifacts = createArtifactLifecycleService({
+    authorizer: dependencies.authorizer,
+    artifacts: dependencies.revisionRepository,
+    deletions: dependencies.artifactDeletionRepository,
+    ...(dependencies.artifactClock === undefined ? {} : { clock: dependencies.artifactClock }),
+  });
   const resolution = createShareResolutionService({
     shares: dependencies.shareRepository,
     ...(dependencies.shareClock === undefined ? {} : { clock: dependencies.shareClock }),
@@ -286,6 +301,24 @@ export async function registerShareRoutes(
       const params = request.params as { workspaceId: string; artifactId: string };
       const headers = request.headers as { 'idempotency-key': string };
       const body = request.body as ShareCreateInput;
+      const deletion = await dependencies.artifactDeletionRepository.findArtifactForDeletion(
+        params.artifactId,
+      );
+      if (
+        deletion?.deletedAt !== null &&
+        deletion?.artifact.installationId === identity.installationId &&
+        deletion.artifact.workspaceId === params.workspaceId
+      ) {
+        await artifacts.recoverArtifact({
+          installationId: identity.installationId,
+          actorId: identity.actorId,
+          artifactId: params.artifactId,
+          idempotencyKey: `share-recovery-${createHash('sha256')
+            .update(headers['idempotency-key'])
+            .digest('hex')}`,
+          signal: requestCancellationSignal(request, reply),
+        });
+      }
       const result = await lifecycle.createShare({
         installationId: identity.installationId,
         workspaceId: params.workspaceId,
@@ -359,6 +392,34 @@ export async function registerShareRoutes(
         actorId: identity.actorId,
         limit: query.limit ?? 20,
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+        signal: requestCancellationSignal(request, reply),
+      });
+    },
+  );
+
+  app.get(
+    '/api/v1/workspaces/:workspaceId/shares/resolve',
+    {
+      schema: {
+        operationId: 'resolveManagedShareV1',
+        summary: 'Resolve a share ID or Public selector to its artifact',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        tags: ['shares'],
+        params: WorkspaceParamsSchema,
+        querystring: ShareResolveQuerySchema,
+        response: { 200: Type.Ref('ShareManagementSummary'), ...managementErrors },
+      },
+    },
+    async (request, reply) => {
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { workspaceId: string };
+      const query = request.query as { shareId?: string; publicCode?: string };
+      return lifecycle.resolveManagedShare({
+        installationId: identity.installationId,
+        workspaceId: params.workspaceId,
+        actorId: identity.actorId,
+        ...(query.shareId === undefined ? {} : { shareId: query.shareId }),
+        ...(query.publicCode === undefined ? {} : { publicCode: query.publicCode }),
         signal: requestCancellationSignal(request, reply),
       });
     },

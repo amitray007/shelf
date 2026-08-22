@@ -73,28 +73,43 @@
     padding-bottom: 6px;
   }
 
-  .dashboard-context {
+  .dashboard-primary {
     grid-column: 1;
     grid-row: 1;
+    display: grid;
+    gap: 6px;
+  }
+
+  .dashboard-context {
+    min-width: 0;
   }
 
   .dashboard-actions {
-    display: contents;
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
   }
 
   .dashboard-section-tabs {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    justify-self: end;
+    justify-self: start;
   }
 
-  .dashboard-sign-out {
-    grid-column: 2;
-    grid-row: 1;
+  .dashboard-section-actions {
+    grid-row: 2;
+  }
+
+  .dashboard-trash-link {
+    width: 36px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .dashboard-trash-link span {
+    display: none;
   }
 
   .workspace-menu-trigger {
-    max-width: calc(100vw - 190px);
+    max-width: calc(100vw - 188px);
   }
 
   .dashboard-page {

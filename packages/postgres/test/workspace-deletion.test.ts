@@ -191,6 +191,8 @@ describePostgres('workspace deletion persistence', () => {
           recoverable_until: new Date('2026-09-20T01:00:00.000Z'),
           deleted_by_actor_id: owner,
           deleted_share_count: 0,
+          deletion_reason: 'manual',
+          auto_trash_at: null,
         })
         .where('artifact_id', '=', 'art_AAAAAAAAAAAAAAAAAAAAAA')
         .execute();
@@ -221,6 +223,7 @@ describePostgres('workspace deletion persistence', () => {
           actorId: owner,
           deletedAt: '2026-08-21T01:00:00.000Z',
           recoverableUntil: '2026-09-20T01:00:00.000Z',
+          reason: 'manual',
         }),
       ).resolves.toMatchObject({ status: 'deleted' });
 

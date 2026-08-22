@@ -9,19 +9,31 @@ import {
   executeArtifactHistory,
   executeDeleteArtifact,
   executeListArtifacts,
+  executeListTrash,
   executeRecoverArtifact,
   executeRenameArtifact,
+  executeResolveArtifact,
   executeRestoreArtifact,
+  executeSetArtifactRetention,
   executeShowArtifact,
+  executeShowTrashedArtifact,
   type ListArtifactsCommandOptions,
+  type ListTrashCommandOptions,
   type RecoverArtifactCommandOptions,
   type RenameArtifactCommandOptions,
+  type ResolveArtifactCommandOptions,
   type RestoreArtifactCommandOptions,
+  type SetArtifactRetentionCommandOptions,
   type ShowArtifactCommandOptions,
 } from './commands/artifacts.js';
 import {
   type CommentSummariesCommandOptions,
+  type CreateCommentCommandOptions,
+  type EditCommentCommandOptions,
   executeCommentSummaries,
+  executeCreateComment,
+  executeDeleteComment,
+  executeEditComment,
   executeHideComment,
   executeListComments,
   executeReopenComment,
@@ -460,6 +472,28 @@ Example:
       result = await executeShowArtifact(options, runtime);
     });
   artifacts
+    .command('resolve')
+    .description('Find an artifact from a share ID or share link')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>', 'installation origin to read from; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID to search; requires --url')
+    .requiredOption('--from <share-id-or-link>', 'share ID, Public link, or Protected link')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Protected URL fragments are parsed locally and never sent to Shelf. The response includes the
+resolved artifactId and share state, including expired or revoked management records.
+
+Examples:
+  shelf artifacts resolve --profile default --from shr_<id>
+  shelf artifacts resolve --profile default --from https://shelf.example/s/publiccode12
+`,
+    )
+    .action(async (options: ResolveArtifactCommandOptions) => {
+      result = await executeResolveArtifact(options, runtime);
+    });
+  artifacts
     .command('history')
     .description('List immutable revision history')
     .option('--profile <name>', 'use one configured profile instead of --url')
@@ -579,6 +613,79 @@ Example:
   shelf artifacts recover --profile default --artifact art_<id>
 `,
     )
+    .action(async (options: RecoverArtifactCommandOptions) => {
+      result = await executeRecoverArtifact(options, runtime);
+    });
+
+  const artifactRetention = artifacts
+    .command('retention')
+    .description('Inspect or change automatic artifact retention');
+  artifactRetention
+    .command('set')
+    .description('Keep an artifact or return it to automatic cleanup')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>', 'installation origin to write to; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact whose retention should change')
+    .requiredOption('--mode <automatic|keep>', 'automatic Trash cleanup or indefinite keep')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Automatic artifacts move to Trash after their active custom shares and grace period end. Keep
+disables automatic Trash for the artifact. Prepared default links never count as active shares.
+
+Examples:
+  shelf artifacts retention set --profile default --artifact art_<id> --mode keep
+  shelf artifacts retention set --profile default --artifact art_<id> --mode automatic
+`,
+    )
+    .action(async (options: SetArtifactRetentionCommandOptions) => {
+      result = await executeSetArtifactRetention(options, runtime);
+    });
+
+  const trash = program.command('trash').description('List and recover artifacts in Trash');
+  trash
+    .command('list')
+    .description('List recoverable artifacts in one workspace Trash')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>', 'installation origin to read from; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID whose Trash should be listed; requires --url')
+    .option('--limit <count>', 'artifacts to return (1-100, default 20)')
+    .option('--cursor <cursor>', 'opaque cursor returned by the previous page')
+    .option('--search <text>', 'search artifact ID, title, description, filename, or name')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+Each item includes deletedAt and purgeAt. Pass nextCursor back with --cursor to page further.
+
+Examples:
+  shelf trash list --profile default
+  shelf trash list --profile default --search art_<id>
+`,
+    )
+    .action(async (options: ListTrashCommandOptions) => {
+      result = await executeListTrash(options, runtime);
+    });
+  trash
+    .command('show')
+    .description('Show one recoverable artifact from Trash by ID')
+    .option('--profile <name>', 'use one configured profile instead of --url')
+    .option('--url <url>', 'installation origin to read from; conflicts with --profile')
+    .requiredOption('--artifact <artifact-id>', 'trashed artifact to show')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: ShowArtifactCommandOptions) => {
+      result = await executeShowTrashedArtifact(options, runtime);
+    });
+  trash
+    .command('recover')
+    .description('Recover an artifact and create a seven-day Protected recovery link')
+    .option('--profile <name>', 'use one configured profile instead of --url')
+    .option('--url <url>', 'installation origin to write to; conflicts with --profile')
+    .requiredOption('--artifact <artifact-id>', 'trashed artifact to recover')
+    .option('--idempotency-key <key>', 'stable retry key (1-128 characters)')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: RecoverArtifactCommandOptions) => {
       result = await executeRecoverArtifact(options, runtime);
     });
@@ -776,6 +883,60 @@ Example:
     )
     .action(async (options: ReplyCommentCommandOptions) => {
       result = await executeReplyComment(options, runtime);
+    });
+
+  comments
+    .command('create')
+    .description('Create a new artifact comment thread as the authenticated actor')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>', 'installation origin to use; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact to comment on')
+    .requiredOption('--share <share-id>', 'active comments-enabled share for the thread')
+    .requiredOption('--revision <revision-id>', 'revision rendered by the share')
+    .requiredOption('--body <text>', 'comment body text (1-20000 characters)')
+    .option('--path <path>', 'folder path or file label for the anchor')
+    .option('--start-line <line>', 'first anchored line; requires --end-line')
+    .option('--end-line <line>', 'last anchored line; requires --start-line')
+    .option('--quoted-text <text>', 'quoted source text for anchor relocation')
+    .option('--content-hash <hash>', 'content hash observed when the anchor was created')
+    .option('--display-name <name>', 'actor display name shown on the comment')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+The selected share must have comments enabled and target the supplied revision. Omit line flags
+for a whole-file comment; supply both line flags for a range comment.
+`,
+    )
+    .action(async (options: CreateCommentCommandOptions) => {
+      result = await executeCreateComment(options, runtime);
+    });
+
+  comments
+    .command('edit')
+    .description('Edit a comment reply created by the authenticated actor')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>', 'installation origin to use; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact that owns the post')
+    .requiredOption('--post <post-id>', 'authenticated actor post to edit')
+    .requiredOption('--body <text>', 'replacement body text (1-20000 characters)')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: EditCommentCommandOptions) => {
+      result = await executeEditComment(options, runtime);
+    });
+  comments
+    .command('delete')
+    .description('Delete a comment reply created by the authenticated actor')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>', 'installation origin to use; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID that owns the artifact; requires --url')
+    .requiredOption('--artifact <artifact-id>', 'artifact that owns the post')
+    .requiredOption('--post <post-id>', 'authenticated actor post to delete')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .action(async (options: PostModerationCommandOptions) => {
+      result = await executeDeleteComment(options, runtime);
     });
 
   comments

@@ -11,9 +11,9 @@ high-availability or production-hardening guide.
 These are not planned for the current release cycle. Read them before you trust Shelf with
 critical data:
 
-- **No permanent purge.** Deletion is a soft-delete with a 30-day recovery window. After the
-  window, content and metadata stay on disk invisibly — nothing destroys them yet. Treat
-  "delete" as "hide", not "erase".
+- **Cleanup is asynchronous.** The application checks retention hourly. Due artifacts first enter
+  Trash, remain recoverable for 30 days, and are then permanently removed. Content deletion is
+  queued durably and retried, so storage reclamation may lag metadata purge after a provider error.
 - **Recovery drills cover one profile only.** Verified backup and restore exist for host-native
   PostgreSQL with local content. There is no qualified recovery procedure for Docker Compose
   named volumes or for R2-backed content.
@@ -159,6 +159,28 @@ curl --fail https://shelf.example.com/health/ready
 
 PostgreSQL metadata lives in `postgres-data`; sealed and staged content lives in `shelf-content`. `docker compose down` preserves them. `docker compose down --volumes` deletes both and is destructive.
 
+## Artifact retention and cleanup
+
+New artifacts default to automatic retention. Prepared Protected and Public links are discovery
+defaults only and do not keep an artifact alive. A non-default custom share pauses the cleanup
+deadline while it is active. When the last custom share is revoked, expires, or exhausts its
+session budget, Shelf grants 30 days before moving the artifact to Trash. Set the artifact to
+`keep` from the CLI or dashboard when it must remain available without a custom share.
+
+Trash is visible in the dashboard and reports both deletion and permanent-purge timestamps. An
+artifact can be recovered for 30 days. Manual recovery creates a Protected seven-day recovery
+lease and returns its URL once; creating a normal custom share for a trashed artifact recovers it
+as part of that operation. Both recovery paths reset the artifact to automatic retention.
+
+The application scheduler runs a bounded cleanup pass at startup and once per hour. It moves due
+artifacts to Trash, permanently removes expired Trash metadata, and drains a durable content-purge
+queue. A sealed object is removed only after no remaining revision references its content ID.
+Provider deletion failures remain queued with the error and are retried by a later pass.
+
+Before relying on cleanup in production, monitor application logs for retention-pass or storage
+deletion failures and keep verified backups. The 30-day Trash window is a recovery convenience,
+not a backup policy.
+
 Run a read-only storage reconciliation scan while PostgreSQL is available:
 
 ```sh
@@ -175,7 +197,7 @@ This reference runs exactly one writing Shelf application process when local sto
 plus one separately configured renderer process that resolves shared content. Shelf now has a
 verified host-native PostgreSQL/Local File recovery workflow, but the current runtime image does
 not include PostgreSQL client tools and the command does not yet orchestrate Compose named volumes.
-Compose-volume recovery, R2 recovery, destructive orphan cleanup, TLS/reverse-proxy
+Compose-volume recovery, R2 recovery, destructive orphan cleanup outside the retention queue, TLS/reverse-proxy
 qualification, rolling upgrades, and a live R2 conformance run remain
 roadmap work. Least-privilege read-only database/storage credentials for the renderer are also
 still open. Do not scale the local-storage writer horizontally or represent this Compose profile as

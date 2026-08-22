@@ -6,6 +6,7 @@ const ids = {
   artifact: 'art_AAAAAAAAAAAAAAAAAAAAAA',
   second: 'art_DDDDDDDDDDDDDDDDDDDDDD',
   revision: 'rev_BBBBBBBBBBBBBBBBBBBBBB',
+  share: 'shr_CCCCCCCCCCCCCCCCCCCCCC',
   thread: 'thread_01',
   post: 'post_01',
 };
@@ -64,7 +65,10 @@ describe('shelf comments', () => {
     const exitCode = await runCli(['node', 'shelf', 'comments', '--help'], output.value);
     expect(exitCode).toBe(0);
     expect(output.stdout.value()).toContain('list');
+    expect(output.stdout.value()).toContain('create');
     expect(output.stdout.value()).toContain('reply');
+    expect(output.stdout.value()).toContain('edit');
+    expect(output.stdout.value()).toContain('delete');
     expect(output.stdout.value()).toContain('summaries');
     expect(output.stdout.value()).toContain('hide');
   });
@@ -126,6 +130,93 @@ describe('shelf comments', () => {
     expect(fetch.mock.calls[0]?.[0].toString()).toContain('cursor=cursor-token');
     expect(fetch.mock.calls[0]?.[0].toString()).toContain('limit=10');
     expect(JSON.parse(output.stdout.value()).nextCursor).toBe('older');
+  });
+
+  it('creates a share-scoped review thread with a line anchor', async () => {
+    const fetch = vi.fn(async () => Response.json(thread, { status: 201 }));
+    const output = runtime(fetch);
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'comments',
+        'create',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--artifact',
+        ids.artifact,
+        '--share',
+        ids.share,
+        '--revision',
+        ids.revision,
+        '--path',
+        'src/main.ts',
+        '--start-line',
+        '12',
+        '--end-line',
+        '14',
+        '--body',
+        'Please revisit this.',
+        '--display-name',
+        'Release bot',
+      ],
+      output.value,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(output.stdout.value())).toEqual(thread);
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      `https://shelf.example/api/v1/workspaces/workspace-main/artifacts/${ids.artifact}/comments/threads`,
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({
+        shareId: ids.share,
+        anchor: {
+          revisionId: ids.revision,
+          kind: 'range',
+          path: 'src/main.ts',
+          startLine: 12,
+          endLine: 14,
+        },
+        body: 'Please revisit this.',
+        displayName: 'Release bot',
+      }),
+    });
+  });
+
+  it.each([
+    ['edit', { action: 'edit', body: 'Updated reply.' }],
+    ['delete', { action: 'delete' }],
+  ] as const)('mutates an authenticated actor own post with comments %s', async (command, body) => {
+    const fetch = vi.fn(async () => Response.json(thread.posts[0]));
+    const output = runtime(fetch);
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'comments',
+        command,
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--artifact',
+        ids.artifact,
+        '--post',
+        ids.post,
+        ...(command === 'edit' ? ['--body', 'Updated reply.'] : []),
+      ],
+      output.value,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      `https://shelf.example/api/v1/workspaces/workspace-main/artifacts/${ids.artifact}/comments/posts/${ids.post}`,
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({ method: 'PATCH', body: JSON.stringify(body) });
   });
 
   it.each([

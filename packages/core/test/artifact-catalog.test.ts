@@ -27,6 +27,8 @@ const storedArtifact = {
   name: 'Release notes',
   createdAt: '2026-08-17T12:00:00.000Z',
   updatedAt: '2026-08-17T12:01:00.000Z',
+  retentionMode: 'automatic' as const,
+  autoTrashAt: '2026-09-16T12:01:00.000Z',
   latestRevision: storedRevision,
 };
 
@@ -70,6 +72,7 @@ describe('artifact catalog service', () => {
       name: 'Release notes',
       createdAt: '2026-08-17T12:00:00.000Z',
       updatedAt: '2026-08-17T12:01:00.000Z',
+      retention: { mode: 'automatic', trashAt: '2026-09-16T12:01:00.000Z' },
       latestRevision: {
         ...storedRevision,
         paths: {

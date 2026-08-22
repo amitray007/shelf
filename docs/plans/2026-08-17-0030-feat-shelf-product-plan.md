@@ -43,8 +43,8 @@ It is a predictable way to publish an output, immediately receive a readable or 
 - **Shelf is open source and self-hostable** (session-settled: user-directed — chosen over a required proprietary service: anyone should be able to run and own an installation). Governs R22-R25.
 - **The CLI is the primary product workflow and the dashboard is a supporting utility** (session-settled: user-directed — chosen after reviewing a Claude Artifact share: agents and people should be able to publish and share without navigating a management UI, while the dashboard remains available for browsing and occasional lifecycle work). Governs R14-R19 and R26.
 - **Shelf has no collections** (session-settled: user-directed — grouping adds management breadth without helping the core publish-to-link job). A share targets one artifact's latest revision or one exact revision. Governs R9-R13 and R19.
-- **Storage lifetime and sharing lifetime are independent.** A share may expire or be revoked without deleting the underlying artifact. Governs R10-R13.
-- **Explicit artifact deletion has a fixed 30-day recovery window.** Deletion hides the artifact from active catalog, revision, publishing, and share-resolution paths while retaining immutable revision bytes. It transactionally revokes every active share; recovery restores the artifact but never resurrects those capability URLs. Governs R12-R15 and F5.
+- **Share state is the activity signal for automatic artifact retention.** Prepared default links do not count. Any active non-default custom share pauses cleanup; after the last one becomes inactive, an automatic artifact receives 30 days before Trash. `keep` is the explicit indefinite-retention override. Governs R10-R13.
+- **Trash has a fixed 30-day recovery window.** Explicit deletion and automatic retention both hide an artifact in Trash. Explicit deletion transactionally revokes every active share. Recovery never resurrects revoked capabilities; it creates a seven-day Protected recovery lease, while creating a normal custom share recovers the artifact directly. Trash expiry permanently removes metadata and queues unreferenced content for deletion. Governs R12-R15 and F5.
 - **Folder publishes are atomic snapshots.** A revision represents a complete directory state that actually existed, while comparisons can drill into changed files. Governs R3-R6.
 - **Restore preserves history.** Restoring an earlier state creates a new latest revision rather than rewriting or deleting later revisions. Governs R5.
 - **Review is a per-share capability, not a workspace conversation feed.** Each share chooses Off, Private, or Shared comments independently. Existing discussions retain the visibility captured when they were created; disabling comments blocks new writes without erasing authorized history. Governs R27.
@@ -98,8 +98,8 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 
 - R10. Artifacts are private by default. Shares remain unlisted and non-indexed while choosing either Protected capability access or short Public access; Public means secretless and non-confidential, not discoverable.
 - R11. A share must expose a stable URL, target either the latest state or an exact revision, and retain that targeting behavior for its lifetime.
-- R12. Share expiry and revocation must stop access without deleting an otherwise retained artifact or revision.
-- R13. Artifact retention, revision retention, and share-link retention must be configurable independently, with retained artifacts and revisions defaulting to no automatic expiry, pinned revisions protected from automated cleanup, and explicit deletion recoverable for 30 days before purge.
+- R12. Share expiry, revocation, and protected-session exhaustion must stop access. For automatic-retention artifacts, the final inactive custom share starts a 30-day grace period; prepared default links never count as activity.
+- R13. Artifacts default to automatic retention with an explicit `keep` override. Due artifacts enter visible Trash for 30 days before permanent metadata and unreferenced-content purge. Recovery creates a seven-day Protected lease, and creating a normal custom share recovers a trashed artifact.
 
 **Dashboard and automation**
 
@@ -157,8 +157,8 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 - F5. Apply lifecycle policy
   - **Trigger:** A retention deadline arrives or an owner requests deletion.
   - **Actors:** A1 or the installation
-  - **Steps:** Shelf evaluates independent artifact, revision, and share policies; protects pinned revisions; revokes access when required; and exposes recoverable deletion state before permanent purge.
-  - **Outcome:** Cleanup is predictable and never implies that share expiry equals content deletion.
+  - **Steps:** Shelf evaluates custom-share activity and the artifact's `automatic` or `keep` mode; moves due artifacts into visible Trash; preserves a 30-day recovery window; and then purges metadata while durably retrying deletion of content no revision still references.
+  - **Outcome:** Cleanup is predictable, important artifacts can be exempted, and every automatic deletion has a visible recovery period.
   - **Covered by:** R12-R14.
 
 - F6. Review a shared artifact
@@ -848,7 +848,7 @@ No release, live R2 or Compose-volume recovery, or TLS/reverse-proxy qualificati
 - Handled failures and cancellations before metadata commit leave no visible revision or request-owned staging content; cancellation or response loss after commit preserves the revision and remains recoverable through replay.
 - No visible revision references missing or mutable bytes, and no visible revision exists without its successful idempotency record.
 - Pinned delivery is byte-exact, range-capable, conditional, and download-safe for active HTML.
-- Explicit artifact deletion is retry-safe, preserves immutable revisions and content for exactly 30 days, revokes active shares in the same metadata transaction, and recovery never restores a revoked capability URL.
+- Explicit deletion and automatic retention converge on visible Trash with a 30-day recovery window. Explicit deletion revokes active shares transactionally; recovery never restores a revoked capability URL, creates a seven-day Protected lease, and Trash expiry purges metadata plus unreferenced content through a durable retry queue.
 - A stable artifact accepts later immutable revisions, advances latest atomically, and exposes authorized deterministic list, detail, and newest-first history reads without mutating older revisions.
 - Artifact rename changes only mutable presentation. Restore creates an idempotent source-linked revision that reuses verified immutable content, advances latest atomically, and preserves every earlier descriptor and URL.
 - A folder revision is one atomic canonical snapshot: its portable path tree, empty directories, manifest hash, entry content references, and latest pointer become visible together; no symlink, special file, host path, or partial tree enters the public model.

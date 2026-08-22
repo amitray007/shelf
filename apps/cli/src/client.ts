@@ -5,7 +5,10 @@ import {
   type ArtifactDefaultShares,
   type ArtifactDeletionResult,
   type ArtifactPage,
+  type ArtifactRecoveryResult,
+  type ArtifactRetentionMode,
   type ArtifactRevisionPage,
+  type CommentAnchor,
   type CommentPolicy,
   type CommentPost,
   type CommentSummary,
@@ -17,6 +20,7 @@ import {
   isArtifactDefaultShares,
   isArtifactDeletionResult,
   isArtifactPage,
+  isArtifactRecoveryResult,
   isArtifactRevisionPage,
   isCommentPost,
   isCommentThread,
@@ -29,6 +33,8 @@ import {
   isShareCreateInput,
   isShareCreateResult,
   isSharePage,
+  isTrashedArtifact,
+  isTrashPage,
   type PublisherMetadata,
   type PublishResult,
   type RestoreResult,
@@ -37,6 +43,8 @@ import {
   type ShareCreateResult,
   type ShareManagementSummary,
   type SharePage,
+  type TrashedArtifact,
+  type TrashPage,
 } from '@shelf/contracts';
 import { mediaTypeForPath } from './media-type.js';
 import { failure, remoteFailure, usageFailure } from './output.js';
@@ -89,6 +97,21 @@ export interface ListArtifactRevisionsOptions extends GetArtifactOptions {
 
 export interface RenameArtifactOptions extends GetArtifactOptions {
   name: string;
+}
+
+export interface SetArtifactRetentionOptions extends GetArtifactOptions {
+  workspaceId: string;
+  mode: ArtifactRetentionMode;
+}
+
+export interface ListTrashOptions {
+  installationUrl: string;
+  workspaceId: string;
+  limit: number;
+  search?: string;
+  cursor?: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
 }
 
 export type DeleteArtifactOptions = GetArtifactOptions;
@@ -171,6 +194,15 @@ export interface ListSharesOptions {
   allowInsecureLoopback?: boolean;
 }
 
+export interface ResolveManagedShareOptions {
+  installationUrl: string;
+  workspaceId: string;
+  shareId?: string;
+  publicCode?: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
 export interface EnsureArtifactDefaultSharesOptions {
   installationUrl: string;
   workspaceId: string;
@@ -221,6 +253,18 @@ export interface ReplyArtifactCommentOptions extends ArtifactCommentMutationOpti
   displayName?: string;
 }
 
+export interface CreateArtifactCommentOptions {
+  installationUrl: string;
+  workspaceId: string;
+  artifactId: string;
+  shareId: string;
+  anchor: CommentAnchor;
+  body: string;
+  displayName?: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
 export interface SummarizeArtifactCommentsOptions {
   installationUrl: string;
   workspaceId: string;
@@ -235,6 +279,17 @@ export interface ArtifactCommentPostMutationOptions {
   artifactId: string;
   postId: string;
   moderation: 'hide' | 'unhide';
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
+
+export interface ArtifactCommentOwnPostMutationOptions {
+  installationUrl: string;
+  workspaceId: string;
+  artifactId: string;
+  postId: string;
+  action: 'edit' | 'delete';
+  body?: string;
   token: string;
   allowInsecureLoopback?: boolean;
 }
@@ -454,6 +509,67 @@ export async function renameArtifact(
   );
 }
 
+export async function setArtifactRetention(
+  options: SetArtifactRetentionOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<Artifact> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/artifacts/${encodeURIComponent(options.artifactId)}/retention`,
+    origin,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'PATCH',
+      body: JSON.stringify({ mode: options.mode }),
+    },
+    dependencies,
+    isArtifact,
+  );
+}
+
+export async function listTrash(
+  options: ListTrashOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<TrashPage> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/trash`,
+    origin,
+  );
+  url.searchParams.set('limit', String(options.limit));
+  if (options.search !== undefined && options.search.length > 0) {
+    url.searchParams.set('search', options.search);
+  }
+  if (options.cursor !== undefined) url.searchParams.set('cursor', options.cursor);
+  return requestApiJson(
+    url,
+    { token: options.token, allowInsecureLoopback },
+    dependencies,
+    isTrashPage,
+  );
+}
+
+export async function getTrashedArtifact(
+  options: GetArtifactOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<TrashedArtifact> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(`/api/v1/trash/${encodeURIComponent(options.artifactId)}`, origin);
+  return requestApiJson(
+    url,
+    { token: options.token, allowInsecureLoopback },
+    dependencies,
+    isTrashedArtifact,
+  );
+}
+
 export async function deleteArtifact(
   options: DeleteArtifactOptions,
   dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
@@ -472,7 +588,7 @@ export async function deleteArtifact(
 export async function recoverArtifact(
   options: RecoverArtifactOptions,
   dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
-): Promise<Artifact> {
+): Promise<ArtifactRecoveryResult> {
   const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
   const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
   const url = new URL(
@@ -488,7 +604,7 @@ export async function recoverArtifact(
       idempotencyKey: options.idempotencyKey,
     },
     dependencies,
-    isArtifact,
+    isArtifactRecoveryResult,
   );
 }
 
@@ -763,6 +879,27 @@ export async function listShares(
   );
 }
 
+export async function resolveManagedShare(
+  options: ResolveManagedShareOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<ShareManagementSummary> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/shares/resolve`,
+    origin,
+  );
+  if (options.shareId !== undefined) url.searchParams.set('shareId', options.shareId);
+  if (options.publicCode !== undefined) url.searchParams.set('publicCode', options.publicCode);
+  return requestApiJson(
+    url,
+    { token: options.token, allowInsecureLoopback, redactShareCapabilities: true },
+    dependencies,
+    (value): value is ShareManagementSummary =>
+      isShareManagementSummary(value) && value.workspaceId === options.workspaceId,
+  );
+}
+
 export async function revokeShare(
   options: RevokeShareOptions,
   dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
@@ -889,6 +1026,32 @@ export async function replyArtifactComment(
   );
 }
 
+export async function createArtifactComment(
+  options: CreateArtifactCommentOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<CommentThread> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = artifactCommentsUrl(origin, options.workspaceId, options.artifactId, '/threads');
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'POST',
+      body: JSON.stringify({
+        shareId: options.shareId,
+        anchor: options.anchor,
+        body: options.body,
+        ...(options.displayName === undefined ? {} : { displayName: options.displayName }),
+      }),
+      expectedStatus: 201,
+    },
+    dependencies,
+    isCommentThread,
+  );
+}
+
 function isCount(value: unknown): boolean {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
@@ -1002,6 +1165,32 @@ export async function moderateArtifactCommentPost(
       allowInsecureLoopback,
       method: 'PATCH',
       body: JSON.stringify({ moderation: options.moderation }),
+    },
+    dependencies,
+    isCommentPost,
+  );
+}
+
+export async function mutateOwnArtifactCommentPost(
+  options: ArtifactCommentOwnPostMutationOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<CommentPost> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/artifacts/${encodeURIComponent(options.artifactId)}/comments/posts/${encodeURIComponent(options.postId)}`,
+    origin,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'PATCH',
+      body: JSON.stringify({
+        action: options.action,
+        ...(options.body === undefined ? {} : { body: options.body }),
+      }),
     },
     dependencies,
     isCommentPost,

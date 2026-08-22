@@ -8,7 +8,7 @@ The [Product Contract](../plans/2026-08-17-0030-feat-shelf-product-plan.md) owns
 | ID | Decision | Contract authority |
 |---|---|---|
 | D1 | The product is named Shelf and its portable user-facing CLI is named exactly `shelf`; host-local administration remains the separate `shelf-admin` executable. | R1 and Key Decisions |
-| D2 | Shelf is a durable publishing workspace rather than an expiry-first file drop. | R2-R7 and R14-R17 |
+| D2 | Shelf is a durable publishing workspace with explicit retention, not an expiry-first file drop. New artifacts use automatic retention; `keep` exempts important artifacts from cleanup. | R2-R7 and R14-R17 |
 | D3 | Files and complete folders are publishing units. | R2-R7 |
 | D4 | Revision history, comparison, and source-linked restore-as-latest are core behavior; restore never rewrites earlier revisions. | R3-R6 |
 | D5 | Share access policy and latest-versus-pinned targets are independent core behavior. Every new file receives reusable Latest Protected and Public links with no expiry; neither URL is returned unless sharing is requested. Additional links may set expiry, and finite Public expiry remains capped at 30 days. Both modes remain unlisted and non-indexed. | R10-R13 |
@@ -17,7 +17,9 @@ The [Product Contract](../plans/2026-08-17-0030-feat-shelf-product-plan.md) owns
 | D8 | Shelf has no collection abstraction; shares target one artifact or one exact revision. | R9-R13 |
 | D9 | Import, export, and portable ownership are core behavior. | R18-R19 and R22-R24 |
 | D10 | Shelf is open source and self-hostable without a mandatory proprietary dependency. | R22-R25 |
-| D11 | Explicit artifact deletion is a recoverable soft deletion for exactly 30 days. It transactionally revokes active shares, hides the artifact from active lifecycle and resolution paths, preserves immutable revision content, and recovery does not restore revoked shares. | R12-R15 and F5 |
+| D11 | Trash is the single recoverable deletion state. Explicit deletion and automatic retention both place an artifact in Trash for exactly 30 days; explicit deletion revokes active shares. Expiry then permanently removes metadata and schedules unreferenced immutable content for storage deletion. | R12-R15 and F5 |
+| D13 | Prepared default Protected and Public links do not keep an artifact active. A non-default custom share does until it is revoked, expires, or exhausts its protected-session budget. When no such share remains, automatic retention starts a 30-day grace period before Trash. | Retention lifecycle |
+| D14 | Recovering from Trash creates a seven-day Protected recovery lease and resets retention to automatic. Creating a normal custom share also recovers the artifact. The recovery lease provides a short safety window but does not become an indefinite keep signal. | Retention lifecycle |
 | D12 | Comments are configured per share as Off, Private, or Shared. Prepared default links start Off. A thread snapshots its visibility and revision anchor when created, so later policy or revision changes never broaden old private discussions or erase review history. Shelf provides artifact-level review rather than a workspace-wide comments feed. | R27 and F6 |
 
 ## Accepted technical decisions
@@ -46,12 +48,12 @@ These defaults make the current Product Contract coherent, but they may be revis
 |---|---|---|
 | W1 | The first release has one owner and multiple isolated workspaces. | R8 and Dependencies and Assumptions |
 | W2 | A folder revision is an atomic snapshot of the complete directory. | R3-R6 |
-| W3 | Artifact, revision, and share lifetimes are independent. | R12-R13 |
+| W3 | Share state drives automatic artifact retention, while immutable revision lifetime follows the artifact through active, Trash, and purge states. | R12-R13 |
 | W4 | A share targets one artifact's latest revision or one exact revision; grouping multiple artifacts is outside Shelf's product model. | R9-R11 and Dependencies and Assumptions |
 | W5 | Restore creates a new revision and never rewrites history. | R5 and AE2 |
 | W6 | Rendered active content is isolated from Shelf's authenticated application. | R21 and AE5 |
 | W7 | Artifacts start private. Protected and Public shares remain unlisted and non-indexed; Public describes secretless access, not discovery. | R10 |
-| W8 | Artifacts and revisions do not expire automatically. Explicit artifact deletion has a 30-day recovery period, revokes active shares, and recovery never resurrects those share capabilities. | R12-R13 and F5 |
+| W8 | Automatic artifacts enter Trash 30 days after their last active custom share; `keep` artifacts do not. Trash has a separate 30-day recovery window before permanent purge. Explicit recovery creates a seven-day recovery lease and never resurrects revoked capabilities. | R12-R13 and F5 |
 | W9 | Provenance is immutable while later metadata edits are retained as auditable events. | R20 |
 | W10 | Artifact, revision, and share URLs remain stable across renames and later publishes. | R2-R3, R11, and AE9 |
 

@@ -618,6 +618,7 @@ describePostgres('PostgresRevisionRepository', () => {
           actorId,
           deletedAt: '2026-08-18T12:00:00.000Z',
           recoverableUntil: '2026-09-17T12:00:00.000Z',
+          reason: 'manual',
         }),
       ).resolves.toMatchObject({ status: 'deleted' });
     }
@@ -670,6 +671,71 @@ describePostgres('PostgresRevisionRepository', () => {
         namespace: { ...namespace, key: 'new-key-for-active-artifact' },
       }),
     ).resolves.toEqual({ status: 'not-found' });
+    await database.destroy();
+  });
+
+  it('moves due artifacts through Trash and never purges content still referenced elsewhere', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const repository = new PostgresRevisionRepository(database);
+    const sharedContent = {
+      contentId: 'cnt_retention_shared_aaaaaaaaaaa',
+      contentHash: `sha256:${'7'.repeat(64)}`,
+      byteCount: 24,
+    };
+    const first = {
+      ...stored('rev_retention_AAAAAAAAAAAAA', 'art_retention_AAAAAAAAAAAAA'),
+      content: sharedContent,
+    };
+    const second = {
+      ...stored('rev_retention_BBBBBBBBBBBBB', 'art_retention_BBBBBBBBBBBBB'),
+      content: sharedContent,
+    };
+    await database
+      .insertInto('shelf_actors')
+      .values({
+        actor_id: 'actor-agent',
+        installation_id: 'installation-main',
+        actor_kind: 'service',
+        actor_name: 'Retention test actor',
+        auth_user_id: null,
+        created_by_actor_id: null,
+        created_at: new Date('2026-08-18T12:00:00.000Z'),
+        disabled_at: null,
+      })
+      .onConflict((conflict) => conflict.column('actor_id').doNothing())
+      .execute();
+    await repository.commitPublish(commitInput(first, 'retention-first'));
+    await repository.commitPublish(commitInput(second, 'retention-second'));
+    const dueAt = new Date('2026-08-16T00:00:00.000Z');
+    await database
+      .updateTable('shelf_artifacts')
+      .set({ auto_trash_at: dueAt })
+      .where('artifact_id', 'in', [first.artifactId, second.artifactId])
+      .execute();
+
+    await expect(repository.trashDueArtifacts(dueAt, 1)).resolves.toBe(1);
+    await expect(repository.trashDueArtifacts(dueAt, 1)).resolves.toBe(1);
+    await expect(
+      repository.listTrashedArtifacts({
+        installationId: first.installationId,
+        workspaceId: first.workspaceId,
+        limit: 10,
+        search: 'art_retention_',
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        { reason: 'retention', artifact: { retentionMode: 'automatic' } },
+        { reason: 'retention', artifact: { retentionMode: 'automatic' } },
+      ],
+    });
+
+    const afterRecoveryWindow = new Date('2026-09-15T00:00:00.000Z');
+    await expect(repository.purgeExpiredArtifacts(afterRecoveryWindow, 1)).resolves.toBe(1);
+    await expect(repository.listQueuedContentPurges(10)).resolves.toEqual([]);
+    await expect(repository.purgeExpiredArtifacts(afterRecoveryWindow, 1)).resolves.toBe(1);
+    await expect(repository.listQueuedContentPurges(10)).resolves.toEqual([
+      expect.objectContaining({ content_id: sharedContent.contentId, attempts: 0 }),
+    ]);
     await database.destroy();
   });
 

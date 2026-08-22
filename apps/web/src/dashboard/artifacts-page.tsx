@@ -60,6 +60,15 @@ function dateLabel(value: string): string {
   return dateLabelFormatter.format(new Date(value));
 }
 
+function retentionLabel(artifact: Artifact): string {
+  if (artifact.retention.mode === 'keep') return 'Kept indefinitely';
+  if (artifact.retention.trashAt === null) return 'Active custom share';
+  const remaining = Date.parse(artifact.retention.trashAt) - Date.now();
+  if (remaining <= 0) return 'Trash pending';
+  const days = Math.ceil(remaining / (24 * 60 * 60 * 1_000));
+  return `Trash in ${days} ${days === 1 ? 'day' : 'days'}`;
+}
+
 const COMMENT_HOVER_OPEN_DELAY = 120;
 const COMMENT_HOVER_CLOSE_DELAY = 100;
 
@@ -356,7 +365,7 @@ export function ArtifactsPage() {
         recentDeletion.artifact.artifactId,
         recentDeletion.recoveryKey,
       );
-      showRecoveredArtifact(recovered);
+      showRecoveredArtifact(recovered.artifact);
     } catch (caught) {
       if (caught instanceof DashboardApiError && caught.code === 'ARTIFACT_NOT_FOUND') {
         try {
@@ -528,6 +537,10 @@ export function ArtifactsPage() {
                               <span title={sourceName}>{sourceName}</span>
                               <span aria-hidden="true">·</span>
                               <code title={artifact.artifactId}>{artifact.artifactId}</code>
+                              <span aria-hidden="true">·</span>
+                              <span title={artifact.retention.trashAt ?? undefined}>
+                                {retentionLabel(artifact)}
+                              </span>
                             </span>
                           </span>
                         </div>
