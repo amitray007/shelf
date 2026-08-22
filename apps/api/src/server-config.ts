@@ -26,6 +26,13 @@ export interface ShelfServerConfig {
     setInterval?: typeof setInterval;
     clearInterval?: typeof clearInterval;
   };
+  artifactRetentionCleanup?: {
+    intervalMs?: number;
+    batchSize?: number;
+    now?: () => Date;
+    setInterval?: typeof setInterval;
+    clearInterval?: typeof clearInterval;
+  };
   rendererPublicOrigin?: string;
   webRoot?: string;
   persistence: ShelfPersistenceConfig;

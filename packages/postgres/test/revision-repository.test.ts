@@ -673,6 +673,57 @@ describePostgres('PostgresRevisionRepository', () => {
     await database.destroy();
   });
 
+  it('moves due artifacts through Trash and never purges content still referenced elsewhere', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const repository = new PostgresRevisionRepository(database);
+    const sharedContent = {
+      contentId: 'cnt_retention_shared_aaaaaaaaaaa',
+      contentHash: `sha256:${'7'.repeat(64)}`,
+      byteCount: 24,
+    };
+    const first = {
+      ...stored('rev_retention_AAAAAAAAAAAAA', 'art_retention_AAAAAAAAAAAAA'),
+      content: sharedContent,
+    };
+    const second = {
+      ...stored('rev_retention_BBBBBBBBBBBBB', 'art_retention_BBBBBBBBBBBBB'),
+      content: sharedContent,
+    };
+    await repository.commitPublish(commitInput(first, 'retention-first'));
+    await repository.commitPublish(commitInput(second, 'retention-second'));
+    const dueAt = new Date('2026-08-20T00:00:00.000Z');
+    await database
+      .updateTable('shelf_artifacts')
+      .set({ auto_trash_at: dueAt })
+      .where('artifact_id', 'in', [first.artifactId, second.artifactId])
+      .execute();
+
+    await expect(repository.trashDueArtifacts(dueAt, 1)).resolves.toBe(1);
+    await expect(repository.trashDueArtifacts(dueAt, 1)).resolves.toBe(1);
+    await expect(
+      repository.listTrashedArtifacts({
+        installationId: first.installationId,
+        workspaceId: first.workspaceId,
+        limit: 10,
+        search: 'art_retention_',
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        { reason: 'retention', artifact: { retentionMode: 'automatic' } },
+        { reason: 'retention', artifact: { retentionMode: 'automatic' } },
+      ],
+    });
+
+    const afterRecoveryWindow = new Date('2026-09-20T00:00:00.000Z');
+    await expect(repository.purgeExpiredArtifacts(afterRecoveryWindow, 1)).resolves.toBe(1);
+    await expect(repository.listQueuedContentPurges(10)).resolves.toEqual([]);
+    await expect(repository.purgeExpiredArtifacts(afterRecoveryWindow, 1)).resolves.toBe(1);
+    await expect(repository.listQueuedContentPurges(10)).resolves.toEqual([
+      expect.objectContaining({ content_id: sharedContent.contentId, attempts: 0 }),
+    ]);
+    await database.destroy();
+  });
+
   it('inventories unique referenced content within one installation', async () => {
     const database = createPostgresDatabase({ connectionString });
     const repository = new PostgresRevisionRepository(database);

@@ -244,12 +244,14 @@ function outputPost(
       canEdit:
         post.deletedAt === null &&
         resolvedAt === null &&
-        (authority.kind === 'moderator' ||
-          (currentPolicy !== 'off' && post.visitorKey === authority.visitorKey)),
+        (authority.kind === 'moderator'
+          ? post.actorId === authority.actorId
+          : currentPolicy !== 'off' && post.visitorKey === authority.visitorKey),
       canDelete:
         post.deletedAt === null &&
-        (authority.kind === 'moderator' ||
-          (currentPolicy !== 'off' && post.visitorKey === authority.visitorKey)),
+        (authority.kind === 'moderator'
+          ? post.actorId === authority.actorId
+          : currentPolicy !== 'off' && post.visitorKey === authority.visitorKey),
       canModerate: authority.kind === 'moderator' && post.visitorKey !== null,
     },
     createdAt: post.createdAt,
@@ -839,6 +841,12 @@ export function createCommentService(dependencies: {
         }
       }
       if (context === undefined) throw new CommentNotFoundError();
+      if (
+        request.authority.kind === 'moderator' &&
+        context.post.actorId !== request.authority.actorId
+      ) {
+        throw new CommentNotFoundError();
+      }
       let thread: StoredCommentThread | undefined;
       try {
         thread = await dependencies.comments.findThread({
@@ -927,6 +935,12 @@ export function createCommentService(dependencies: {
         }
       }
       if (context === undefined) throw new CommentNotFoundError();
+      if (
+        request.authority.kind === 'moderator' &&
+        context.post.actorId !== request.authority.actorId
+      ) {
+        throw new CommentNotFoundError();
+      }
       let deleted: StoredCommentPost | undefined;
       try {
         deleted = await dependencies.comments.deletePost({

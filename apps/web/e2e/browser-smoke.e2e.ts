@@ -134,6 +134,27 @@ for (const viewport of densityViewports) {
     const applicationBar = page.getByRole('banner');
     await expect(applicationBar).toBeVisible();
     await expect(applicationBar.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+    const dashboardSections = applicationBar.getByRole('navigation', {
+      name: 'Dashboard sections',
+    });
+    await expect(dashboardSections.getByRole('link', { name: 'Artifacts' })).toBeVisible();
+    await expect(dashboardSections.getByRole('link', { name: 'Access' })).toBeVisible();
+    await expect(dashboardSections.getByRole('link', { name: 'Trash' })).toHaveCount(0);
+    const trashLink = applicationBar.getByRole('link', { name: 'Trash', exact: true });
+    await expect(trashLink).toBeVisible();
+    await expect(trashLink.locator('svg')).toHaveCount(1);
+    if (viewport.width > 430) {
+      const workspaceBox = await applicationBar
+        .getByRole('button', { name: /Workspace menu/u })
+        .boundingBox();
+      const sectionBox = await dashboardSections.boundingBox();
+      expect(workspaceBox).not.toBeNull();
+      expect(sectionBox).not.toBeNull();
+      expect(sectionBox?.x ?? 0).toBeGreaterThan(
+        (workspaceBox?.x ?? 0) + (workspaceBox?.width ?? 0),
+      );
+      expect(Math.abs((sectionBox?.y ?? 0) - (workspaceBox?.y ?? 0))).toBeLessThanOrEqual(4);
+    }
     const dashboardBar = page.locator('.dashboard-bar');
     const listPageHeading = page.locator('.page-heading');
     const dashboardBarBox = await dashboardBar.boundingBox();
@@ -440,7 +461,16 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
     .getByRole('dialog', { name: 'Delete artifact?' })
     .getByRole('button', { name: 'Delete artifact' })
     .click();
-  await page.getByRole('button', { name: 'Undo deletion' }).click();
+  await page.getByRole('link', { name: 'Trash', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Trash' })).toBeVisible();
+  const trashTable = page.getByRole('table', { name: 'Trash' });
+  await expect(trashTable).toContainText(shortArtifactId);
+  await expect(trashTable).toContainText(/days/u);
+  await trashTable.getByRole('button', { name: 'Recover' }).click();
+  await expect(page.getByText('Artifact recovered', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy recovery link' })).toBeVisible();
+  await expect(trashTable).toHaveCount(0);
+  await dashboardSections.getByRole('link', { name: 'Artifacts' }).click();
   await expect(page.getByRole('link', { name: 'x', exact: true })).toBeVisible();
 
   await page.getByRole('link', { name: longArtifactName, exact: true }).click();

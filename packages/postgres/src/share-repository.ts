@@ -29,6 +29,8 @@ type ArtifactWithLatestRow = RevisionRow & {
   artifact_kind: 'file' | 'folder';
   artifact_created_at: Date;
   artifact_updated_at: Date;
+  artifact_retention_mode: 'automatic' | 'keep';
+  artifact_auto_trash_at: Date | null;
 };
 
 function parsePublisherMetadata(value: unknown): Record<string, string> {
@@ -107,6 +109,8 @@ function storedArtifact(row: ArtifactWithLatestRow): StoredArtifact {
     name: row.artifact_name,
     createdAt: row.artifact_created_at.toISOString(),
     updatedAt: row.artifact_updated_at.toISOString(),
+    retentionMode: row.artifact_retention_mode,
+    autoTrashAt: row.artifact_auto_trash_at?.toISOString() ?? null,
     latestRevision: storedRevision(row),
   };
 }
@@ -159,6 +163,8 @@ async function findArtifact(
       'artifact.kind as artifact_kind',
       'artifact.created_at as artifact_created_at',
       'artifact.updated_at as artifact_updated_at',
+      'artifact.retention_mode as artifact_retention_mode',
+      'artifact.auto_trash_at as artifact_auto_trash_at',
     ])
     .where('artifact.artifact_id', '=', artifactId)
     .where('artifact.deleted_at', 'is', null)
@@ -231,6 +237,12 @@ async function findIdempotency(
 }
 
 function shareValues(result: StoredShare, purpose: CommitShareCreateInput['purpose']): ShareTable {
+  const retentionRole: ShareTable['retention_role'] =
+    purpose === 'artifact-default'
+      ? 'default'
+      : purpose === 'artifact-recovery'
+        ? 'recovery-lease'
+        : 'custom';
   return {
     share_id: result.shareId,
     installation_id: result.installationId,
@@ -250,7 +262,54 @@ function shareValues(result: StoredShare, purpose: CommitShareCreateInput['purpo
     revoked_at: result.revokedAt === null ? null : new Date(result.revokedAt),
     revoked_by_actor_id: result.revokedByActorId,
     is_default: purpose === 'artifact-default',
+    retention_role: retentionRole,
   };
+}
+
+async function refreshArtifactAutoTrash(
+  database: DatabaseExecutor,
+  request: { installationId: string; workspaceId: string; artifactId: string; now: Date },
+): Promise<void> {
+  await database
+    .updateTable('shelf_artifacts')
+    .set({
+      auto_trash_at: sql<Date | null>`
+        case
+          when retention_mode = 'keep' then null
+          when exists (
+            select 1
+            from shelf_shares as share
+            where share.installation_id = shelf_artifacts.installation_id
+              and share.workspace_id = shelf_artifacts.workspace_id
+              and share.artifact_id = shelf_artifacts.artifact_id
+              and share.retention_role = 'custom'
+              and share.revoked_at is null
+              and (share.expires_at is null or share.expires_at > ${request.now})
+              and (share.max_sessions is null or share.sessions_used < share.max_sessions)
+              and share.expires_at is null
+          ) then null
+          else greatest(
+            ${request.now} + interval '30 days',
+            coalesce((
+              select max(share.expires_at + interval '30 days')
+              from shelf_shares as share
+              where share.installation_id = shelf_artifacts.installation_id
+                and share.workspace_id = shelf_artifacts.workspace_id
+                and share.artifact_id = shelf_artifacts.artifact_id
+                and share.retention_role = 'custom'
+                and share.revoked_at is null
+                and share.expires_at > ${request.now}
+                and (share.max_sessions is null or share.sessions_used < share.max_sessions)
+            ), ${request.now} + interval '30 days')
+          )
+        end
+      `,
+    })
+    .where('installation_id', '=', request.installationId)
+    .where('workspace_id', '=', request.workspaceId)
+    .where('artifact_id', '=', request.artifactId)
+    .where('deleted_at', 'is', null)
+    .execute();
 }
 
 function isPublicCodeConflict(error: unknown): boolean {
@@ -376,6 +435,14 @@ export class PostgresShareRepository implements ShareRepository {
             .values(shareValues(input.result, input.purpose))
             .returningAll()
             .executeTakeFirstOrThrow();
+          if (inserted.retention_role === 'custom') {
+            await refreshArtifactAutoTrash(transaction, {
+              installationId: inserted.installation_id,
+              workspaceId: inserted.workspace_id,
+              artifactId: inserted.artifact_id,
+              now: inserted.created_at,
+            });
+          }
           return { status: 'committed', result: storedShare(inserted) };
         }
 
@@ -486,6 +553,16 @@ export class PostgresShareRepository implements ShareRepository {
     return findShare(this.#database, shareId);
   }
 
+  async findShareByPublicCode(publicCode: string): Promise<StoredShare | undefined> {
+    const row = await this.#database
+      .selectFrom('shelf_shares')
+      .selectAll()
+      .where('access_type', '=', 'public')
+      .where('public_code', '=', publicCode)
+      .executeTakeFirst();
+    return row === undefined ? undefined : storedShare(row);
+  }
+
   async findSharesByIds(request: {
     installationId: string;
     workspaceId: string;
@@ -522,7 +599,17 @@ export class PostgresShareRepository implements ShareRepository {
         .where('revoked_at', 'is', null)
         .returningAll()
         .executeTakeFirst();
-      if (updated !== undefined) return { status: 'revoked', result: storedShare(updated) };
+      if (updated !== undefined) {
+        if (updated.retention_role === 'custom') {
+          await refreshArtifactAutoTrash(transaction, {
+            installationId: updated.installation_id,
+            workspaceId: updated.workspace_id,
+            artifactId: updated.artifact_id,
+            now: new Date(request.revokedAt),
+          });
+        }
+        return { status: 'revoked', result: storedShare(updated) };
+      }
       const existing = await transaction
         .selectFrom('shelf_shares')
         .selectAll()
@@ -655,6 +742,18 @@ export class PostgresShareRepository implements ShareRepository {
         .where('share_id', '=', request.shareId)
         .returningAll()
         .executeTakeFirstOrThrow();
+      if (
+        updated.retention_role === 'custom' &&
+        updated.max_sessions !== null &&
+        safeInteger(updated.sessions_used, { positive: false }) >= updated.max_sessions
+      ) {
+        await refreshArtifactAutoTrash(transaction, {
+          installationId: updated.installation_id,
+          workspaceId: updated.workspace_id,
+          artifactId: updated.artifact_id,
+          now,
+        });
+      }
       await transaction
         .insertInto('shelf_share_session_receipts')
         .values({

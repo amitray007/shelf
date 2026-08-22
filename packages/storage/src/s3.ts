@@ -179,6 +179,11 @@ export class S3ContentStorage implements ContentStorage {
     await this.#delete(staged.stageId);
   }
 
+  async deleteSealed(contentId: string): Promise<void> {
+    assertContentId(contentId);
+    await this.#delete(contentId);
+  }
+
   async seal(
     staged: StagedContent,
     descriptor: { contentHash: string; byteCount: number },

@@ -147,6 +147,13 @@ export class LocalContentStorage implements ContentStorage {
     });
   }
 
+  async deleteSealed(contentId: string): Promise<void> {
+    assertContentId(contentId);
+    await unlink(this.#objectPath(contentId)).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    });
+  }
+
   async seal(
     staged: StagedContent,
     descriptor: { contentHash: string; byteCount: number },

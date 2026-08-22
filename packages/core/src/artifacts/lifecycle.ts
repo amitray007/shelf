@@ -30,7 +30,9 @@ import { type StoredArtifact, storedArtifactToArtifact } from './catalog.js';
 type StoredLifecycleRestore = StoredRestore | StoredFolderRestore;
 
 const ARTIFACT_ID_PATTERN = /^art_[A-Za-z0-9_-]{22}$/u;
-const ARTIFACT_RECOVERY_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000;
+export const ARTIFACT_RECOVERY_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000;
+export const ARTIFACT_UNSHARED_GRACE_MS = 30 * 24 * 60 * 60 * 1_000;
+export const ARTIFACT_RECOVERY_LEASE_MS = 7 * 24 * 60 * 60 * 1_000;
 
 function containsControlCharacter(value: string): boolean {
   return [...value].some((character) => {
@@ -67,6 +69,7 @@ export interface StoredArtifactDeletionState {
   artifact: StoredArtifact;
   deletedAt: string | null;
   recoverableUntil: string | null;
+  deletionReason: 'manual' | 'retention' | null;
 }
 
 export type DeleteArtifactOutcome =
@@ -74,6 +77,7 @@ export type DeleteArtifactOutcome =
       status: 'deleted' | 'already-deleted';
       deletedAt: string;
       recoverableUntil: string;
+      reason: 'manual' | 'retention';
       revokedShareCount: number;
     }
   | { status: 'not-found' };
@@ -101,6 +105,7 @@ export interface ArtifactDeletionRepository {
     actorId: string;
     deletedAt: string;
     recoverableUntil: string;
+    reason: 'manual' | 'retention';
   }): Promise<DeleteArtifactOutcome>;
   recoverArtifact(request: {
     namespace: ArtifactRecoveryIdempotencyNamespace;
@@ -363,6 +368,7 @@ export function createArtifactLifecycleService(dependencies: {
           actorId: request.actorId,
           deletedAt,
           recoverableUntil,
+          reason: 'manual',
         });
       } catch (error) {
         throw boundaryFailure('SERVICE_UNAVAILABLE', 'Artifact deletion failed.', error);
@@ -374,6 +380,7 @@ export function createArtifactLifecycleService(dependencies: {
         artifactId: request.artifactId,
         deletedAt: outcome.deletedAt,
         recoverableUntil: outcome.recoverableUntil,
+        reason: outcome.reason,
         revokedShareCount: outcome.revokedShareCount,
       };
     },

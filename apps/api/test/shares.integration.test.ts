@@ -176,6 +176,11 @@ describe('share HTTP boundary', () => {
       url: `/api/v1/public/shares/${shareId}/sessions`,
       payload: { sessionId: '11111111-1111-4111-8111-111111111111', secret },
     });
+    const deletedAgain = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/artifacts/${artifactId}`,
+      headers: { authorization: 'Bearer test' },
+    });
     const [recovered, replayedRecovery] = await Promise.all([
       app.inject({
         method: 'POST',
@@ -213,12 +218,16 @@ describe('share HTTP boundary', () => {
     expect(hidden.statusCode).toBe(404);
     expect(hiddenHistory.statusCode).toBe(404);
     expect(rejectedUpdate.statusCode).toBe(404);
-    expect(rejectedShare.statusCode).toBe(404);
+    expect(rejectedShare.statusCode, rejectedShare.body).toBe(201);
     expect(publicMiss.statusCode).toBe(404);
+    expect(deletedAgain.statusCode, deletedAgain.body).toBe(200);
     expect(recovered.statusCode, recovered.body).toBe(200);
-    expect(recovered.json()).toMatchObject({ artifactId });
+    expect(recovered.json()).toMatchObject({ artifact: { artifactId } });
     expect(replayedRecovery.statusCode, replayedRecovery.body).toBe(200);
-    expect(replayedRecovery.json()).toEqual(recovered.json());
+    expect(replayedRecovery.json()).toMatchObject({
+      artifact: { artifactId },
+      recoveryShare: { shareId: recovered.json().recoveryShare.shareId, replayed: true },
+    });
     expect(visible.statusCode).toBe(200);
     expect(stillRevoked.statusCode).toBe(404);
   });

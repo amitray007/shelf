@@ -10,9 +10,9 @@ Shelf puts the CLI first, and the CLI is safe for agents to operate. The web das
 
 - **Immutable revisions.** Every publish creates a new revision. History is permanent, and each revision records where it came from.
 - **Files and folders.** Publish one file or a complete folder snapshot. There is no collection abstraction.
-- **Safe deletion.** Deleted artifacts stay recoverable for 30 days. Deletion also revokes their active shares.
+- **Automatic retention with Trash.** Artifacts without an active custom share move to Trash after a 30-day grace period. Trash remains recoverable for another 30 days before metadata and unreferenced content are purged. Important artifacts can be kept indefinitely.
 - **Share links.** Protected links use a private capability. Public links use a short unlisted URL. Links can be permanent, expiring, or session-limited, and you can revoke them at any time.
-- **Discussions.** Visitors can comment on shared content, anchored to a file or a line range. Admins reply, resolve, and moderate from the dashboard or the CLI.
+- **Discussions.** Visitors and authenticated agents can start discussions anchored to a file or line range. Agents can reply and edit or delete their own posts; moderation remains separate.
 - **Safe rendering.** A dark, content-first viewer renders Markdown, JSON, code, and images. Active HTML runs in a separate sandboxed renderer process.
 - **Agent-first CLI.** One JSON document per run. Strict exit codes. No interactive prompts. Idempotency keys on every mutation.
 - **Self-hostable.** One host with PostgreSQL. Content storage uses a local filesystem or Cloudflare R2.
@@ -47,6 +47,7 @@ A profile stores the installation URL, the workspace, and a credential reference
   - `private` — visitors see only the discussions they started. Admins see all.
   - `shared` — everyone on the link sees shared discussions.
 - Both link types can follow Latest or pin one revision. Both are excluded from search-engine indexing.
+- Prepared default links do not keep an artifact active. Any non-default custom link keeps it active until it is revoked, expires, or exhausts its protected-session budget.
 
 ## CLI usage
 
@@ -67,12 +68,17 @@ Every remote command accepts `--profile <name>`. The explicit `--url` + `SHELF_T
 # Artifacts
 shelf artifacts list --profile default --search "notes" --sort updated
 shelf artifacts show --profile default --artifact art_...
+shelf artifacts resolve --profile default --from 'https://shelf.example/s/shr_...#capability'
 shelf artifacts history --profile default --artifact art_...
+shelf artifacts retention set --profile default --artifact art_... --mode keep
 shelf artifacts rename --profile default --artifact art_... --name "Project notes"
 shelf artifacts restore --profile default --artifact art_... --revision rev_... \
   --idempotency-key restore-1
 shelf artifacts delete --profile default --artifact art_... --confirm art_...
 shelf artifacts recover --profile default --artifact art_...
+shelf trash list --profile default --search art_...
+shelf trash show --profile default --artifact art_...
+shelf trash recover --profile default --artifact art_...
 
 # Folders and revisions
 shelf folders tree --profile default --revision rev_...
@@ -90,11 +96,15 @@ shelf shares list --profile default
 shelf shares comments --profile default --share shr_... --comments shared
 shelf shares revoke --profile default --share shr_...
 
-# Discussions (moderator authority)
+# Discussions
 shelf comments summaries --profile default --artifact art_... --artifact art_...
 shelf comments list --profile default --artifact art_...
+shelf comments create --profile default --artifact art_... --share shr_... \
+  --revision rev_... --body "Please revisit this section."
 shelf comments reply --profile default --artifact art_... --thread <thread-id> \
   --body "Fixed in the 4th revision." --display-name "Amit"
+shelf comments edit --profile default --artifact art_... --post <post-id> --body "Updated note"
+shelf comments delete --profile default --artifact art_... --post <post-id>
 shelf comments resolve --profile default --artifact art_... --thread <thread-id>
 shelf comments hide --profile default --artifact art_... --post <post-id>
 ```
@@ -159,7 +169,7 @@ The [self-hosting guide](docs/operations/self-hosting.md) lists the current oper
 
 ## Product principles
 
-- Keep artifacts durable. Let shares expire or be revoked independently.
+- Keep important artifacts durable while cleaning up abandoned artifacts through visible, recoverable lifecycle states.
 - Make every revision immutable, and record where it came from.
 - Treat files and complete folders as the publishing units.
 - Make publishing and sharing quick from the CLI, with defaults that stay safe for agents.

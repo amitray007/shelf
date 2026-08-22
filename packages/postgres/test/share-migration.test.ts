@@ -82,6 +82,7 @@ describePostgres('shares migration', () => {
         { migrationName: '0012_comments', status: 'Success' },
         { migrationName: '0013_actor_display_names', status: 'Success' },
         { migrationName: '0014_workspace_deletion', status: 'Success' },
+        { migrationName: '0015_artifact_retention', status: 'Success' },
       ]);
       await sql`
         insert into shelf_actors (

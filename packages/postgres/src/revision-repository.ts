@@ -3,6 +3,7 @@ import type {
   ArtifactDeletionRepository,
   ArtifactLifecycleRepository,
   ArtifactRecoveryIdempotencyNamespace,
+  ArtifactRetentionRepository,
   CommitFolderPublishInput,
   CommitFolderPublishOutcome,
   CommitPublishInput,
@@ -27,6 +28,7 @@ import type {
   StoredPublish,
   StoredRestore,
   StoredRevision,
+  StoredTrashedArtifact,
 } from '@shelf/core';
 import { initialArtifactNameFromFileName } from '@shelf/core';
 import { sql, type Transaction } from 'kysely';
@@ -111,11 +113,14 @@ type ArtifactWithLatestRow = RevisionRow & {
   artifact_kind: 'file' | 'folder';
   artifact_created_at: Date;
   artifact_updated_at: Date;
+  artifact_retention_mode: 'automatic' | 'keep';
+  artifact_auto_trash_at: Date | null;
 };
 
 type ArtifactDeletionRow = ArtifactWithLatestRow & {
   artifact_deleted_at: Date | null;
   artifact_recoverable_until: Date | null;
+  artifact_deletion_reason: 'manual' | 'retention' | null;
 };
 
 function storedArtifact(row: ArtifactWithLatestRow): StoredArtifact {
@@ -127,6 +132,8 @@ function storedArtifact(row: ArtifactWithLatestRow): StoredArtifact {
     name: row.artifact_name,
     createdAt: row.artifact_created_at.toISOString(),
     updatedAt: row.artifact_updated_at.toISOString(),
+    retentionMode: row.artifact_retention_mode,
+    autoTrashAt: row.artifact_auto_trash_at?.toISOString() ?? null,
     latestRevision: storedArtifactRevision(row),
   };
 }
@@ -150,8 +157,11 @@ async function findArtifactDeletionState(
       'artifact.kind as artifact_kind',
       'artifact.created_at as artifact_created_at',
       'artifact.updated_at as artifact_updated_at',
+      'artifact.retention_mode as artifact_retention_mode',
+      'artifact.auto_trash_at as artifact_auto_trash_at',
       'artifact.deleted_at as artifact_deleted_at',
       'artifact.recoverable_until as artifact_recoverable_until',
+      'artifact.deletion_reason as artifact_deletion_reason',
     ])
     .where('artifact.artifact_id', '=', artifactId)
     .executeTakeFirst();
@@ -161,6 +171,7 @@ async function findArtifactDeletionState(
     artifact: storedArtifact(value),
     deletedAt: value.artifact_deleted_at?.toISOString() ?? null,
     recoverableUntil: value.artifact_recoverable_until?.toISOString() ?? null,
+    deletionReason: value.artifact_deletion_reason,
   };
 }
 
@@ -177,6 +188,8 @@ function parseStoredRecoveryArtifact(value: unknown): StoredArtifact {
     typeof artifact.name !== 'string' ||
     typeof artifact.createdAt !== 'string' ||
     typeof artifact.updatedAt !== 'string' ||
+    (artifact.retentionMode !== 'automatic' && artifact.retentionMode !== 'keep') ||
+    (artifact.autoTrashAt !== null && typeof artifact.autoTrashAt !== 'string') ||
     typeof artifact.latestRevision !== 'object' ||
     artifact.latestRevision === null
   ) {
@@ -496,6 +509,9 @@ async function commitNewPublish(
       recoverable_until: null,
       deleted_by_actor_id: null,
       deleted_share_count: null,
+      retention_mode: 'automatic',
+      auto_trash_at: sql`transaction_timestamp() + interval '30 days'`,
+      deletion_reason: null,
     })
     .onConflict((conflict) => conflict.column('artifact_id').doNothing())
     .execute();
@@ -551,6 +567,31 @@ async function commitNewPublish(
     .set({
       latest_revision_id: input.result.revisionId,
       updated_at: sql`transaction_timestamp()`,
+      auto_trash_at: sql`
+        case
+          when retention_mode = 'keep' then null
+          when exists (
+            select 1 from shelf_shares
+            where shelf_shares.artifact_id = shelf_artifacts.artifact_id
+              and retention_role = 'custom'
+              and revoked_at is null
+              and expires_at is null
+              and (max_sessions is null or sessions_used < max_sessions)
+          ) then null
+          else greatest(
+            transaction_timestamp() + interval '30 days',
+            coalesce((
+              select max(expires_at + interval '30 days')
+              from shelf_shares
+              where shelf_shares.artifact_id = shelf_artifacts.artifact_id
+                and retention_role = 'custom'
+                and revoked_at is null
+                and expires_at > transaction_timestamp()
+                and (max_sessions is null or sessions_used < max_sessions)
+            ), transaction_timestamp() + interval '30 days')
+          )
+        end
+      `,
     })
     .where('artifact_id', '=', input.result.artifactId)
     .executeTakeFirstOrThrow();
@@ -692,6 +733,31 @@ async function commitNewRestore(
     .set({
       latest_revision_id: inserted.revision_id,
       updated_at: sql`transaction_timestamp()`,
+      auto_trash_at: sql`
+        case
+          when retention_mode = 'keep' then null
+          when exists (
+            select 1 from shelf_shares
+            where shelf_shares.artifact_id = shelf_artifacts.artifact_id
+              and retention_role = 'custom'
+              and revoked_at is null
+              and expires_at is null
+              and (max_sessions is null or sessions_used < max_sessions)
+          ) then null
+          else greatest(
+            transaction_timestamp() + interval '30 days',
+            coalesce((
+              select max(expires_at + interval '30 days')
+              from shelf_shares
+              where shelf_shares.artifact_id = shelf_artifacts.artifact_id
+                and retention_role = 'custom'
+                and revoked_at is null
+                and expires_at > transaction_timestamp()
+                and (max_sessions is null or sessions_used < max_sessions)
+            ), transaction_timestamp() + interval '30 days')
+          )
+        end
+      `,
     })
     .where('artifact_id', '=', input.result.artifactId)
     .executeTakeFirstOrThrow();
@@ -757,6 +823,9 @@ async function commitNewFolderPublish(
       recoverable_until: null,
       deleted_by_actor_id: null,
       deleted_share_count: null,
+      retention_mode: 'automatic',
+      auto_trash_at: sql`transaction_timestamp() + interval '30 days'`,
+      deletion_reason: null,
     })
     .onConflict((conflict) => conflict.column('artifact_id').doNothing())
     .execute();
@@ -827,6 +896,31 @@ async function commitNewFolderPublish(
     .set({
       latest_revision_id: input.result.revisionId,
       updated_at: sql`transaction_timestamp()`,
+      auto_trash_at: sql`
+        case
+          when retention_mode = 'keep' then null
+          when exists (
+            select 1 from shelf_shares
+            where shelf_shares.artifact_id = shelf_artifacts.artifact_id
+              and retention_role = 'custom'
+              and revoked_at is null
+              and expires_at is null
+              and (max_sessions is null or sessions_used < max_sessions)
+          ) then null
+          else greatest(
+            transaction_timestamp() + interval '30 days',
+            coalesce((
+              select max(expires_at + interval '30 days')
+              from shelf_shares
+              where shelf_shares.artifact_id = shelf_artifacts.artifact_id
+                and retention_role = 'custom'
+                and revoked_at is null
+                and expires_at > transaction_timestamp()
+                and (max_sessions is null or sessions_used < max_sessions)
+            ), transaction_timestamp() + interval '30 days')
+          )
+        end
+      `,
     })
     .where('artifact_id', '=', input.result.artifactId)
     .executeTakeFirstOrThrow();
@@ -838,6 +932,7 @@ export class PostgresRevisionRepository
     RevisionRepository,
     ArtifactCatalogRepository,
     ArtifactLifecycleRepository,
+    ArtifactRetentionRepository,
     ArtifactDeletionRepository,
     FolderRevisionRepository,
     RevisionComparisonRepository
@@ -964,6 +1059,8 @@ export class PostgresRevisionRepository
         'artifact.kind as artifact_kind',
         'artifact.created_at as artifact_created_at',
         'artifact.updated_at as artifact_updated_at',
+        'artifact.retention_mode as artifact_retention_mode',
+        'artifact.auto_trash_at as artifact_auto_trash_at',
       ])
       .where('artifact.artifact_id', '=', artifactId)
       .where('artifact.deleted_at', 'is', null)
@@ -998,6 +1095,8 @@ export class PostgresRevisionRepository
         'artifact.kind as artifact_kind',
         'artifact.created_at as artifact_created_at',
         'artifact.updated_at as artifact_updated_at',
+        'artifact.retention_mode as artifact_retention_mode',
+        'artifact.auto_trash_at as artifact_auto_trash_at',
       ])
       .where('artifact.installation_id', '=', request.installationId)
       .where('artifact.workspace_id', '=', request.workspaceId);
@@ -1007,6 +1106,7 @@ export class PostgresRevisionRepository
       const pattern = `%${escaped}%`;
       query = query.where((expressions) =>
         expressions.or([
+          expressions('artifact.artifact_id', 'ilike', pattern),
           expressions('artifact.name', 'ilike', pattern),
           expressions('revision.original_file_name', 'ilike', pattern),
           sql<boolean>`revision.publisher_metadata ->> 'title' ILIKE ${pattern} ESCAPE '\\'`,
@@ -1044,6 +1144,166 @@ export class PostgresRevisionRepository
               artifactId: last.artifactId,
             },
           }
+        : {}),
+    };
+  }
+
+  async setArtifactRetention(request: {
+    installationId: string;
+    workspaceId: string;
+    artifactId: string;
+    mode: 'automatic' | 'keep';
+    changedAt: string;
+  }): Promise<StoredArtifact | undefined> {
+    const changedAt = new Date(request.changedAt);
+    const updated = await this.#database
+      .updateTable('shelf_artifacts')
+      .set({
+        retention_mode: request.mode,
+        auto_trash_at:
+          request.mode === 'keep'
+            ? null
+            : sql<Date | null>`(
+                CASE
+                  WHEN EXISTS (
+                    SELECT 1
+                    FROM shelf_shares AS share
+                    WHERE share.installation_id = shelf_artifacts.installation_id
+                      AND share.workspace_id = shelf_artifacts.workspace_id
+                      AND share.artifact_id = shelf_artifacts.artifact_id
+                      AND share.retention_role = 'custom'
+                      AND share.revoked_at IS NULL
+                      AND (share.expires_at IS NULL OR share.expires_at > ${changedAt})
+                      AND (share.max_sessions IS NULL OR share.sessions_used < share.max_sessions)
+                      AND share.expires_at IS NULL
+                  ) THEN NULL
+                  ELSE GREATEST(
+                    ${changedAt} + interval '30 days',
+                    COALESCE((
+                      SELECT MAX(share.expires_at + interval '30 days')
+                      FROM shelf_shares AS share
+                      WHERE share.installation_id = shelf_artifacts.installation_id
+                        AND share.workspace_id = shelf_artifacts.workspace_id
+                        AND share.artifact_id = shelf_artifacts.artifact_id
+                        AND share.retention_role = 'custom'
+                        AND share.revoked_at IS NULL
+                        AND share.expires_at > ${changedAt}
+                        AND (share.max_sessions IS NULL OR share.sessions_used < share.max_sessions)
+                    ), ${changedAt} + interval '30 days')
+                  )
+                END
+              )`,
+        updated_at: changedAt,
+      })
+      .where('installation_id', '=', request.installationId)
+      .where('workspace_id', '=', request.workspaceId)
+      .where('artifact_id', '=', request.artifactId)
+      .where('deleted_at', 'is', null)
+      .returning('artifact_id')
+      .executeTakeFirst();
+    return updated === undefined ? undefined : this.findArtifact(updated.artifact_id);
+  }
+
+  async findTrashedArtifact(artifactId: string): Promise<StoredTrashedArtifact | undefined> {
+    const state = await findArtifactDeletionState(this.#database, artifactId);
+    if (
+      state === undefined ||
+      state.deletedAt === null ||
+      state.recoverableUntil === null ||
+      state.deletionReason === null
+    ) {
+      return undefined;
+    }
+    return {
+      artifact: state.artifact,
+      deletedAt: state.deletedAt,
+      purgeAt: state.recoverableUntil,
+      reason: state.deletionReason,
+    };
+  }
+
+  async listTrashedArtifacts(request: {
+    installationId: string;
+    workspaceId: string;
+    limit: number;
+    search?: string;
+    after?: { deletedAt: string; artifactId: string };
+  }) {
+    let query = this.#database
+      .selectFrom('shelf_artifacts as artifact')
+      .innerJoin('shelf_revisions as revision', (join) =>
+        join
+          .onRef('revision.revision_id', '=', 'artifact.latest_revision_id')
+          .onRef('revision.installation_id', '=', 'artifact.installation_id')
+          .onRef('revision.workspace_id', '=', 'artifact.workspace_id'),
+      )
+      .selectAll('revision')
+      .select([
+        'artifact.name as artifact_name',
+        'artifact.kind as artifact_kind',
+        'artifact.created_at as artifact_created_at',
+        'artifact.updated_at as artifact_updated_at',
+        'artifact.retention_mode as artifact_retention_mode',
+        'artifact.auto_trash_at as artifact_auto_trash_at',
+        'artifact.deleted_at as artifact_deleted_at',
+        'artifact.recoverable_until as artifact_recoverable_until',
+        'artifact.deletion_reason as artifact_deletion_reason',
+      ])
+      .where('artifact.installation_id', '=', request.installationId)
+      .where('artifact.workspace_id', '=', request.workspaceId)
+      .where('artifact.deleted_at', 'is not', null);
+    if (request.search !== undefined) {
+      const escaped = request.search.replace(/[\\%_]/gu, '\\$&');
+      const pattern = `%${escaped}%`;
+      query = query.where((expressions) =>
+        expressions.or([
+          expressions('artifact.artifact_id', 'ilike', pattern),
+          expressions('artifact.name', 'ilike', pattern),
+          expressions('revision.original_file_name', 'ilike', pattern),
+          sql<boolean>`revision.publisher_metadata ->> 'title' ILIKE ${pattern} ESCAPE '\\'`,
+          sql<boolean>`revision.publisher_metadata ->> 'description' ILIKE ${pattern} ESCAPE '\\'`,
+        ]),
+      );
+    }
+    if (request.after !== undefined) {
+      const deletedAt = new Date(request.after.deletedAt);
+      query = query.where((expressions) =>
+        expressions.or([
+          expressions('artifact.deleted_at', '<', deletedAt),
+          expressions.and([
+            expressions('artifact.deleted_at', '=', deletedAt),
+            expressions('artifact.artifact_id', '>', request.after?.artifactId ?? ''),
+          ]),
+        ]),
+      );
+    }
+    const rows = await query
+      .orderBy('artifact.deleted_at', 'desc')
+      .orderBy('artifact.artifact_id', 'asc')
+      .limit(request.limit + 1)
+      .execute();
+    const hasMore = rows.length > request.limit;
+    const items = rows.slice(0, request.limit).map((row): StoredTrashedArtifact => {
+      const value = row as ArtifactDeletionRow;
+      if (
+        value.artifact_deleted_at === null ||
+        value.artifact_recoverable_until === null ||
+        value.artifact_deletion_reason === null
+      ) {
+        throw new Error('Stored trashed artifact state is invalid.');
+      }
+      return {
+        artifact: storedArtifact(value),
+        deletedAt: value.artifact_deleted_at.toISOString(),
+        purgeAt: value.artifact_recoverable_until.toISOString(),
+        reason: value.artifact_deletion_reason,
+      };
+    });
+    const last = items.at(-1);
+    return {
+      items,
+      ...(hasMore && last !== undefined
+        ? { next: { deletedAt: last.deletedAt, artifactId: last.artifact.artifactId } }
         : {}),
     };
   }
@@ -1138,11 +1398,12 @@ export class PostgresRevisionRepository
     actorId: string;
     deletedAt: string;
     recoverableUntil: string;
+    reason: 'manual' | 'retention';
   }) {
     return this.#database.transaction().execute(async (transaction) => {
       const artifact = await transaction
         .selectFrom('shelf_artifacts')
-        .select(['deleted_at', 'recoverable_until', 'deleted_share_count'])
+        .select(['deleted_at', 'recoverable_until', 'deleted_share_count', 'deletion_reason'])
         .where('installation_id', '=', request.installationId)
         .where('workspace_id', '=', request.workspaceId)
         .where('artifact_id', '=', request.artifactId)
@@ -1150,13 +1411,18 @@ export class PostgresRevisionRepository
         .executeTakeFirst();
       if (artifact === undefined) return { status: 'not-found' as const };
       if (artifact.deleted_at !== null) {
-        if (artifact.recoverable_until === null || artifact.deleted_share_count === null) {
+        if (
+          artifact.recoverable_until === null ||
+          artifact.deleted_share_count === null ||
+          artifact.deletion_reason === null
+        ) {
           throw new Error('Stored artifact deletion state is invalid.');
         }
         return {
           status: 'already-deleted' as const,
           deletedAt: artifact.deleted_at.toISOString(),
           recoverableUntil: artifact.recoverable_until.toISOString(),
+          reason: artifact.deletion_reason,
           revokedShareCount: artifact.deleted_share_count,
         };
       }
@@ -1188,6 +1454,8 @@ export class PostgresRevisionRepository
           recoverable_until: recoverableUntil,
           deleted_by_actor_id: request.actorId,
           deleted_share_count: revokedShareCount,
+          deletion_reason: request.reason,
+          auto_trash_at: null,
         })
         .where('installation_id', '=', request.installationId)
         .where('workspace_id', '=', request.workspaceId)
@@ -1197,6 +1465,7 @@ export class PostgresRevisionRepository
         status: 'deleted' as const,
         deletedAt: request.deletedAt,
         recoverableUntil: request.recoverableUntil,
+        reason: request.reason,
         revokedShareCount,
       };
     });
@@ -1251,6 +1520,10 @@ export class PostgresRevisionRepository
       const recoveredArtifact = {
         ...deletionState.artifact,
         updatedAt: request.recoveredAt,
+        retentionMode: 'automatic' as const,
+        autoTrashAt: new Date(
+          Date.parse(request.recoveredAt) + 7 * 24 * 60 * 60 * 1_000,
+        ).toISOString(),
       };
       const claim = await transaction
         .insertInto('shelf_artifact_recovery_idempotency')
@@ -1288,6 +1561,9 @@ export class PostgresRevisionRepository
           recoverable_until: null,
           deleted_by_actor_id: null,
           deleted_share_count: null,
+          deletion_reason: null,
+          retention_mode: 'automatic',
+          auto_trash_at: sql`transaction_timestamp() + interval '7 days'`,
           updated_at: new Date(request.recoveredAt),
         })
         .where('installation_id', '=', request.namespace.installationId)
@@ -1296,5 +1572,300 @@ export class PostgresRevisionRepository
         .executeTakeFirstOrThrow();
       return { status: 'recovered' as const, artifact: recoveredArtifact };
     });
+  }
+
+  async trashDueArtifacts(now: Date, limit: number): Promise<number> {
+    return this.#database.transaction().execute(async (transaction) => {
+      const candidates = await transaction
+        .selectFrom('shelf_artifacts as artifact')
+        .innerJoin('shelf_revisions as revision', (join) =>
+          join
+            .onRef('revision.installation_id', '=', 'artifact.installation_id')
+            .onRef('revision.workspace_id', '=', 'artifact.workspace_id')
+            .onRef('revision.revision_id', '=', 'artifact.latest_revision_id'),
+        )
+        .select([
+          'artifact.installation_id',
+          'artifact.workspace_id',
+          'artifact.artifact_id',
+          'revision.actor_id',
+        ])
+        .where('artifact.deleted_at', 'is', null)
+        .where('artifact.retention_mode', '=', 'automatic')
+        .where('artifact.auto_trash_at', '<=', now)
+        .orderBy('artifact.auto_trash_at', 'asc')
+        .orderBy('artifact.artifact_id', 'asc')
+        .limit(limit)
+        .forUpdate('artifact')
+        .skipLocked()
+        .execute();
+      let trashed = 0;
+      for (const artifact of candidates) {
+        const liveCustom = await transaction
+          .selectFrom('shelf_shares')
+          .select('share_id')
+          .where('installation_id', '=', artifact.installation_id)
+          .where('workspace_id', '=', artifact.workspace_id)
+          .where('artifact_id', '=', artifact.artifact_id)
+          .where('retention_role', '=', 'custom')
+          .where('revoked_at', 'is', null)
+          .where((expressions) =>
+            expressions.or([
+              expressions('expires_at', 'is', null),
+              expressions('expires_at', '>', now),
+            ]),
+          )
+          .where((expressions) =>
+            expressions.or([
+              expressions('max_sessions', 'is', null),
+              sql<boolean>`sessions_used < max_sessions`,
+            ]),
+          )
+          .limit(1)
+          .executeTakeFirst();
+        if (liveCustom !== undefined) {
+          await transaction
+            .updateTable('shelf_artifacts')
+            .set({
+              auto_trash_at: sql<Date | null>`
+                case
+                  when exists (
+                    select 1 from shelf_shares as share
+                    where share.installation_id = ${artifact.installation_id}
+                      and share.workspace_id = ${artifact.workspace_id}
+                      and share.artifact_id = ${artifact.artifact_id}
+                      and share.retention_role = 'custom'
+                      and share.revoked_at is null
+                      and share.expires_at is null
+                      and (share.max_sessions is null or share.sessions_used < share.max_sessions)
+                  ) then null
+                  else greatest(
+                    ${now} + interval '30 days',
+                    coalesce((
+                      select max(share.expires_at + interval '30 days')
+                      from shelf_shares as share
+                      where share.installation_id = ${artifact.installation_id}
+                        and share.workspace_id = ${artifact.workspace_id}
+                        and share.artifact_id = ${artifact.artifact_id}
+                        and share.retention_role = 'custom'
+                        and share.revoked_at is null
+                        and share.expires_at > ${now}
+                        and (share.max_sessions is null or share.sessions_used < share.max_sessions)
+                    ), ${now} + interval '30 days')
+                  )
+                end
+              `,
+            })
+            .where('artifact_id', '=', artifact.artifact_id)
+            .execute();
+          continue;
+        }
+        const revoked = await transaction
+          .updateTable('shelf_shares')
+          .set({ revoked_at: now, revoked_by_actor_id: artifact.actor_id })
+          .where('installation_id', '=', artifact.installation_id)
+          .where('workspace_id', '=', artifact.workspace_id)
+          .where('artifact_id', '=', artifact.artifact_id)
+          .where('revoked_at', 'is', null)
+          .where((expressions) =>
+            expressions.or([
+              expressions('expires_at', 'is', null),
+              expressions('expires_at', '>', now),
+            ]),
+          )
+          .executeTakeFirst();
+        await transaction
+          .updateTable('shelf_artifacts')
+          .set({
+            deleted_at: now,
+            recoverable_until: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1_000),
+            deleted_by_actor_id: artifact.actor_id,
+            deleted_share_count: Number(revoked.numUpdatedRows),
+            deletion_reason: 'retention',
+            auto_trash_at: null,
+          })
+          .where('artifact_id', '=', artifact.artifact_id)
+          .executeTakeFirstOrThrow();
+        trashed += 1;
+      }
+      return trashed;
+    });
+  }
+
+  async purgeExpiredArtifacts(now: Date, limit: number): Promise<number> {
+    return this.#database.transaction().execute(async (transaction) => {
+      const artifacts = await transaction
+        .selectFrom('shelf_artifacts')
+        .select(['installation_id', 'workspace_id', 'artifact_id'])
+        .where('deleted_at', 'is not', null)
+        .where('recoverable_until', '<=', now)
+        .orderBy('recoverable_until', 'asc')
+        .orderBy('artifact_id', 'asc')
+        .limit(limit)
+        .forUpdate()
+        .skipLocked()
+        .execute();
+      for (const artifact of artifacts) {
+        const contents = await sql<{ content_id: string }>`
+          select distinct content_id
+          from (
+            select content_id
+            from shelf_revisions
+            where installation_id = ${artifact.installation_id}
+              and workspace_id = ${artifact.workspace_id}
+              and artifact_id = ${artifact.artifact_id}
+            union all
+            select content_id
+            from shelf_revision_entries
+            where installation_id = ${artifact.installation_id}
+              and workspace_id = ${artifact.workspace_id}
+              and artifact_id = ${artifact.artifact_id}
+              and content_id is not null
+          ) as content
+        `.execute(transaction);
+        for (const content of contents.rows) {
+          await transaction
+            .insertInto('shelf_content_purge_queue')
+            .values({
+              content_id: content.content_id,
+              artifact_id: artifact.artifact_id,
+              queued_at: now,
+              attempts: 0,
+              last_attempt_at: null,
+            })
+            .onConflict((conflict) => conflict.column('content_id').doNothing())
+            .execute();
+        }
+        await transaction
+          .deleteFrom('shelf_comment_posts')
+          .where('installation_id', '=', artifact.installation_id)
+          .where('workspace_id', '=', artifact.workspace_id)
+          .where(
+            'thread_id',
+            'in',
+            transaction
+              .selectFrom('shelf_comment_threads')
+              .select('thread_id')
+              .where('installation_id', '=', artifact.installation_id)
+              .where('workspace_id', '=', artifact.workspace_id)
+              .where('artifact_id', '=', artifact.artifact_id),
+          )
+          .execute();
+        await transaction
+          .deleteFrom('shelf_comment_threads')
+          .where('installation_id', '=', artifact.installation_id)
+          .where('workspace_id', '=', artifact.workspace_id)
+          .where('artifact_id', '=', artifact.artifact_id)
+          .execute();
+        await transaction
+          .deleteFrom('shelf_share_session_receipts')
+          .where(
+            'share_id',
+            'in',
+            transaction
+              .selectFrom('shelf_shares')
+              .select('share_id')
+              .where('installation_id', '=', artifact.installation_id)
+              .where('workspace_id', '=', artifact.workspace_id)
+              .where('artifact_id', '=', artifact.artifact_id),
+          )
+          .execute();
+        await transaction
+          .deleteFrom('shelf_share_idempotency')
+          .where('installation_id', '=', artifact.installation_id)
+          .where('workspace_id', '=', artifact.workspace_id)
+          .where(
+            'share_id',
+            'in',
+            transaction
+              .selectFrom('shelf_shares')
+              .select('share_id')
+              .where('artifact_id', '=', artifact.artifact_id),
+          )
+          .execute();
+        await transaction
+          .deleteFrom('shelf_shares')
+          .where('installation_id', '=', artifact.installation_id)
+          .where('workspace_id', '=', artifact.workspace_id)
+          .where('artifact_id', '=', artifact.artifact_id)
+          .execute();
+        await transaction
+          .deleteFrom('shelf_artifact_recovery_idempotency')
+          .where('installation_id', '=', artifact.installation_id)
+          .where('workspace_id', '=', artifact.workspace_id)
+          .where('artifact_id', '=', artifact.artifact_id)
+          .execute();
+        await transaction
+          .deleteFrom('shelf_idempotency')
+          .where('installation_id', '=', artifact.installation_id)
+          .where('workspace_id', '=', artifact.workspace_id)
+          .where(
+            'revision_id',
+            'in',
+            transaction
+              .selectFrom('shelf_revisions')
+              .select('revision_id')
+              .where('artifact_id', '=', artifact.artifact_id),
+          )
+          .execute();
+        await transaction
+          .deleteFrom('shelf_revision_entries')
+          .where('installation_id', '=', artifact.installation_id)
+          .where('workspace_id', '=', artifact.workspace_id)
+          .where('artifact_id', '=', artifact.artifact_id)
+          .execute();
+        await transaction
+          .deleteFrom('shelf_revisions')
+          .where('installation_id', '=', artifact.installation_id)
+          .where('workspace_id', '=', artifact.workspace_id)
+          .where('artifact_id', '=', artifact.artifact_id)
+          .execute();
+        await transaction
+          .deleteFrom('shelf_artifacts')
+          .where('installation_id', '=', artifact.installation_id)
+          .where('workspace_id', '=', artifact.workspace_id)
+          .where('artifact_id', '=', artifact.artifact_id)
+          .executeTakeFirstOrThrow();
+      }
+      return artifacts.length;
+    });
+  }
+
+  async listQueuedContentPurges(limit: number) {
+    const result = await sql<{
+      content_id: string;
+      artifact_id: string;
+      attempts: number;
+    }>`
+      select queue.content_id, queue.artifact_id, queue.attempts
+      from shelf_content_purge_queue as queue
+      where not exists (
+        select 1
+        from shelf_revisions as revision
+        where revision.content_id = queue.content_id
+        union all
+        select 1
+        from shelf_revision_entries as entry
+        where entry.content_id = queue.content_id
+      )
+      order by queue.queued_at asc, queue.content_id asc
+      limit ${limit}
+    `.execute(this.#database);
+    return result.rows;
+  }
+
+  async completeContentPurge(contentId: string): Promise<void> {
+    await this.#database
+      .deleteFrom('shelf_content_purge_queue')
+      .where('content_id', '=', contentId)
+      .execute();
+  }
+
+  async failContentPurge(contentId: string, attemptedAt: Date): Promise<void> {
+    await this.#database
+      .updateTable('shelf_content_purge_queue')
+      .set({ attempts: sql`attempts + 1`, last_attempt_at: attemptedAt })
+      .where('content_id', '=', contentId)
+      .execute();
   }
 }

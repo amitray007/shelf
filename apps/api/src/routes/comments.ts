@@ -24,7 +24,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { type Static, type TSchema, Type } from 'typebox';
 
 import type { ShelfAppDependencies } from '../app.js';
-import { authenticate, authenticateHumanSession } from '../authenticate.js';
+import { authenticate } from '../authenticate.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
 import { createAuthenticatedShareLifecycle } from '../share-lifecycle.js';
 
@@ -142,12 +142,9 @@ const ArtifactPostMutationBodySchema = Type.Union([
   ),
   Type.Object(
     { action: Type.Literal('edit'), body: CommentBodySchema },
-    { additionalProperties: false, description: 'Requires a human dashboard session.' },
+    { additionalProperties: false },
   ),
-  Type.Object(
-    { action: Type.Literal('delete') },
-    { additionalProperties: false, description: 'Requires a human dashboard session.' },
-  ),
+  Type.Object({ action: Type.Literal('delete') }, { additionalProperties: false }),
 ]);
 const ArtifactCommentsParamsSchema = Type.Object(
   {
@@ -723,6 +720,66 @@ export async function registerCommentRoutes(
   );
 
   app.post(
+    '/api/v1/workspaces/:workspaceId/artifacts/:artifactId/comments/threads',
+    {
+      schema: {
+        operationId: 'createModeratorCommentThreadV1',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        params: ArtifactCommentsParamsSchema,
+        body: Type.Object(
+          {
+            shareId: OpaqueShareIdSchema,
+            anchor: CommentAnchorSchema,
+            body: CommentBodySchema,
+            displayName: Type.Optional(DisplayNameSchema),
+          },
+          { additionalProperties: false },
+        ),
+        response: { 201: Type.Ref('CommentThread'), ...errors },
+      },
+    },
+    async (request, reply) => {
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { workspaceId: string; artifactId: string };
+      const body = request.body as {
+        shareId: string;
+        anchor: CommentAnchor;
+        body: string;
+        displayName?: string;
+      };
+      await dependencies.authorizer.authorize({
+        installationId: identity.installationId,
+        workspaceId: params.workspaceId,
+        actorId: identity.actorId,
+        action: PUBLISH_OPERATION,
+      });
+      const share = await dependencies.shareRepository.findShare(body.shareId);
+      if (
+        share === undefined ||
+        share.installationId !== identity.installationId ||
+        share.workspaceId !== params.workspaceId ||
+        share.artifactId !== params.artifactId
+      ) {
+        throw new CommentNotFoundError();
+      }
+      const result = await service.createThread({
+        installationId: identity.installationId,
+        workspaceId: params.workspaceId,
+        shareId: body.shareId,
+        revisionId: body.anchor.revisionId,
+        anchor: body.anchor,
+        authority: {
+          kind: 'moderator',
+          actorId: identity.actorId,
+          ...(body.displayName === undefined ? {} : { displayName: body.displayName }),
+        },
+        body: body.body,
+      });
+      return reply.status(201).send(result);
+    },
+  );
+
+  app.post(
     '/api/v1/workspaces/:workspaceId/artifacts/:artifactId/comments/threads/:threadId/replies',
     {
       schema: {
@@ -829,10 +886,7 @@ export async function registerCommentRoutes(
     async (request) => {
       const params = request.params as { workspaceId: string; artifactId: string; postId: string };
       const body = request.body as Static<typeof ArtifactPostMutationBodySchema>;
-      const identity =
-        'action' in body
-          ? await authenticateHumanSession(request, dependencies.authenticator)
-          : await authenticate(request, dependencies.authenticator);
+      const identity = await authenticate(request, dependencies.authenticator);
       await dependencies.authorizer.authorize({
         installationId: identity.installationId,
         workspaceId: params.workspaceId,

@@ -187,6 +187,7 @@ export const artifact = {
   name: longArtifactName,
   createdAt: '2026-08-15T06:00:00.000Z',
   updatedAt: revision.createdAt,
+  retention: { mode: 'automatic', trashAt: '2026-09-15T07:15:00.000Z' },
   latestRevision: revision,
   paths: {
     artifact: `/api/v1/artifacts/${artifactId}`,
@@ -202,6 +203,7 @@ export const folderArtifact = {
   name: longFolderName,
   createdAt: '2026-08-12T09:00:00.000Z',
   updatedAt: latestFolderRevision.createdAt,
+  retention: { mode: 'automatic', trashAt: '2026-09-14T14:20:00.000Z' },
   latestRevision: latestFolderRevision,
   paths: {
     artifact: `/api/v1/artifacts/${folderArtifactId}`,
@@ -217,6 +219,7 @@ const shortArtifact = {
   name: 'x',
   createdAt: shortRevision.createdAt,
   updatedAt: shortRevision.createdAt,
+  retention: { mode: 'automatic', trashAt: '2026-09-16T08:10:00.000Z' },
   latestRevision: shortRevision,
   paths: {
     artifact: `/api/v1/artifacts/${shortArtifactId}`,
@@ -232,6 +235,7 @@ const jsonArtifact = {
   name: jsonRevision.originalFileName,
   createdAt: '2026-08-10T11:00:00.000Z',
   updatedAt: jsonRevision.createdAt,
+  retention: { mode: 'keep', trashAt: null },
   latestRevision: jsonRevision,
   paths: {
     artifact: `/api/v1/artifacts/${jsonArtifactId}`,
@@ -247,6 +251,7 @@ const archiveArtifact = {
   name: archiveRevision.originalFileName,
   createdAt: archiveRevision.createdAt,
   updatedAt: archiveRevision.createdAt,
+  retention: { mode: 'automatic', trashAt: '2026-09-13T07:45:00.000Z' },
   latestRevision: archiveRevision,
   paths: {
     artifact: `/api/v1/artifacts/${archiveArtifactId}`,
@@ -286,6 +291,10 @@ const paginationArtifacts = paginationRevisions.map(
       name: paginationRevision.originalFileName,
       createdAt: paginationRevision.createdAt,
       updatedAt: paginationRevision.createdAt,
+      retention: {
+        mode: 'automatic',
+        trashAt: `2026-09-${String(index + 1).padStart(2, '0')}T07:00:00.000Z`,
+      },
       latestRevision: paginationRevision,
       paths: {
         artifact: `/api/v1/artifacts/art_${String.fromCharCode(112 + index).repeat(22)}`,

@@ -106,6 +106,16 @@ const router = createBrowserRouter([
         },
       },
       {
+        path: 'w/:workspaceId/trash',
+        lazy: async () => {
+          const [page, routes] = await Promise.all([
+            import('./dashboard/trash-page.js'),
+            import('./dashboard/routes.js'),
+          ]);
+          return { Component: page.TrashPage, loader: routes.trashLoader };
+        },
+      },
+      {
         path: 'w/:workspaceId/access',
         lazy: async () => {
           const [page, routes] = await Promise.all([

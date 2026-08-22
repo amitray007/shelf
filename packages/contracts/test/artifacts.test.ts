@@ -44,6 +44,7 @@ const artifact = {
   name: 'Release notes',
   createdAt: '2026-08-17T12:00:00.000Z',
   updatedAt: '2026-08-17T12:01:00.000Z',
+  retention: { mode: 'automatic', trashAt: '2026-09-16T12:01:00.000Z' },
   latestRevision: revision,
   paths: {
     artifact: '/api/v1/artifacts/art_AAAAAAAAAAAAAAAAAAAAAA',
@@ -131,6 +132,7 @@ describe('artifact catalog contracts', () => {
       artifactId: artifact.artifactId,
       deletedAt: '2026-08-18T12:00:00.000Z',
       recoverableUntil: '2026-09-17T12:00:00.000Z',
+      reason: 'manual',
       revokedShareCount: 2,
     };
 

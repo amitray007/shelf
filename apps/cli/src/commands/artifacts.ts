@@ -4,18 +4,26 @@ import type {
   Artifact,
   ArtifactDeletionResult,
   ArtifactPage,
+  ArtifactRecoveryResult,
   ArtifactRevisionPage,
   RestoreResult,
+  ShareManagementSummary,
+  TrashedArtifact,
+  TrashPage,
 } from '@shelf/contracts';
 
 import {
   deleteArtifact,
   getArtifact,
+  getTrashedArtifact,
   listArtifactRevisions,
   listArtifacts,
+  listTrash,
   recoverArtifact,
   renameArtifact,
+  resolveManagedShare,
   restoreArtifact,
+  setArtifactRetention,
 } from '../client.js';
 import { resolveRemoteContext, resolveWorkspaceContext, transportFields } from '../context.js';
 import { usageFailure } from '../output.js';
@@ -55,6 +63,21 @@ export interface DeleteArtifactCommandOptions extends ShowArtifactCommandOptions
 }
 export interface RecoverArtifactCommandOptions extends ShowArtifactCommandOptions {
   idempotencyKey?: string;
+}
+
+export interface SetArtifactRetentionCommandOptions extends ShowArtifactCommandOptions {
+  workspace?: string;
+  mode: string;
+}
+
+export interface ListTrashCommandOptions extends ListArtifactsCommandOptions {}
+
+export interface ResolveArtifactCommandOptions {
+  profile?: string;
+  url?: string;
+  workspace?: string;
+  from: string;
+  allowInsecureLoopback?: boolean;
 }
 
 export interface RestoreArtifactCommandOptions extends ShowArtifactCommandOptions {
@@ -206,7 +229,7 @@ export async function executeDeleteArtifact(
 export async function executeRecoverArtifact(
   options: RecoverArtifactCommandOptions,
   runtime: CliRuntime,
-): Promise<Artifact> {
+): Promise<ArtifactRecoveryResult> {
   const recoveryIdempotencyKey = idempotencyKey(
     options.idempotencyKey ?? `artifact-recover-${randomUUID()}`,
   );
@@ -216,6 +239,91 @@ export async function executeRecoverArtifact(
       ...transportFields(context),
       artifactId: artifactId(options.artifact),
       idempotencyKey: recoveryIdempotencyKey,
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
+export async function executeSetArtifactRetention(
+  options: SetArtifactRetentionCommandOptions,
+  runtime: CliRuntime,
+): Promise<Artifact> {
+  if (options.mode !== 'automatic' && options.mode !== 'keep') {
+    throw usageFailure('Artifact retention mode must be automatic or keep.');
+  }
+  const context = await resolveWorkspaceContext(options, runtime);
+  return setArtifactRetention(
+    {
+      ...transportFields(context),
+      workspaceId: context.workspaceId,
+      artifactId: artifactId(options.artifact),
+      mode: options.mode,
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
+export async function executeListTrash(
+  options: ListTrashCommandOptions,
+  runtime: CliRuntime,
+): Promise<TrashPage> {
+  const context = await resolveWorkspaceContext(options, runtime);
+  return listTrash(
+    {
+      ...transportFields(context),
+      workspaceId: context.workspaceId,
+      limit: pageLimit(options.limit),
+      ...(options.search === undefined ? {} : { search: options.search }),
+      ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
+export async function executeShowTrashedArtifact(
+  options: ShowArtifactCommandOptions,
+  runtime: CliRuntime,
+): Promise<TrashedArtifact> {
+  const context = await resolveRemoteContext(options, runtime);
+  return getTrashedArtifact(
+    {
+      ...transportFields(context),
+      artifactId: artifactId(options.artifact),
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
+function shareSelector(value: string): { shareId: string } | { publicCode: string } {
+  if (/^shr_[A-Za-z0-9_-]{22}$/u.test(value)) return { shareId: value };
+  if (/^[A-Za-z0-9_-]{12}$/u.test(value)) return { publicCode: value };
+  let url: URL;
+  try {
+    url = new URL(value, 'https://shelf.invalid');
+  } catch {
+    throw usageFailure('The share ID or link is invalid.');
+  }
+  const match = /^\/s\/([^/]+)$/u.exec(url.pathname);
+  const selector = match?.[1];
+  if (selector !== undefined && /^shr_[A-Za-z0-9_-]{22}$/u.test(selector)) {
+    return { shareId: selector };
+  }
+  if (selector !== undefined && /^[A-Za-z0-9_-]{12}$/u.test(selector)) {
+    return { publicCode: selector };
+  }
+  throw usageFailure('The share ID or link is invalid.');
+}
+
+export async function executeResolveArtifact(
+  options: ResolveArtifactCommandOptions,
+  runtime: CliRuntime,
+): Promise<ShareManagementSummary> {
+  const context = await resolveWorkspaceContext(options, runtime);
+  return resolveManagedShare(
+    {
+      ...transportFields(context),
+      workspaceId: context.workspaceId,
+      ...shareSelector(options.from),
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );

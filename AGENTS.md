@@ -107,11 +107,17 @@ shelf profiles remove staging --yes
 | Share public, short URL | `shelf shares create --artifact art_... --access public --expires-in 24hr --idempotency-key k` |
 | Get the two prepared Latest links | `shelf shares defaults --artifact art_...` |
 | Find something I published earlier | `shelf artifacts list --search "notes" --sort updated` |
+| Resolve an artifact from a share link | `shelf artifacts resolve --from '<share-link>'` |
 | Inspect one artifact | `shelf artifacts show --artifact art_...` |
 | See the revision history | `shelf artifacts history --artifact art_...` |
+| Keep an important artifact | `shelf artifacts retention set --artifact art_... --mode keep` |
+| List recoverable Trash | `shelf trash list --search "notes"` |
 | Poll which artifacts have new discussion | `shelf comments summaries --artifact art_... --artifact art_...` |
 | Read review feedback | `shelf comments list --artifact art_...` |
+| Start a review thread | `shelf comments create --artifact art_... --share shr_... --revision rev_... --body "..."` |
 | Reply to feedback | `shelf comments reply --artifact art_... --thread <thread-id> --body "..."` |
+| Edit my comment | `shelf comments edit --artifact art_... --post <post-id> --body "..."` |
+| Delete my comment | `shelf comments delete --artifact art_... --post <post-id>` |
 | Close out a thread | `shelf comments resolve --artifact art_... --thread <thread-id>` |
 | Roll back to an old revision | `shelf artifacts restore --artifact art_... --revision rev_... --idempotency-key k` |
 | Stop sharing | `shelf shares revoke --share shr_...` |
@@ -175,6 +181,10 @@ shelf shares create --artifact art_... --revision rev_... \
 
 With `--share` and no finite or session policy, Shelf returns the prepared permanent default for `--access` (protected when omitted) rather than creating a new link. Adding `--expires-in`, `--expires-at`, or `--max-sessions` creates a custom link instead. `--expires-in` and `--expires-at` conflict; use one.
 
+Prepared default links do not keep an automatic-retention artifact active. Any non-default custom
+share does until it is revoked, expires, or exhausts its Protected session budget. If no custom
+share remains, the artifact receives a 30-day grace period before Trash.
+
 `--expires-in` presets: `never`, `5m`, `30m`, `2hr`, `6hr`, `24hr`, `3d`, `7d`, `15d`, `30d`. `--max-sessions` is 1 to 1000000 and applies to protected links only.
 
 Share policy flags without `--share` are a usage error on `shelf publish`.
@@ -191,13 +201,17 @@ shelf shares comments --share shr_... --comments shared
 shelf artifacts list --search "Q3 report" --sort updated --order desc --limit 20
 ```
 
-`--search` matches title, description, filename, or artifact name. `--sort` is `created` or `updated` (default `updated`), `--order` is `asc` or `desc` (default `desc`). Page with `--cursor` using the `nextCursor` from the previous response.
+`--search` matches title, description, filename, artifact name, or an exact/partial artifact ID. `--sort` is `created` or `updated` (default `updated`), `--order` is `asc` or `desc` (default `desc`). Page with `--cursor` using the `nextCursor` from the previous response.
 
 ```sh
 shelf artifacts show --artifact art_...
 shelf artifacts history --artifact art_... --order newest --limit 50
+shelf artifacts resolve --from 'https://shelf.example/s/shr_...#capability'
 shelf revisions compare --base rev_... --target rev_...
 ```
+
+`artifacts resolve` also accepts a share ID or Public link. A Protected fragment is parsed locally
+and is never sent to the server.
 
 `shelf revisions compare` diffs two revisions without reading content bytes.
 
@@ -232,15 +246,21 @@ Without `--revision`, line anchors are evaluated against the latest revision. Re
 Act as moderator:
 
 ```sh
+shelf comments create --artifact art_... --share shr_... --revision rev_... \
+  --body "Please revisit this section."
 shelf comments reply --artifact art_... --thread <thread-id> \
   --body "Fixed in the next revision." --display-name "Release bot"
+shelf comments edit    --artifact art_... --post <post-id> --body "Updated reply"
+shelf comments delete  --artifact art_... --post <post-id>
 shelf comments resolve --artifact art_... --thread <thread-id>
 shelf comments reopen  --artifact art_... --thread <thread-id>
 shelf comments hide    --artifact art_... --post <post-id>
 shelf comments unhide  --artifact art_... --post <post-id>
 ```
 
-Reply bodies cap at 20000 characters. `--display-name` is 1 to 128 characters. Hiding changes visibility without rewriting the visitor's post.
+Comment bodies cap at 20000 characters. `--display-name` is 1 to 128 characters. An authenticated
+actor may edit or delete only its own posts. Hiding changes visibility without rewriting a
+visitor's post and remains a separate moderation operation.
 
 ### Clean up
 
@@ -251,6 +271,16 @@ shelf artifacts recover --artifact art_...
 ```
 
 Deletion is soft. It revokes the artifact's active shares and leaves the artifact recoverable for 30 days. After that window, `recover` fails with `ARTIFACT_RECOVERY_EXPIRED` at exit `5`.
+
+Automatic retention uses the same Trash. New artifacts receive 30 days after their last active
+custom share; prepared defaults do not count. Use `shelf artifacts retention set --artifact
+art_... --mode keep` for important long-lived artifacts, or `--mode automatic` to return them to
+cleanup. List and search recoverable artifacts with `shelf trash list`, inspect an exact ID with
+`shelf trash show`, and recover with `shelf trash recover`.
+
+Recovery creates a seven-day Protected recovery link and resets retention to automatic. If no
+normal custom share is created before that lease ends, the artifact returns to Trash. Creating a
+normal custom share for an artifact already in Trash recovers it automatically.
 
 ### Rename and restore
 

@@ -91,6 +91,16 @@ describe('LocalContentStorage', () => {
     ).resolves.toBe('shelf');
   });
 
+  it('deletes sealed content idempotently for retention cleanup', async () => {
+    const { storage } = await fixture();
+    const staged = await storage.stage(chunks('expired'), {});
+    const sealed = await storage.seal(staged, descriptor('expired'));
+
+    await storage.deleteSealed(sealed.contentId);
+    await expect(storage.read(sealed, {})).rejects.toThrow();
+    await expect(storage.deleteSealed(sealed.contentId)).resolves.toBeUndefined();
+  });
+
   it('removes partial staging when the caller cancels', async () => {
     const { root, storage } = await fixture();
     const controller = new AbortController();

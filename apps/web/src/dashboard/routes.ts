@@ -8,6 +8,7 @@ import type {
   DashboardSession,
   FolderEntry,
   SharePage,
+  TrashPage,
 } from '@shelf/contracts';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { redirect } from 'react-router';
@@ -24,6 +25,7 @@ import {
   loadDashboardSession,
   loadFolderEntries,
   loadRevisionBytes,
+  loadTrash,
   loadWorkspaceShares,
   signIn,
 } from './api.js';
@@ -126,6 +128,14 @@ export function artifactsLoader({ params, request }: LoaderFunctionArgs): Promis
   return withSessionRedirect(request, () =>
     loadArtifacts(workspaceId, cursor, request.signal, sort, order, search),
   );
+}
+
+export function trashLoader({ params, request }: LoaderFunctionArgs): Promise<TrashPage> {
+  const workspaceId = params.workspaceId ?? '';
+  const query = new URL(request.url).searchParams;
+  const cursor = query.get('cursor') ?? undefined;
+  const search = query.get('search')?.trim() || undefined;
+  return withSessionRedirect(request, () => loadTrash(workspaceId, cursor, request.signal, search));
 }
 
 export function accessLoader({

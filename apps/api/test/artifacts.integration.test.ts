@@ -361,6 +361,56 @@ describe('artifact catalog HTTP API', () => {
     expect(tracked.mutations).toBe(mutationsBeforeRestore);
   });
 
+  it('changes retention and exposes recoverable Trash with a seven-day recovery link', async () => {
+    const app = await fixture();
+    const created = await publish(app, 'retained', 'retained.txt', 'retention-create');
+    const artifactId = created.json().artifactId as string;
+    const kept = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/retention`,
+      headers: { authorization: 'Bearer test' },
+      payload: { mode: 'keep' },
+    });
+    expect(kept.statusCode, kept.body).toBe(200);
+    expect(kept.json().retention).toEqual({ mode: 'keep', trashAt: null });
+
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/artifacts/${artifactId}`,
+      headers: { authorization: 'Bearer test' },
+    });
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    expect(deleted.json()).toMatchObject({ artifactId, reason: 'manual' });
+
+    const trash = await app.inject({
+      method: 'GET',
+      url: `/api/v1/workspaces/workspace-main/trash?search=${artifactId}`,
+      headers: { authorization: 'Bearer test' },
+    });
+    expect(trash.statusCode, trash.body).toBe(200);
+    expect(trash.json().items).toMatchObject([
+      { artifact: { artifactId }, reason: 'manual', purgeAt: deleted.json().recoverableUntil },
+    ]);
+
+    const recovered = await app.inject({
+      method: 'POST',
+      url: `/api/v1/artifacts/${artifactId}/recovery`,
+      headers: { authorization: 'Bearer test', 'idempotency-key': 'retention-recover' },
+    });
+    expect(recovered.statusCode, recovered.body).toBe(200);
+    expect(recovered.json()).toMatchObject({
+      artifact: {
+        artifactId,
+        retention: { mode: 'automatic', trashAt: expect.any(String) },
+      },
+      recoveryShare: {
+        artifactId,
+        accessType: 'protected',
+        expiresAt: expect.any(String),
+      },
+    });
+  });
+
   it('uses revision.read authorization for every catalog surface', async () => {
     const root = await mkdtemp(join(tmpdir(), 'shelf-artifact-denied-'));
     roots.push(root);

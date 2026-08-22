@@ -185,6 +185,31 @@ async function api(request, response, url) {
     });
     return;
   }
+  if (path === `/api/v1/workspaces/${workspaceId}/trash`) {
+    const search = url.searchParams.get('search')?.toLowerCase();
+    const items = artifactPage.items
+      .filter((artifact) => deletedArtifacts.has(deletedArtifactKey(request, artifact.artifactId)))
+      .filter(
+        (artifact) =>
+          search === undefined ||
+          [
+            artifact.artifactId,
+            artifact.name,
+            artifact.latestRevision.kind === 'file'
+              ? artifact.latestRevision.originalFileName
+              : artifact.latestRevision.rootName,
+          ].some((value) => value.toLowerCase().includes(search)),
+      )
+      .map((artifact) => ({
+        apiVersion: 'v1',
+        artifact,
+        deletedAt: '2026-08-18T12:00:00.000Z',
+        purgeAt: '2026-09-17T12:00:00.000Z',
+        reason: 'manual',
+      }));
+    json(response, 200, { apiVersion: 'v1', items, nextCursor: null });
+    return;
+  }
   const createdWorkspaceArtifacts = /^\/api\/v1\/workspaces\/([^/]+)\/artifacts$/u.exec(path);
   if (
     createdWorkspaceArtifacts !== null &&
@@ -210,7 +235,33 @@ async function api(request, response, url) {
       return;
     }
     deletedArtifacts.delete(deletionKey);
-    json(response, 200, artifact);
+    json(response, 200, {
+      apiVersion: 'v1',
+      artifact: {
+        ...artifact,
+        retention: { mode: 'automatic', trashAt: '2026-08-25T12:00:00.000Z' },
+      },
+      recoveryShare: {
+        apiVersion: 'v1',
+        workspaceId,
+        artifactId: requestedArtifactId,
+        shareId: `shr_${'r'.repeat(22)}`,
+        visibility: 'unlisted',
+        accessType: 'protected',
+        commentPolicy: 'off',
+        target: { mode: 'latest' },
+        createdAt: '2026-08-18T12:00:00.000Z',
+        expiresAt: '2026-08-25T12:00:00.000Z',
+        maxSessions: null,
+        sessionsUsed: 0,
+        sessionsRemaining: null,
+        revokedAt: null,
+        status: 'active',
+        url: `/s/shr_${'r'.repeat(22)}#${'c'.repeat(32)}`,
+        requestId: 'request-browser-recovery',
+        replayed: false,
+      },
+    });
     return;
   }
   const deleteMatch = /^\/api\/v1\/artifacts\/(art_[A-Za-z0-9_-]{22})$/u.exec(path);
@@ -234,6 +285,7 @@ async function api(request, response, url) {
       artifactId: requestedArtifactId,
       deletedAt: '2026-08-18T12:00:00.000Z',
       recoverableUntil: '2026-09-17T12:00:00.000Z',
+      reason: 'manual',
       revokedShareCount: requestedArtifactId === artifactPage.items[0]?.artifactId ? 2 : 0,
     });
     return;

@@ -34,6 +34,7 @@ export class MemoryArtifactDeletionRepository implements ArtifactDeletionReposit
           artifact: state.artifact,
           deletedAt: state.deletedAt,
           recoverableUntil: state.recoverableUntil,
+          deletionReason: state.deletionReason,
         };
   }
 
@@ -44,6 +45,7 @@ export class MemoryArtifactDeletionRepository implements ArtifactDeletionReposit
     actorId: string;
     deletedAt: string;
     recoverableUntil: string;
+    reason: 'manual' | 'retention';
   }): Promise<DeleteArtifactOutcome> {
     const state = this.#artifacts.findArtifactDeletionState(request.artifactId);
     if (
@@ -62,6 +64,7 @@ export class MemoryArtifactDeletionRepository implements ArtifactDeletionReposit
         status: 'already-deleted',
         deletedAt: state.deletedAt,
         recoverableUntil: state.recoverableUntil,
+        reason: state.deletionReason ?? request.reason,
         revokedShareCount: state.revokedShareCount,
       };
     }

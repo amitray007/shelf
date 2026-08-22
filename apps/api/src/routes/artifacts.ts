@@ -1,20 +1,30 @@
+import { createHash } from 'node:crypto';
+
 import {
   ArtifactDeletionResultSchema,
   ArtifactNameSchema,
   ArtifactPageSchema,
+  ArtifactRetentionModeSchema,
   ArtifactRevisionPageSchema,
   ArtifactSchema,
   OpaqueArtifactIdSchema,
   OpaqueRevisionIdSchema,
   RestoreResultSchema,
+  TrashedArtifactSchema,
+  TrashPageSchema,
 } from '@shelf/contracts';
-import { createArtifactCatalogService, createArtifactLifecycleService } from '@shelf/core';
+import {
+  createArtifactCatalogService,
+  createArtifactLifecycleService,
+  createArtifactRetentionService,
+} from '@shelf/core';
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
 
 import type { ShelfAppDependencies } from '../app.js';
 import { authenticate } from '../authenticate.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
+import { createAuthenticatedShareLifecycle } from '../share-lifecycle.js';
 
 const ArtifactParamsSchema = Type.Object(
   { artifactId: OpaqueArtifactIdSchema },
@@ -41,6 +51,20 @@ const RenameArtifactBodySchema = Type.Object(
 
 const RestoreArtifactBodySchema = Type.Object(
   { sourceRevisionId: OpaqueRevisionIdSchema },
+  { additionalProperties: false },
+);
+
+const ArtifactRetentionBodySchema = Type.Object(
+  { mode: ArtifactRetentionModeSchema },
+  { additionalProperties: false },
+);
+
+const TrashPageQuerySchema = Type.Object(
+  {
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 2048 })),
+    search: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  },
   { additionalProperties: false },
 );
 
@@ -96,6 +120,93 @@ export async function registerArtifactRoutes(
     deletions: dependencies.artifactDeletionRepository,
     ...(dependencies.artifactClock === undefined ? {} : { clock: dependencies.artifactClock }),
   });
+  const retention = createArtifactRetentionService({
+    authorizer: dependencies.authorizer,
+    artifacts: dependencies.revisionRepository,
+    ...(dependencies.artifactClock === undefined ? {} : { clock: dependencies.artifactClock }),
+  });
+  const shares = createAuthenticatedShareLifecycle(dependencies);
+
+  app.patch(
+    '/api/v1/workspaces/:workspaceId/artifacts/:artifactId/retention',
+    {
+      schema: {
+        operationId: 'setArtifactRetentionV1',
+        summary: 'Keep an artifact or return it to automatic Trash retention',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        tags: ['artifacts'],
+        params: WorkspaceArtifactParamsSchema,
+        body: ArtifactRetentionBodySchema,
+        response: { 200: ArtifactSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { workspaceId: string; artifactId: string };
+      const body = request.body as { mode: 'automatic' | 'keep' };
+      return retention.setRetention({
+        installationId: identity.installationId,
+        workspaceId: params.workspaceId,
+        actorId: identity.actorId,
+        artifactId: params.artifactId,
+        mode: body.mode,
+        signal: requestCancellationSignal(request, reply),
+      });
+    },
+  );
+
+  app.get(
+    '/api/v1/workspaces/:workspaceId/trash',
+    {
+      schema: {
+        operationId: 'listTrashV1',
+        summary: 'List recoverable artifacts in Trash',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        tags: ['artifacts'],
+        params: WorkspaceParamsSchema,
+        querystring: TrashPageQuerySchema,
+        response: { 200: TrashPageSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { workspaceId: string };
+      const query = request.query as { limit?: number; cursor?: string; search?: string };
+      return retention.listTrash({
+        installationId: identity.installationId,
+        workspaceId: params.workspaceId,
+        actorId: identity.actorId,
+        limit: query.limit ?? 20,
+        ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+        ...(query.search === undefined ? {} : { search: query.search }),
+        signal: requestCancellationSignal(request, reply),
+      });
+    },
+  );
+
+  app.get(
+    '/api/v1/trash/:artifactId',
+    {
+      schema: {
+        operationId: 'getTrashedArtifactV1',
+        summary: 'Get one recoverable artifact from Trash by artifact ID',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        tags: ['artifacts'],
+        params: ArtifactParamsSchema,
+        response: { 200: TrashedArtifactSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { artifactId: string };
+      return retention.getTrash({
+        installationId: identity.installationId,
+        actorId: identity.actorId,
+        artifactId: params.artifactId,
+        signal: requestCancellationSignal(request, reply),
+      });
+    },
+  );
 
   app.delete(
     '/api/v1/artifacts/:artifactId',
@@ -131,20 +242,41 @@ export async function registerArtifactRoutes(
         tags: ['artifacts'],
         params: ArtifactParamsSchema,
         headers: IdempotencyHeadersSchema,
-        response: { 200: ArtifactSchema, 410: Type.Ref('ErrorEnvelope'), ...errorResponses },
+        response: {
+          200: Type.Ref('ArtifactRecoveryResult'),
+          410: Type.Ref('ErrorEnvelope'),
+          ...errorResponses,
+        },
       },
     },
     async (request, reply) => {
       const identity = await authenticate(request, dependencies.authenticator);
       const params = request.params as { artifactId: string };
       const headers = request.headers as { 'idempotency-key': string };
-      return lifecycle.recoverArtifact({
+      const signal = requestCancellationSignal(request, reply);
+      const artifact = await lifecycle.recoverArtifact({
         installationId: identity.installationId,
         actorId: identity.actorId,
         artifactId: params.artifactId,
         idempotencyKey: headers['idempotency-key'],
-        signal: requestCancellationSignal(request, reply),
+        signal,
       });
+      const recoveryShare = await shares.createShare({
+        installationId: identity.installationId,
+        workspaceId: artifact.workspaceId,
+        actorId: identity.actorId,
+        artifactId: artifact.artifactId,
+        accessType: 'protected',
+        target: { mode: 'latest' },
+        expiresIn: '7d',
+        purpose: 'artifact-recovery',
+        idempotencyKey: `recovery-lease-${createHash('sha256')
+          .update(headers['idempotency-key'])
+          .digest('hex')}`,
+        requestId: request.id,
+        signal,
+      });
+      return { apiVersion: 'v1', artifact, recoveryShare };
     },
   );
 

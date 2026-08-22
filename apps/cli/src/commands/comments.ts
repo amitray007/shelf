@@ -1,8 +1,10 @@
 import type { CommentPost, CommentSummary, CommentThread } from '@shelf/contracts';
 
 import {
+  createArtifactComment,
   listArtifactComments,
   moderateArtifactCommentPost,
+  mutateOwnArtifactCommentPost,
   replyArtifactComment,
   setArtifactCommentStatus,
   summarizeArtifactComments,
@@ -31,12 +33,28 @@ export interface ReplyCommentCommandOptions extends ArtifactCommentsCommandOptio
   displayName?: string;
 }
 
+export interface CreateCommentCommandOptions extends ArtifactCommentsCommandOptions {
+  share: string;
+  revision: string;
+  body: string;
+  displayName?: string;
+  path?: string;
+  startLine?: string;
+  endLine?: string;
+  quotedText?: string;
+  contentHash?: string;
+}
+
 export interface ThreadStatusCommandOptions extends ArtifactCommentsCommandOptions {
   thread: string;
 }
 
 export interface PostModerationCommandOptions extends ArtifactCommentsCommandOptions {
   post: string;
+}
+
+export interface EditCommentCommandOptions extends PostModerationCommandOptions {
+  body: string;
 }
 
 /** Matches the summarizeCommentsV1 request schema batch bound in apps/api/src/routes/comments.ts. */
@@ -59,6 +77,21 @@ function revisionId(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
   if (!/^rev_[A-Za-z0-9_-]{22}$/u.test(value)) throw usageFailure('The revision ID is invalid.');
   return value;
+}
+
+function shareId(value: string): string {
+  if (!/^shr_[A-Za-z0-9_-]{22}$/u.test(value)) throw usageFailure('The share ID is invalid.');
+  return value;
+}
+
+function line(value: string | undefined, label: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (!/^\d+$/u.test(value)) throw usageFailure(`The ${label} must be a positive integer.`);
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw usageFailure(`The ${label} must be a positive integer.`);
+  }
+  return parsed;
 }
 
 function hasControlCharacter(value: string): boolean {
@@ -157,6 +190,39 @@ export async function executeReplyComment(
   );
 }
 
+export async function executeCreateComment(
+  options: CreateCommentCommandOptions,
+  runtime: CliRuntime,
+): Promise<CommentThread> {
+  const selectedRevision = revisionId(options.revision) as string;
+  const startLine = line(options.startLine, 'start line');
+  const endLine = line(options.endLine, 'end line');
+  if ((startLine === undefined) !== (endLine === undefined)) {
+    throw usageFailure('--start-line and --end-line must be supplied together.');
+  }
+  if (startLine !== undefined && endLine !== undefined && startLine > endLine) {
+    throw usageFailure('The start line cannot be after the end line.');
+  }
+  const name = displayName(options.displayName);
+  return createArtifactComment(
+    {
+      ...(await transport(options, runtime)),
+      shareId: shareId(options.share),
+      anchor: {
+        revisionId: selectedRevision,
+        kind: startLine === undefined ? 'file' : 'range',
+        ...(options.path === undefined ? {} : { path: options.path }),
+        ...(startLine === undefined ? {} : { startLine, endLine: endLine as number }),
+        ...(options.quotedText === undefined ? {} : { quotedText: options.quotedText }),
+        ...(options.contentHash === undefined ? {} : { contentHash: options.contentHash }),
+      },
+      body: body(options.body),
+      ...(name === undefined ? {} : { displayName: name }),
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
 export async function executeCommentSummaries(
   options: CommentSummariesCommandOptions,
   runtime: CliRuntime,
@@ -229,4 +295,33 @@ export function executeUnhideComment(
   runtime: CliRuntime,
 ): Promise<CommentPost> {
   return executePostModeration(options, 'unhide', runtime);
+}
+
+export async function executeEditComment(
+  options: EditCommentCommandOptions,
+  runtime: CliRuntime,
+): Promise<CommentPost> {
+  return mutateOwnArtifactCommentPost(
+    {
+      ...(await transport(options, runtime)),
+      postId: commentId(options.post, 'post'),
+      action: 'edit',
+      body: body(options.body),
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
+export async function executeDeleteComment(
+  options: PostModerationCommandOptions,
+  runtime: CliRuntime,
+): Promise<CommentPost> {
+  return mutateOwnArtifactCommentPost(
+    {
+      ...(await transport(options, runtime)),
+      postId: commentId(options.post, 'post'),
+      action: 'delete',
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
 }

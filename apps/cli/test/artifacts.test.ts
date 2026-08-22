@@ -40,12 +40,46 @@ const artifact = {
   name: 'Release notes',
   createdAt: '2026-08-17T12:00:00.000Z',
   updatedAt: '2026-08-17T12:01:00.000Z',
+  retention: { mode: 'automatic', trashAt: '2026-09-16T12:01:00.000Z' },
   latestRevision: revision,
   paths: {
     artifact: '/api/v1/artifacts/art_AAAAAAAAAAAAAAAAAAAAAA',
     revisions: '/api/v1/artifacts/art_AAAAAAAAAAAAAAAAAAAAAA/revisions',
   },
 };
+
+const recoveryResult = {
+  apiVersion: 'v1',
+  artifact,
+  recoveryShare: {
+    apiVersion: 'v1',
+    workspaceId: artifact.workspaceId,
+    artifactId: artifact.artifactId,
+    shareId: `shr_${'d'.repeat(22)}`,
+    visibility: 'unlisted',
+    accessType: 'protected',
+    commentPolicy: 'off',
+    target: { mode: 'latest' },
+    createdAt: '2026-08-18T12:00:00.000Z',
+    expiresAt: '2026-08-25T12:00:00.000Z',
+    maxSessions: null,
+    sessionsUsed: 0,
+    sessionsRemaining: null,
+    revokedAt: null,
+    status: 'active',
+    url: `/s/shr_${'d'.repeat(22)}#${'e'.repeat(32)}`,
+    requestId: 'request-recovery',
+    replayed: false,
+  },
+};
+
+const shareSummary = {
+  ...recoveryResult.recoveryShare,
+  requestId: undefined,
+  replayed: undefined,
+};
+delete (shareSummary as { requestId?: string }).requestId;
+delete (shareSummary as { replayed?: boolean }).replayed;
 
 function capture() {
   let value = '';
@@ -124,6 +158,111 @@ describe('shelf artifacts', () => {
     expect(exitCode).toBe(2);
     expect(JSON.parse(stderr.value())).toMatchObject({ error: { code: 'INVALID_REQUEST' } });
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('sets artifact retention through workspace context', async () => {
+    const kept = { ...artifact, retention: { mode: 'keep', trashAt: null } };
+    const stdout = capture();
+    const fetch = vi.fn(async () => Response.json(kept));
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'artifacts',
+        'retention',
+        'set',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--artifact',
+        artifact.artifactId,
+        '--mode',
+        'keep',
+      ],
+      {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout: stdout.write,
+        stderr() {},
+        fetch,
+      },
+    );
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout.value())).toEqual(kept);
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      `https://shelf.example/api/v1/workspaces/workspace-main/artifacts/${artifact.artifactId}/retention`,
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'PATCH',
+      body: JSON.stringify({ mode: 'keep' }),
+    });
+  });
+
+  it('lists Trash and resolves a Protected link without sending its fragment', async () => {
+    const trash = {
+      apiVersion: 'v1',
+      items: [
+        {
+          apiVersion: 'v1',
+          artifact,
+          deletedAt: '2026-08-18T12:00:00.000Z',
+          purgeAt: '2026-09-17T12:00:00.000Z',
+          reason: 'retention',
+        },
+      ],
+      nextCursor: null,
+    };
+    const stdout = capture();
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json(trash))
+      .mockResolvedValueOnce(Response.json(shareSummary));
+    const runtime = {
+      env: { SHELF_TOKEN: 'secret-token' },
+      stdout: stdout.write,
+      stderr() {},
+      fetch,
+    };
+    expect(
+      await runCli(
+        [
+          'node',
+          'shelf',
+          'trash',
+          'list',
+          '--url',
+          'https://shelf.example',
+          '--workspace',
+          'workspace-main',
+          '--search',
+          artifact.artifactId,
+        ],
+        runtime,
+      ),
+    ).toBe(0);
+    expect(JSON.parse(stdout.value())).toEqual(trash);
+    const protectedUrl = `https://elsewhere.example${recoveryResult.recoveryShare.url}`;
+    expect(
+      await runCli(
+        [
+          'node',
+          'shelf',
+          'artifacts',
+          'resolve',
+          '--url',
+          'https://shelf.example',
+          '--workspace',
+          'workspace-main',
+          '--from',
+          protectedUrl,
+        ],
+        { ...runtime, stdout() {} },
+      ),
+    ).toBe(0);
+    expect(fetch.mock.calls[1]?.[0].toString()).toBe(
+      `https://shelf.example/api/v1/workspaces/workspace-main/shares/resolve?shareId=${recoveryResult.recoveryShare.shareId}`,
+    );
+    expect(fetch.mock.calls[1]?.[0].toString()).not.toContain('#');
   });
 
   it('downloads exact immutable revision bytes to an explicit new path', async () => {
@@ -494,6 +633,7 @@ describe('shelf artifacts', () => {
       artifactId: artifact.artifactId,
       deletedAt: '2026-08-18T12:00:00.000Z',
       recoverableUntil: '2026-09-17T12:00:00.000Z',
+      reason: 'manual',
       revokedShareCount: 2,
     };
     const stdout = capture();
@@ -560,7 +700,7 @@ describe('shelf artifacts', () => {
 
   it('recovers an artifact through the shelf command', async () => {
     const stdout = capture();
-    const fetch = vi.fn(async () => Response.json(artifact));
+    const fetch = vi.fn(async () => Response.json(recoveryResult));
 
     const exitCode = await runCli(
       [
@@ -584,7 +724,7 @@ describe('shelf artifacts', () => {
     );
 
     expect(exitCode).toBe(0);
-    expect(JSON.parse(stdout.value())).toEqual(artifact);
+    expect(JSON.parse(stdout.value())).toEqual(recoveryResult);
     expect(fetch.mock.calls[0]?.[0].toString()).toBe(
       `https://shelf.example/api/v1/artifacts/${artifact.artifactId}/recovery`,
     );
@@ -595,7 +735,7 @@ describe('shelf artifacts', () => {
   });
 
   it('generates one recovery idempotency key when none is supplied', async () => {
-    const fetch = vi.fn(async () => Response.json(artifact));
+    const fetch = vi.fn(async () => Response.json(recoveryResult));
 
     const exitCode = await runCli(
       [

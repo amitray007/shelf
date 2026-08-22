@@ -344,8 +344,8 @@ describe('comment service', () => {
       canReopen: false,
     });
     expect(moderatorThreads.items[0]?.posts[0]?.permissions).toEqual({
-      canEdit: true,
-      canDelete: true,
+      canEdit: false,
+      canDelete: false,
       canModerate: true,
     });
   });
@@ -547,7 +547,7 @@ describe('comment service', () => {
         authority: { kind: 'moderator', actorId: 'actor-moderator' },
         body: 'moderator edit',
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    ).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
     await expect(
       h.service.editPost({
         installationId: 'installation-main',
@@ -678,7 +678,7 @@ describe('comment service', () => {
       shareId,
       revisionId,
       anchor,
-      authority: { kind: 'visitor', visitorKey: 'visitor_digest_a_123456', displayName: 'A' },
+      authority: { kind: 'moderator', actorId: 'actor-moderator' },
       body: 'starter',
     });
     const reply = (displayName?: string) =>
@@ -735,7 +735,7 @@ describe('comment service', () => {
       shareId,
       revisionId,
       anchor,
-      authority: { kind: 'visitor', visitorKey: 'visitor_digest_a_123456', displayName: 'A' },
+      authority: { kind: 'moderator', actorId: 'actor-moderator' },
       body: 'note',
     });
     h.comments.editPost = async () => {

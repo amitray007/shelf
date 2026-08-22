@@ -7,6 +7,7 @@ import {
   PUBLISH_OPERATION,
   PUBLISHER_METADATA_LIMITS,
 } from './publish.js';
+import { ShareCreateResultSchema } from './shares.js';
 
 const IsoInstantSchema = Type.String({
   pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$',
@@ -19,6 +20,19 @@ export const ArtifactNameSchema = Type.String({
   maxLength: 255,
   pattern: '^(?!\\s*$)[^\\u0000-\\u001F\\u007F]+$',
 });
+
+export const ArtifactRetentionModeSchema = Type.Union(
+  [Type.Literal('automatic'), Type.Literal('keep')],
+  { $id: 'ArtifactRetentionMode' },
+);
+
+export const ArtifactRetentionSchema = Type.Object(
+  {
+    mode: ArtifactRetentionModeSchema,
+    trashAt: Type.Union([IsoInstantSchema, Type.Null()]),
+  },
+  { additionalProperties: false, $id: 'ArtifactRetention' },
+);
 
 export const RESTORE_OPERATION = 'revision.restore' as const;
 export const RECOVER_OPERATION = 'artifact.recover' as const;
@@ -121,6 +135,7 @@ export const ArtifactSchema = Type.Object(
     name: ArtifactNameSchema,
     createdAt: IsoInstantSchema,
     updatedAt: IsoInstantSchema,
+    retention: ArtifactRetentionSchema,
     latestRevision: ArtifactRevisionSchema,
     paths: Type.Object(
       {
@@ -160,9 +175,39 @@ export const ArtifactDeletionResultSchema = Type.Object(
     artifactId: OpaqueArtifactIdSchema,
     deletedAt: IsoInstantSchema,
     recoverableUntil: IsoInstantSchema,
+    reason: Type.Union([Type.Literal('manual'), Type.Literal('retention')]),
     revokedShareCount: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
   },
   { additionalProperties: false, $id: 'ArtifactDeletionResult' },
+);
+
+export const TrashedArtifactSchema = Type.Object(
+  {
+    apiVersion: Type.Literal('v1'),
+    artifact: ArtifactSchema,
+    deletedAt: IsoInstantSchema,
+    purgeAt: IsoInstantSchema,
+    reason: Type.Union([Type.Literal('manual'), Type.Literal('retention')]),
+  },
+  { additionalProperties: false, $id: 'TrashedArtifact' },
+);
+
+export const TrashPageSchema = Type.Object(
+  {
+    apiVersion: Type.Literal('v1'),
+    items: Type.Array(TrashedArtifactSchema, { maxItems: 100 }),
+    nextCursor: CursorSchema,
+  },
+  { additionalProperties: false, $id: 'TrashPage' },
+);
+
+export const ArtifactRecoveryResultSchema = Type.Object(
+  {
+    apiVersion: Type.Literal('v1'),
+    artifact: ArtifactSchema,
+    recoveryShare: ShareCreateResultSchema,
+  },
+  { additionalProperties: false, $id: 'ArtifactRecoveryResult' },
 );
 
 const RestoreResultCommon = {
@@ -224,6 +269,11 @@ export type Artifact = Static<typeof ArtifactSchema>;
 export type ArtifactPage = Static<typeof ArtifactPageSchema>;
 export type ArtifactRevisionPage = Static<typeof ArtifactRevisionPageSchema>;
 export type ArtifactDeletionResult = Static<typeof ArtifactDeletionResultSchema>;
+export type ArtifactRetentionMode = Static<typeof ArtifactRetentionModeSchema>;
+export type ArtifactRetention = Static<typeof ArtifactRetentionSchema>;
+export type TrashedArtifact = Static<typeof TrashedArtifactSchema>;
+export type TrashPage = Static<typeof TrashPageSchema>;
+export type ArtifactRecoveryResult = Static<typeof ArtifactRecoveryResultSchema>;
 export type RestoreResult = Static<typeof RestoreResultSchema>;
 
 export function isArtifact(value: unknown): value is Artifact {
@@ -240,6 +290,18 @@ export function isArtifactRevisionPage(value: unknown): value is ArtifactRevisio
 
 export function isArtifactDeletionResult(value: unknown): value is ArtifactDeletionResult {
   return Check(ArtifactDeletionResultSchema, value);
+}
+
+export function isTrashedArtifact(value: unknown): value is TrashedArtifact {
+  return Check(TrashedArtifactSchema, value);
+}
+
+export function isTrashPage(value: unknown): value is TrashPage {
+  return Check(TrashPageSchema, value);
+}
+
+export function isArtifactRecoveryResult(value: unknown): value is ArtifactRecoveryResult {
+  return Check(ArtifactRecoveryResultSchema, value);
 }
 
 export function isRestoreResult(value: unknown): value is RestoreResult {

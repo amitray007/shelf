@@ -246,6 +246,13 @@ export class MemoryShareRepository implements ShareRepository {
     return stored === undefined ? undefined : copyShare(stored);
   }
 
+  async findShareByPublicCode(publicCode: string): Promise<StoredShare | undefined> {
+    const stored = [...this.#shares.values()].find(
+      (share) => share.accessType === 'public' && share.publicCode === publicCode,
+    );
+    return stored === undefined ? undefined : copyShare(stored);
+  }
+
   async findSharesByIds(request: {
     installationId: string;
     workspaceId: string;
