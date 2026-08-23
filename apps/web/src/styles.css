@@ -1303,20 +1303,6 @@ a {
   padding: clamp(20px, 4vw, 48px);
 }
 
-.artifact-preview-with-download {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-.artifact-preview-with-download > :not(.artifact-preview-action) {
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-}
-
 .artifact-code {
   padding: clamp(18px, 3vw, 40px);
 }
@@ -1940,19 +1926,19 @@ a {
     monospace;
 }
 
-.file-view-toolbar-share {
+.file-view-toolbar-artifact {
   gap: 8px;
 }
 
-.file-view-toolbar-share .file-view-meta {
+.file-view-toolbar-artifact .file-view-meta {
   gap: 8px;
 }
 
-.file-view-toolbar-share .file-view-meta strong {
+.file-view-toolbar-artifact .file-view-meta strong {
   color: var(--text);
 }
 
-.file-view-toolbar-share .file-view-format {
+.file-view-toolbar-artifact .file-view-format {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 650;
@@ -2135,15 +2121,6 @@ a {
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-}
-
-.folder-browser-download {
-  display: flex;
-  flex: 0 0 auto;
-  justify-content: flex-end;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--rule);
-  background: var(--canvas);
 }
 
 .folder-browser-content .artifact-document .markdown-body {
@@ -2554,21 +2531,21 @@ a {
 }
 
 @media (max-width: 360px) {
-  .file-view-toolbar-share {
+  .file-view-toolbar-artifact {
     gap: 4px;
     padding-inline: 8px;
   }
 
-  .file-view-toolbar-share .file-view-meta {
+  .file-view-toolbar-artifact .file-view-meta {
     gap: 4px;
   }
 
-  .file-view-toolbar-share .file-view-tabs button {
+  .file-view-toolbar-artifact .file-view-tabs button {
     padding-inline: 6px;
     font-size: 11px;
   }
 
-  .file-view-toolbar-share .file-view-download-label {
+  .file-view-toolbar-artifact .file-view-download-label {
     display: none;
   }
 

@@ -1,5 +1,5 @@
 import type { CommentAnchor } from '@shelf/contracts';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { LoaderFunctionArgs } from 'react-router';
 import { useLoaderData, useRevalidator } from 'react-router';
 
@@ -13,6 +13,7 @@ import {
   PublicShareUnavailableError,
   resolveViewerShare,
   type ViewerAuthority,
+  viewerShareActionUrl,
   viewerShareDownloadUrl,
   viewerSharePreviewUrl,
 } from './api.js';
@@ -25,10 +26,10 @@ import {
   shareReferenceFromViewerPath,
   type ViewerShareReference,
 } from './capability.js';
-import { ArtifactContent } from './components/artifact-content.js';
-import { decodeFileSource } from './components/file-view.js';
+import { ArtifactFileView } from './components/artifact-file-view.js';
 import type { FolderBrowserReview } from './components/folder-browser.js';
 import { LazyFolderBrowser as FolderBrowser } from './components/lazy-views.js';
+import { RendererFrame } from './components/renderer-frame.js';
 import { DiscussionPanel } from './components/review/discussion-panel.js';
 import { readReviewValue, writeReviewValue } from './components/review/persistence.js';
 import type { ReviewSidebarMode } from './components/review/types.js';
@@ -36,7 +37,6 @@ import { reviewPanelStorageKey, useViewerReview } from './components/review/use-
 import { ViewerRail } from './components/viewer-shell.js';
 import { ViewerSidebarSplit } from './components/viewer-sidebar-split.js';
 import {
-  type PassiveRenderer,
   prefetchRendererModules,
   requiresClientBytes,
   selectRenderer,
@@ -48,12 +48,6 @@ import {
   isFileShareResolution,
   isFolderShareResolution,
 } from './share-types.js';
-
-interface PreparedFile {
-  readonly renderer: PassiveRenderer;
-  readonly text?: string;
-  readonly bytes?: ArrayBuffer;
-}
 
 export function updateViewerThreadUrl(currentUrl: string, threadId: string): string {
   const url = new URL(currentUrl, 'https://shelf.invalid');
@@ -69,26 +63,6 @@ export function readViewerSidebarOpen(
   if (persisted === 'open') return true;
   if (persisted === 'closed') return false;
   return isFolderShareResolution(resolution);
-}
-
-function prepareFile(
-  resolution: FileShareResolution,
-  bytes: ArrayBuffer | null,
-  rendererOrigin: string | undefined,
-): PreparedFile {
-  const selected = selectRenderer(
-    resolution.revision.mediaType,
-    rendererOrigin,
-    resolution.revision.originalFileName,
-  );
-  if (bytes === null || !requiresClientBytes(selected)) {
-    return { renderer: selected };
-  }
-  if (selected.kind === 'docx' || selected.kind === 'workbook') {
-    return { bytes, renderer: selected };
-  }
-  const text = decodeFileSource(bytes);
-  return text === null ? { renderer: { kind: 'download' } } : { renderer: selected, text };
 }
 
 export async function viewerLoader({
@@ -198,29 +172,85 @@ function FileArtifact({
   onOpenSidebar,
 }: {
   readonly payload: Extract<PublicSharePayload, { kind: 'file' }>;
-  readonly review?: React.ComponentProps<typeof ArtifactContent>['review'];
+  readonly review?: React.ComponentProps<typeof ArtifactFileView>['review'];
   readonly sidebarOpen?: boolean | undefined;
   readonly onOpenSidebar?: (() => void) | undefined;
 }) {
-  const prepared = useMemo(
-    () => prepareFile(payload.resolution, payload.bytes, payload.rendererOrigin),
-    [payload.bytes, payload.rendererOrigin, payload.resolution],
-  );
+  const download = useCallback(() => {
+    try {
+      submitViewerDownload(
+        viewerShareActionUrl(payload.resolution, payload.authority),
+        payload.authority,
+      );
+    } catch {
+      return;
+    }
+  }, [payload.authority, payload.resolution]);
   return (
-    <ArtifactContent
-      {...(payload.previewUrl === undefined ? {} : { previewUrl: payload.previewUrl })}
-      {...(prepared.text === undefined ? {} : { text: prepared.text })}
-      {...(prepared.bytes === undefined ? {} : { bytes: prepared.bytes })}
-      renderer={prepared.renderer}
-      resolution={payload.resolution}
-      authority={payload.authority}
-      onOpenSidebar={onOpenSidebar}
+    <ArtifactFileView
+      capabilities={{
+        download,
+        ...(payload.rendererOrigin === undefined
+          ? {}
+          : {
+              isolatedHtml: {
+                origin: payload.rendererOrigin,
+                render: (renderer, theme) => (
+                  <div className="artifact-surface artifact-html">
+                    <RendererFrame
+                      authority={payload.authority}
+                      renderer={renderer}
+                      resolution={payload.resolution}
+                      theme={theme}
+                    />
+                  </div>
+                ),
+              },
+            }),
+      }}
+      content={{
+        status: 'ready',
+        ...(payload.bytes === null ? {} : { bytes: payload.bytes }),
+        ...(payload.previewUrl === undefined ? {} : { previewUrl: payload.previewUrl }),
+      }}
+      file={{
+        id: payload.resolution.revision.revisionId,
+        mediaType: payload.resolution.revision.mediaType,
+        name: payload.resolution.revision.originalFileName,
+      }}
       review={review}
-      sidebarControlsId="viewer-discussion-sidebar"
-      sidebarLabel="file discussions sidebar"
-      sidebarOpen={sidebarOpen}
+      {...(onOpenSidebar === undefined || sidebarOpen === undefined
+        ? {}
+        : {
+            sidebar: {
+              controlsId: 'viewer-discussion-sidebar',
+              label: 'file discussions sidebar',
+              onToggle: onOpenSidebar,
+              open: sidebarOpen,
+            },
+          })}
     />
   );
+}
+
+function submitViewerDownload(action: string, authority: ViewerAuthority) {
+  const form = document.createElement('form');
+  form.action = action;
+  form.method = authority.accessType === 'protected' ? 'post' : 'get';
+  form.hidden = true;
+  if (authority.accessType === 'protected') {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'token';
+    input.value = authority.token;
+    form.append(input);
+  }
+  document.body.append(form);
+  try {
+    form.submit();
+  } finally {
+    form.remove();
+  }
 }
 
 function FolderArtifact({
@@ -245,28 +275,13 @@ function FolderArtifact({
   );
   const downloadFile = useCallback(
     (path: string) => {
-      let action: string;
       try {
-        action = viewerShareDownloadUrl(payload.resolution, payload.authority, path);
+        submitViewerDownload(
+          viewerShareDownloadUrl(payload.resolution, payload.authority, path),
+          payload.authority,
+        );
       } catch {
         return;
-      }
-      const form = document.createElement('form');
-      form.action = action;
-      form.method = payload.authority.accessType === 'protected' ? 'post' : 'get';
-      form.hidden = true;
-      if (payload.authority.accessType === 'protected') {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'token';
-        input.value = payload.authority.token;
-        form.append(input);
-      }
-      document.body.append(form);
-      try {
-        form.submit();
-      } finally {
-        form.remove();
       }
     },
     [payload.authority, payload.resolution],
@@ -279,7 +294,6 @@ function FolderArtifact({
       loadFile={loadFile}
       loadPreviewUrl={loadPreviewUrl}
       downloadFile={downloadFile}
-      publicShare={true}
       rendererOrigin={payload.rendererOrigin}
       resolution={payload.resolution}
       {...(review === undefined

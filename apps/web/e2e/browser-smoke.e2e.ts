@@ -255,6 +255,16 @@ test('artifact detail keeps revision and share controls compact and explicit', a
   await expect(previewBar).not.toContainText('Revision:');
   await expect(previewBar).not.toContainText(/\d+(?:\.\d+)?\s+(?:k|M)?B/u);
   await expect(page.getByText('Immutable lineage', { exact: true })).toHaveCount(0);
+  const managedFileControls = page.getByRole('region', {
+    name: `${longArtifactName} view controls`,
+  });
+  await expect(managedFileControls.locator('.file-view-meta strong')).toHaveAttribute(
+    'title',
+    longArtifactName,
+  );
+  await expect(
+    managedFileControls.getByRole('button', { name: 'Download', exact: true }),
+  ).toBeVisible();
 
   await expect(page.getByRole('complementary', { name: 'Artifact inspector' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Hide inspector' })).toHaveCount(1);
@@ -346,6 +356,30 @@ test('artifact detail keeps revision and share controls compact and explicit', a
   await expect(page.locator('.shelf-dialog')).toHaveCount(0);
 
   await expectNoAxeViolations(page);
+  diagnostics.assertClean();
+});
+
+test('private file preview reuses the canonical file surface', async ({ page }) => {
+  const diagnostics = trackPageErrors(page);
+
+  await page.goto(`/preview/${artifactId}`);
+
+  await expect(page.getByText('Private preview', { exact: true })).toHaveCount(1);
+  const controls = page.getByRole('region', {
+    name: `${longArtifactName} view controls`,
+  });
+  await expect(controls).toBeVisible();
+  await expect(controls.locator('.file-view-meta strong')).toHaveAttribute(
+    'title',
+    longArtifactName,
+  );
+  await expect(controls.getByRole('tab', { name: 'Preview' })).toBeVisible();
+  await expect(controls.getByRole('tab', { name: 'Source' })).toBeVisible();
+  await expect(controls.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
+    'One useful idea',
+  );
+  await expectNoHorizontalOverflow(page, [page.locator('.artifact-surface')]);
   diagnostics.assertClean();
 });
 

@@ -1,9 +1,9 @@
-import type { Artifact, ArtifactRevision, PublicShareResolution } from '@shelf/contracts';
+import type { ArtifactRevision, PublicShareResolution } from '@shelf/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { viewerSharePreviewUrl } from '../src/api.js';
-import { ArtifactContent } from '../src/components/artifact-content.js';
+import { ArtifactFileView } from '../src/components/artifact-file-view.js';
 import { ViewerRail } from '../src/components/viewer-shell.js';
 import { ManagedArtifactContent } from '../src/dashboard/managed-artifact-content.js';
 import { selectRenderer } from '../src/rendering.js';
@@ -57,22 +57,6 @@ const managedRevision = {
   byteCount: 8,
 } satisfies ArtifactRevision;
 
-const managedArtifact = {
-  apiVersion: 'v1',
-  artifactId: `art_${'e'.repeat(22)}`,
-  createdAt: '2026-08-23T00:00:00.000Z',
-  kind: 'file',
-  latestRevision: managedRevision,
-  name: 'Release document',
-  paths: {
-    artifact: `/api/v1/artifacts/art_${'e'.repeat(22)}`,
-    revisions: `/api/v1/artifacts/art_${'e'.repeat(22)}/revisions`,
-  },
-  retention: { mode: 'keep', trashAt: null },
-  updatedAt: '2026-08-23T00:00:00.000Z',
-  workspaceId: 'workspace-main',
-} satisfies Artifact;
-
 describe('web preview integration', () => {
   it.each([
     ['image/svg+xml', 'image', undefined, '/api/v1/revisions/svg/preview', '<img'],
@@ -92,15 +76,18 @@ describe('web preview integration', () => {
       );
       expect(renderer.kind).toBe(kind);
       const markup = renderToStaticMarkup(
-        <ArtifactContent
-          authority={authority}
-          resolution={{
-            ...resolution,
-            revision: { ...resolution.revision, mediaType },
+        <ArtifactFileView
+          capabilities={{ download: () => undefined }}
+          content={{
+            status: 'ready',
+            ...(text === undefined ? {} : { bytes: new TextEncoder().encode(text).buffer }),
+            ...(previewUrl === undefined ? {} : { previewUrl }),
           }}
-          renderer={renderer}
-          {...(text === undefined ? {} : { text })}
-          {...(previewUrl === undefined ? {} : { previewUrl })}
+          file={{
+            id: `file:${mediaType}`,
+            mediaType,
+            name: `preview.${mediaType === 'text/csv' ? 'csv' : 'bin'}`,
+          }}
         />,
       );
       expect(markup).toContain(marker);
@@ -124,14 +111,10 @@ describe('web preview integration', () => {
     const renderer = selectRenderer(mediaType, undefined, fileName);
     expect(renderer).toEqual({ kind });
     const markup = renderToStaticMarkup(
-      <ArtifactContent
-        authority={authority}
-        bytes={new ArrayBuffer(8)}
-        resolution={{
-          ...resolution,
-          revision: { ...resolution.revision, mediaType, originalFileName: fileName },
-        }}
-        renderer={renderer}
+      <ArtifactFileView
+        capabilities={{ download: () => undefined }}
+        content={{ bytes: new ArrayBuffer(8), status: 'ready' }}
+        file={{ id: `file:${fileName}`, mediaType, name: fileName }}
       />,
     );
     expect(markup).toContain(marker);
@@ -140,21 +123,16 @@ describe('web preview integration', () => {
 
   it('renders the same DOCX binding in the authenticated artifact surface', () => {
     const markup = renderToStaticMarkup(
-      <ManagedArtifactContent
-        artifact={managedArtifact}
-        bytes={new ArrayBuffer(8)}
-        entries={[]}
-        revision={managedRevision}
-      />,
+      <ManagedArtifactContent bytes={new ArrayBuffer(8)} entries={[]} revision={managedRevision} />,
     );
     expect(markup).toContain('data-preview-kind="docx"');
     expect(markup).toContain('Download');
   });
 
   it('keeps shared structured and table controls owned by the rail and outer file view', () => {
-    for (const [mediaType, fileName, renderer, text] of [
-      ['application/yaml', 'config.yaml', { kind: 'json' as const }, 'name: Shelf'],
-      ['text/csv', 'data.csv', { kind: 'table' as const, format: 'csv' as const }, 'name\nShelf'],
+    for (const [mediaType, fileName, text] of [
+      ['application/yaml', 'config.yaml', 'name: Shelf'],
+      ['text/csv', 'data.csv', 'name\nShelf'],
     ] as const) {
       const sharedResolution = {
         ...resolution,
@@ -163,11 +141,10 @@ describe('web preview integration', () => {
       const markup = renderToStaticMarkup(
         <>
           <ViewerRail authority={authority} resolution={sharedResolution} />
-          <ArtifactContent
-            authority={authority}
-            renderer={renderer}
-            resolution={sharedResolution}
-            text={text}
+          <ArtifactFileView
+            capabilities={{ download: () => undefined }}
+            content={{ bytes: new TextEncoder().encode(text).buffer, status: 'ready' }}
+            file={{ id: `file:${fileName}`, mediaType, name: fileName }}
           />
         </>,
       );

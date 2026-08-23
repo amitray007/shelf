@@ -907,7 +907,7 @@ export function FileView({
   sidebarOpen,
   onOpenSidebar,
   htmlPreview,
-  shareToolbar,
+  toolbar,
   source,
 }: {
   readonly annotations?: readonly SourceLineAnnotation[];
@@ -923,8 +923,8 @@ export function FileView({
   readonly sidebarOpen?: boolean | undefined;
   readonly onOpenSidebar?: (() => void) | undefined;
   readonly htmlPreview?: ((theme: HtmlPreviewTheme) => React.ReactNode) | undefined;
-  /** Explicit opt-in chrome for public share pages. Managed views keep their own header. */
-  readonly shareToolbar?:
+  /** Canonical file identity and actions used by every artifact surface. */
+  readonly toolbar?:
     | {
         readonly formatLabel: string;
         readonly download?: React.ReactNode | undefined;
@@ -945,7 +945,7 @@ export function FileView({
   const previousSidebarOpenRef = useRef(sidebarOpen);
   const showSidebarToggle = sidebarOpen !== undefined && onOpenSidebar !== undefined;
   const sidebarToggleLabel = `${sidebarOpen ? 'Collapse' : 'Open'} ${sidebarLabel ?? 'review sidebar'}`;
-  const isShareToolbar = shareToolbar !== undefined;
+  const hasArtifactToolbar = toolbar !== undefined;
 
   useEffect(() => {
     if (previousSidebarOpenRef.current && sidebarOpen === false) {
@@ -970,8 +970,8 @@ export function FileView({
     }
   }, [fileName, hasModes, mode]);
 
-  if (!hasContent && header === undefined && !showSidebarToggle && !isShareToolbar) return null;
-  if (header === undefined && !hasModes && !showSidebarToggle && !isShareToolbar) {
+  if (!hasContent && header === undefined && !showSidebarToggle && !hasArtifactToolbar) return null;
+  if (header === undefined && !hasModes && !showSidebarToggle && !hasArtifactToolbar) {
     if (!hasPreview)
       return (
         <SourceView
@@ -991,12 +991,12 @@ export function FileView({
   // <header> would claim a second banner landmark beside the viewer rail, and a bare <div> would
   // leave the toolbar controls outside every landmark.
   return (
-    <div className={`file-view${isShareToolbar ? ' file-view-share' : ''}`}>
+    <div className={`file-view${hasArtifactToolbar ? ' file-view-artifact' : ''}`}>
       <section
         aria-label={`${fileName ?? 'File'} view controls`}
-        className={`file-view-toolbar${isShareToolbar ? ' file-view-toolbar-share' : ''}`}
+        className={`file-view-toolbar${hasArtifactToolbar ? ' file-view-toolbar-artifact' : ''}`}
       >
-        {header === undefined && !showSidebarToggle && !isShareToolbar ? null : (
+        {header === undefined && !showSidebarToggle && !hasArtifactToolbar ? null : (
           <div className="file-view-meta">
             {showSidebarToggle ? (
               <button
@@ -1012,10 +1012,10 @@ export function FileView({
                 <SidebarSimpleIcon aria-hidden="true" size={18} weight="regular" />
               </button>
             ) : null}
-            {isShareToolbar ? (
+            {hasArtifactToolbar ? (
               <>
                 <strong title={fileName}>{formatFileDisplayName(fileName)}</strong>
-                <span className="file-view-format">{shareToolbar.formatLabel}</span>
+                <span className="file-view-format">{toolbar.formatLabel}</span>
               </>
             ) : (
               header
@@ -1052,8 +1052,8 @@ export function FileView({
             />
           </fieldset>
         ) : null}
-        {isShareToolbar && shareToolbar.download !== undefined ? (
-          <div className="file-view-actions">{shareToolbar.download}</div>
+        {hasArtifactToolbar && toolbar.download !== undefined ? (
+          <div className="file-view-actions">{toolbar.download}</div>
         ) : null}
       </section>
       {hasContent ? (

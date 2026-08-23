@@ -1,36 +1,11 @@
-// biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable previews must be keyboard reachable.
-
-import { LinkButton } from '@cloudflare/kumo/components/button';
-import { FileArrowDownIcon } from '@phosphor-icons/react/FileArrowDown';
-import type {
-  Artifact,
-  ArtifactRevision,
-  CommentAnchor,
-  CommentThread,
-  FolderEntry,
-} from '@shelf/contracts';
+import type { ArtifactRevision, CommentAnchor, CommentThread, FolderEntry } from '@shelf/contracts';
 import { memo, useCallback, useState } from 'react';
 
-import { CodeView, decodeFileSource, FileView } from '../components/file-view.js';
-import {
-  LazyFolderBrowser as FolderBrowser,
-  LazyMarkdownView as MarkdownView,
-} from '../components/lazy-views.js';
-import { DelimitedTablePreview } from '../components/preview/delimited-table-preview.js';
-import { AudioPreview, VideoPreview } from '../components/preview/media-preview.js';
-import { DocxPreview } from '../components/preview/office-document-preview.js';
-import { pdfJsAdapter } from '../components/preview/pdf-js.js';
-import { PdfViewer } from '../components/preview/pdf-viewer.js';
-import { StructuredDataPreview } from '../components/preview/structured-data-preview.js';
-import { WorkbookPreview } from '../components/preview/workbook-preview.js';
+import { ArtifactFileView } from '../components/artifact-file-view.js';
+import { LazyFolderBrowser as FolderBrowser } from '../components/lazy-views.js';
 import { DiscussionPanel } from '../components/review/discussion-panel.js';
 import type { ReviewSidebarMode } from '../components/review/types.js';
-import {
-  requiresClientBytes,
-  selectRenderer,
-  supportsSourceView,
-  usesPreviewUrl,
-} from '../rendering.js';
+import { selectRenderer, usesPreviewUrl } from '../rendering.js';
 import {
   folderEntryDownloadUrl,
   folderEntryPreviewUrl,
@@ -69,39 +44,7 @@ export interface ManagedArtifactReview {
   readonly onDeletePost?: ((postId: string) => Promise<void>) | undefined;
 }
 
-function DownloadOnly({ revision }: { readonly revision: ArtifactRevision }) {
-  if (revision.kind !== 'file') return null;
-  return (
-    <section className="empty-state managed-download" aria-labelledby="managed-download-title">
-      <FileArrowDownIcon aria-hidden="true" className="managed-download-icon" size={30} />
-      <p className="managed-download-type">{revision.mediaType}</p>
-      <h2 id="managed-download-title">Download-only format</h2>
-      <p>Active or unsupported content is not executed on the authenticated Shelf origin.</p>
-      <LinkButton href={revision.paths.content} icon={FileArrowDownIcon} variant="primary">
-        Download {revision.originalFileName}
-      </LinkButton>
-    </section>
-  );
-}
-
-function DownloadAction({ revision }: { readonly revision: ArtifactRevision }) {
-  if (revision.kind !== 'file') return null;
-  return (
-    <div className="artifact-preview-action">
-      <LinkButton
-        href={revision.paths.content}
-        icon={FileArrowDownIcon}
-        size="sm"
-        variant="primary"
-      >
-        Download
-      </LinkButton>
-    </div>
-  );
-}
-
 export const ManagedArtifactContent = memo(function ManagedArtifactContent({
-  artifact,
   revision,
   bytes,
   entries,
@@ -109,7 +52,6 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
   discussionOpen = false,
   onDiscussionToggle,
 }: {
-  readonly artifact: Artifact;
   readonly revision: ArtifactRevision;
   readonly bytes: ArrayBuffer | null;
   readonly entries: readonly FolderEntry[];
@@ -117,23 +59,6 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
   readonly discussionOpen?: boolean | undefined;
   readonly onDiscussionToggle?: (() => void) | undefined;
 }) {
-  const renderer =
-    revision.kind === 'file'
-      ? selectRenderer(revision.mediaType, undefined, revision.originalFileName)
-      : { kind: 'download' as const };
-  const source =
-    revision.kind === 'file' &&
-    bytes !== null &&
-    renderer.kind !== 'docx' &&
-    renderer.kind !== 'workbook' &&
-    (requiresClientBytes(renderer) ||
-      supportsSourceView(revision.mediaType, revision.originalFileName))
-      ? decodeFileSource(bytes)
-      : null;
-  const previewUrl =
-    revision.kind === 'file' && usesPreviewUrl(renderer)
-      ? revisionPreviewUrl(revision.revisionId)
-      : undefined;
   const loadFolderFile = useCallback(
     (path: string, signal: AbortSignal) => loadFolderEntryBytes(revision.revisionId, path, signal),
     [revision.revisionId],
@@ -162,9 +87,6 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
                 sidebarOpen: previewFolderSidebarOpen,
               },
             }
-          : {})}
-        {...(review === undefined
-          ? {}
           : {
               review: {
                 ...review,
@@ -175,143 +97,28 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
       />
     );
   }
-  if (bytes === null && (renderer.kind === 'download' || requiresClientBytes(renderer))) {
-    return (
-      <div className="artifact-surface artifact-download">
-        <DownloadOnly revision={revision} />
-      </div>
-    );
-  }
-  let preview: React.ReactNode | undefined;
-  if (renderer.kind === 'image' && previewUrl !== undefined) {
-    preview = (
-      <div className="artifact-preview-with-download">
-        <DownloadAction revision={revision} />
-        <div className="artifact-surface artifact-image">
-          <img alt={artifact.name} referrerPolicy="no-referrer" src={previewUrl} />
-        </div>
-      </div>
-    );
-  } else if (renderer.kind === 'markdown' && source !== null) {
-    preview = (
-      <div className="artifact-preview-with-download">
-        <DownloadAction revision={revision} />
-        <section
-          aria-label="Artifact document preview"
-          className="artifact-surface artifact-document"
-          tabIndex={0}
-        >
-          <MarkdownView source={source} />
-        </section>
-      </div>
-    );
-  } else if (renderer.kind === 'json' && source !== null) {
-    preview = (
-      <div className="artifact-preview-with-download">
-        <DownloadAction revision={revision} />
-        <StructuredDataPreview
-          fileName={revision.originalFileName}
-          mediaType={revision.mediaType}
-          showModeTabs={false}
-          source={source}
-        />
-      </div>
-    );
-  } else if (renderer.kind === 'table' && source !== null) {
-    preview = (
-      <div className="artifact-preview-with-download">
-        <DownloadAction revision={revision} />
-        <DelimitedTablePreview
-          fileName={revision.originalFileName}
-          mediaType={revision.mediaType}
-          showModeTabs={false}
-          source={source}
-        />
-      </div>
-    );
-  } else if (renderer.kind === 'docx' && bytes !== null) {
-    preview = (
-      <div className="artifact-preview-with-download">
-        <DownloadAction revision={revision} />
-        <DocxPreview
-          metadata={{
-            byteCount: bytes.byteLength,
-            fileName: revision.originalFileName,
-            mediaType: revision.mediaType,
-          }}
-          src={bytes}
-          title={revision.originalFileName}
-        />
-      </div>
-    );
-  } else if (renderer.kind === 'workbook' && bytes !== null) {
-    preview = (
-      <div className="artifact-preview-with-download">
-        <DownloadAction revision={revision} />
-        <WorkbookPreview
-          metadata={{
-            byteCount: bytes.byteLength,
-            fileName: revision.originalFileName,
-            format: 'xlsx',
-            mediaType: revision.mediaType,
-          }}
-          src={bytes}
-          title={revision.originalFileName}
-        />
-      </div>
-    );
-  } else if (renderer.kind === 'text' && source !== null) {
-    preview = (
-      <div className="artifact-preview-with-download">
-        <DownloadAction revision={revision} />
-        <CodeView
-          fileName={revision.originalFileName}
-          label="Artifact source preview"
-          source={source}
-        />
-      </div>
-    );
-  } else if (renderer.kind === 'pdf' && previewUrl !== undefined) {
-    preview = (
-      <div className="artifact-preview-with-download">
-        <DownloadAction revision={revision} />
-        <div className="artifact-surface artifact-pdf">
-          <PdfViewer adapter={pdfJsAdapter} src={previewUrl} title="PDF preview" />
-        </div>
-      </div>
-    );
-  } else if (renderer.kind === 'audio' && previewUrl !== undefined) {
-    preview = (
-      <div className="artifact-preview-with-download">
-        <DownloadAction revision={revision} />
-        <div className="artifact-surface artifact-media">
-          <AudioPreview src={previewUrl} title={revision.originalFileName} />
-        </div>
-      </div>
-    );
-  } else if (renderer.kind === 'video' && previewUrl !== undefined) {
-    preview = (
-      <div className="artifact-preview-with-download">
-        <DownloadAction revision={revision} />
-        <div className="artifact-surface artifact-media">
-          <VideoPreview src={previewUrl} title={revision.originalFileName} />
-        </div>
-      </div>
-    );
-  }
-  if (preview === undefined && source === null) {
-    return (
-      <div className="artifact-surface artifact-download">
-        <DownloadOnly revision={revision} />
-      </div>
-    );
-  }
+
+  const renderer = selectRenderer(revision.mediaType, undefined, revision.originalFileName);
+  const previewUrl = usesPreviewUrl(renderer) ? revisionPreviewUrl(revision.revisionId) : undefined;
+
   return (
     <div className="managed-file-review-stage">
       <div className="managed-file-review-body">
         <div className="managed-file-preview">
-          <FileView
-            {...(source === null ? {} : { source })}
+          <ArtifactFileView
+            capabilities={{
+              download: () => window.location.assign(revision.paths.content),
+            }}
+            content={{
+              status: 'ready',
+              ...(bytes === null ? {} : { bytes }),
+              ...(previewUrl === undefined ? {} : { previewUrl }),
+            }}
+            file={{
+              id: revision.revisionId,
+              mediaType: revision.mediaType,
+              name: revision.originalFileName,
+            }}
             {...(review === undefined
               ? {}
               : {
@@ -329,16 +136,15 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
                     saving: review.saving,
                   },
                 })}
-            fileName={revision.originalFileName}
-            key={revision.revisionId}
-            preview={preview}
             {...(review === undefined || onDiscussionToggle === undefined
               ? {}
               : {
-                  onOpenSidebar: onDiscussionToggle,
-                  sidebarControlsId: 'managed-artifact-discussion-sidebar',
-                  sidebarLabel: 'discussions sidebar',
-                  sidebarOpen: discussionOpen,
+                  sidebar: {
+                    controlsId: 'managed-artifact-discussion-sidebar',
+                    label: 'discussions sidebar',
+                    onToggle: onDiscussionToggle,
+                    open: discussionOpen,
+                  },
                 })}
           />
         </div>

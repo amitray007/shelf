@@ -46,12 +46,7 @@ export function PreviewPage() {
           </Link>
         </div>
       </header>
-      <ManagedArtifactContent
-        artifact={artifact}
-        bytes={payload.bytes}
-        entries={payload.entries}
-        revision={revision}
-      />
+      <ManagedArtifactContent bytes={payload.bytes} entries={payload.entries} revision={revision} />
     </div>
   );
 }

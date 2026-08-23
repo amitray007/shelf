@@ -573,9 +573,6 @@ export function ArtifactPage() {
   const viewingLatest = viewedRevision.revisionId === latest.revisionId;
   const artifactTitle = viewedRevision.publisherMetadata.title?.trim() || artifact.name;
   const artifactDescription = viewedRevision.publisherMetadata.description?.trim();
-  const sourceFileName =
-    viewedRevision.kind === 'file' ? viewedRevision.originalFileName : viewedRevision.rootName;
-
   return (
     <div className="dashboard-page artifact-detail">
       <header className="page-heading artifact-heading">
@@ -649,9 +646,7 @@ export function ArtifactPage() {
           <section className="managed-stage" aria-labelledby="preview-heading">
             <header className="managed-stage-bar">
               <span className="managed-stage-label" id="preview-heading">
-                <strong title={sourceFileName}>{sourceFileName}</strong>
-                <span aria-hidden="true">·</span>
-                <span>Artifact Preview</span>
+                Artifact Preview
               </span>
               <div className="managed-stage-actions">
                 <span>
@@ -683,7 +678,6 @@ export function ArtifactPage() {
               </div>
             </header>
             <ManagedArtifactContent
-              artifact={artifact}
               bytes={payload.bytes}
               entries={payload.entries}
               discussionOpen={discussionOpen}

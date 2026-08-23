@@ -1,8 +1,8 @@
-import type { CommentThread, FolderEntry, PublicShareResolution } from '@shelf/contracts';
+import type { CommentThread, PublicShareResolution } from '@shelf/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ArtifactContent } from '../src/components/artifact-content.js';
+import { ArtifactFileView } from '../src/components/artifact-file-view.js';
 import {
   DEFAULT_SOURCE_VIEW_SETTINGS,
   FileLoadingState,
@@ -106,20 +106,26 @@ const FOLDER_RESOLUTION = {
   },
 } satisfies PublicShareResolution;
 
-function renderContent(props: Partial<React.ComponentProps<typeof ArtifactContent>> = {}): string {
+function renderContent({
+  fileName = 'idea.md',
+  mediaType = 'text/markdown',
+  previewUrl,
+  text = 'const idea = "keep";',
+}: {
+  readonly fileName?: string;
+  readonly mediaType?: string;
+  readonly previewUrl?: string | undefined;
+  readonly text?: string | undefined;
+} = {}): string {
   return renderToStaticMarkup(
-    <ArtifactContent
-      authority={{
-        accessType: 'protected',
-        shareId: FILE_RESOLUTION.shareId,
-        sessionId: '123e4567-e89b-42d3-a456-426614174000',
-        token: `${'v'.repeat(24)}.${'s'.repeat(43)}`,
+    <ArtifactFileView
+      capabilities={{ download: () => undefined }}
+      content={{
+        status: 'ready',
+        ...(text === undefined ? {} : { bytes: new TextEncoder().encode(text).buffer }),
+        ...(previewUrl === undefined ? {} : { previewUrl }),
       }}
-      resolution={FILE_RESOLUTION}
-      renderer={{ kind: 'text' }}
-      text={'const idea = "keep";'}
-      downloadUrl="blob:test"
-      {...props}
+      file={{ id: `file:${fileName}`, mediaType, name: fileName }}
     />,
   );
 }
@@ -773,18 +779,27 @@ describe('viewer content states', () => {
     expect(html).not.toContain('review-post-action');
   });
   it('renders source through the syntax-aware viewer and formatted JSON', () => {
-    const text = renderContent({ text: '<script>unsafe</script>' });
+    const text = renderContent({
+      fileName: 'unsafe.ts',
+      mediaType: 'application/typescript',
+      text: '<script>unsafe</script>',
+    });
     expect(text).toContain('Loading file…');
     expect(text).not.toContain('<script>unsafe</script>');
     expect(text.match(/tabindex="0"/gu)).toHaveLength(1);
-    expect(renderContent({ renderer: { kind: 'json' }, text: '{"name":"shelf"}' })).toContain(
-      'structured data preview',
-    );
+    expect(
+      renderContent({
+        fileName: 'config.json',
+        mediaType: 'application/json',
+        text: '{"name":"shelf"}',
+      }),
+    ).toContain('structured data preview');
   });
 
   it('offers Preview and Source for readable rendered files', () => {
     const markdown = renderContent({
-      renderer: { kind: 'markdown' },
+      fileName: 'readme.md',
+      mediaType: 'text/markdown',
       text: '# A readable artifact',
     });
     expect(markdown).toContain('Preview');
@@ -793,7 +808,12 @@ describe('viewer content states', () => {
     // loading state where the rendered document will appear.
     expect(markdown).toContain('Loading file…');
 
-    const raster = renderContent({ renderer: { kind: 'image' }, text: undefined });
+    const raster = renderContent({
+      fileName: 'preview.png',
+      mediaType: 'image/png',
+      previewUrl: 'blob:test',
+      text: undefined,
+    });
     expect(raster).not.toContain('Source');
   });
 
@@ -843,7 +863,7 @@ describe('viewer content states', () => {
       <FileView
         fileName="media/preview.webm"
         preview={<p>Video preview</p>}
-        shareToolbar={{ formatLabel: 'WEBM' }}
+        toolbar={{ formatLabel: 'WEBM' }}
       />,
     );
     expect(html).toContain('title="media/preview.webm">media/preview</strong>');
@@ -852,27 +872,35 @@ describe('viewer content states', () => {
   });
 
   it('integrates structured, delimited, PDF, audio, and video renderers', () => {
-    const json = renderContent({ renderer: { kind: 'json' }, text: '{"ready":true}' });
+    const json = renderContent({
+      fileName: 'data.json',
+      mediaType: 'application/json',
+      text: '{"ready":true}',
+    });
     expect(json).toContain('structured data preview');
     const table = renderContent({
-      renderer: { kind: 'table', format: 'csv' },
+      fileName: 'data.csv',
+      mediaType: 'text/csv',
       text: 'name,count\nShelf,1',
     });
     expect(table).toContain('table preview');
     const pdf = renderContent({
-      renderer: { kind: 'pdf' },
+      fileName: 'document.pdf',
+      mediaType: 'application/pdf',
       previewUrl: '/api/v1/revisions/rev_pdf/preview',
       text: undefined,
     });
     expect(pdf).toContain('PDF preview');
     const audio = renderContent({
-      renderer: { kind: 'audio' },
+      fileName: 'recording.mp3',
+      mediaType: 'audio/mpeg',
       previewUrl: '/api/v1/revisions/rev_audio/preview',
       text: undefined,
     });
     expect(audio).toContain('<audio');
     const video = renderContent({
-      renderer: { kind: 'video' },
+      fileName: 'recording.mp4',
+      mediaType: 'video/mp4',
       previewUrl: '/api/v1/revisions/rev_video/preview',
       text: undefined,
     });
@@ -966,27 +994,14 @@ describe('viewer content states', () => {
   });
 
   it('renders an allowlisted raster image without embedding active markup', () => {
-    const html = renderContent({ renderer: { kind: 'image' } });
+    const html = renderContent({
+      fileName: 'preview.png',
+      mediaType: 'image/png',
+      previewUrl: 'blob:test',
+      text: undefined,
+    });
     expect(html).toContain('<img');
     expect(html).toContain('src="blob:test"');
-  });
-
-  it('renders folder entries as a browsable tree', () => {
-    const entries: FolderEntry[] = [
-      { kind: 'directory', path: 'notes' },
-      {
-        kind: 'file',
-        path: 'notes/idea.md',
-        mediaType: 'text/markdown',
-        contentHash: `sha256:${'d'.repeat(64)}`,
-        byteCount: 42,
-      },
-    ];
-    const html = renderContent({ entries, resolution: FOLDER_RESOLUTION });
-    expect(html).toContain('notes');
-    expect(html).toContain('idea.md');
-    expect(html).toContain('<svg');
-    expect(html).not.toContain('tree-icon');
   });
 
   it('uses Pierre Trees for the interactive folder navigator', () => {
@@ -1008,7 +1023,8 @@ describe('viewer content states', () => {
     );
     expect(html).toContain('folder-browser-pierre-tree');
     expect(html).toContain('aria-label="Folder contents"');
-    expect(html).toContain('21 B');
+    expect(html).toContain('title="src/example.ts">src/example</strong>');
+    expect(html).toContain('>TS</span>');
   });
 
   it('keeps preview folder navigation read-only with a searchable Files sidebar', () => {
@@ -1030,12 +1046,11 @@ describe('viewer content states', () => {
           sidebarControlsId: 'preview-folder-sidebar-content',
           sidebarOpen: true,
         }}
-        publicShare
       />,
     );
     expect(html).toContain('Files');
     expect(html).toContain('Search files');
-    expect(html).toContain('file-view-toolbar-share');
+    expect(html).toContain('file-view-toolbar-artifact');
     expect(html).toContain('aria-label="Download"');
     expect(html).not.toContain('21 B');
     expect(html).not.toContain('folder-browser-download');
@@ -1119,7 +1134,11 @@ describe('viewer content states', () => {
   });
 
   it('gives download-only files a clear quiet state', () => {
-    const html = renderContent({ renderer: { kind: 'download' }, text: undefined });
+    const html = renderContent({
+      fileName: 'archive.zip',
+      mediaType: 'application/zip',
+      text: undefined,
+    });
     expect(html).toContain('Preview unavailable');
     expect(html).toContain('aria-label="Download"');
   });

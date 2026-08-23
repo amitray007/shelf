@@ -853,6 +853,7 @@ async function staticFile(request, response, url) {
       decodedPath === '/signin' ||
       decodedPath === '/app' ||
       decodedPath.startsWith('/app/') ||
+      /^\/preview\/art_[A-Za-z0-9_-]{22}$/u.test(decodedPath) ||
       /^\/s\/(?:shr_[A-Za-z0-9_-]{22}|[A-Za-z0-9_-]{12})\/?$/u.test(decodedPath);
     if (!isClientRoute || (decodedPath !== '/' && !acceptsDocument)) {
       response.writeHead(404, { 'cache-control': 'no-store' });

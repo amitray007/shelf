@@ -1,44 +1,13 @@
-import type {
-  Artifact,
-  ArtifactRevision,
-  FolderEntry,
-  PublicShareResolution,
-} from '@shelf/contracts';
+import type { ArtifactRevision, FolderEntry } from '@shelf/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { ArtifactContent } from '../src/components/artifact-content.js';
+import { ArtifactFileView } from '../src/components/artifact-file-view.js';
 import { classifyDownloadOnly, DownloadOnlyState } from '../src/components/download-only-state.js';
 import { FolderBrowser } from '../src/components/folder-browser.js';
 import { ManagedArtifactContent } from '../src/dashboard/managed-artifact-content.js';
 import { shouldLoadManagedRevisionBytes } from '../src/dashboard/routes.js';
 import { selectRenderer, supportsSourceView } from '../src/rendering.js';
-
-const SHARE_ID = `shr_${'a'.repeat(22)}`;
-const resolution = {
-  apiVersion: 'v1',
-  shareId: SHARE_ID,
-  accessType: 'public',
-  publicCode: 'pub_1234567890',
-  target: { mode: 'latest' },
-  expiresAt: null,
-  artifact: { artifactId: `art_${'b'.repeat(22)}`, kind: 'file', name: 'download-only.bin' },
-  revision: {
-    revisionId: `rev_${'c'.repeat(22)}`,
-    revisionNumber: 1,
-    createdAt: '2026-08-24T00:00:00.000Z',
-    kind: 'file',
-    originalFileName: 'download-only.bin',
-    mediaType: 'application/octet-stream',
-    byteCount: 42,
-  },
-  action: { type: 'content', path: `/api/v1/public/shares/${SHARE_ID}/content` },
-} satisfies PublicShareResolution;
-
-const authority = {
-  accessType: 'public' as const,
-  publicCode: 'pub_1234567890',
-};
 
 const managedHtmlRevision = {
   contentHash: `sha256:${'e'.repeat(64)}`,
@@ -60,22 +29,6 @@ const managedHtmlRevision = {
   revisionNumber: 1,
   byteCount: 38,
 } satisfies ArtifactRevision;
-
-const managedHtmlArtifact = {
-  apiVersion: 'v1',
-  artifactId: `art_${'f'.repeat(22)}`,
-  createdAt: '2026-08-24T00:00:00.000Z',
-  kind: 'file',
-  latestRevision: managedHtmlRevision,
-  name: 'HTML document',
-  paths: {
-    artifact: `/api/v1/artifacts/art_${'f'.repeat(22)}`,
-    revisions: `/api/v1/artifacts/art_${'f'.repeat(22)}/revisions`,
-  },
-  retention: { mode: 'keep', trashAt: null },
-  updatedAt: '2026-08-24T00:00:00.000Z',
-  workspaceId: 'workspace-main',
-} satisfies Artifact;
 
 describe('public download-only state', () => {
   it.each([
@@ -124,13 +77,10 @@ describe('public download-only state', () => {
     ['unknown.data', 'application/x-custom-binary'],
   ] as const)('renders one toolbar download for %s', (fileName, mediaType) => {
     const markup = renderToStaticMarkup(
-      <ArtifactContent
-        authority={authority}
-        resolution={{
-          ...resolution,
-          revision: { ...resolution.revision, mediaType, originalFileName: fileName },
-        }}
-        renderer={selectRenderer(mediaType, undefined, fileName)}
+      <ArtifactFileView
+        capabilities={{ download: () => undefined }}
+        content={{ status: 'ready' }}
+        file={{ id: `file:${fileName}`, mediaType, name: fileName }}
       />,
     );
     expect(markup).toContain('Preview unavailable');
@@ -156,7 +106,6 @@ describe('public download-only state', () => {
         loadFile={async () => {
           throw new Error('download-only files must not load preview bytes');
         }}
-        publicShare
       />,
     );
     expect(markup).toContain('Preview unavailable');
@@ -173,7 +122,6 @@ describe('public download-only state', () => {
     expect(shouldLoadManagedRevisionBytes(managedHtmlRevision)).toBe(true);
     const markup = renderToStaticMarkup(
       <ManagedArtifactContent
-        artifact={managedHtmlArtifact}
         bytes={new TextEncoder().encode('<!doctype html><h1>Shelf</h1>').buffer}
         entries={[]}
         revision={managedHtmlRevision}
@@ -183,7 +131,7 @@ describe('public download-only state', () => {
     expect(markup).not.toContain('Download-only format');
   });
 
-  it('keeps managed folder download-only entries in the preview-unavailable state', () => {
+  it('uses the same download-only state for managed folder entries', () => {
     const entries: FolderEntry[] = [
       {
         kind: 'file',
@@ -202,7 +150,9 @@ describe('public download-only state', () => {
         }}
       />,
     );
-    expect(markup).toContain('Preview unavailable for this file type.');
+    expect(markup).toContain('Preview unavailable');
+    expect(markup).toContain('Download this file to open it in an Office app.');
+    expect((markup.match(/aria-label="Download"/gu) ?? []).length).toBe(1);
     expect(markup).not.toContain('This file could not be loaded');
   });
 });

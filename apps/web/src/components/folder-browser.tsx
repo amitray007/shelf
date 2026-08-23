@@ -1,7 +1,5 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable previews must be keyboard reachable.
 
-import { Button } from '@cloudflare/kumo/components/button';
-import { DownloadSimpleIcon } from '@phosphor-icons/react/DownloadSimple';
 import type { FileTreeDirectoryHandle } from '@pierre/trees';
 import { FileTree, useFileTree } from '@pierre/trees/react';
 import type { CommentAnchor, CommentThread, FolderEntry } from '@shelf/contracts';
@@ -9,30 +7,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ViewerAuthority } from '../api.js';
 import {
-  prefersSourceView,
   requiresClientBytes,
   selectRenderer,
   supportsSourceView,
   usesPreviewUrl,
 } from '../rendering.js';
 import type { FolderShareResolution } from '../share-types.js';
-import { DownloadOnlyState } from './download-only-state.js';
-import {
-  CodeView,
-  decodeFileSource,
-  FileLoadingState,
-  FileView,
-  viewerSessionStorageKey,
-} from './file-view.js';
-import { formatBytes, formatFileType } from './format.js';
-import { LazyMarkdownView as MarkdownView } from './lazy-views.js';
-import { DelimitedTablePreview } from './preview/delimited-table-preview.js';
-import { AudioPreview, VideoPreview } from './preview/media-preview.js';
-import { DocxPreview } from './preview/office-document-preview.js';
-import { pdfJsAdapter } from './preview/pdf-js.js';
-import { PdfViewer } from './preview/pdf-viewer.js';
-import { StructuredDataPreview } from './preview/structured-data-preview.js';
-import { WorkbookPreview } from './preview/workbook-preview.js';
+import { type ArtifactFileContent, ArtifactFileView } from './artifact-file-view.js';
+import { viewerSessionStorageKey } from './file-view.js';
 import { RendererFrame } from './renderer-frame.js';
 import { DiscussionPanel } from './review/discussion-panel.js';
 import { ReviewSidebarToolbar } from './review/sidebar-toolbar.js';
@@ -74,8 +56,6 @@ interface FolderBrowserProps {
   readonly loadFile: (path: string, signal: AbortSignal) => Promise<ArrayBuffer>;
   readonly loadPreviewUrl?: ((path: string) => string) | undefined;
   readonly downloadFile?: ((path: string) => void) | undefined;
-  /** Public shares opt in to the compact outer file toolbar. */
-  readonly publicShare?: boolean | undefined;
   readonly rendererOrigin?: string | undefined;
   readonly resolution?: FolderShareResolution | undefined;
   readonly review?: FolderBrowserReview | undefined;
@@ -123,44 +103,6 @@ function expandedTreePaths(
   });
 }
 
-function FolderImage({
-  bytes,
-  src,
-  mediaType,
-  path,
-}: {
-  bytes?: ArrayBuffer | undefined;
-  mediaType: string;
-  path: string;
-  src?: string | undefined;
-}) {
-  const source = useMemo(
-    () =>
-      src === undefined && bytes !== undefined
-        ? URL.createObjectURL(new Blob([bytes], { type: mediaType }))
-        : src,
-    [bytes, mediaType, src],
-  );
-  useEffect(
-    () => () => {
-      if (src === undefined && source?.startsWith('blob:')) URL.revokeObjectURL(source);
-    },
-    [source, src],
-  );
-  return (
-    <section className="artifact-surface artifact-image">
-      {source === undefined ? null : (
-        <img
-          alt={path}
-          className="folder-preview-image"
-          referrerPolicy="no-referrer"
-          src={source}
-        />
-      )}
-    </section>
-  );
-}
-
 function ancestorDirectories(path: string): string[] {
   const segments = path.split('/');
   return segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join('/'));
@@ -195,7 +137,6 @@ export function FolderBrowser({
   loadPreviewUrl,
   downloadFile,
   navigation,
-  publicShare = false,
   rendererOrigin,
   resolution,
   review,
@@ -230,9 +171,20 @@ export function FolderBrowser({
   const [selectedPath, setSelectedPath] = useState(
     () => readSelectedFilePath(filePaths) ?? firstFile?.path,
   );
-  const [bytes, setBytes] = useState<ArrayBuffer>();
-  const [previewUrl, setPreviewUrl] = useState<string>();
-  const [failed, setFailed] = useState(false);
+  const selected = selectedPath === undefined ? undefined : fileEntriesByPath.get(selectedPath);
+  const [loadedFile, setLoadedFile] = useState<{
+    readonly path?: string | undefined;
+    readonly content: ArtifactFileContent;
+  }>(() => {
+    if (selected === undefined) return { content: { status: 'loading' } };
+    const renderer = selectRenderer(selected.mediaType, rendererOrigin, selected.path);
+    const immediatelyReady =
+      renderer.kind === 'download' && !supportsSourceView(selected.mediaType, selected.path);
+    return {
+      path: selected.path,
+      content: { status: immediatelyReady ? 'ready' : 'loading' },
+    };
+  });
   const [treeSearchOpen, setTreeSearchOpen] = useState(false);
   const [discussionSearchOpen, setDiscussionSearchOpen] = useState(false);
   const [threadFilter, setThreadFilter] = useState<ReviewThreadFilter>('all');
@@ -395,8 +347,6 @@ export function FolderBrowser({
     };
   }, [model, paths]);
 
-  const selected = selectedPath === undefined ? undefined : fileEntriesByPath.get(selectedPath);
-
   useEffect(() => {
     if (selectedPath === undefined || filePaths.has(selectedPath)) return;
     setSelectedPath(firstFile?.path);
@@ -418,12 +368,11 @@ export function FolderBrowser({
   useEffect(() => {
     if (selected === undefined) return;
     const controller = new AbortController();
-    setBytes(undefined);
-    setPreviewUrl(undefined);
-    setFailed(false);
+    setLoadedFile({ path: selected.path, content: { status: 'loading' } });
     const renderer = selectRenderer(selected.mediaType, rendererOrigin, selected.path);
     const sourceView = supportsSourceView(selected.mediaType, selected.path);
-    if (publicShare && renderer.kind === 'download') {
+    if (renderer.kind === 'download' && !sourceView) {
+      setLoadedFile({ path: selected.path, content: { status: 'ready' } });
       return () => controller.abort();
     }
     const remote =
@@ -431,174 +380,36 @@ export function FolderBrowser({
         ? loadPreviewUrl(selected.path)
         : undefined;
     if (remote !== undefined) {
-      setPreviewUrl(remote);
+      setLoadedFile({
+        path: selected.path,
+        content: { status: 'ready', previewUrl: remote },
+      });
       return () => controller.abort();
     }
     if (!requiresClientBytes(renderer) && renderer.kind !== 'image' && !sourceView) {
+      setLoadedFile({ path: selected.path, content: { status: 'ready' } });
       return () => controller.abort();
     }
     void loadFile(selected.path, controller.signal).then(
-      (value) => setBytes(value),
+      (value) => {
+        if (!controller.signal.aborted) {
+          setLoadedFile({
+            path: selected.path,
+            content: { status: 'ready', bytes: value },
+          });
+        }
+      },
       () => {
-        if (!controller.signal.aborted) setFailed(true);
+        if (!controller.signal.aborted) {
+          setLoadedFile({ path: selected.path, content: { status: 'failed' } });
+        }
       },
     );
     return () => controller.abort();
-  }, [loadFile, loadPreviewUrl, publicShare, rendererOrigin, selected]);
+  }, [loadFile, loadPreviewUrl, rendererOrigin, selected]);
 
-  const selectedRenderer =
-    selected === undefined
-      ? undefined
-      : selectRenderer(selected.mediaType, rendererOrigin, selected.path);
-  const source =
-    selected !== undefined &&
-    selectedRenderer !== undefined &&
-    selectedRenderer.kind !== 'docx' &&
-    selectedRenderer.kind !== 'workbook' &&
-    bytes !== undefined &&
-    (requiresClientBytes(selectedRenderer) || supportsSourceView(selected.mediaType, selected.path))
-      ? decodeFileSource(bytes)
-      : null;
-
-  const preview = useMemo(() => {
-    if (selected === undefined)
-      return <p className="folder-preview-state">This folder is empty.</p>;
-    const renderer = selectedRenderer;
-    if (publicShare && renderer?.kind === 'download') {
-      return (
-        <div className="artifact-surface artifact-download">
-          <DownloadOnlyState fileName={selected.path} mediaType={selected.mediaType} />
-        </div>
-      );
-    }
-    if (
-      !publicShare &&
-      renderer?.kind === 'download' &&
-      !supportsSourceView(selected.mediaType, selected.path)
-    ) {
-      return <p className="folder-preview-state">Preview unavailable for this file type.</p>;
-    }
-    if (failed) return <p className="folder-preview-state">This file could not be loaded.</p>;
-    if (bytes === undefined && previewUrl === undefined) return <FileLoadingState />;
-    if (renderer === undefined)
-      return <p className="folder-preview-state">This folder is empty.</p>;
-    let renderedPreview: React.ReactNode | undefined;
-    if (renderer.kind === 'image' && (previewUrl !== undefined || bytes !== undefined)) {
-      renderedPreview = (
-        <FolderImage
-          bytes={bytes}
-          mediaType={selected.mediaType}
-          path={selected.path}
-          src={previewUrl}
-        />
-      );
-    } else if (renderer.kind === 'markdown' && source !== null) {
-      renderedPreview = (
-        <section
-          aria-label="Artifact document preview"
-          className="artifact-surface artifact-document"
-          tabIndex={0}
-        >
-          <MarkdownView source={source} />
-        </section>
-      );
-    } else if (renderer.kind === 'json' && source !== null) {
-      renderedPreview = (
-        <StructuredDataPreview
-          fileName={selected.path}
-          mediaType={selected.mediaType}
-          {...(publicShare ? { showFileIdentity: false } : {})}
-          showModeTabs={false}
-          source={source}
-        />
-      );
-    } else if (renderer.kind === 'table' && source !== null) {
-      renderedPreview = (
-        <DelimitedTablePreview
-          fileName={selected.path}
-          mediaType={selected.mediaType}
-          {...(publicShare ? { showFileIdentity: false } : {})}
-          showModeTabs={false}
-          source={source}
-        />
-      );
-    } else if (renderer.kind === 'docx' && bytes !== undefined) {
-      renderedPreview = (
-        <DocxPreview
-          metadata={{
-            byteCount: bytes.byteLength,
-            fileName: selected.path,
-            mediaType: selected.mediaType,
-          }}
-          src={bytes}
-          title={selected.path}
-        />
-      );
-    } else if (renderer.kind === 'workbook' && bytes !== undefined) {
-      renderedPreview = (
-        <WorkbookPreview
-          metadata={{
-            byteCount: bytes.byteLength,
-            fileName: selected.path,
-            format: 'xlsx',
-            mediaType: selected.mediaType,
-          }}
-          src={bytes}
-          title={selected.path}
-          {...(publicShare ? { showFileIdentity: false } : {})}
-        />
-      );
-    } else if (renderer.kind === 'text' && source !== null) {
-      renderedPreview = (
-        <CodeView fileName={selected.path} label="Artifact source preview" source={source} />
-      );
-    } else if (renderer.kind === 'pdf' && previewUrl !== undefined) {
-      renderedPreview = <PdfViewer adapter={pdfJsAdapter} src={previewUrl} title="PDF preview" />;
-    } else if (renderer.kind === 'audio' && previewUrl !== undefined) {
-      renderedPreview = (
-        <AudioPreview
-          {...(publicShare ? { showFileIdentity: false } : {})}
-          src={previewUrl}
-          title={selected.path}
-        />
-      );
-    } else if (renderer.kind === 'video' && previewUrl !== undefined) {
-      renderedPreview = <VideoPreview src={previewUrl} title={selected.path} />;
-    }
-    if (renderedPreview === undefined && source === null) {
-      return <p className="folder-preview-state">Preview unavailable for this file type.</p>;
-    }
-    return renderedPreview;
-  }, [bytes, failed, previewUrl, publicShare, selected, selectedRenderer, source]);
-
-  const fileHeader =
-    !publicShare && selected !== undefined ? (
-      <>
-        <strong title={selected.path}>{selected.path}</strong>
-        <span>{formatBytes(selected.byteCount)}</span>
-      </>
-    ) : undefined;
-
-  const shareToolbar =
-    !publicShare || selected === undefined
-      ? undefined
-      : {
-          download:
-            downloadFile === undefined ? undefined : (
-              <Button
-                aria-label="Download"
-                icon={DownloadSimpleIcon}
-                onClick={() => downloadFile(selected.path)}
-                size="sm"
-                title={`Download ${selected.path}`}
-                type="button"
-                variant="primary"
-              >
-                <span className="file-view-download-label">Download</span>
-              </Button>
-            ),
-          formatLabel: formatFileType(selected.path, selected.mediaType),
-        };
+  const fileContent: ArtifactFileContent =
+    loadedFile.path === selected?.path ? loadedFile.content : { status: 'loading' };
 
   const selectedAnchor: CommentAnchor | undefined =
     selected === undefined || review === undefined || !review.canCreateThread
@@ -616,78 +427,74 @@ export function FolderBrowser({
         content={
           <div className="folder-browser-preview">
             <div className="folder-browser-content">
-              {!publicShare && selected !== undefined && downloadFile !== undefined ? (
-                <div className="artifact-preview-action folder-browser-download">
-                  <Button
-                    icon={DownloadSimpleIcon}
-                    onClick={() => downloadFile(selected.path)}
-                    size="sm"
-                    type="button"
-                    variant="primary"
-                  >
-                    Download
-                  </Button>
-                </div>
-              ) : null}
-              <FileView
-                defaultMode={
-                  selected !== undefined && prefersSourceView(selected.mediaType, selected.path)
-                    ? 'source'
-                    : 'preview'
-                }
-                {...(fileHeader === undefined ? {} : { header: fileHeader })}
-                {...(source === null ? {} : { source })}
-                {...(selected === undefined ? {} : { fileName: selected.path })}
-                {...(review === undefined
-                  ? {}
-                  : {
-                      review: {
-                        canCreateThread: review.canCreateThread,
-                        revisionId: review.revisionId,
-                        ...(selected === undefined ? {} : { path: selected.path }),
-                        activeThreadId: review.activeThreadId,
-                        focusLine: review.focusLine,
-                        focusRequestId: review.focusRequestId,
-                        threads: review.threads,
-                        onCreateThread: review.onCreateThread,
-                        onDeletePost: review.onDeletePost,
-                        onEditPost: review.onEditPost,
-                        onSelectThread: review.onSelectThread,
-                        saving: review.saving,
-                      },
-                    })}
-                {...(review === undefined && navigation === undefined
-                  ? {}
-                  : {
-                      onOpenSidebar: toggleSidebar,
-                      sidebarControlsId,
-                      sidebarLabel:
-                        review === undefined
-                          ? 'folder files sidebar'
-                          : 'folder tree and discussions sidebar',
-                      sidebarOpen,
-                    })}
-                key={folderFileViewKey(selected?.path, bytes === undefined)}
-                {...(selectedRenderer?.kind !== 'html' ||
-                authority === undefined ||
-                resolution === undefined
-                  ? {}
-                  : {
-                      htmlPreview: (theme) => (
-                        <div className="artifact-surface artifact-html">
-                          <RendererFrame
-                            authority={authority}
-                            path={selected?.path}
-                            renderer={selectedRenderer}
-                            resolution={resolution}
-                            theme={theme}
-                          />
-                        </div>
-                      ),
-                    })}
-                preview={preview}
-                {...(shareToolbar === undefined ? {} : { shareToolbar })}
-              />
+              {selected === undefined ? (
+                <p className="folder-preview-state">This folder is empty.</p>
+              ) : (
+                <ArtifactFileView
+                  capabilities={{
+                    ...(downloadFile === undefined
+                      ? {}
+                      : { download: () => downloadFile(selected.path) }),
+                    ...(authority === undefined ||
+                    resolution === undefined ||
+                    rendererOrigin === undefined
+                      ? {}
+                      : {
+                          isolatedHtml: {
+                            origin: rendererOrigin,
+                            render: (renderer, theme) => (
+                              <div className="artifact-surface artifact-html">
+                                <RendererFrame
+                                  authority={authority}
+                                  path={selected.path}
+                                  renderer={renderer}
+                                  resolution={resolution}
+                                  theme={theme}
+                                />
+                              </div>
+                            ),
+                          },
+                        }),
+                  }}
+                  content={fileContent}
+                  file={{
+                    id: folderFileViewKey(selected.path, fileContent.status === 'loading'),
+                    mediaType: selected.mediaType,
+                    name: selected.path,
+                  }}
+                  {...(review === undefined
+                    ? {}
+                    : {
+                        review: {
+                          canCreateThread: review.canCreateThread,
+                          revisionId: review.revisionId,
+                          path: selected.path,
+                          activeThreadId: review.activeThreadId,
+                          focusLine: review.focusLine,
+                          focusRequestId: review.focusRequestId,
+                          threads: review.threads,
+                          onCreateThread: review.onCreateThread,
+                          onDeletePost: review.onDeletePost,
+                          onEditPost: review.onEditPost,
+                          onSelectThread: review.onSelectThread,
+                          saving: review.saving,
+                        },
+                      })}
+                  {...(toggleSidebar === undefined
+                    ? {}
+                    : {
+                        sidebar: {
+                          controlsId: sidebarControlsId,
+                          label:
+                            review === undefined
+                              ? 'folder files sidebar'
+                              : 'folder tree and discussions sidebar',
+                          onToggle: toggleSidebar,
+                          open: sidebarOpen,
+                        },
+                      })}
+                />
+              )}
             </div>
           </div>
         }

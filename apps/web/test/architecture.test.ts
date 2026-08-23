@@ -17,6 +17,31 @@ async function sourceText(directory: string, excluded = new Set<string>()): Prom
 }
 
 describe('anonymous viewer architecture', () => {
+  it('keeps file renderer dispatch in one shared module', async () => {
+    const sourceRoot = path.resolve(import.meta.dirname, '../src');
+    const canonical = await readFile(
+      path.join(sourceRoot, 'components/artifact-file-view.tsx'),
+      'utf8',
+    );
+    expect(canonical).toContain('export function ArtifactFileView');
+    expect(canonical).toContain('StructuredDataPreview');
+    expect(canonical).toContain('DelimitedTablePreview');
+    expect(canonical).toContain('DocxPreview');
+    expect(canonical).toContain('WorkbookPreview');
+
+    for (const adapterPath of [
+      'components/folder-browser.tsx',
+      'dashboard/managed-artifact-content.tsx',
+      'viewer-page.tsx',
+    ]) {
+      const adapter = await readFile(path.join(sourceRoot, adapterPath), 'utf8');
+      expect(adapter).toContain('ArtifactFileView');
+      expect(adapter).not.toMatch(
+        /StructuredDataPreview|DelimitedTablePreview|DocxPreview|WorkbookPreview|PdfViewer|AudioPreview|VideoPreview/u,
+      );
+    }
+  });
+
   it('has no server-layer imports or capability-leaking browser APIs', async () => {
     const sourceRoot = path.resolve(import.meta.dirname, '../src');
     const persistencePath = path.join(sourceRoot, 'components/review/persistence.ts');
@@ -68,7 +93,7 @@ describe('anonymous viewer architecture', () => {
 
   it('streams downloads through the access-type-specific anonymous route', async () => {
     const source = await readFile(
-      path.resolve(import.meta.dirname, '../src/components/artifact-content.tsx'),
+      path.resolve(import.meta.dirname, '../src/viewer-page.tsx'),
       'utf8',
     );
     expect(source).toContain("authority.accessType === 'protected' ? 'post' : 'get'");
