@@ -12,9 +12,11 @@ import { Type } from 'typebox';
 
 import type { ShelfAppDependencies } from '../app.js';
 import { authenticate } from '../authenticate.js';
+import { deliverContent } from '../content-delivery.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
 
 export const REVISION_CONTENT_ROUTE_URL = '/api/v1/revisions/:revisionId/content';
+export const REVISION_PREVIEW_ROUTE_URL = '/api/v1/revisions/:revisionId/preview';
 export const REVISION_COMPARISON_ROUTE_URL =
   '/api/v1/revisions/:baseRevisionId/comparisons/:targetRevisionId';
 
@@ -103,6 +105,59 @@ const NotModifiedResponseSchema = {
 };
 
 const RangeErrorResponseSchema = {
+  ...Type.Ref('ErrorEnvelope'),
+  headers: {
+    'Content-Range': {
+      type: 'string',
+      description: 'Unsatisfied range form: bytes */ followed by the full revision size.',
+    },
+  },
+};
+
+const PreviewResponseHeaders = {
+  'Accept-Ranges': { type: 'string', description: 'Supported range unit; always bytes.' },
+  'Content-Disposition': {
+    type: 'string',
+    description: 'Inline disposition with a safe file name.',
+  },
+  'Content-Length': { type: 'integer', description: 'Selected byte count.' },
+  'Content-Range': { type: 'string', description: 'Inclusive byte range and full size.' },
+  ETag: { type: 'string', description: 'Strong SHA-256 entity tag for this revision.' },
+  'X-Content-Type-Options': {
+    type: 'string',
+    description: 'MIME-sniffing protection; always nosniff.',
+  },
+  'Content-Security-Policy': {
+    type: 'string',
+    description: 'Sandbox policy for inline active documents.',
+  },
+} as const;
+
+const PreviewFullResponseSchema = {
+  ...Type.String({
+    format: 'binary',
+    description: 'Complete immutable revision bytes delivered inline.',
+  }),
+  headers: PreviewResponseHeaders,
+};
+
+const PreviewPartialResponseSchema = {
+  ...Type.String({
+    format: 'binary',
+    description: 'Selected immutable revision bytes delivered inline.',
+  }),
+  headers: PreviewResponseHeaders,
+};
+
+const PreviewNotModifiedResponseSchema = {
+  ...Type.Null({ description: 'The entity tag matched; no bytes are returned.' }),
+  headers: {
+    'Accept-Ranges': { type: 'string', description: 'Supported range unit; always bytes.' },
+    ETag: { type: 'string', description: 'Strong SHA-256 entity tag for this revision.' },
+  },
+};
+
+const PreviewRangeErrorResponseSchema = {
   ...Type.Ref('ErrorEnvelope'),
   headers: {
     'Content-Range': {
@@ -324,6 +379,58 @@ export async function registerRevisionRoutes(
         reply.header('content-range', `bytes ${range.start}-${range.end}/${revision.byteCount}`);
       }
       return reply.status(range === undefined ? 200 : 206).send(Readable.from(content));
+    },
+  );
+
+  app.get(
+    REVISION_PREVIEW_ROUTE_URL,
+    {
+      schema: {
+        operationId: 'previewRevisionContentV1',
+        summary: 'Preview one exact immutable revision inline',
+        description:
+          'Returns the stored media type inline. Supports validators and one RFC 9110 bytes range; active document types are sandboxed.',
+        produces: ['application/octet-stream'],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        tags: ['revisions'],
+        params: ParamsSchema,
+        headers: HeadersSchema,
+        response: {
+          200: PreviewFullResponseSchema,
+          206: PreviewPartialResponseSchema,
+          304: PreviewNotModifiedResponseSchema,
+          400: Type.Ref('ErrorEnvelope'),
+          401: Type.Ref('ErrorEnvelope'),
+          403: Type.Ref('ErrorEnvelope'),
+          404: Type.Ref('ErrorEnvelope'),
+          416: PreviewRangeErrorResponseSchema,
+          500: Type.Ref('ErrorEnvelope'),
+          503: Type.Ref('ErrorEnvelope'),
+        },
+      },
+    },
+    async (request, reply) => {
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { revisionId: string };
+      const headers = request.headers as { range?: string; 'if-none-match'?: string };
+      const revision = await readRevision({
+        installationId: identity.installationId,
+        actorId: identity.actorId,
+        revisionId: params.revisionId,
+        signal: requestCancellationSignal(request, reply),
+      });
+      return deliverContent(
+        reply,
+        { range: headers.range, ifNoneMatch: headers['if-none-match'] },
+        {
+          mediaType: revision.mediaType,
+          byteCount: revision.byteCount,
+          contentHash: revision.contentHash,
+          originalFileName: revision.originalFileName,
+          read: (range) => revision.read(range),
+        },
+        { disposition: 'inline', fallbackFileName: `revision-${revision.revisionId}.bin` },
+      );
     },
   );
 }

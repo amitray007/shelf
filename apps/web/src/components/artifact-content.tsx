@@ -1,26 +1,35 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable previews must be keyboard reachable.
 
 import { Button } from '@cloudflare/kumo/components/button';
-import { Empty } from '@cloudflare/kumo/components/empty';
 import { DownloadSimpleIcon } from '@phosphor-icons/react/DownloadSimple';
 import { FileIcon } from '@phosphor-icons/react/File';
-import { FileDashedIcon } from '@phosphor-icons/react/FileDashed';
 import { FolderIcon } from '@phosphor-icons/react/Folder';
 import type { FolderEntry, PublicShareResolution } from '@shelf/contracts';
 
 import { type ViewerAuthority, viewerShareActionUrl } from '../api.js';
-import { normalizeMediaType, type PassiveRenderer } from '../rendering.js';
+import type { PassiveRenderer } from '../rendering.js';
+import { prefersSourceView } from '../rendering.js';
 import { isFileShareResolution, isFolderShareResolution } from '../share-types.js';
-import { CodeView, type FileReviewProps, FileView, formatJson } from './file-view.js';
-import { formatBytes } from './format.js';
+import { DownloadOnlyState } from './download-only-state.js';
+import { CodeView, type FileReviewProps, FileView } from './file-view.js';
+import { formatFileType } from './format.js';
 import { LazyMarkdownView as MarkdownView } from './lazy-views.js';
+import { DelimitedTablePreview } from './preview/delimited-table-preview.js';
+import { AudioPreview, VideoPreview } from './preview/media-preview.js';
+import { DocxPreview } from './preview/office-document-preview.js';
+import { pdfJsAdapter } from './preview/pdf-js.js';
+import { PdfViewer } from './preview/pdf-viewer.js';
+import { StructuredDataPreview } from './preview/structured-data-preview.js';
+import { WorkbookPreview } from './preview/workbook-preview.js';
 import { RendererFrame } from './renderer-frame.js';
 
 interface ArtifactContentProps {
   readonly resolution: PublicShareResolution;
   readonly renderer: PassiveRenderer;
   readonly text?: string | undefined;
+  readonly bytes?: ArrayBuffer | undefined;
   readonly entries?: readonly FolderEntry[];
+  readonly previewUrl?: string | undefined;
   readonly downloadUrl?: string;
   readonly authority: ViewerAuthority;
   readonly review?: FileReviewProps | undefined;
@@ -66,35 +75,24 @@ export function DownloadAction({
   };
   return (
     <Button
+      {...(compact
+        ? {
+            'aria-label': 'Download',
+            title: `Download ${resolution.revision.originalFileName}`,
+          }
+        : {})}
       icon={DownloadSimpleIcon}
       onClick={download}
       {...(compact ? { size: 'sm' as const } : {})}
       type="button"
       variant="primary"
     >
-      {compact ? 'Download' : `Download ${resolution.revision.originalFileName}`}
+      {compact ? (
+        <span className="file-view-download-label">Download</span>
+      ) : (
+        `Download ${resolution.revision.originalFileName}`
+      )}
     </Button>
-  );
-}
-
-function DownloadOnly({
-  mediaType,
-  resolution,
-  authority,
-}: {
-  readonly mediaType: string;
-  readonly resolution: Extract<PublicShareResolution, { artifact: { kind: 'file' } }>;
-  readonly authority: ViewerAuthority;
-}) {
-  return (
-    <Empty
-      className="download-empty"
-      contents={<DownloadAction authority={authority} resolution={resolution} />}
-      description={`This ${mediaType} artifact stays download-only to keep active content outside Shelf.`}
-      icon={<FileDashedIcon aria-hidden="true" size={32} />}
-      size="sm"
-      title="Preview unavailable"
-    />
   );
 }
 
@@ -123,11 +121,6 @@ export function FolderTree({ entries }: { readonly entries: readonly FolderEntry
             <span className="tree-name" title={entry.path}>
               {name}
             </span>
-            {entry.kind === 'file' && (
-              <span className="tree-meta">
-                {entry.mediaType} · {formatBytes(entry.byteCount)}
-              </span>
-            )}
           </li>
         );
       })}
@@ -139,7 +132,9 @@ export function ArtifactContent({
   resolution,
   renderer,
   text,
+  bytes,
   entries = [],
+  previewUrl,
   downloadUrl,
   authority,
   review,
@@ -162,14 +157,13 @@ export function ArtifactContent({
 
   if (!isFileShareResolution(resolution)) return null;
 
-  const fileHeader = (
-    <>
-      <strong title={resolution.revision.originalFileName}>
-        {resolution.revision.originalFileName}
-      </strong>
-      <span>{formatBytes(resolution.revision.byteCount)}</span>
-    </>
-  );
+  const shareToolbar = {
+    download: <DownloadAction authority={authority} compact resolution={resolution} />,
+    formatLabel: formatFileType(
+      resolution.revision.originalFileName,
+      resolution.revision.mediaType,
+    ),
+  };
   const sidebarProps = {
     ...(onOpenSidebar === undefined ? {} : { onOpenSidebar }),
     ...(sidebarControlsId === undefined ? {} : { sidebarControlsId }),
@@ -177,7 +171,6 @@ export function ArtifactContent({
     ...(sidebarLabel === undefined ? {} : { sidebarLabel }),
   };
 
-  const normalizedMediaType = normalizeMediaType(resolution.revision.mediaType);
   let preview: React.ReactNode | undefined;
   if (renderer.kind === 'html') {
     preview = (
@@ -185,12 +178,14 @@ export function ArtifactContent({
         <RendererFrame authority={authority} renderer={renderer} resolution={resolution} />
       </div>
     );
-  } else if (renderer.kind === 'image' || normalizedMediaType === 'image/svg+xml') {
+  } else if (renderer.kind === 'image' && (previewUrl !== undefined || downloadUrl !== undefined)) {
     preview = (
       <div className="artifact-surface artifact-image">
-        {downloadUrl === undefined ? null : (
-          <img alt={resolution.artifact.name} referrerPolicy="no-referrer" src={downloadUrl} />
-        )}
+        <img
+          alt={resolution.artifact.name}
+          referrerPolicy="no-referrer"
+          src={previewUrl ?? downloadUrl}
+        />
       </div>
     );
   } else if (renderer.kind === 'markdown' && text !== undefined) {
@@ -205,41 +200,113 @@ export function ArtifactContent({
     );
   } else if (renderer.kind === 'json' && text !== undefined) {
     preview = (
+      <StructuredDataPreview
+        fileName={resolution.revision.originalFileName}
+        mediaType={resolution.revision.mediaType}
+        showFileIdentity={false}
+        showModeTabs={false}
+        source={text}
+      />
+    );
+  } else if (renderer.kind === 'table' && text !== undefined) {
+    preview = (
+      <DelimitedTablePreview
+        fileName={resolution.revision.originalFileName}
+        mediaType={resolution.revision.mediaType}
+        showFileIdentity={false}
+        showModeTabs={false}
+        source={text}
+      />
+    );
+  } else if (renderer.kind === 'docx' && bytes !== undefined) {
+    preview = (
+      <DocxPreview
+        metadata={{
+          byteCount: bytes.byteLength,
+          fileName: resolution.revision.originalFileName,
+          mediaType: resolution.revision.mediaType,
+        }}
+        src={bytes}
+        title={resolution.revision.originalFileName}
+      />
+    );
+  } else if (renderer.kind === 'workbook' && bytes !== undefined) {
+    preview = (
+      <WorkbookPreview
+        metadata={{
+          byteCount: bytes.byteLength,
+          fileName: resolution.revision.originalFileName,
+          format: 'xlsx',
+          mediaType: resolution.revision.mediaType,
+        }}
+        src={bytes}
+        showFileIdentity={false}
+        title={resolution.revision.originalFileName}
+      />
+    );
+  } else if (renderer.kind === 'text' && text !== undefined) {
+    preview = (
       <CodeView
         fileName={resolution.revision.originalFileName}
-        label="Artifact data preview"
-        source={formatJson(text)}
+        label="Artifact source preview"
+        source={text}
       />
+    );
+  } else if (renderer.kind === 'pdf' && previewUrl !== undefined) {
+    preview = (
+      <div className="artifact-surface artifact-pdf">
+        <PdfViewer adapter={pdfJsAdapter} src={previewUrl} title="PDF preview" />
+      </div>
+    );
+  } else if (renderer.kind === 'audio' && previewUrl !== undefined) {
+    preview = (
+      <div className="artifact-surface artifact-media">
+        <AudioPreview
+          showFileIdentity={false}
+          src={previewUrl}
+          title={resolution.revision.originalFileName}
+        />
+      </div>
+    );
+  } else if (renderer.kind === 'video' && previewUrl !== undefined) {
+    preview = (
+      <div className="artifact-surface artifact-media">
+        <VideoPreview src={previewUrl} title={resolution.revision.originalFileName} />
+      </div>
     );
   }
 
-  if (preview !== undefined || text !== undefined) {
+  if (preview !== undefined || text !== undefined || bytes !== undefined) {
     return (
       <FileView
-        header={fileHeader}
         {...(text === undefined ? {} : { source: text })}
+        defaultMode={
+          prefersSourceView(resolution.revision.mediaType, resolution.revision.originalFileName)
+            ? 'source'
+            : 'preview'
+        }
         fileName={resolution.revision.originalFileName}
         key={resolution.revision.revisionId}
         preview={preview}
         review={review}
+        shareToolbar={shareToolbar}
         {...sidebarProps}
       />
     );
   }
-  if (renderer.kind === 'download') {
+  if (renderer.kind === 'download' || preview === undefined) {
     return (
       <FileView
         fileName={resolution.revision.originalFileName}
-        header={fileHeader}
         preview={
           <div className="artifact-surface artifact-download">
-            <DownloadOnly
-              authority={authority}
+            <DownloadOnlyState
+              fileName={resolution.revision.originalFileName}
               mediaType={resolution.revision.mediaType}
-              resolution={resolution}
             />
           </div>
         }
+        shareToolbar={shareToolbar}
         {...sidebarProps}
       />
     );

@@ -98,6 +98,101 @@ describe('core HTML resolver', () => {
     ).resolves.toEqual({ status: 'available', html: '<!doctype html><h1>Artifact</h1>' });
   });
 
+  it('opens an exact HTML entry from a shared folder', async () => {
+    const path = 'site/index.html';
+    const content = new TextEncoder().encode(html);
+    const dependencies = rendererDependencies({ content });
+    const createdAt = '2026-08-17T12:00:00.000Z';
+    const revision = {
+      kind: 'folder' as const,
+      revisionId: rendererIds.revision,
+      revisionNumber: 1,
+      rootName: 'site',
+      contentHash: `sha256:${'b'.repeat(64)}`,
+      byteCount: content.byteLength,
+      fileCount: 1,
+      createdAt,
+      provenance: {
+        classification: 'direct-publish' as const,
+        observed: { actorId: 'private-actor', operation: 'folder.publish' as const },
+      },
+      publisherMetadata: {},
+    };
+    dependencies.shares.resolveShareTarget = async () => ({
+      share: rendererStoredShare(),
+      artifact: {
+        installationId: 'install-main',
+        workspaceId: 'workspace-main',
+        artifactId: rendererIds.artifact,
+        kind: 'folder',
+        name: 'Site',
+        createdAt,
+        updatedAt: createdAt,
+        retentionMode: 'automatic',
+        autoTrashAt: null,
+        latestRevision: revision,
+      },
+      revision: {
+        installationId: 'install-main',
+        workspaceId: 'workspace-main',
+        artifactId: rendererIds.artifact,
+        revision,
+      },
+    });
+    dependencies.folders.findFolderRevision = async () => ({
+      apiVersion: 'v1',
+      kind: 'folder',
+      installationId: 'install-main',
+      workspaceId: 'workspace-main',
+      artifactId: rendererIds.artifact,
+      revisionId: rendererIds.revision,
+      manifest: {
+        contentId: 'folder-manifest',
+        contentHash: revision.contentHash,
+        byteCount: 1,
+      },
+      rootName: revision.rootName,
+      totalByteCount: content.byteLength,
+      fileCount: 1,
+      provenance: revision.provenance,
+      publisherMetadata: {},
+    });
+    dependencies.folders.listFolderEntries = async () => ({
+      items: [
+        {
+          kind: 'file',
+          path,
+          mediaType: 'text/html',
+          content: {
+            contentId: 'folder-html',
+            contentHash: `sha256:${'c'.repeat(64)}`,
+            byteCount: content.byteLength,
+          },
+        },
+      ],
+    });
+
+    await expect(
+      createCoreHtmlResolver({
+        ...dependencies,
+        viewerSessionTokenCodec: {
+          verify: () => ({
+            shareId: rendererIds.share,
+            sessionId: rendererIds.sessionId,
+            issuedAt: createdAt,
+            accessExpiresAt: '2026-08-18T12:00:00.000Z',
+          }),
+        },
+        clock: () => new Date('2026-08-17T12:30:00.000Z'),
+      }).resolveHtml({
+        accessType: 'protected',
+        shareId: rendererIds.share,
+        viewerToken,
+        path,
+      }),
+    ).resolves.toEqual({ status: 'available', html });
+  });
+
   it('rejects cross-share viewer-token replay and revalidates revocation after issuance', async () => {
     await expect(
       resolver().resolveHtml({

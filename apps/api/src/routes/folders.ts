@@ -1,4 +1,3 @@
-import { Readable } from 'node:stream';
 import type { Multipart, MultipartFile, MultipartValue } from '@fastify/multipart';
 import {
   FOLDER_LIMITS,
@@ -21,6 +20,7 @@ import { Type } from 'typebox';
 
 import type { ShelfAppDependencies, ShelfMultipartLimits } from '../app.js';
 import { authenticate } from '../authenticate.js';
+import { deliverContent } from '../content-delivery.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
 
 export const FOLDER_CREATE_ROUTE = '/api/v1/workspaces/:workspaceId/folders';
@@ -81,6 +81,20 @@ const EntryQuerySchema = Type.Object(
   { path: PortableFolderPathSchema },
   { additionalProperties: false },
 );
+const ContentHeadersSchema = Type.Object(
+  {
+    range: Type.Optional(
+      Type.String({
+        maxLength: 256,
+        description: 'One RFC 9110 bytes range. Multiple ranges are not supported.',
+      }),
+    ),
+    'if-none-match': Type.Optional(
+      Type.String({ maxLength: 1024, description: 'Conditional entity tag validator.' }),
+    ),
+  },
+  { additionalProperties: true },
+);
 const errorResponses = {
   400: Type.Ref('ErrorEnvelope'),
   401: Type.Ref('ErrorEnvelope'),
@@ -90,6 +104,30 @@ const errorResponses = {
   499: Type.Ref('ErrorEnvelope'),
   500: Type.Ref('ErrorEnvelope'),
   503: Type.Ref('ErrorEnvelope'),
+};
+
+const ContentResponseHeaders = {
+  'Accept-Ranges': { type: 'string', description: 'Supported range unit; always bytes.' },
+  'Content-Disposition': { type: 'string', description: 'Safe file disposition and name.' },
+  'Content-Length': { type: 'integer', description: 'Selected byte count.' },
+  'Content-Range': { type: 'string', description: 'Inclusive byte range and full size.' },
+  ETag: { type: 'string', description: 'Strong SHA-256 entity tag for this file.' },
+  'X-Content-Type-Options': { type: 'string', description: 'Always nosniff.' },
+} as const;
+const FullContentResponseSchema = {
+  ...Type.String({ format: 'binary', description: 'Immutable folder entry bytes.' }),
+  headers: ContentResponseHeaders,
+};
+const NotModifiedResponseSchema = {
+  ...Type.Null({ description: 'The entity tag matched; no bytes are returned.' }),
+  headers: {
+    'Accept-Ranges': { type: 'string' },
+    ETag: { type: 'string' },
+  },
+};
+const RangeErrorResponseSchema = {
+  ...Type.Ref('ErrorEnvelope'),
+  headers: { 'Content-Range': { type: 'string' } },
 };
 
 function invalid(field: string, reason: string): InvalidPublishRequestError {
@@ -307,7 +345,14 @@ export async function registerFolderRoutes(
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         params: RevisionParamsSchema,
         querystring: EntryQuerySchema,
-        response: { 200: { type: 'string', format: 'binary' }, ...errorResponses },
+        headers: ContentHeadersSchema,
+        response: {
+          200: FullContentResponseSchema,
+          206: FullContentResponseSchema,
+          304: NotModifiedResponseSchema,
+          416: RangeErrorResponseSchema,
+          ...errorResponses,
+        },
       },
     },
     async (request, reply) => {
@@ -315,6 +360,7 @@ export async function registerFolderRoutes(
       const identity = await authenticate(request, dependencies.authenticator);
       const params = request.params as { revisionId: string };
       const query = request.query as { path: string };
+      const headers = request.headers as { range?: string; 'if-none-match'?: string };
       const file = await readEntry({
         installationId: identity.installationId,
         actorId: identity.actorId,
@@ -322,15 +368,68 @@ export async function registerFolderRoutes(
         path: query.path,
         signal,
       });
-      return reply
-        .type(file.mediaType)
-        .header(
-          'Content-Disposition',
-          `inline; filename*=UTF-8''${encodeURIComponent(query.path.split('/').at(-1) ?? 'file')}`,
-        )
-        .header('Content-Length', file.byteCount)
-        .header('ETag', `"${file.contentHash}"`)
-        .send(Readable.from(await file.read()));
+      return deliverContent(
+        reply,
+        { range: headers.range, ifNoneMatch: headers['if-none-match'] },
+        {
+          mediaType: file.mediaType,
+          byteCount: file.byteCount,
+          contentHash: file.contentHash,
+          originalFileName: file.path,
+          read: file.read,
+        },
+        { disposition: 'attachment', fallbackFileName: 'file' },
+      );
+    },
+  );
+
+  app.get(
+    '/api/v1/revisions/:revisionId/tree/content/preview',
+    {
+      schema: {
+        operationId: 'previewFolderEntryContentV1',
+        summary: 'Preview one file from an immutable folder revision',
+        description:
+          'Returns the stored media type inline and supports validators and one bytes range.',
+        produces: ['application/octet-stream'],
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        params: RevisionParamsSchema,
+        headers: ContentHeadersSchema,
+        querystring: EntryQuerySchema,
+        response: {
+          200: FullContentResponseSchema,
+          206: FullContentResponseSchema,
+          304: NotModifiedResponseSchema,
+          416: RangeErrorResponseSchema,
+          ...errorResponses,
+        },
+      },
+    },
+    async (request, reply) => {
+      const signal = requestCancellationSignal(request, reply);
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { revisionId: string };
+      const query = request.query as { path: string };
+      const headers = request.headers as { range?: string; 'if-none-match'?: string };
+      const file = await readEntry({
+        installationId: identity.installationId,
+        actorId: identity.actorId,
+        revisionId: params.revisionId,
+        path: query.path,
+        signal,
+      });
+      return deliverContent(
+        reply,
+        { range: headers.range, ifNoneMatch: headers['if-none-match'] },
+        {
+          mediaType: file.mediaType,
+          byteCount: file.byteCount,
+          contentHash: file.contentHash,
+          originalFileName: file.path,
+          read: file.read,
+        },
+        { disposition: 'inline', fallbackFileName: 'file' },
+      );
     },
   );
 }

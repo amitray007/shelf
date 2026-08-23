@@ -4,18 +4,26 @@ import type { AxeResults } from 'axe-core';
 
 import {
   artifactId,
+  audioShareId,
   createdCredentialToken,
   createdShareId,
+  csvShareId,
   folderArtifactId,
   htmlShareId,
   longArtifactName,
   longFolderName,
   longFolderPath,
   markdownShareId,
+  pdfShareId,
+  publicPdfCode,
   rendererOrigin,
   shareSecret,
   shortArtifactId,
+  svgShareId,
+  videoShareId,
   workspaceId,
+  xlsxShareId,
+  yamlShareId,
 } from './fixtures.js';
 
 declare global {
@@ -100,10 +108,11 @@ async function expectActionWithinViewport(
   page: Page,
   name: string,
   role: 'button' | 'link' = 'button',
+  root: Page | Locator = page,
 ): Promise<void> {
   const viewport = page.viewportSize();
   expect(viewport).not.toBeNull();
-  const action = page.getByRole(role, { name, exact: true });
+  const action = root.getByRole(role, { name, exact: true });
   await expect(action).toBeVisible();
   const box = await action.boundingBox();
   expect(box).not.toBeNull();
@@ -651,6 +660,218 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
   ).toBeVisible();
   await freshTab.close();
   diagnostics.assertClean();
+});
+
+test('rich protected shares render structured and image previews without leaking capability material', async ({
+  page,
+}) => {
+  const diagnostics = trackPageErrors(page);
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
+
+  await page.goto(`/s/${yamlShareId}#${shareSecret}`);
+  await expect(page).toHaveURL(`/s/${yamlShareId}`);
+  const yamlControls = page.getByRole('region', { name: 'preview.yaml view controls' });
+  await expect(yamlControls.getByText('preview', { exact: true })).toBeVisible();
+  await expect(page.getByRole('tablist')).toHaveCount(1);
+  await expect(yamlControls.getByRole('tab', { name: 'Preview' })).toBeVisible();
+  await expect(yamlControls.getByRole('tab', { name: 'Source' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Preview' })).toHaveCount(1);
+  await expect(page.getByRole('tab', { name: 'Source' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Download', exact: true })).toHaveCount(1);
+  await yamlControls.getByRole('tab', { name: 'Source' }).click();
+  await expect(page.locator('body')).toContainText('name: Shelf preview');
+  await yamlControls.getByRole('tab', { name: 'Preview' }).click();
+  await expect(page.getByRole('tabpanel')).toContainText('Shelf preview');
+
+  await page.goto(`/s/${csvShareId}#${shareSecret}`);
+  const csvControls = page.getByRole('region', { name: 'preview.csv view controls' });
+  await expect(csvControls.getByText('preview', { exact: true })).toBeVisible();
+  await expect(page.getByRole('tablist')).toHaveCount(1);
+  await expect(page.getByRole('tab', { name: 'Preview' })).toHaveCount(1);
+  await expect(page.getByRole('tab', { name: 'Source' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Download', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('tabpanel')).toContainText('Deterministic fixture');
+  const csvScroll = page.getByRole('region', {
+    name: 'preview.csv horizontally scrollable table',
+  });
+  const csvExtent = await csvScroll.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(csvExtent.scrollWidth).toBeGreaterThan(csvExtent.clientWidth);
+  await csvScroll.evaluate((element) => {
+    element.scrollLeft = element.scrollWidth;
+  });
+  await expect.poll(() => csvScroll.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+  await page
+    .getByRole('region', { name: 'preview.csv view controls' })
+    .getByRole('tab', { name: 'Source' })
+    .click();
+  await expect(page.locator('body')).toContainText('id,label,score');
+
+  await page.goto(`/s/${svgShareId}#${shareSecret}`);
+  const svgControls = page.getByRole('region', { name: 'preview.svg view controls' });
+  await expect(svgControls.getByText('preview', { exact: true })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'preview.svg' })).toBeVisible();
+
+  const previewUrls = requests.filter((url) => url.includes('/content/preview'));
+  expect(previewUrls.length).toBeGreaterThan(0);
+  expect(previewUrls.every((url) => !url.includes(shareSecret))).toBe(true);
+  expect(previewUrls.every((url) => new URL(url).search === '' && !url.includes('#'))).toBe(true);
+  expect(requests.some((url) => url.includes(shareSecret))).toBe(false);
+
+  const scope = await page.evaluate(
+    async () =>
+      (await fetch('/__fixture/cookie-scope')).json() as Promise<{
+        readonly protectedCookieOnUnscopedPath: boolean;
+      }>,
+  );
+  expect(scope.protectedCookieOnUnscopedPath).toBe(false);
+  await expectNoHorizontalOverflow(page, [page.locator('.artifact-surface')]);
+  diagnostics.assertClean();
+});
+
+test('a singular workbook fills its pane without creating fake sheet overflow', async ({
+  page,
+}) => {
+  await page.goto(`/s/${xlsxShareId}#${shareSecret}`);
+  await expect(page).toHaveURL(`/s/${xlsxShareId}`);
+
+  const controls = page.getByRole('region', { name: 'preview-sheet.xlsx view controls' });
+  await expect(controls.getByText('preview-sheet', { exact: true })).toBeVisible();
+  await expect(controls.getByText('XLSX', { exact: true })).toBeVisible();
+
+  const workbook = page.getByRole('region', { name: 'preview-sheet.xlsx', exact: true });
+  const grid = page.getByRole('grid', { name: 'Overview workbook grid' });
+  await expect(workbook).toBeVisible();
+  await expect(grid).toBeVisible();
+  await expect(workbook.locator('.workbook-preview-status')).toHaveCount(0);
+
+  await expect
+    .poll(async () => {
+      const gridBox = await grid.boundingBox();
+      const lastColumnBox = await grid.getByRole('columnheader', { name: 'D' }).boundingBox();
+      if (gridBox === null || lastColumnBox === null) return Number.POSITIVE_INFINITY;
+      return Math.abs(gridBox.x + gridBox.width - (lastColumnBox.x + lastColumnBox.width));
+    })
+    .toBeLessThan(2);
+
+  const gridExtent = await grid.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(gridExtent.scrollHeight).toBe(gridExtent.clientHeight);
+
+  await page.getByRole('tab', { name: 'Checks' }).click();
+  const wideGrid = page.getByRole('grid', { name: 'Checks workbook grid' });
+  await expect(wideGrid).toBeVisible();
+  const wideExtent = await wideGrid.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(wideExtent.scrollWidth).toBeGreaterThan(wideExtent.clientWidth);
+  await wideGrid.evaluate((element) => {
+    element.scrollLeft = element.scrollWidth;
+  });
+  await expect.poll(() => wideGrid.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+  await expect(wideGrid.getByRole('columnheader', { name: 'L' })).toBeVisible();
+});
+
+test('rich protected and public media shares expose inline preview controls and ranges', async ({
+  page,
+}) => {
+  const diagnostics = trackPageErrors(page, [/^The resource was preloaded using link preload/u]);
+  const requests: string[] = [];
+  const previewResponses: { readonly headers: Record<string, string>; readonly status: number }[] =
+    [];
+  page.on('request', (request) => requests.push(request.url()));
+  page.on('response', (response) => {
+    if (response.url().includes('/content/preview')) {
+      previewResponses.push({ headers: response.headers(), status: response.status() });
+    }
+  });
+
+  await page.goto(`/s/${pdfShareId}#${shareSecret}`);
+  await expect(page.getByRole('region', { name: 'PDF preview' })).toBeVisible();
+  await expect(page.locator('canvas[role="img"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Previous PDF page' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Fit PDF page to width' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Zoom in PDF' })).toBeVisible();
+
+  const protectedPreviewUrl = `/api/v1/public/shares/${pdfShareId}/content/preview`;
+  const protectedRange = await page.evaluate(async (url) => {
+    const response = await fetch(url, { headers: { Range: 'bytes=0-15' } });
+    return {
+      acceptRanges: response.headers.get('accept-ranges'),
+      contentLength: response.headers.get('content-length'),
+      contentRange: response.headers.get('content-range'),
+      contentType: response.headers.get('content-type'),
+      etag: response.headers.get('etag'),
+      status: response.status,
+    };
+  }, protectedPreviewUrl);
+  expect(protectedRange.status).toBe(206);
+  expect(protectedRange.acceptRanges).toBe('bytes');
+  expect(protectedRange.contentRange).toBe('bytes 0-15/583');
+  expect(protectedRange.contentLength).toBe('16');
+  expect(protectedRange.contentType).toBe('application/pdf');
+  expect(protectedRange.etag).toBeTruthy();
+
+  await page.goto(`/s/${audioShareId}#${shareSecret}`);
+  const audio = page.locator('audio');
+  await expect(audio).toHaveAttribute('preload', 'metadata');
+  await expect(audio).not.toHaveAttribute('autoplay');
+  await expect(page.getByRole('button', { name: 'Play audio' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Mute audio' })).toBeVisible();
+
+  await page.goto(`/s/${videoShareId}#${shareSecret}`);
+  const video = page.locator('video');
+  await expect(video).toHaveAttribute('preload', 'metadata');
+  await expect(video).not.toHaveAttribute('autoplay');
+  await expect(page.getByRole('button', { name: 'Play video' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enter fullscreen' })).toBeVisible();
+
+  let downloadStarted = false;
+  page.on('download', async (event) => {
+    downloadStarted = true;
+    await event.cancel();
+  });
+  await page.goto(`/s/${publicPdfCode}`);
+  await expect(page).toHaveURL(`/s/${publicPdfCode}`);
+  await expect(page.getByRole('region', { name: 'PDF preview' })).toBeVisible();
+  await expect(page.locator('canvas[role="img"]')).toBeVisible();
+  const download = page
+    .getByRole('region', { name: 'preview-public.pdf view controls' })
+    .getByRole('button', { name: 'Download', exact: true });
+  await expect(download).toBeVisible();
+  expect(downloadStarted).toBe(false);
+  await download.click();
+  await expect.poll(() => downloadStarted).toBe(true);
+
+  const publicPreviewUrls = requests.filter((url) =>
+    url.includes(`/public/links/${publicPdfCode}`),
+  );
+  expect(publicPreviewUrls.every((url) => new URL(url).search === '')).toBe(true);
+  expect(requests.some((url) => url.includes(shareSecret))).toBe(false);
+  expect(previewResponses.some((response) => [200, 206].includes(response.status))).toBe(true);
+  await expectNoHorizontalOverflow(page, [page.locator('.artifact-surface')]);
+  diagnostics.assertClean();
+});
+
+test('rich public PDF preview remains usable at narrow mobile width', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto(`/s/${publicPdfCode}`);
+  const pdf = page.getByRole('region', { name: 'PDF preview' });
+  await expect(pdf).toBeVisible();
+  await expect(pdf.getByRole('button', { name: 'Next PDF page' })).toBeVisible();
+  await expectNoHorizontalOverflow(page, [pdf, page.locator('.artifact-surface')]);
+  await expectActionWithinViewport(
+    page,
+    'Download',
+    'button',
+    page.getByRole('region', { name: 'preview-public.pdf view controls' }),
+  );
 });
 
 test('reduced motion and the 200 percent layout equivalent preserve utility', async ({

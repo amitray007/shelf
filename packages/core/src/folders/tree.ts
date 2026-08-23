@@ -6,7 +6,7 @@ import {
 } from '@shelf/contracts';
 
 import { boundaryFailure, ShelfCoreError } from '../errors.js';
-import type { Authorizer, ContentReader } from '../publishing/ports.js';
+import type { Authorizer, ContentByteRange, ContentReader } from '../publishing/ports.js';
 import { RevisionNotFoundError } from '../revisions/read.js';
 import type { FolderRevisionRepository, StoredFolderRevision } from './publish.js';
 import type { StoredFolderEntry } from './snapshot.js';
@@ -165,8 +165,9 @@ export function createFolderEntryContentService(dependencies: {
       mediaType: entry.mediaType,
       byteCount: entry.content.byteCount,
       contentHash: entry.content.contentHash,
-      read: () =>
+      read: (range?: ContentByteRange) =>
         dependencies.contentReader.read(entry.content, {
+          ...(range === undefined ? {} : { range }),
           ...(request.signal === undefined ? {} : { signal: request.signal }),
         }),
     };

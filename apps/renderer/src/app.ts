@@ -1,3 +1,4 @@
+import { normalizePortableFolderPath } from '@shelf/core';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
 import {
@@ -13,8 +14,14 @@ export type RendererApp = FastifyInstance;
 export interface RendererHtmlResolver {
   resolveHtml(
     request:
-      | { accessType: 'protected'; shareId: string; viewerToken: string; signal?: AbortSignal }
-      | { accessType: 'public'; publicCode: string; signal?: AbortSignal },
+      | {
+          accessType: 'protected';
+          shareId: string;
+          viewerToken: string;
+          path?: string;
+          signal?: AbortSignal;
+        }
+      | { accessType: 'public'; publicCode: string; path?: string; signal?: AbortSignal },
   ): Promise<{ status: 'available'; html: string } | { status: 'unavailable' }>;
 }
 
@@ -43,8 +50,8 @@ function applyBoundaryHeaders(reply: FastifyReply, contentSecurityPolicy: string
 function parseRenderRequest(body: unknown): {
   nonce: string;
   request?:
-    | { accessType: 'protected'; shareId: string; viewerToken: string }
-    | { accessType: 'public'; publicCode: string };
+    | { accessType: 'protected'; shareId: string; viewerToken: string; path?: string }
+    | { accessType: 'public'; publicCode: string; path?: string };
 } {
   if (typeof body !== 'string') return { nonce: '' };
   const parameters = new URLSearchParams(body);
@@ -54,9 +61,19 @@ function parseRenderRequest(body: unknown): {
       ? (nonceValues[0] ?? '')
       : '';
   if (nonce === '') return { nonce };
+  const pathValues = parameters.getAll('path');
+  if (pathValues.length > 1) return { nonce };
+  let path: string | undefined;
+  if (pathValues.length === 1) {
+    try {
+      path = normalizePortableFolderPath(pathValues[0] ?? '');
+    } catch {
+      return { nonce };
+    }
+  }
   const keys = [...parameters.keys()];
   const protectedBody = keys.every(
-    (key) => key === 'shareId' || key === 'viewerToken' || key === 'nonce',
+    (key) => key === 'shareId' || key === 'viewerToken' || key === 'nonce' || key === 'path',
   );
   if (
     protectedBody &&
@@ -67,10 +84,18 @@ function parseRenderRequest(body: unknown): {
     const shareId = parameters.get('shareId') ?? '';
     const viewerToken = parameters.get('viewerToken') ?? '';
     return SHARE_ID_PATTERN.test(shareId) && VIEWER_TOKEN_PATTERN.test(viewerToken)
-      ? { nonce, request: { accessType: 'protected', shareId, viewerToken } }
+      ? {
+          nonce,
+          request: {
+            accessType: 'protected',
+            shareId,
+            viewerToken,
+            ...(path === undefined ? {} : { path }),
+          },
+        }
       : { nonce };
   }
-  const publicBody = keys.every((key) => key === 'publicCode' || key === 'nonce');
+  const publicBody = keys.every((key) => key === 'publicCode' || key === 'nonce' || key === 'path');
   if (
     publicBody &&
     parameters.getAll('publicCode').length === 1 &&
@@ -78,7 +103,14 @@ function parseRenderRequest(body: unknown): {
   ) {
     const publicCode = parameters.get('publicCode') ?? '';
     return PUBLIC_CODE_PATTERN.test(publicCode)
-      ? { nonce, request: { accessType: 'public', publicCode } }
+      ? {
+          nonce,
+          request: {
+            accessType: 'public',
+            publicCode,
+            ...(path === undefined ? {} : { path }),
+          },
+        }
       : { nonce };
   }
   return { nonce };

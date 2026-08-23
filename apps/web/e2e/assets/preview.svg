@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="96" viewBox="0 0 240 96" role="img" aria-label="Shelf SVG fixture">
+  <rect width="240" height="96" rx="12" fill="#111111"/>
+  <circle cx="48" cy="48" r="24" fill="#52a8ff"/>
+  <text x="88" y="56" fill="#ededed" font-family="sans-serif" font-size="20">Shelf SVG</text>
+</svg>

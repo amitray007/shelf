@@ -2,17 +2,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ViewerAuthority } from '../api.js';
 import type { PassiveRenderer } from '../rendering.js';
-import type { FileShareResolution } from '../share-types.js';
+import type { FileShareResolution, FolderShareResolution } from '../share-types.js';
 
 type HtmlRenderer = Extract<PassiveRenderer, { kind: 'html' }>;
 export function RendererFrame({
   renderer,
   resolution,
   authority,
+  path,
 }: {
   readonly renderer: HtmlRenderer;
-  readonly resolution: FileShareResolution;
+  readonly resolution: FileShareResolution | FolderShareResolution;
   readonly authority: ViewerAuthority;
+  readonly path?: string | undefined;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const nonceRef = useRef<string>(window.crypto.randomUUID());
@@ -99,7 +101,10 @@ export function RendererFrame({
       authority.accessType === 'protected'
         ? { shareId: authority.shareId, viewerToken: authority.token, nonce: nonceRef.current }
         : { publicCode: authority.publicCode, nonce: nonceRef.current };
-    for (const [name, value] of Object.entries(fields)) {
+    for (const [name, value] of Object.entries({
+      ...fields,
+      ...(path === undefined ? {} : { path }),
+    })) {
       const input = document.createElement('input');
       input.type = 'hidden';
       input.name = name;
@@ -116,7 +121,7 @@ export function RendererFrame({
     }
     clearDeadline();
     timeoutRef.current = window.setTimeout(terminateFrame, 8_000);
-  }, [authority, clearDeadline, renderer.url, terminateFrame]);
+  }, [authority, clearDeadline, path, renderer.url, terminateFrame]);
 
   const stopPostReadyNavigation = useCallback(() => {
     if (terminatedRef.current) return;
@@ -166,7 +171,7 @@ export function RendererFrame({
         referrerPolicy="no-referrer"
         sandbox="allow-scripts"
         src="about:blank"
-        title={`${resolution.artifact.name} isolated preview`}
+        title={`${path ?? resolution.artifact.name} isolated preview`}
       />
     </div>
   );

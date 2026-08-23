@@ -79,12 +79,13 @@ async function createShare(
   key: string,
   target: { mode: 'latest' } | { mode: 'pinned'; revisionId: string } = { mode: 'latest' },
   expiresAt: string | null = null,
+  accessType: 'protected' | 'public' = 'protected',
 ) {
   return app.inject({
     method: 'POST',
     url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/shares`,
     headers: { authorization: 'Bearer test', 'idempotency-key': key },
-    payload: { accessType: 'protected', target, ...(expiresAt === null ? {} : { expiresAt }) },
+    payload: { accessType, target, ...(expiresAt === null ? {} : { expiresAt }) },
   });
 }
 
@@ -620,6 +621,167 @@ describe('share HTTP boundary', () => {
     publicHeaders(expired);
   });
 
+  it('streams protected and public previews with single-range semantics', async () => {
+    const app = await fixture();
+    const published = await publishFile(app, '0123456789', 'publish-preview');
+    const protectedShare = await createShare(
+      app,
+      published.json().artifactId as string,
+      'share-preview-protected',
+    );
+    const shareId = protectedShare.json().shareId as string;
+    const secret = (protectedShare.json().url as string).split('#')[1] as string;
+    const established = await establishSession(app, shareId, secret);
+    const setCookie = established.headers['set-cookie'];
+    const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(';')[0];
+    const viewerToken = established.json().token as string;
+
+    expect(cookie).toMatch(new RegExp(`^shelf_viewer_session_${shareId}=`));
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('SameSite=Strict');
+    expect(setCookie).toContain('Max-Age=86400');
+    expect(setCookie).not.toContain('Secure');
+    expect(setCookie).toMatch(new RegExp(`^shelf_viewer_session_${shareId}=[A-Za-z0-9._-]+;`));
+
+    const protectedPreview = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/shares/${shareId}/content/preview`,
+      headers: { cookie: cookie as string },
+    });
+    const protectedRange = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/shares/${shareId}/content/preview`,
+      headers: { cookie: cookie as string, range: 'bytes=-3' },
+    });
+    const protectedInvalid = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/shares/${shareId}/content/preview`,
+      headers: { cookie: cookie as string, range: 'bytes=0-1,4-5' },
+    });
+    const protectedUnsatisfiable = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/shares/${shareId}/content/preview`,
+      headers: { cookie: cookie as string, range: 'bytes=10-' },
+    });
+    const protectedMissingCookie = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/shares/${shareId}/content/preview`,
+    });
+    const protectedQueryToken = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/shares/${shareId}/content/preview?token=${encodeURIComponent(viewerToken)}`,
+    });
+    const protectedBodyToken = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/shares/${shareId}/content/preview`,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: `token=${encodeURIComponent(viewerToken)}`,
+    });
+    const protectedMalformedCookie = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/shares/${shareId}/content/preview`,
+      headers: { cookie: `shelf_viewer_session_${shareId}="unterminated` },
+    });
+    const protectedNotModifiedWithoutCookie = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/shares/${shareId}/content/preview`,
+      headers: { 'if-none-match': protectedPreview.headers.etag as string },
+    });
+
+    expect(protectedPreview.statusCode).toBe(200);
+    expect(protectedPreview.body).toBe('0123456789');
+    expect(protectedPreview.headers).toMatchObject({
+      'content-type': 'text/html',
+      'content-disposition': expect.stringMatching(/^inline;/u),
+      'accept-ranges': 'bytes',
+      'content-length': '10',
+      'content-security-policy': 'sandbox',
+    });
+    expect(protectedRange.statusCode).toBe(206);
+    expect(protectedRange.body).toBe('789');
+    expect(protectedRange.headers).toMatchObject({
+      'content-range': 'bytes 7-9/10',
+      'content-length': '3',
+    });
+    expect(protectedInvalid.statusCode).toBe(416);
+    expect(protectedInvalid.headers['content-range']).toBe('bytes */10');
+    expect(protectedInvalid.json()).toMatchObject({
+      error: { code: 'MULTI_RANGE_UNSUPPORTED', retryable: false },
+    });
+    expect(protectedUnsatisfiable.statusCode).toBe(416);
+    expect(protectedUnsatisfiable.headers['content-range']).toBe('bytes */10');
+    expect(protectedUnsatisfiable.json()).toMatchObject({
+      error: { code: 'RANGE_NOT_SATISFIABLE', retryable: false },
+    });
+    expect(protectedMissingCookie.statusCode).toBe(404);
+    for (const response of [
+      protectedQueryToken,
+      protectedBodyToken,
+      protectedMalformedCookie,
+      protectedNotModifiedWithoutCookie,
+    ]) {
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({ error: { code: 'SHARE_NOT_FOUND' } });
+      publicHeaders(response);
+    }
+    publicHeaders(protectedPreview);
+    publicHeaders(protectedRange);
+    publicHeaders(protectedInvalid);
+    publicHeaders(protectedUnsatisfiable);
+    publicHeaders(protectedMissingCookie);
+
+    const publicShare = await createShare(
+      app,
+      published.json().artifactId as string,
+      'share-preview-public',
+      { mode: 'latest' },
+      null,
+      'public',
+    );
+    const publicPreview = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/links/${publicShare.json().publicCode as string}/content/preview`,
+      headers: { cookie: cookie as string, range: 'bytes=2-5' },
+    });
+    const publicNotModified = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/links/${publicShare.json().publicCode as string}/content/preview`,
+      headers: { 'if-none-match': publicPreview.headers.etag as string },
+    });
+
+    expect(publicPreview.statusCode).toBe(206);
+    expect(publicPreview.body).toBe('2345');
+    expect(publicPreview.headers).toMatchObject({
+      'content-range': 'bytes 2-5/10',
+      'content-disposition': expect.stringMatching(/^inline;/u),
+      'content-type': 'text/html',
+    });
+    expect(publicNotModified.statusCode).toBe(304);
+    expect(publicNotModified.rawPayload).toHaveLength(0);
+    publicHeaders(publicPreview);
+    publicHeaders(publicNotModified);
+  });
+
+  it('does not extend a viewer cookie past a near-term share expiry', async () => {
+    const now = new Date('2026-08-18T12:00:00.900Z');
+    const app = await fixture({ shareClock: () => now });
+    const published = await publishFile(app, 'expiring preview', 'publish-preview-expiry');
+    const expiresAt = '2026-08-18T12:00:01.050Z';
+    const created = await createShare(
+      app,
+      published.json().artifactId as string,
+      'share-preview-expiry',
+      { mode: 'latest' },
+      expiresAt,
+    );
+    const shareId = created.json().shareId as string;
+    const secret = (created.json().url as string).split('#')[1] as string;
+    const established = await establishSession(app, shareId, secret);
+
+    expect(established.statusCode, established.body).toBe(200);
+    expect(established.headers['set-cookie']).toContain('Max-Age=0');
+  });
+
   it('keeps Protected capability and viewer-token values out of production request logs', async () => {
     const chunks: string[] = [];
     const stream = new Writable({
@@ -742,6 +904,8 @@ describe('share HTTP boundary', () => {
     const secret = (created.json().url as string).split('#')[1] as string;
     const established = await establishSession(app, shareId, secret);
     const token = established.json().token as string;
+    const setCookie = established.headers['set-cookie'];
+    const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(';')[0] as string;
 
     const tree = await app.inject({
       method: 'POST',
@@ -758,6 +922,24 @@ describe('share HTTP boundary', () => {
       url: `/api/v1/public/shares/${shareId}/content`,
       payload: { token },
     });
+    const protectedPreview = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/shares/${shareId}/tree/content/preview?path=${encodeURIComponent('src/index.ts')}`,
+      headers: { cookie, range: 'bytes=0-5' },
+    });
+    const publicShare = await createShare(
+      app,
+      published.json().artifactId as string,
+      'share-folder-public',
+      { mode: 'latest' },
+      null,
+      'public',
+    );
+    const publicPreview = await app.inject({
+      method: 'GET',
+      url: `/api/v1/public/links/${publicShare.json().publicCode as string}/tree/content/preview?path=${encodeURIComponent('src/index.ts')}`,
+      headers: { range: 'bytes=-3' },
+    });
 
     expect(tree.statusCode).toBe(200);
     expect(tree.json().items).toHaveLength(1);
@@ -767,10 +949,22 @@ describe('share HTTP boundary', () => {
     );
     expect(content.statusCode).toBe(404);
     expect(content.json()).toMatchObject({ error: { code: 'SHARE_NOT_FOUND' } });
+    expect(protectedPreview.statusCode).toBe(206);
+    expect(protectedPreview.rawPayload.toString()).toBe('export');
+    expect(protectedPreview.headers).toMatchObject({
+      'content-range': 'bytes 0-5/10',
+      'content-disposition': expect.stringMatching(/^inline;/u),
+    });
+    expect(publicPreview.statusCode).toBe(206);
+    expect(publicPreview.rawPayload.toString()).toBe('{};');
+    expect(publicPreview.headers['content-range']).toBe('bytes 7-9/10');
     publicHeaders(tree);
     expect(treeFile.statusCode).toBe(200);
     expect(treeFile.rawPayload.toString()).toBe('export {};');
+    expect(treeFile.headers['content-disposition']).toMatch(/^attachment;/u);
     publicHeaders(treeFile);
+    publicHeaders(protectedPreview);
+    publicHeaders(publicPreview);
     publicHeaders(content);
   });
 });

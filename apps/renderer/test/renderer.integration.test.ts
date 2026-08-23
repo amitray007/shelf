@@ -27,8 +27,15 @@ async function fixture() {
 
 async function postRender(
   app: RendererApp,
-  values: { shareId?: string; viewerToken?: string; publicCode?: string; nonce?: string } = {},
+  values: {
+    shareId?: string;
+    viewerToken?: string;
+    publicCode?: string;
+    nonce?: string;
+    path?: string;
+  } = {},
 ) {
+  const path = values.path === undefined ? {} : { path: values.path };
   return app.inject({
     method: 'POST',
     url: '/render',
@@ -42,8 +49,9 @@ async function postRender(
             shareId: values.shareId ?? 'shr_AAAAAAAAAAAAAAAAAAAAAA',
             viewerToken: values.viewerToken ?? viewerToken,
             nonce: values.nonce ?? 'n'.repeat(22),
+            ...path,
           }
-        : { publicCode: values.publicCode, nonce: values.nonce ?? 'n'.repeat(22) },
+        : { publicCode: values.publicCode, nonce: values.nonce ?? 'n'.repeat(22), ...path },
     ).toString(),
   });
 }
@@ -164,6 +172,30 @@ describe('isolated HTML renderer', () => {
     );
   });
 
+  it('passes an exact portable folder path through the opaque form boundary', async () => {
+    const resolveHtml = vi.fn(async () => ({
+      status: 'available' as const,
+      html: '<!doctype html><h1>Folder artifact</h1>',
+    }));
+    const app = await createRendererApp({ appOrigin, resolver: { resolveHtml } });
+    apps.push(app);
+
+    const response = await postRender(app, {
+      publicCode: 'AbCdEf0123_-',
+      path: 'site/index.html',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('Folder artifact');
+    expect(resolveHtml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessType: 'public',
+        publicCode: 'AbCdEf0123_-',
+        path: 'site/index.html',
+      }),
+    );
+  });
+
   it('bounds a stalled renderer dependency and aborts its data-plane signal', async () => {
     let observedSignal: AbortSignal | undefined;
     const app = await createRendererApp({
@@ -266,6 +298,22 @@ describe('isolated HTML renderer', () => {
           origin: 'null',
         },
         payload: `${validBody}&publicCode=AbCdEf0123_-`,
+        url: '/render',
+      },
+      {
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          origin: 'null',
+        },
+        payload: `${validBody}&path=..%2Fprivate.html`,
+        url: '/render',
+      },
+      {
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          origin: 'null',
+        },
+        payload: `${validBody}&path=site%2Findex.html&path=site%2Fother.html`,
         url: '/render',
       },
     ];

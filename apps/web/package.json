@@ -18,12 +18,16 @@
     "@pierre/diffs": "1.3.5",
     "@pierre/trees": "1.0.0-beta.6",
     "@shelf/contracts": "workspace:*",
+    "docx-preview": "0.4.0",
+    "pdfjs-dist": "6.2.108",
+    "read-excel-file": "9.3.10",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "10.1.0",
     "react-resizable-panels": "4.12.3",
     "react-router": "8.3.0",
-    "remark-gfm": "4.0.1"
+    "remark-gfm": "4.0.1",
+    "yaml": "2.8.1"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

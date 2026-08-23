@@ -84,10 +84,17 @@ export function createCoreHtmlResolver(dependencies: {
                   sessionId: claims.sessionId,
                 };
               })();
-        const file = await access.readFile({
-          authority,
-          ...(request.signal === undefined ? {} : { signal: request.signal }),
-        });
+        const file =
+          request.path === undefined
+            ? await access.readFile({
+                authority,
+                ...(request.signal === undefined ? {} : { signal: request.signal }),
+              })
+            : await access.readTreeFile({
+                authority,
+                path: request.path,
+                ...(request.signal === undefined ? {} : { signal: request.signal }),
+              });
         if (normalizedMediaType(file.mediaType) !== 'text/html' || file.byteCount > maximumBytes) {
           return { status: 'unavailable' };
         }

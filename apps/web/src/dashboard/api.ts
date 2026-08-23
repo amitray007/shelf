@@ -546,6 +546,20 @@ export async function loadFolderEntryBytes(
   return response.arrayBuffer();
 }
 
+export function revisionPreviewUrl(revisionId: string): string {
+  return `/api/v1/revisions/${encodeURIComponent(revisionId)}/preview`;
+}
+
+export function folderEntryPreviewUrl(revisionId: string, path: string): string {
+  const query = new URLSearchParams({ path });
+  return `/api/v1/revisions/${encodeURIComponent(revisionId)}/tree/content/preview?${query}`;
+}
+
+export function folderEntryDownloadUrl(revisionId: string, path: string): string {
+  const query = new URLSearchParams({ path });
+  return `/api/v1/revisions/${encodeURIComponent(revisionId)}/tree/content?${query}`;
+}
+
 export async function loadRevisionBytes(
   revisionId: string,
   signal?: AbortSignal,

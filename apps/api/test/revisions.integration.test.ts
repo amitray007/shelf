@@ -110,6 +110,14 @@ function get(app: FastifyInstance, revisionId: string, headers: Record<string, s
   });
 }
 
+function preview(app: FastifyInstance, revisionId: string, headers: Record<string, string> = {}) {
+  return app.inject({
+    method: 'GET',
+    url: `/api/v1/revisions/${revisionId}/preview`,
+    headers: { authorization: 'Bearer test', ...headers },
+  });
+}
+
 describe('GET /api/v1/revisions/:revisionId/content', () => {
   it('downloads an exact pinned revision with strong validation and safety headers', async () => {
     const context = await fixture();
@@ -241,6 +249,102 @@ describe('GET /api/v1/revisions/:revisionId/content', () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ error: { code: 'REVISION_NOT_FOUND' } });
+    expect(context.contentReads).toBe(0);
+  });
+});
+
+describe('GET /api/v1/revisions/:revisionId/preview', () => {
+  it('previews stored media inline with full and single-range delivery', async () => {
+    const context = await fixture();
+    const published = await context.seed('0123456789', 'manual.pdf', 'application/pdf');
+    const full = await preview(context.app, published.revisionId);
+    const suffix = await preview(context.app, published.revisionId, { range: 'bytes=-3' });
+    const open = await preview(context.app, published.revisionId, { range: 'bytes=7-' });
+    const closed = await preview(context.app, published.revisionId, { range: 'bytes=2-5' });
+
+    expect(full.statusCode).toBe(200);
+    expect(full.rawPayload.toString()).toBe('0123456789');
+    expect(full.headers).toMatchObject({
+      'accept-ranges': 'bytes',
+      'content-disposition': expect.stringMatching(/^inline;/u),
+      'content-length': '10',
+      'content-type': 'application/pdf',
+      etag: `"${published.contentHash}"`,
+      'x-content-type-options': 'nosniff',
+    });
+    expect(full.headers['content-security-policy']).toBeUndefined();
+    expect(suffix.statusCode).toBe(206);
+    expect(suffix.rawPayload.toString()).toBe('789');
+    expect(suffix.headers['content-range']).toBe('bytes 7-9/10');
+    expect(open.statusCode).toBe(206);
+    expect(open.rawPayload.toString()).toBe('789');
+    expect(open.headers['content-range']).toBe('bytes 7-9/10');
+    expect(closed.statusCode).toBe(206);
+    expect(closed.rawPayload.toString()).toBe('2345');
+    expect(closed.headers['content-range']).toBe('bytes 2-5/10');
+  });
+
+  it.each(['bytes=invalid', 'bytes=10-', 'bytes=-0'])(
+    'rejects invalid or unsatisfiable preview range %s without content bytes',
+    async (range) => {
+      const context = await fixture();
+      const published = await context.seed();
+      const response = await preview(context.app, published.revisionId, { range });
+
+      expect(response.statusCode).toBe(416);
+      expect(response.headers['content-range']).toBe('bytes */10');
+      expect(response.json()).toMatchObject({
+        error: { code: 'RANGE_NOT_SATISFIABLE', retryable: false },
+      });
+      expect(response.headers['content-disposition']).toBeUndefined();
+      expect(context.contentReads).toBe(0);
+    },
+  );
+
+  it('rejects preview multi-ranges, supports conditional requests, and sandboxes HTML', async () => {
+    const context = await fixture();
+    const published = await context.seed(
+      '<script>alert(1)</script>',
+      '../private\\folder/\u0001evil"name.html',
+      'text/html',
+    );
+    const multi = await preview(context.app, published.revisionId, { range: 'bytes=0-1,4-5' });
+    const full = await preview(context.app, published.revisionId);
+    const notModified = await preview(context.app, published.revisionId, {
+      'if-none-match': `W/"unrelated", W/"${published.contentHash}"`,
+    });
+
+    expect(multi.statusCode).toBe(416);
+    expect(multi.headers['content-range']).toBe('bytes */25');
+    expect(multi.json()).toMatchObject({
+      error: { code: 'MULTI_RANGE_UNSUPPORTED', retryable: false },
+    });
+    expect(full.statusCode).toBe(200);
+    expect(full.headers).toMatchObject({
+      'content-type': 'text/html',
+      'content-disposition': expect.stringMatching(/^inline;/u),
+      'content-security-policy': 'sandbox',
+      'x-content-type-options': 'nosniff',
+    });
+    expect(full.headers['content-disposition']).toContain('filename="evil_name.html"');
+    expect(full.headers['content-disposition']).toContain("filename*=UTF-8''evil%22name.html");
+    expect(full.headers['content-disposition']).not.toMatch(/[\r\n\\]/u);
+    expect(full.headers['content-disposition']).not.toContain('private');
+    expect(notModified.statusCode).toBe(304);
+    expect(notModified.rawPayload).toHaveLength(0);
+    expect(notModified.headers.etag).toBe(`"${published.contentHash}"`);
+    expect(context.contentReads).toBe(1);
+  });
+
+  it('reuses authenticated authorization and does not open content when denied', async () => {
+    const context = await fixture();
+    const published = await context.seed();
+    context.authorizer.denyReads = true;
+    const denied = await preview(context.app, published.revisionId);
+
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json()).toMatchObject({ error: { code: 'AUTHORIZATION_DENIED' } });
+    expect(denied.rawPayload.toString()).not.toContain('0123456789');
     expect(context.contentReads).toBe(0);
   });
 });

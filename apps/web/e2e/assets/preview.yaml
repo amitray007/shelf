@@ -1,0 +1,5 @@
+name: Shelf preview
+enabled: true
+items:
+  - id: one
+    label: Deterministic fixture

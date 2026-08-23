@@ -1,47 +1,177 @@
 import { extname } from 'node:path';
 
+const MEDIA_TYPES: Readonly<Record<string, string>> = {
+  '.7z': 'application/x-7z-compressed',
+  '.aac': 'audio/aac',
+  '.adoc': 'text/plain',
+  '.as': 'text/plain',
+  '.asm': 'text/plain',
+  '.astro': 'text/plain',
+  '.avif': 'image/avif',
+  '.bash': 'text/plain',
+  '.bat': 'text/plain',
+  '.c': 'text/plain',
+  '.cc': 'text/plain',
+  '.cfg': 'text/plain',
+  '.clj': 'text/plain',
+  '.cjs': 'text/javascript',
+  '.conf': 'text/plain',
+  '.config': 'text/plain',
+  '.cpp': 'text/plain',
+  '.cs': 'text/plain',
+  '.css': 'text/css',
+  '.csv': 'text/csv',
+  '.cts': 'text/typescript',
+  '.cxx': 'text/plain',
+  '.dart': 'text/plain',
+  '.diff': 'text/plain',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.ex': 'text/plain',
+  '.exs': 'text/plain',
+  '.fish': 'text/plain',
+  '.flac': 'audio/flac',
+  '.gif': 'image/gif',
+  '.gql': 'text/plain',
+  '.graphql': 'text/plain',
+  '.go': 'text/plain',
+  '.groovy': 'text/plain',
+  '.gz': 'application/gzip',
+  '.h': 'text/plain',
+  '.hh': 'text/plain',
+  '.hpp': 'text/plain',
+  '.hs': 'text/plain',
+  '.htm': 'text/html',
+  '.html': 'text/html',
+  '.ini': 'text/plain',
+  '.java': 'text/plain',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.js': 'text/javascript',
+  '.json': 'application/json',
+  '.json5': 'text/plain',
+  '.jsonc': 'text/plain',
+  '.jsonl': 'application/x-ndjson',
+  '.jsonld': 'application/ld+json',
+  '.jsx': 'text/javascript',
+  '.kt': 'text/plain',
+  '.kts': 'text/plain',
+  '.less': 'text/css',
+  '.log': 'text/plain',
+  '.lock': 'text/plain',
+  '.lua': 'text/plain',
+  '.m4a': 'audio/mp4',
+  '.m4v': 'video/x-m4v',
+  '.map': 'application/json',
+  '.md': 'text/markdown',
+  '.mdx': 'text/markdown',
+  '.mjs': 'text/javascript',
+  '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg',
+  '.mp4': 'video/mp4',
+  '.mts': 'text/typescript',
+  '.ndjson': 'application/x-ndjson',
+  '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+  '.odp': 'application/vnd.oasis.opendocument.presentation',
+  '.odt': 'application/vnd.oasis.opendocument.text',
+  '.oga': 'audio/ogg',
+  '.ogg': 'audio/ogg',
+  '.ogv': 'video/ogg',
+  '.opus': 'audio/opus',
+  '.otf': 'font/otf',
+  '.patch': 'text/plain',
+  '.pdf': 'application/pdf',
+  '.php': 'application/x-httpd-php',
+  '.pl': 'text/plain',
+  '.pm': 'text/plain',
+  '.png': 'image/png',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.properties': 'text/plain',
+  '.ps1': 'text/plain',
+  '.py': 'text/plain',
+  '.r': 'text/plain',
+  '.rb': 'text/plain',
+  '.rs': 'text/plain',
+  '.rtf': 'application/rtf',
+  '.sass': 'text/css',
+  '.scala': 'text/plain',
+  '.scss': 'text/css',
+  '.sh': 'application/x-sh',
+  '.sql': 'text/plain',
+  '.svelte': 'text/plain',
+  '.svg': 'image/svg+xml',
+  '.swift': 'text/plain',
+  '.tar': 'application/x-tar',
+  '.tar.gz': 'application/gzip',
+  '.text': 'text/plain',
+  '.tgz': 'application/gzip',
+  '.toml': 'text/plain',
+  '.ts': 'text/typescript',
+  '.tsv': 'text/tab-separated-values',
+  '.tsx': 'text/typescript',
+  '.ttf': 'font/ttf',
+  '.txt': 'text/plain',
+  '.vue': 'text/plain',
+  '.wav': 'audio/wav',
+  '.wasm': 'application/wasm',
+  '.webm': 'video/webm',
+  '.webmanifest': 'application/manifest+json',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.xml': 'application/xml',
+  '.xhtml': 'application/xhtml+xml',
+  '.xsd': 'application/xml',
+  '.xsl': 'application/xml',
+  '.xslt': 'application/xml',
+  '.yaml': 'application/yaml',
+  '.yml': 'application/yaml',
+  '.zsh': 'text/plain',
+  '.zip': 'application/zip',
+};
+
+const JSON_MEDIA_TYPES: Readonly<Record<string, string>> = {
+  '.geojson': 'application/geo+json',
+  '.har': 'application/json',
+  '.jsonpatch': 'application/json-patch+json',
+  '.mergepatch': 'application/merge-patch+json',
+  '.topojson': 'application/json',
+};
+
+const SPECIAL_FILE_MEDIA_TYPES: Readonly<Record<string, string>> = {
+  '.dockerignore': 'text/plain',
+  '.editorconfig': 'text/plain',
+  '.env': 'text/plain',
+  '.gitattributes': 'text/plain',
+  '.gitignore': 'text/plain',
+  '.gitmodules': 'text/plain',
+  '.npmrc': 'text/plain',
+  '.nvmrc': 'text/plain',
+  dockerfile: 'text/plain',
+  makefile: 'text/plain',
+};
+
+function fileName(path: string): string {
+  return path.toLowerCase().split(/[\\/]/u).at(-1) ?? '';
+}
+
+function extension(path: string): string {
+  const normalizedPath = path.toLowerCase();
+  if (normalizedPath.endsWith('.tar.gz')) return '.tar.gz';
+  return extname(normalizedPath);
+}
+
 export function mediaTypeForPath(path: string): string {
-  switch (extname(path).toLowerCase()) {
-    case '.css':
-      return 'text/css';
-    case '.csv':
-      return 'text/csv';
-    case '.gif':
-      return 'image/gif';
-    case '.htm':
-    case '.html':
-      return 'text/html';
-    case '.jpeg':
-    case '.jpg':
-      return 'image/jpeg';
-    case '.js':
-    case '.mjs':
-      return 'text/javascript';
-    case '.json':
-      return 'application/json';
-    case '.md':
-      return 'text/markdown';
-    case '.pdf':
-      return 'application/pdf';
-    case '.png':
-      return 'image/png';
-    case '.svg':
-      return 'image/svg+xml';
-    case '.ts':
-    case '.tsx':
-      return 'text/typescript';
-    case '.txt':
-      return 'text/plain';
-    case '.wasm':
-      return 'application/wasm';
-    case '.webp':
-      return 'image/webp';
-    case '.xml':
-      return 'application/xml';
-    case '.yaml':
-    case '.yml':
-      return 'application/yaml';
-    default:
-      return 'application/octet-stream';
-  }
+  const name = fileName(path);
+  const specialFileType = SPECIAL_FILE_MEDIA_TYPES[name];
+  if (specialFileType !== undefined) return specialFileType;
+  if (name.startsWith('.env.')) return 'text/plain';
+
+  const pathExtension = extension(path);
+  return (
+    MEDIA_TYPES[pathExtension] ?? JSON_MEDIA_TYPES[pathExtension] ?? 'application/octet-stream'
+  );
 }

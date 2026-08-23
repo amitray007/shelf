@@ -102,10 +102,10 @@ export function ReviewSidebarToolbar({
         ) : null}
         {onClose ? (
           <button
-            aria-label="Close discussion"
-            className="review-sidebar-tool"
+            aria-label={`Close ${filesOnly ? 'files sidebar' : 'discussion'}`}
+            className="review-sidebar-tool review-sidebar-close"
             onClick={onClose}
-            title="Close discussion"
+            title={`Close ${filesOnly ? 'files sidebar' : 'discussion'}`}
             type="button"
           >
             <XIcon aria-hidden="true" size={18} weight="regular" />

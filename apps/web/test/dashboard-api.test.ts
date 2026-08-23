@@ -8,6 +8,8 @@ import {
   DashboardAuthenticationError,
   deleteArtifact,
   ensureArtifactDefaultShares,
+  folderEntryDownloadUrl,
+  folderEntryPreviewUrl,
   loadArtifactCommentSummaries,
   loadArtifacts,
   loadDashboardCredentials,
@@ -16,6 +18,7 @@ import {
   recoverArtifact,
   renameArtifact,
   restoreArtifact,
+  revisionPreviewUrl,
 } from '../src/dashboard/api.js';
 
 const originalFetch = globalThis.fetch;
@@ -34,6 +37,16 @@ function json(value: unknown, status = 200): Response {
 }
 
 describe('dashboard API client', () => {
+  it('builds authenticated inline preview URLs without credentials in the URL', () => {
+    expect(revisionPreviewUrl('rev_abc')).toBe('/api/v1/revisions/rev_abc/preview');
+    expect(folderEntryPreviewUrl('rev_abc', 'docs/report.pdf')).toBe(
+      '/api/v1/revisions/rev_abc/tree/content/preview?path=docs%2Freport.pdf',
+    );
+    expect(folderEntryDownloadUrl('rev_abc', 'docs/report.pdf')).toBe(
+      '/api/v1/revisions/rev_abc/tree/content?path=docs%2Freport.pdf',
+    );
+  });
+
   it('loads comment summaries in one validated workspace request', async () => {
     const artifactId = `art_${'a'.repeat(22)}`;
     const summary = {

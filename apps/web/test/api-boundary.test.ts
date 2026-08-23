@@ -11,6 +11,7 @@ import {
   updateViewerCommentPost,
   updateViewerCommentThread,
   ViewerCommentRevisionMismatchError,
+  viewerSharePreviewUrl,
 } from '../src/api.js';
 import {
   capabilityStorageKey,
@@ -79,6 +80,42 @@ afterEach(() => {
 });
 
 describe('viewer content boundary', () => {
+  it('builds preview URLs without bearer tokens or capability secrets', () => {
+    const protectedAuthority = {
+      accessType: 'protected' as const,
+      shareId: SHARE_ID,
+      sessionId: SESSION_ID,
+      token: TOKEN,
+    };
+    const protectedUrl = viewerSharePreviewUrl(
+      {
+        ...folderResolution(),
+        revision: { ...folderResolution().revision },
+      },
+      protectedAuthority,
+      'docs/report.pdf',
+    );
+    expect(protectedUrl).toBe(
+      `/api/v1/public/shares/${SHARE_ID}/tree/content/preview?path=docs%2Freport.pdf`,
+    );
+    expect(protectedUrl).not.toContain(TOKEN);
+    expect(protectedUrl).not.toContain(SECRET);
+
+    const publicResolution = {
+      ...folderResolution(),
+      accessType: 'public' as const,
+      publicCode: PUBLIC_CODE,
+      action: { type: 'tree' as const, path: `/api/v1/public/links/${PUBLIC_CODE}/tree` },
+    };
+    expect(
+      viewerSharePreviewUrl(
+        publicResolution,
+        { accessType: 'public', publicCode: PUBLIC_CODE },
+        'a.wav',
+      ),
+    ).toBe(`/api/v1/public/links/${PUBLIC_CODE}/tree/content/preview?path=a.wav`);
+  });
+
   it('projects a Latest revision race as an actionable review error', async () => {
     vi.stubGlobal(
       'fetch',
@@ -255,7 +292,7 @@ describe('viewer content boundary', () => {
     ).rejects.toBeInstanceOf(PublicShareUnavailableError);
   });
 
-  it('loads active HTML source while keeping execution in the isolated renderer', async () => {
+  it('does not buffer HTML source before the isolated renderer requests it', async () => {
     const resolution = {
       apiVersion: 'v1',
       shareId: SHARE_ID,
@@ -281,10 +318,7 @@ describe('viewer content boundary', () => {
         path: `/api/v1/public/shares/${SHARE_ID}/content`,
       },
     };
-    const fetch = vi
-      .fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(Response.json(resolution))
-      .mockResolvedValueOnce(new Response('<h1>Shared source</h1>'));
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(Response.json(resolution));
     vi.stubGlobal('fetch', fetch);
 
     const payload = await loadViewerPayload(
@@ -294,12 +328,46 @@ describe('viewer content boundary', () => {
       'https://renderer.shelf.example/',
     );
 
-    expect(payload).toMatchObject({ kind: 'file' });
-    if (payload.kind !== 'file' || payload.bytes === null) throw new Error('Expected file bytes.');
-    expect(new TextDecoder().decode(payload.bytes)).toBe('<h1>Shared source</h1>');
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(payload).toMatchObject({ kind: 'file', bytes: null });
+    expect(fetch).toHaveBeenCalledOnce();
     expect(fetch.mock.calls[0]?.[0]).toBe(`/api/v1/public/shares/${SHARE_ID}/resolve`);
-    expect(fetch.mock.calls[1]?.[0]).toBe(`/api/v1/public/shares/${SHARE_ID}/content`);
+  });
+
+  it('retains the isolated renderer origin for HTML entries in folder shares', async () => {
+    const resolution = folderResolution();
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json(resolution))
+      .mockResolvedValueOnce(
+        Response.json(
+          folderPage(
+            [
+              {
+                path: 'site/index.html',
+                kind: 'file',
+                mediaType: 'text/html',
+                contentHash: `sha256:${'b'.repeat(64)}`,
+                byteCount: 128,
+              },
+            ],
+            null,
+          ),
+        ),
+      );
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(
+      loadViewerPayload(
+        { accessType: 'protected', shareId: SHARE_ID },
+        { accessType: 'protected', shareId: SHARE_ID, sessionId: SESSION_ID, token: TOKEN },
+        undefined,
+        'https://renderer.shelf.example/',
+      ),
+    ).resolves.toMatchObject({
+      kind: 'folder',
+      rendererOrigin: 'https://renderer.shelf.example/',
+      entries: [expect.objectContaining({ path: 'site/index.html', mediaType: 'text/html' })],
+    });
   });
 
   it('does not buffer download-only bytes before the user requests them', async () => {
@@ -338,7 +406,11 @@ describe('viewer content boundary', () => {
         undefined,
         undefined,
       ),
-    ).resolves.toMatchObject({ kind: 'file', bytes: null });
+    ).resolves.toMatchObject({
+      kind: 'file',
+      bytes: null,
+      previewUrl: `/api/v1/public/shares/${SHARE_ID}/content/preview`,
+    });
     expect(fetch).toHaveBeenCalledOnce();
   });
 
@@ -424,7 +496,7 @@ describe('viewer content boundary', () => {
       expect(call[0]).toBe(`/api/v1/public/shares/${SHARE_ID}/sessions`);
       expect(call[1]).toMatchObject({
         cache: 'no-store',
-        credentials: 'omit',
+        credentials: 'include',
         referrerPolicy: 'no-referrer',
       });
       expect(String(call[0])).not.toContain(SECRET);

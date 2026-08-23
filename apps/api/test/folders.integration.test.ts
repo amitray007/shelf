@@ -126,6 +126,30 @@ describe('folder snapshot HTTP API', () => {
     expect(file.headers['content-type']).toContain('text/markdown');
     expect(file.rawPayload.toString()).toBe('# Shelf');
 
+    const fileRange = await app.inject({
+      method: 'GET',
+      url: `/api/v1/revisions/${revisionId}/tree/content?path=${encodeURIComponent('docs/README.md')}`,
+      headers: { authorization: 'Bearer test', range: 'bytes=2-4' },
+    });
+    const filePreview = await app.inject({
+      method: 'GET',
+      url: `/api/v1/revisions/${revisionId}/tree/content/preview?path=${encodeURIComponent('docs/README.md')}`,
+      headers: { authorization: 'Bearer test', range: 'bytes=-3' },
+    });
+    expect(fileRange.statusCode).toBe(206);
+    expect(fileRange.rawPayload.toString()).toBe('She');
+    expect(fileRange.headers).toMatchObject({
+      'content-range': 'bytes 2-4/7',
+      'content-disposition': expect.stringMatching(/^attachment;/u),
+    });
+    expect(filePreview.statusCode).toBe(206);
+    expect(filePreview.rawPayload.toString()).toBe('elf');
+    expect(filePreview.headers).toMatchObject({
+      'content-range': 'bytes 4-6/7',
+      'content-disposition': expect.stringMatching(/^inline;/u),
+      'content-type': 'text/markdown',
+    });
+
     const restored = await app.inject({
       method: 'POST',
       url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/restores`,

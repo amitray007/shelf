@@ -190,6 +190,7 @@ export async function createShelfServer(config: ShelfServerConfig): Promise<Shel
       humanAuth: shelfHumanAuth,
       contentStore: persistence.contentStore,
       contentReader: persistence.contentReader,
+      multipartLimits: { fileSize: config.maxFileBytes },
       revisionRepository: persistence.revisionRepository,
       artifactDeletionRepository: persistence.artifactDeletionRepository,
       shareRepository: persistence.shareRepository,

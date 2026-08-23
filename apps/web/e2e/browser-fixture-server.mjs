@@ -1,4 +1,4 @@
-import { open } from 'node:fs/promises';
+import { open, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +22,7 @@ import {
   markdownShareId,
   rendererOrigin,
   revisionId,
+  richPreviewFixtures,
   sharePage,
   shareSecret,
   workspaceId,
@@ -42,12 +43,25 @@ const filesByRevisionId = new Map(
 );
 
 const fixtureRoot = resolve(fileURLToPath(new URL('../dist/', import.meta.url)));
+const e2eAssetRoot = resolve(fileURLToPath(new URL('./assets/', import.meta.url)));
+const richFixturesByShareId = new Map(
+  richPreviewFixtures
+    .filter((fixture) => fixture.accessType === 'protected')
+    .map((fixture) => [fixture.shareId, fixture]),
+);
+const richFixturesByPublicCode = new Map(
+  richPreviewFixtures
+    .filter((fixture) => fixture.accessType === 'public')
+    .map((fixture) => [fixture.publicCode, fixture]),
+);
+const previewRequests = [];
 const mimeTypes = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.html', 'text/html; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],
   ['.json', 'application/json; charset=utf-8'],
   ['.map', 'application/json; charset=utf-8'],
+  ['.mjs', 'text/javascript; charset=utf-8'],
   ['.woff2', 'font/woff2'],
 ]);
 
@@ -62,6 +76,7 @@ const documentHeaders = {
     `frame-src ${rendererOrigin}`,
     "frame-ancestors 'none'",
     "img-src 'self' https://api.dicebear.com data: blob:",
+    "media-src 'self'",
     "object-src 'none'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
@@ -73,6 +88,7 @@ const documentHeaders = {
 const rendererCanaryHits = new Map();
 const rendererFrameName = /^shelf-renderer-[0-9a-f-]{36}$/u;
 const viewerToken = `${'v'.repeat(24)}.${'t'.repeat(43)}`;
+const viewerCookieToken = `${'c'.repeat(96)}.${'d'.repeat(43)}`;
 
 function json(response, status, value) {
   response.writeHead(status, {
@@ -91,6 +107,67 @@ async function body(request) {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks).toString('utf8');
+}
+
+async function richFixtureBytes(fixture) {
+  const raw = await readFile(resolve(e2eAssetRoot, fixture.assetFile));
+  return fixture.encoding === 'base64' ? Buffer.from(raw.toString('ascii').trim(), 'base64') : raw;
+}
+
+function hasViewerCookie(request, shareId) {
+  return (request.headers.cookie ?? '').includes(`shelf_viewer_session_${shareId}=`);
+}
+
+function parseRangeHeader(value, total) {
+  if (value === undefined) return null;
+  const match = /^bytes=(\d+)-(\d*)$/u.exec(value);
+  if (match === null) return 'invalid';
+  const start = Number(match[1]);
+  const requestedEnd = match[2] === '' ? total - 1 : Number(match[2]);
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(requestedEnd) ||
+    start >= total ||
+    requestedEnd < start
+  ) {
+    return 'invalid';
+  }
+  return { end: Math.min(requestedEnd, total - 1), start };
+}
+
+async function sendRichContent(request, response, fixture, options = {}) {
+  const bytes = await richFixtureBytes(fixture);
+  const etag = `"fixture-${fixture.shareId}"`;
+  if (request.headers['if-none-match'] === etag && options.preview === true) {
+    response.writeHead(304, { ETag: etag, 'cache-control': 'no-store' });
+    response.end();
+    return;
+  }
+  const range = parseRangeHeader(request.headers.range, bytes.length);
+  if (range === 'invalid') {
+    response.writeHead(416, {
+      'accept-ranges': 'bytes',
+      'cache-control': 'no-store',
+      'content-range': `bytes */${bytes.length}`,
+      ETag: etag,
+    });
+    response.end();
+    return;
+  }
+  const bodyBytes = range === null ? bytes : bytes.subarray(range.start, range.end + 1);
+  const headers = {
+    'accept-ranges': 'bytes',
+    'cache-control': 'no-store',
+    'content-disposition': `${options.preview === true ? 'inline' : 'attachment'}; filename="${fixture.fileName}"`,
+    'content-length': String(bodyBytes.length),
+    'content-type': fixture.mediaType,
+    ETag: etag,
+    ...(range === null
+      ? {}
+      : { 'content-range': `bytes ${range.start}-${range.end}/${bytes.length}` }),
+  };
+  response.writeHead(range === null ? 200 : 206, headers);
+  response.end(bodyBytes);
 }
 
 // Playwright projects share this fixture process, so mutable state is scoped to the per-project
@@ -527,7 +604,9 @@ async function api(request, response, url) {
   const sessionMatch = /^\/api\/v1\/public\/shares\/(shr_[A-Za-z0-9_-]{22})\/sessions$/u.exec(path);
   if (request.method === 'POST' && sessionMatch !== null) {
     const value = JSON.parse(await body(request));
-    const knownShare = [markdownShareId, htmlShareId].includes(sessionMatch[1]);
+    const knownShare =
+      [markdownShareId, htmlShareId].includes(sessionMatch[1]) ||
+      richFixturesByShareId.has(sessionMatch[1]);
     const validSession =
       typeof value.sessionId === 'string' &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
@@ -540,14 +619,20 @@ async function api(request, response, url) {
       json(response, 404, {});
       return;
     }
-    json(response, 200, {
+    const result = {
       apiVersion: 'v1',
       shareId: sessionMatch[1],
       sessionId: value.sessionId,
       token: viewerToken,
       issuedAt: '2026-08-19T00:00:00.000Z',
       expiresAt: '2026-08-20T00:00:00.000Z',
+    };
+    response.writeHead(200, {
+      'cache-control': 'no-store',
+      'content-type': 'application/json; charset=utf-8',
+      'set-cookie': `shelf_viewer_session_${sessionMatch[1]}=${viewerCookieToken}; Path=/api/v1/public/shares/${sessionMatch[1]}; HttpOnly; SameSite=Strict`,
     });
+    response.end(JSON.stringify(result));
     return;
   }
   if (
@@ -583,6 +668,76 @@ async function api(request, response, url) {
         ? '# One useful idea\n\nA durable artifact should stay quick to share.'
         : '<!doctype html><html lang="en"><title>One useful idea</title><body><p>A durable artifact should stay quick to share.</p></body></html>',
     );
+    return;
+  }
+  const protectedResolutionMatch =
+    /^\/api\/v1\/public\/shares\/(shr_[A-Za-z0-9_-]{22})\/resolve$/u.exec(path);
+  if (request.method === 'POST' && protectedResolutionMatch !== null) {
+    const value = JSON.parse(await body(request));
+    const fixture = richFixturesByShareId.get(protectedResolutionMatch[1]);
+    if (fixture === undefined || value.token !== viewerToken || Object.keys(value).length !== 1) {
+      json(response, 404, {});
+      return;
+    }
+    json(response, 200, fixture.resolution);
+    return;
+  }
+  const protectedContentMatch =
+    /^\/api\/v1\/public\/shares\/(shr_[A-Za-z0-9_-]{22})\/content$/u.exec(path);
+  if (request.method === 'POST' && protectedContentMatch !== null) {
+    const value = JSON.parse(await body(request));
+    const fixture = richFixturesByShareId.get(protectedContentMatch[1]);
+    if (fixture === undefined || value.token !== viewerToken || Object.keys(value).length !== 1) {
+      json(response, 404, {});
+      return;
+    }
+    await sendRichContent(request, response, fixture);
+    return;
+  }
+  const protectedPreviewMatch =
+    /^\/api\/v1\/public\/shares\/(shr_[A-Za-z0-9_-]{22})\/content\/preview$/u.exec(path);
+  if (request.method === 'GET' && protectedPreviewMatch !== null) {
+    const fixture = richFixturesByShareId.get(protectedPreviewMatch[1]);
+    if (fixture === undefined || !hasViewerCookie(request, protectedPreviewMatch[1])) {
+      json(response, 404, {});
+      return;
+    }
+    previewRequests.push({ shareId: fixture.shareId, url: request.url });
+    await sendRichContent(request, response, fixture, { preview: true });
+    return;
+  }
+  const publicResolutionMatch = /^\/api\/v1\/public\/links\/([A-Za-z0-9_-]{12})\/resolve$/u.exec(
+    path,
+  );
+  if (request.method === 'GET' && publicResolutionMatch !== null) {
+    const fixture = richFixturesByPublicCode.get(publicResolutionMatch[1]);
+    if (fixture === undefined) {
+      json(response, 404, {});
+      return;
+    }
+    json(response, 200, fixture.resolution);
+    return;
+  }
+  const publicContentMatch = /^\/api\/v1\/public\/links\/([A-Za-z0-9_-]{12})\/content$/u.exec(path);
+  if (request.method === 'GET' && publicContentMatch !== null) {
+    const fixture = richFixturesByPublicCode.get(publicContentMatch[1]);
+    if (fixture === undefined) {
+      json(response, 404, {});
+      return;
+    }
+    await sendRichContent(request, response, fixture);
+    return;
+  }
+  const publicPreviewMatch =
+    /^\/api\/v1\/public\/links\/([A-Za-z0-9_-]{12})\/content\/preview$/u.exec(path);
+  if (request.method === 'GET' && publicPreviewMatch !== null) {
+    const fixture = richFixturesByPublicCode.get(publicPreviewMatch[1]);
+    if (fixture === undefined) {
+      json(response, 404, {});
+      return;
+    }
+    previewRequests.push({ shareId: fixture.shareId, url: request.url });
+    await sendRichContent(request, response, fixture, { preview: true });
     return;
   }
   // The viewer queries discussions on mount. Neither fixture share enables a comment policy, so
@@ -640,7 +795,7 @@ async function staticFile(request, response, url) {
       decodedPath === '/signin' ||
       decodedPath === '/app' ||
       decodedPath.startsWith('/app/') ||
-      /^\/s\/shr_[A-Za-z0-9_-]{22}\/?$/u.test(decodedPath);
+      /^\/s\/(?:shr_[A-Za-z0-9_-]{22}|[A-Za-z0-9_-]{12})\/?$/u.test(decodedPath);
     if (!isClientRoute || (decodedPath !== '/' && !acceptsDocument)) {
       response.writeHead(404, { 'cache-control': 'no-store' });
       response.end();
@@ -678,6 +833,15 @@ const server = createServer((request, response) => {
     } else if (url.pathname === '/__fixture/renderer-canary-hits') {
       const run = url.searchParams.get('run') ?? '';
       json(response, 200, { hits: rendererCanaryHits.get(run) ?? 0 });
+    } else if (url.pathname === '/__fixture/preview-requests') {
+      json(response, 200, { requests: previewRequests });
+    } else if (url.pathname === '/__fixture/cookie-scope') {
+      const cookie = request.headers.cookie ?? '';
+      json(response, 200, {
+        protectedCookieOnUnscopedPath: [...richFixturesByShareId.keys()].some((shareId) =>
+          cookie.includes(`shelf_viewer_session_${shareId}=`),
+        ),
+      });
     } else if (url.pathname === '/__fixture/history-anchor') {
       response.writeHead(200, {
         ...documentHeaders,
