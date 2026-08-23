@@ -13,7 +13,12 @@ import type {
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { redirect } from 'react-router';
 
-import { prefetchRendererModules, selectRenderer, supportsSourceView } from '../rendering.js';
+import {
+  prefetchRendererModules,
+  requiresClientBytes,
+  selectRenderer,
+  supportsSourceView,
+} from '../rendering.js';
 import {
   DashboardApiError,
   DashboardAuthenticationError,
@@ -46,6 +51,15 @@ export interface ArtifactPreviewPayload {
   revision: ArtifactRevision;
   bytes: ArrayBuffer | null;
   entries: readonly FolderEntry[];
+}
+
+export function shouldLoadManagedRevisionBytes(revision: ArtifactRevision): boolean {
+  if (revision.kind !== 'file') return false;
+  const renderer = selectRenderer(revision.mediaType, undefined, revision.originalFileName);
+  return (
+    requiresClientBytes(renderer) ||
+    supportsSourceView(revision.mediaType, revision.originalFileName)
+  );
 }
 
 export function safeReturnPath(value: string | null): string {
@@ -191,11 +205,7 @@ export async function artifactLoader({
             entries,
           }))
         : (() => {
-            const renderer = selectRenderer(revision.mediaType, undefined);
-            if (
-              ['text', 'json', 'markdown', 'image'].includes(renderer.kind) ||
-              supportsSourceView(revision.mediaType)
-            ) {
+            if (shouldLoadManagedRevisionBytes(revision)) {
               return loadRevisionBytes(revision.revisionId, request.signal).then((bytes) => ({
                 bytes,
                 entries: [] as readonly FolderEntry[],
@@ -257,11 +267,7 @@ export async function artifactPreviewLoader({
     if (revision.kind === 'folder') {
       entries = await loadFolderEntries(revision.revisionId, request.signal);
     } else {
-      const renderer = selectRenderer(revision.mediaType, undefined);
-      if (
-        ['text', 'json', 'markdown', 'image'].includes(renderer.kind) ||
-        supportsSourceView(revision.mediaType)
-      ) {
+      if (shouldLoadManagedRevisionBytes(revision)) {
         bytes = await loadRevisionBytes(revision.revisionId, request.signal);
       }
     }

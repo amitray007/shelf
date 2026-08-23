@@ -9,17 +9,34 @@ import type {
   CommentThread,
   FolderEntry,
 } from '@shelf/contracts';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 
-import { CodeView, decodeFileSource, FileView, formatJson } from '../components/file-view.js';
+import { CodeView, decodeFileSource, FileView } from '../components/file-view.js';
 import {
   LazyFolderBrowser as FolderBrowser,
   LazyMarkdownView as MarkdownView,
 } from '../components/lazy-views.js';
+import { DelimitedTablePreview } from '../components/preview/delimited-table-preview.js';
+import { AudioPreview, VideoPreview } from '../components/preview/media-preview.js';
+import { DocxPreview } from '../components/preview/office-document-preview.js';
+import { pdfJsAdapter } from '../components/preview/pdf-js.js';
+import { PdfViewer } from '../components/preview/pdf-viewer.js';
+import { StructuredDataPreview } from '../components/preview/structured-data-preview.js';
+import { WorkbookPreview } from '../components/preview/workbook-preview.js';
 import { DiscussionPanel } from '../components/review/discussion-panel.js';
 import type { ReviewSidebarMode } from '../components/review/types.js';
-import { normalizeMediaType, selectRenderer, supportsSourceView } from '../rendering.js';
-import { loadFolderEntryBytes } from './api.js';
+import {
+  requiresClientBytes,
+  selectRenderer,
+  supportsSourceView,
+  usesPreviewUrl,
+} from '../rendering.js';
+import {
+  folderEntryDownloadUrl,
+  folderEntryPreviewUrl,
+  loadFolderEntryBytes,
+  revisionPreviewUrl,
+} from './api.js';
 
 export interface ManagedArtifactReview {
   readonly moderator?: boolean | undefined;
@@ -67,6 +84,22 @@ function DownloadOnly({ revision }: { readonly revision: ArtifactRevision }) {
   );
 }
 
+function DownloadAction({ revision }: { readonly revision: ArtifactRevision }) {
+  if (revision.kind !== 'file') return null;
+  return (
+    <div className="artifact-preview-action">
+      <LinkButton
+        href={revision.paths.content}
+        icon={FileArrowDownIcon}
+        size="sm"
+        variant="primary"
+      >
+        Download
+      </LinkButton>
+    </div>
+  );
+}
+
 export const ManagedArtifactContent = memo(function ManagedArtifactContent({
   artifact,
   revision,
@@ -86,29 +119,21 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
 }) {
   const renderer =
     revision.kind === 'file'
-      ? selectRenderer(revision.mediaType, undefined)
+      ? selectRenderer(revision.mediaType, undefined, revision.originalFileName)
       : { kind: 'download' as const };
-  const normalizedMediaType =
-    revision.kind === 'file' ? normalizeMediaType(revision.mediaType) : '';
   const source =
-    revision.kind === 'file' && bytes !== null && supportsSourceView(revision.mediaType)
+    revision.kind === 'file' &&
+    bytes !== null &&
+    renderer.kind !== 'docx' &&
+    renderer.kind !== 'workbook' &&
+    (requiresClientBytes(renderer) ||
+      supportsSourceView(revision.mediaType, revision.originalFileName))
       ? decodeFileSource(bytes)
       : null;
-  const imageUrl = useMemo(
-    () =>
-      revision.kind === 'file' &&
-      (renderer.kind === 'image' || normalizedMediaType === 'image/svg+xml') &&
-      bytes !== null
-        ? URL.createObjectURL(new Blob([bytes], { type: revision.mediaType }))
-        : undefined,
-    [bytes, normalizedMediaType, renderer.kind, revision],
-  );
-  useEffect(
-    () => () => {
-      if (imageUrl !== undefined) URL.revokeObjectURL(imageUrl);
-    },
-    [imageUrl],
-  );
+  const previewUrl =
+    revision.kind === 'file' && usesPreviewUrl(renderer)
+      ? revisionPreviewUrl(revision.revisionId)
+      : undefined;
   const loadFolderFile = useCallback(
     (path: string, signal: AbortSignal) => loadFolderEntryBytes(revision.revisionId, path, signal),
     [revision.revisionId],
@@ -125,6 +150,10 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
         entries={entries}
         key={revision.revisionId}
         loadFile={loadFolderFile}
+        loadPreviewUrl={(path) => folderEntryPreviewUrl(revision.revisionId, path)}
+        downloadFile={(path) =>
+          window.location.assign(folderEntryDownloadUrl(revision.revisionId, path))
+        }
         {...(review === undefined
           ? {
               navigation: {
@@ -146,7 +175,7 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
       />
     );
   }
-  if (bytes === null) {
+  if (bytes === null && (renderer.kind === 'download' || requiresClientBytes(renderer))) {
     return (
       <div className="artifact-surface artifact-download">
         <DownloadOnly revision={revision} />
@@ -154,31 +183,120 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
     );
   }
   let preview: React.ReactNode | undefined;
-  if (renderer.kind === 'image' || normalizedMediaType === 'image/svg+xml') {
+  if (renderer.kind === 'image' && previewUrl !== undefined) {
     preview = (
-      <div className="artifact-surface artifact-image">
-        {imageUrl === undefined ? null : (
-          <img alt={artifact.name} referrerPolicy="no-referrer" src={imageUrl} />
-        )}
+      <div className="artifact-preview-with-download">
+        <DownloadAction revision={revision} />
+        <div className="artifact-surface artifact-image">
+          <img alt={artifact.name} referrerPolicy="no-referrer" src={previewUrl} />
+        </div>
       </div>
     );
   } else if (renderer.kind === 'markdown' && source !== null) {
     preview = (
-      <section
-        aria-label="Artifact document preview"
-        className="artifact-surface artifact-document"
-        tabIndex={0}
-      >
-        <MarkdownView source={source} />
-      </section>
+      <div className="artifact-preview-with-download">
+        <DownloadAction revision={revision} />
+        <section
+          aria-label="Artifact document preview"
+          className="artifact-surface artifact-document"
+          tabIndex={0}
+        >
+          <MarkdownView source={source} />
+        </section>
+      </div>
     );
   } else if (renderer.kind === 'json' && source !== null) {
     preview = (
-      <CodeView
-        fileName={revision.originalFileName}
-        label="Artifact data preview"
-        source={formatJson(source)}
-      />
+      <div className="artifact-preview-with-download">
+        <DownloadAction revision={revision} />
+        <StructuredDataPreview
+          fileName={revision.originalFileName}
+          mediaType={revision.mediaType}
+          showModeTabs={false}
+          source={source}
+        />
+      </div>
+    );
+  } else if (renderer.kind === 'table' && source !== null) {
+    preview = (
+      <div className="artifact-preview-with-download">
+        <DownloadAction revision={revision} />
+        <DelimitedTablePreview
+          fileName={revision.originalFileName}
+          mediaType={revision.mediaType}
+          showModeTabs={false}
+          source={source}
+        />
+      </div>
+    );
+  } else if (renderer.kind === 'docx' && bytes !== null) {
+    preview = (
+      <div className="artifact-preview-with-download">
+        <DownloadAction revision={revision} />
+        <DocxPreview
+          metadata={{
+            byteCount: bytes.byteLength,
+            fileName: revision.originalFileName,
+            mediaType: revision.mediaType,
+          }}
+          src={bytes}
+          title={revision.originalFileName}
+        />
+      </div>
+    );
+  } else if (renderer.kind === 'workbook' && bytes !== null) {
+    preview = (
+      <div className="artifact-preview-with-download">
+        <DownloadAction revision={revision} />
+        <WorkbookPreview
+          metadata={{
+            byteCount: bytes.byteLength,
+            fileName: revision.originalFileName,
+            format: 'xlsx',
+            mediaType: revision.mediaType,
+          }}
+          src={bytes}
+          title={revision.originalFileName}
+        />
+      </div>
+    );
+  } else if (renderer.kind === 'text' && source !== null) {
+    preview = (
+      <div className="artifact-preview-with-download">
+        <DownloadAction revision={revision} />
+        <CodeView
+          fileName={revision.originalFileName}
+          label="Artifact source preview"
+          source={source}
+        />
+      </div>
+    );
+  } else if (renderer.kind === 'pdf' && previewUrl !== undefined) {
+    preview = (
+      <div className="artifact-preview-with-download">
+        <DownloadAction revision={revision} />
+        <div className="artifact-surface artifact-pdf">
+          <PdfViewer adapter={pdfJsAdapter} src={previewUrl} title="PDF preview" />
+        </div>
+      </div>
+    );
+  } else if (renderer.kind === 'audio' && previewUrl !== undefined) {
+    preview = (
+      <div className="artifact-preview-with-download">
+        <DownloadAction revision={revision} />
+        <div className="artifact-surface artifact-media">
+          <AudioPreview src={previewUrl} title={revision.originalFileName} />
+        </div>
+      </div>
+    );
+  } else if (renderer.kind === 'video' && previewUrl !== undefined) {
+    preview = (
+      <div className="artifact-preview-with-download">
+        <DownloadAction revision={revision} />
+        <div className="artifact-surface artifact-media">
+          <VideoPreview src={previewUrl} title={revision.originalFileName} />
+        </div>
+      </div>
     );
   }
   if (preview === undefined && source === null) {

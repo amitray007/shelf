@@ -778,7 +778,7 @@ describe('viewer content states', () => {
     expect(text).not.toContain('<script>unsafe</script>');
     expect(text.match(/tabindex="0"/gu)).toHaveLength(1);
     expect(renderContent({ renderer: { kind: 'json' }, text: '{"name":"shelf"}' })).toContain(
-      'Loading file…',
+      'structured data preview',
     );
   });
 
@@ -795,6 +795,61 @@ describe('viewer content states', () => {
 
     const raster = renderContent({ renderer: { kind: 'image' }, text: undefined });
     expect(raster).not.toContain('Source');
+  });
+
+  it('can open a readable code file directly in source mode', () => {
+    const html = renderToStaticMarkup(
+      <FileView
+        defaultMode="source"
+        fileName="src/example.ts"
+        preview={<p>Rendered duplicate</p>}
+        source="export const ready = true;"
+      />,
+    );
+    expect(html).not.toContain('Rendered duplicate');
+    expect(html).toContain('aria-selected="true"');
+    expect(html).toContain('Source');
+  });
+
+  it('shows the shared file path without repeating its extension', () => {
+    const html = renderToStaticMarkup(
+      <FileView
+        fileName="media/preview.webm"
+        preview={<p>Video preview</p>}
+        shareToolbar={{ formatLabel: 'WEBM' }}
+      />,
+    );
+    expect(html).toContain('title="media/preview.webm">media/preview</strong>');
+    expect(html).toContain('>WEBM</span>');
+    expect(html).not.toContain('>media/preview.webm</strong>');
+  });
+
+  it('integrates structured, delimited, PDF, audio, and video renderers', () => {
+    const json = renderContent({ renderer: { kind: 'json' }, text: '{"ready":true}' });
+    expect(json).toContain('structured data preview');
+    const table = renderContent({
+      renderer: { kind: 'table', format: 'csv' },
+      text: 'name,count\nShelf,1',
+    });
+    expect(table).toContain('table preview');
+    const pdf = renderContent({
+      renderer: { kind: 'pdf' },
+      previewUrl: '/api/v1/revisions/rev_pdf/preview',
+      text: undefined,
+    });
+    expect(pdf).toContain('PDF preview');
+    const audio = renderContent({
+      renderer: { kind: 'audio' },
+      previewUrl: '/api/v1/revisions/rev_audio/preview',
+      text: undefined,
+    });
+    expect(audio).toContain('<audio');
+    const video = renderContent({
+      renderer: { kind: 'video' },
+      previewUrl: '/api/v1/revisions/rev_video/preview',
+      text: undefined,
+    });
+    expect(video).toContain('<video');
   });
 
   it('keeps file size and view controls in the same rendered header', () => {
@@ -926,6 +981,7 @@ describe('viewer content states', () => {
     );
     expect(html).toContain('folder-browser-pierre-tree');
     expect(html).toContain('aria-label="Folder contents"');
+    expect(html).toContain('21 B');
   });
 
   it('keeps preview folder navigation read-only with a searchable Files sidebar', () => {
@@ -941,15 +997,21 @@ describe('viewer content states', () => {
           },
         ]}
         loadFile={async () => new TextEncoder().encode('const shelf = true;').buffer}
+        downloadFile={() => undefined}
         navigation={{
           onSidebarToggle: () => undefined,
           sidebarControlsId: 'preview-folder-sidebar-content',
           sidebarOpen: true,
         }}
+        publicShare
       />,
     );
     expect(html).toContain('Files');
     expect(html).toContain('Search files');
+    expect(html).toContain('file-view-toolbar-share');
+    expect(html).toContain('aria-label="Download"');
+    expect(html).not.toContain('21 B');
+    expect(html).not.toContain('folder-browser-download');
     expect(html).toContain('Collapse folder files sidebar');
     expect(html).toContain('aria-controls="preview-folder-sidebar-content"');
     expect(html).not.toContain('Discussion');
@@ -1032,7 +1094,7 @@ describe('viewer content states', () => {
   it('gives download-only files a clear quiet state', () => {
     const html = renderContent({ renderer: { kind: 'download' }, text: undefined });
     expect(html).toContain('Preview unavailable');
-    expect(html).toContain('Download idea.md');
+    expect(html).toContain('aria-label="Download"');
   });
 
   it('uses the same unavailable projection for every failed public lookup', () => {
@@ -1050,10 +1112,10 @@ describe('viewer content states', () => {
     );
 
     expect(html).toContain('Shared artifact');
-    expect(html).toContain('idea.md');
     expect(html).toContain('Latest');
-    expect(html).toContain('Download');
-    expect(html).toContain('rail-secondary-separator');
+    expect(html).not.toContain('idea.md');
+    expect(html).not.toContain('Download');
+    expect(html).not.toContain('rail-secondary-separator');
     expect(html).not.toContain('trust-dot');
 
     const pinnedHtml = renderToStaticMarkup(

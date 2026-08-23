@@ -22,6 +22,14 @@ export const revisionId = `rev_${'b'.repeat(22)}`;
 export const folderRevisionId = `rev_${'g'.repeat(22)}`;
 export const markdownShareId = `shr_${'c'.repeat(22)}`;
 export const htmlShareId = `shr_${'d'.repeat(22)}`;
+export const yamlShareId = `shr_${'y'.repeat(22)}`;
+export const csvShareId = `shr_${'x'.repeat(22)}`;
+export const xlsxShareId = `shr_${'k'.repeat(22)}`;
+export const svgShareId = `shr_${'v'.repeat(22)}`;
+export const pdfShareId = `shr_${'z'.repeat(22)}`;
+export const audioShareId = `shr_${'w'.repeat(22)}`;
+export const videoShareId = `shr_${'q'.repeat(22)}`;
+export const publicPdfCode = 'PdfRich00123';
 export const shareSecret = 's'.repeat(43);
 export const createdShareId = `shr_${'r'.repeat(22)}`;
 export const createdCredentialId = `crd_${'u'.repeat(22)}`;
@@ -553,6 +561,173 @@ function publicFileResolution(
 export const markdownResolution = publicFileResolution(markdownShareId, 'text/markdown', 'idea.md');
 
 export const htmlResolution = publicFileResolution(htmlShareId, 'text/html', 'idea.html');
+
+function richResolution(input: {
+  readonly accessType: 'protected' | 'public';
+  readonly fileName: string;
+  readonly mediaType: string;
+  readonly shareId: string;
+  readonly publicCode?: string;
+  readonly byteCount: number;
+}): PublicShareResolution {
+  const base = {
+    apiVersion: 'v1' as const,
+    shareId: input.shareId,
+    target: { mode: 'latest' as const },
+    expiresAt: null,
+    artifact: { artifactId, kind: 'file' as const, name: input.fileName },
+    revision: {
+      revisionId,
+      revisionNumber: revision.revisionNumber,
+      createdAt: revision.createdAt,
+      kind: 'file' as const,
+      originalFileName: input.fileName,
+      mediaType: input.mediaType,
+      byteCount: input.byteCount,
+    },
+  };
+  if (input.accessType === 'public') {
+    return {
+      ...base,
+      accessType: 'public',
+      publicCode: input.publicCode as string,
+      action: { type: 'content', path: `/api/v1/public/links/${input.publicCode}/content` },
+    };
+  }
+  return {
+    ...base,
+    accessType: 'protected',
+    action: { type: 'content', path: `/api/v1/public/shares/${input.shareId}/content` },
+  };
+}
+
+export const richPreviewFixtures = [
+  {
+    accessType: 'protected' as const,
+    fileName: 'preview.yaml',
+    mediaType: 'application/yaml',
+    shareId: yamlShareId,
+    assetFile: 'preview.yaml',
+    byteCount: 86,
+    resolution: richResolution({
+      accessType: 'protected',
+      fileName: 'preview.yaml',
+      mediaType: 'application/yaml',
+      shareId: yamlShareId,
+      byteCount: 86,
+    }),
+  },
+  {
+    accessType: 'protected' as const,
+    fileName: 'preview.csv',
+    mediaType: 'text/csv',
+    shareId: csvShareId,
+    assetFile: 'preview.csv',
+    byteCount: 289,
+    resolution: richResolution({
+      accessType: 'protected',
+      fileName: 'preview.csv',
+      mediaType: 'text/csv',
+      shareId: csvShareId,
+      byteCount: 289,
+    }),
+  },
+  {
+    accessType: 'protected' as const,
+    fileName: 'preview-sheet.xlsx',
+    mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    shareId: xlsxShareId,
+    assetFile: 'preview.xlsx.b64',
+    encoding: 'base64' as const,
+    byteCount: 3899,
+    resolution: richResolution({
+      accessType: 'protected',
+      fileName: 'preview-sheet.xlsx',
+      mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      shareId: xlsxShareId,
+      byteCount: 3899,
+    }),
+  },
+  {
+    accessType: 'protected' as const,
+    fileName: 'preview.svg',
+    mediaType: 'image/svg+xml',
+    shareId: svgShareId,
+    assetFile: 'preview.svg',
+    byteCount: 336,
+    resolution: richResolution({
+      accessType: 'protected',
+      fileName: 'preview.svg',
+      mediaType: 'image/svg+xml',
+      shareId: svgShareId,
+      byteCount: 336,
+    }),
+  },
+  {
+    accessType: 'protected' as const,
+    fileName: 'preview.pdf',
+    mediaType: 'application/pdf',
+    shareId: pdfShareId,
+    assetFile: 'preview.pdf',
+    byteCount: 583,
+    resolution: richResolution({
+      accessType: 'protected',
+      fileName: 'preview.pdf',
+      mediaType: 'application/pdf',
+      shareId: pdfShareId,
+      byteCount: 583,
+    }),
+  },
+  {
+    accessType: 'protected' as const,
+    fileName: 'preview.wav',
+    mediaType: 'audio/wav',
+    shareId: audioShareId,
+    assetFile: 'preview.wav.b64',
+    encoding: 'base64' as const,
+    byteCount: 398,
+    resolution: richResolution({
+      accessType: 'protected',
+      fileName: 'preview.wav',
+      mediaType: 'audio/wav',
+      shareId: audioShareId,
+      byteCount: 398,
+    }),
+  },
+  {
+    accessType: 'protected' as const,
+    fileName: 'preview.webm',
+    mediaType: 'video/webm',
+    shareId: videoShareId,
+    assetFile: 'preview.webm.b64',
+    encoding: 'base64' as const,
+    byteCount: 37227,
+    resolution: richResolution({
+      accessType: 'protected',
+      fileName: 'preview.webm',
+      mediaType: 'video/webm',
+      shareId: videoShareId,
+      byteCount: 37227,
+    }),
+  },
+  {
+    accessType: 'public' as const,
+    fileName: 'preview-public.pdf',
+    mediaType: 'application/pdf',
+    shareId: `shr_${'p'.repeat(22)}`,
+    publicCode: publicPdfCode,
+    assetFile: 'preview.pdf',
+    byteCount: 583,
+    resolution: richResolution({
+      accessType: 'public',
+      fileName: 'preview-public.pdf',
+      mediaType: 'application/pdf',
+      shareId: `shr_${'p'.repeat(22)}`,
+      publicCode: publicPdfCode,
+      byteCount: 583,
+    }),
+  },
+] as const;
 
 export const commentThreadId = 'thread-browser-fixture';
 

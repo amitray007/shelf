@@ -17,12 +17,12 @@ import {
   lazy,
   type KeyboardEvent as ReactKeyboardEvent,
   Suspense,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
+import { formatFileDisplayName } from './format.js';
 import { ReviewComposer } from './review/discussion-panel.js';
 import { InlineSourceThread, type InlineSourceThreadData } from './review/inline-source-thread.js';
 
@@ -184,8 +184,20 @@ export function viewerSessionStorageKey(namespace: string, context = ''): string
   return `shelf:${namespace}:${(hash >>> 0).toString(36)}`;
 }
 
-function readFileViewMode(fileName: string, hasPreview: boolean, hasSource: boolean): FileViewMode {
-  const fallback = hasPreview ? 'preview' : 'source';
+function readFileViewMode(
+  fileName: string,
+  hasPreview: boolean,
+  hasSource: boolean,
+  defaultMode: FileViewMode | undefined,
+): FileViewMode {
+  const fallback =
+    defaultMode === 'source' && hasSource
+      ? 'source'
+      : defaultMode === 'preview' && hasPreview
+        ? 'preview'
+        : hasPreview
+          ? 'preview'
+          : 'source';
   if (typeof window === 'undefined') return fallback;
   try {
     const value = window.sessionStorage.getItem(
@@ -882,6 +894,7 @@ export function FileLoadingState() {
 
 export function FileView({
   annotations,
+  defaultMode,
   header,
   fileName,
   focusLine,
@@ -892,9 +905,11 @@ export function FileView({
   sidebarLabel,
   sidebarOpen,
   onOpenSidebar,
+  shareToolbar,
   source,
 }: {
   readonly annotations?: readonly SourceLineAnnotation[];
+  readonly defaultMode?: FileViewMode | undefined;
   readonly header?: React.ReactNode;
   readonly fileName?: string | undefined;
   readonly focusLine?: number | undefined;
@@ -905,12 +920,24 @@ export function FileView({
   readonly sidebarLabel?: string | undefined;
   readonly sidebarOpen?: boolean | undefined;
   readonly onOpenSidebar?: (() => void) | undefined;
+  /** Explicit opt-in chrome for public share pages. Managed views keep their own header. */
+  readonly shareToolbar?:
+    | {
+        readonly formatLabel: string;
+        readonly download?: React.ReactNode | undefined;
+      }
+    | undefined;
   readonly source?: string;
 }) {
   const hasContent = preview !== undefined || source !== undefined;
   const hasModes = preview !== undefined && source !== undefined;
   const [mode, setMode] = useState<FileViewMode>(() =>
-    readFileViewMode(fileName ?? 'source.txt', preview !== undefined, source !== undefined),
+    readFileViewMode(
+      fileName ?? 'source.txt',
+      preview !== undefined,
+      source !== undefined,
+      defaultMode,
+    ),
   );
   const requestedFocusLine = focusLine ?? review?.focusLine;
   const requestedFocusRequestId = focusRequestId ?? review?.focusRequestId;
@@ -918,6 +945,7 @@ export function FileView({
   const previousSidebarOpenRef = useRef(sidebarOpen);
   const showSidebarToggle = sidebarOpen !== undefined && onOpenSidebar !== undefined;
   const sidebarToggleLabel = `${sidebarOpen ? 'Collapse' : 'Open'} ${sidebarLabel ?? 'review sidebar'}`;
+  const isShareToolbar = shareToolbar !== undefined;
 
   useEffect(() => {
     if (previousSidebarOpenRef.current && sidebarOpen === false) {
@@ -942,8 +970,8 @@ export function FileView({
     }
   }, [fileName, hasModes, mode]);
 
-  if (!hasContent && header === undefined && !showSidebarToggle) return null;
-  if (header === undefined && !hasModes && !showSidebarToggle) {
+  if (!hasContent && header === undefined && !showSidebarToggle && !isShareToolbar) return null;
+  if (header === undefined && !hasModes && !showSidebarToggle && !isShareToolbar) {
     if (preview === undefined)
       return (
         <SourceView
@@ -963,9 +991,12 @@ export function FileView({
   // <header> would claim a second banner landmark beside the viewer rail, and a bare <div> would
   // leave the toolbar controls outside every landmark.
   return (
-    <div className="file-view">
-      <section aria-label={`${fileName ?? 'File'} view controls`} className="file-view-toolbar">
-        {header === undefined && !showSidebarToggle ? null : (
+    <div className={`file-view${isShareToolbar ? ' file-view-share' : ''}`}>
+      <section
+        aria-label={`${fileName ?? 'File'} view controls`}
+        className={`file-view-toolbar${isShareToolbar ? ' file-view-toolbar-share' : ''}`}
+      >
+        {header === undefined && !showSidebarToggle && !isShareToolbar ? null : (
           <div className="file-view-meta">
             {showSidebarToggle ? (
               <button
@@ -981,7 +1012,14 @@ export function FileView({
                 <SidebarSimpleIcon aria-hidden="true" size={18} weight="regular" />
               </button>
             ) : null}
-            {header}
+            {isShareToolbar ? (
+              <>
+                <strong title={fileName}>{formatFileDisplayName(fileName)}</strong>
+                <span className="file-view-format">{shareToolbar.formatLabel}</span>
+              </>
+            ) : (
+              header
+            )}
           </div>
         )}
         {hasModes ? (
@@ -997,6 +1035,9 @@ export function FileView({
             value={activeMode}
             variant="segmented"
           />
+        ) : null}
+        {isShareToolbar && shareToolbar.download !== undefined ? (
+          <div className="file-view-actions">{shareToolbar.download}</div>
         ) : null}
       </section>
       {hasContent ? (

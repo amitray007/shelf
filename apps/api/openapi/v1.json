@@ -8485,6 +8485,26 @@
             "name": "revisionId",
             "required": true,
             "description": "Opaque revision identifier containing 128 bits of entropy."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "in": "header",
+            "name": "range",
+            "required": false,
+            "description": "One RFC 9110 bytes range. Multiple ranges are not supported."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "description": "Conditional entity tag validator."
           }
         ],
         "security": [
@@ -8497,12 +8517,116 @@
         ],
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "Immutable folder entry bytes.",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Safe file disposition and name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inclusive byte range and full size."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this file."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              }
+            },
             "content": {
               "application/octet-stream": {
                 "schema": {
                   "type": "string",
-                  "format": "binary"
+                  "format": "binary",
+                  "description": "Immutable folder entry bytes."
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Immutable folder entry bytes.",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Safe file disposition and name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inclusive byte range and full size."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this file."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Immutable folder entry bytes."
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The entity tag matched; no bytes are returned.",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -8549,6 +8673,295 @@
           },
           "409": {
             "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Default Response",
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/revisions/{revisionId}/tree/content/preview": {
+      "get": {
+        "operationId": "previewFolderEntryContentV1",
+        "summary": "Preview one file from an immutable folder revision",
+        "description": "Returns the stored media type inline and supports validators and one bytes range.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+            },
+            "in": "query",
+            "name": "path",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "revisionId",
+            "required": true,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "in": "header",
+            "name": "range",
+            "required": false,
+            "description": "One RFC 9110 bytes range. Multiple ranges are not supported."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "description": "Conditional entity tag validator."
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Immutable folder entry bytes.",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Safe file disposition and name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inclusive byte range and full size."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this file."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Immutable folder entry bytes."
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Immutable folder entry bytes.",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Safe file disposition and name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inclusive byte range and full size."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this file."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Immutable folder entry bytes."
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The entity tag matched; no bytes are returned.",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Default Response",
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -12910,6 +13323,263 @@
         }
       }
     },
+    "/api/v1/revisions/{revisionId}/preview": {
+      "get": {
+        "operationId": "previewRevisionContentV1",
+        "summary": "Preview one exact immutable revision inline",
+        "tags": ["revisions"],
+        "description": "Returns the stored media type inline. Supports validators and one RFC 9110 bytes range; active document types are sandboxed.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "revisionId",
+            "required": true,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "in": "header",
+            "name": "range",
+            "required": false,
+            "description": "One RFC 9110 bytes range. Multiple ranges are not supported."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "description": "Conditional entity tag validator."
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete immutable revision bytes delivered inline.",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inline disposition with a safe file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inclusive byte range and full size."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this revision."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "MIME-sniffing protection; always nosniff."
+              },
+              "Content-Security-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Sandbox policy for inline active documents."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Complete immutable revision bytes delivered inline."
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Selected immutable revision bytes delivered inline.",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inline disposition with a safe file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inclusive byte range and full size."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this revision."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "MIME-sniffing protection; always nosniff."
+              },
+              "Content-Security-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Sandbox policy for inline active documents."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Selected immutable revision bytes delivered inline."
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The entity tag matched; no bytes are returned.",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this revision."
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Default Response",
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Unsatisfied range form: bytes */ followed by the full revision size."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/shares": {
       "post": {
         "operationId": "createShareV1",
@@ -14424,6 +15094,437 @@
         }
       }
     },
+    "/api/v1/public/shares/{shareId}/content/preview": {
+      "get": {
+        "operationId": "previewProtectedShareContentV1",
+        "summary": "Preview Protected shared file bytes with a viewer-session cookie",
+        "tags": ["public shares"],
+        "description": "Returns the stored media type inline and supports validators and one bytes range. The viewer session is read only from a narrow cookie set by session establishment.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "shareId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "in": "header",
+            "name": "range",
+            "required": false,
+            "description": "One RFC 9110 bytes range. Multiple ranges are not supported."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "description": "Conditional entity tag validator."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Immutable media bytes delivered inline.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inline disposition with safe file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this file."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Immutable media bytes delivered inline."
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Selected immutable media bytes delivered inline.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inline disposition with safe file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this file."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inclusive byte range and full size."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Selected immutable media bytes delivered inline."
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The entity tag matched; no bytes are returned.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/public/shares/{shareId}/tree": {
       "post": {
         "operationId": "getProtectedShareTreeV1",
@@ -14860,6 +15961,448 @@
                   "type": "string"
                 },
                 "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/shares/{shareId}/tree/content/preview": {
+      "get": {
+        "operationId": "previewProtectedShareFolderEntryV1",
+        "summary": "Preview one Protected shared folder file with a viewer-session cookie",
+        "tags": ["public shares"],
+        "description": "Returns the stored media type inline and supports validators and one bytes range.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+            },
+            "in": "query",
+            "name": "path",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^shr_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "path",
+            "name": "shareId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "in": "header",
+            "name": "range",
+            "required": false,
+            "description": "One RFC 9110 bytes range. Multiple ranges are not supported."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "description": "Conditional entity tag validator."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Immutable media bytes delivered inline.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inline disposition with safe file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this file."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Immutable media bytes delivered inline."
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Selected immutable media bytes delivered inline.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inline disposition with safe file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this file."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inclusive byte range and full size."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Selected immutable media bytes delivered inline."
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The entity tag matched; no bytes are returned.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -15467,6 +17010,437 @@
         }
       }
     },
+    "/api/v1/public/links/{publicCode}/content/preview": {
+      "get": {
+        "operationId": "previewPublicLinkContentV1",
+        "summary": "Preview secret-free Public shared file bytes inline",
+        "tags": ["public links"],
+        "description": "Returns the stored media type inline and supports validators and one bytes range.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{12}$"
+            },
+            "in": "path",
+            "name": "publicCode",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "in": "header",
+            "name": "range",
+            "required": false,
+            "description": "One RFC 9110 bytes range. Multiple ranges are not supported."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "description": "Conditional entity tag validator."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Immutable media bytes delivered inline.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inline disposition with safe file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this file."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Immutable media bytes delivered inline."
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Selected immutable media bytes delivered inline.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inline disposition with safe file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this file."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inclusive byte range and full size."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Selected immutable media bytes delivered inline."
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The entity tag matched; no bytes are returned.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/public/links/{publicCode}/tree": {
       "get": {
         "operationId": "getPublicLinkTreeV1",
@@ -15863,6 +17837,448 @@
                   "type": "string"
                 },
                 "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/links/{publicCode}/tree/content/preview": {
+      "get": {
+        "operationId": "previewPublicLinkFolderEntryV1",
+        "summary": "Preview one secret-free Public shared folder file inline",
+        "tags": ["public links"],
+        "description": "Returns the stored media type inline and supports validators and one bytes range.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[\\u0000-\\u001F\\u007F])[^/]+(?:/[^/]+)*$"
+            },
+            "in": "query",
+            "name": "path",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{12}$"
+            },
+            "in": "path",
+            "name": "publicCode",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "in": "header",
+            "name": "range",
+            "required": false,
+            "description": "One RFC 9110 bytes range. Multiple ranges are not supported."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "description": "Conditional entity tag validator."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Immutable media bytes delivered inline.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inline disposition with safe file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this file."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Immutable media bytes delivered inline."
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Selected immutable media bytes delivered inline.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Supported range unit; always bytes."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inline disposition with safe file name."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Selected byte count."
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Strong SHA-256 entity tag for this file."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Inclusive byte range and full size."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "Selected immutable media bytes delivered inline."
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The entity tag matched; no bytes are returned.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/def-3"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Default Response",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-store."
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always no-referrer."
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always nosniff."
+              },
+              "X-Robots-Tag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Always noindex, nofollow, noarchive."
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {

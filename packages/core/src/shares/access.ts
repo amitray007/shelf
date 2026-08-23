@@ -4,6 +4,7 @@ import { boundaryFailure } from '../errors.js';
 import type { FolderRevisionRepository, StoredFolderRevision } from '../folders/publish.js';
 import { InvalidFolderTreeRequestError } from '../folders/tree.js';
 import type {
+  ContentByteRange,
   ContentReader,
   RevisionRepository,
   SealedContent,
@@ -20,7 +21,8 @@ export interface PublicSharedFile {
   originalFileName: string;
   mediaType: string;
   byteCount: number;
-  read(): Promise<AsyncIterable<Uint8Array>>;
+  contentHash: string;
+  read(range?: ContentByteRange): Promise<AsyncIterable<Uint8Array>>;
 }
 
 export interface PublicSharedFolderFile {
@@ -28,7 +30,7 @@ export interface PublicSharedFolderFile {
   mediaType: string;
   byteCount: number;
   contentHash: string;
-  read(): Promise<AsyncIterable<Uint8Array>>;
+  read(range?: ContentByteRange): Promise<AsyncIterable<Uint8Array>>;
 }
 
 function decodeCursor(value: string | undefined): string | undefined {
@@ -154,11 +156,13 @@ export function createShareAccessService(dependencies: {
         originalFileName: stored.originalFileName,
         mediaType: stored.mediaType,
         byteCount: stored.content.byteCount,
-        async read(): Promise<AsyncIterable<Uint8Array>> {
+        contentHash: stored.content.contentHash,
+        async read(range: ContentByteRange | undefined): Promise<AsyncIterable<Uint8Array>> {
           let source: AsyncIterable<Uint8Array>;
           try {
             signal?.throwIfAborted();
             source = await dependencies.contentReader.read(content, {
+              ...(range === undefined ? {} : { range }),
               ...(signal === undefined ? {} : { signal }),
             });
           } catch (error) {
@@ -281,11 +285,12 @@ export function createShareAccessService(dependencies: {
         mediaType: entry.mediaType,
         byteCount: entry.content.byteCount,
         contentHash: entry.content.contentHash,
-        async read() {
+        async read(range: ContentByteRange | undefined) {
           let source: AsyncIterable<Uint8Array>;
           try {
             signal?.throwIfAborted();
             source = await dependencies.contentReader.read(entry.content, {
+              ...(range === undefined ? {} : { range }),
               ...(signal === undefined ? {} : { signal }),
             });
           } catch (error) {

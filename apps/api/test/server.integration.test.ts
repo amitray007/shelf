@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createShelfPersistence } from '../src/persistence.js';
 import { createShelfServer } from '../src/server.js';
-import type { ShelfServerConfig } from '../src/server-config.js';
+import { DEFAULT_MAX_FILE_BYTES, type ShelfServerConfig } from '../src/server-config.js';
 
 const adminConnectionString = process.env.SHELF_TEST_POSTGRES_URL;
 const databaseName = `shelf_server_test_${randomBytes(8).toString('hex')}`;
@@ -47,6 +47,7 @@ describePostgres('production server assembly', () => {
     const config: ShelfServerConfig = {
       host: '127.0.0.1',
       port: 0,
+      maxFileBytes: DEFAULT_MAX_FILE_BYTES,
       installationId: 'installation-main',
       auth: {
         baseUrl: 'http://127.0.0.1:3000',

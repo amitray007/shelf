@@ -13,7 +13,7 @@ Shelf puts the CLI first, and the CLI is safe for agents to operate. The web das
 - **Automatic retention with Trash.** Artifacts without an active custom share move to Trash after a 30-day grace period. Trash remains recoverable for another 30 days before metadata and unreferenced content are purged. Important artifacts can be kept indefinitely.
 - **Share links.** Protected links use a private capability. Public links use a short unlisted URL. Links can be permanent, expiring, or session-limited, and you can revoke them at any time.
 - **Discussions.** Visitors and authenticated agents can start discussions anchored to a file or line range. Agents can reply and edit or delete their own posts; moderation remains separate.
-- **Safe rendering.** A dark, content-first viewer renders Markdown, JSON, code, and images. Active HTML runs in a separate sandboxed renderer process.
+- **Safe rendering.** A dark, content-first viewer supports Markdown, JSON/YAML, CSV/TSV, source text and code, raster images including AVIF, SVG, PDF, and browser-supported audio/video through constrained inline preview routes with byte-range delivery. Active HTML runs in a separate sandboxed renderer process. DOCX and XLSX have direct browser previews; legacy spreadsheets, presentations, and unsupported office formats keep an explicit download fallback.
 - **Agent-first CLI.** One JSON document per run. Strict exit codes. No interactive prompts. Idempotency keys on every mutation.
 - **Self-hostable.** One host with PostgreSQL. Content storage uses a local filesystem or Cloudflare R2.
 
@@ -36,6 +36,15 @@ shelf publish ./idea.html --title "Idea" --description "Interactive concept" --s
 ```
 
 A profile stores the installation URL, the workspace, and a credential reference. It does not store a plaintext token. A credential reference points to a named environment variable or to the native keyring. If the keyring fails, Shelf does not fall back to plaintext.
+
+## Server upload limits
+
+The production server accepts authenticated single-file uploads up to 256 MiB by default. Set
+`SHELF_MAX_FILE_BYTES` to a positive byte count to change the limit, up to the hard 1 GiB maximum.
+The upload path streams into configured content storage, but a higher limit still increases network,
+temporary-disk, and storage exposure. Keep any reverse-proxy request limit aligned with this value.
+
+Folder snapshots keep their separate bounds: 10 MiB per file and 100 MiB total per snapshot.
 
 ## Sharing model
 

@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { loadShelfServerConfig } from '../src/server-config.js';
+import {
+  DEFAULT_MAX_FILE_BYTES,
+  loadShelfServerConfig,
+  MAX_CONFIGURED_FILE_BYTES,
+} from '../src/server-config.js';
 
 const temporaryRoots: string[] = [];
 
@@ -31,6 +35,7 @@ describe('loadShelfServerConfig', () => {
     await expect(loadShelfServerConfig(environment())).resolves.toMatchObject({
       host: '127.0.0.1',
       port: 3000,
+      maxFileBytes: DEFAULT_MAX_FILE_BYTES,
       installationId: 'installation-main',
       auth: { baseUrl: 'https://shelf.example.test', secret: 'a'.repeat(32) },
       share: { signingKey: 's'.repeat(32) },
@@ -40,6 +45,12 @@ describe('loadShelfServerConfig', () => {
         content: { driver: 'local', root: '/var/lib/shelf/content' },
       },
     });
+  });
+
+  it('loads a bounded authenticated file upload limit override', async () => {
+    await expect(
+      loadShelfServerConfig(environment({ SHELF_MAX_FILE_BYTES: '536870912' })),
+    ).resolves.toMatchObject({ maxFileBytes: 512 * 1024 * 1024 });
   });
 
   it('loads a validated runtime web root and renderer public origin', async () => {
@@ -170,6 +181,11 @@ describe('loadShelfServerConfig', () => {
       { SHELF_RENDERER_PUBLIC_ORIGIN: 'https://shelf.example.test:3001' },
     ],
     ['empty web root', { SHELF_WEB_ROOT: '' }],
+    ['zero file limit', { SHELF_MAX_FILE_BYTES: '0' }],
+    ['negative file limit', { SHELF_MAX_FILE_BYTES: '-1' }],
+    ['noninteger file limit', { SHELF_MAX_FILE_BYTES: '12.5' }],
+    ['unsafe file limit', { SHELF_MAX_FILE_BYTES: '9007199254740992' }],
+    ['file limit over maximum', { SHELF_MAX_FILE_BYTES: String(MAX_CONFIGURED_FILE_BYTES + 1) }],
   ])('rejects %s', async (_label, overrides) => {
     await expect(loadShelfServerConfig(environment(overrides))).rejects.toBeInstanceOf(Error);
   });

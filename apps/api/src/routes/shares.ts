@@ -17,11 +17,12 @@ import {
   createShareResolutionService,
   ShareNotFoundError,
 } from '@shelf/core';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { Type } from 'typebox';
 
 import type { ShelfAppDependencies } from '../app.js';
 import { authenticate } from '../authenticate.js';
+import { contentDisposition, deliverContent } from '../content-delivery.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
 import { createAuthenticatedShareLifecycle } from '../share-lifecycle.js';
 
@@ -129,6 +130,20 @@ const PublicTreeFileQuerySchema = Type.Object(
   { path: PortableFolderPathSchema },
   { additionalProperties: false },
 );
+const ContentHeadersSchema = Type.Object(
+  {
+    range: Type.Optional(
+      Type.String({
+        maxLength: 256,
+        description: 'One RFC 9110 bytes range. Multiple ranges are not supported.',
+      }),
+    ),
+    'if-none-match': Type.Optional(
+      Type.String({ maxLength: 1024, description: 'Conditional entity tag validator.' }),
+    ),
+  },
+  { additionalProperties: true },
+);
 
 const managementErrors = {
   400: Type.Ref('ErrorEnvelope'),
@@ -173,6 +188,42 @@ const PublicContentResponseSchema = {
   },
 };
 
+const PublicPreviewResponseHeaders = {
+  ...anonymousResponseHeaders,
+  'Accept-Ranges': { type: 'string', description: 'Supported range unit; always bytes.' },
+  'Content-Disposition': { type: 'string', description: 'Inline disposition with safe file name.' },
+  'Content-Length': { type: 'integer', description: 'Selected byte count.' },
+  ETag: { type: 'string', description: 'Strong SHA-256 entity tag for this file.' },
+  'X-Content-Type-Options': { type: 'string', description: 'Always nosniff.' },
+} as const;
+const PublicPreviewPartialResponseHeaders = {
+  ...PublicPreviewResponseHeaders,
+  'Content-Range': { type: 'string', description: 'Inclusive byte range and full size.' },
+} as const;
+const PublicPreviewResponseSchema = {
+  ...Type.String({ format: 'binary', description: 'Immutable media bytes delivered inline.' }),
+  headers: PublicPreviewResponseHeaders,
+};
+const PublicPreviewPartialResponseSchema = {
+  ...Type.String({
+    format: 'binary',
+    description: 'Selected immutable media bytes delivered inline.',
+  }),
+  headers: PublicPreviewPartialResponseHeaders,
+};
+const PublicPreviewNotModifiedResponseSchema = {
+  ...Type.Null({ description: 'The entity tag matched; no bytes are returned.' }),
+  headers: {
+    ...anonymousResponseHeaders,
+    'Accept-Ranges': { type: 'string' },
+    ETag: { type: 'string' },
+  },
+};
+const PublicPreviewRangeErrorResponseSchema = {
+  ...Type.Ref('ErrorEnvelope'),
+  headers: { ...anonymousResponseHeaders, 'Content-Range': { type: 'string' } },
+};
+
 function encodedFileName(value: string): string {
   return encodeURIComponent(value).replace(
     /['()*]/gu,
@@ -198,6 +249,68 @@ function attachmentDisposition(originalFileName: string, revisionId: string): st
     asciiName = `share-${revisionId}.bin`;
   }
   return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodedFileName(unicodeName)}`;
+}
+
+const VIEWER_SESSION_COOKIE_PREFIX = 'shelf_viewer_session_';
+const VIEWER_SESSION_COOKIE_SHARE_ID_PATTERN = /^shr_[A-Za-z0-9_-]{22}$/u;
+const VIEWER_SESSION_COOKIE_TOKEN_PATTERN = /^[A-Za-z0-9._-]{100,3072}$/u;
+
+function viewerSessionCookieName(shareId: string): string {
+  return `${VIEWER_SESSION_COOKIE_PREFIX}${shareId}`;
+}
+
+function viewerSessionCookie(
+  request: { protocol: string },
+  shareId: string,
+  token: string,
+  issuedAt: string,
+  expiresAt: string,
+  now: Date,
+): string {
+  if (
+    !VIEWER_SESSION_COOKIE_SHARE_ID_PATTERN.test(shareId) ||
+    !VIEWER_SESSION_COOKIE_TOKEN_PATTERN.test(token)
+  ) {
+    throw new Error('Cannot issue an invalid viewer-session cookie.');
+  }
+  const nowTimestamp = now.getTime();
+  const issuedTimestamp = Date.parse(issuedAt);
+  const expiryTimestamp = Date.parse(expiresAt);
+  const referenceTimestamp =
+    Number.isFinite(nowTimestamp) && Number.isFinite(issuedTimestamp)
+      ? Math.max(nowTimestamp, issuedTimestamp)
+      : nowTimestamp;
+  const lifetimeSeconds =
+    Number.isFinite(referenceTimestamp) && Number.isFinite(expiryTimestamp)
+      ? Math.max(0, Math.floor((expiryTimestamp - referenceTimestamp) / 1_000))
+      : 0;
+  const secure = request.protocol === 'https' || process.env.NODE_ENV === 'production';
+  return [
+    `${viewerSessionCookieName(shareId)}=${token}`,
+    `Path=/api/v1/public/shares/${shareId}`,
+    `Max-Age=${lifetimeSeconds}`,
+    'HttpOnly',
+    'SameSite=Strict',
+    ...(secure ? ['Secure'] : []),
+  ].join('; ');
+}
+
+function readViewerSessionCookie(
+  request: { headers: { cookie?: string | undefined } },
+  shareId: string,
+): string | undefined {
+  if (!VIEWER_SESSION_COOKIE_SHARE_ID_PATTERN.test(shareId)) return undefined;
+  const header = request.headers.cookie;
+  if (header === undefined) return undefined;
+  const name = `${viewerSessionCookieName(shareId)}=`;
+  for (const item of header.split(';')) {
+    const trimmed = item.trimStart();
+    if (trimmed.startsWith(name)) {
+      const value = trimmed.slice(name.length).trim();
+      return value !== '' && VIEWER_SESSION_COOKIE_TOKEN_PATTERN.test(value) ? value : undefined;
+    }
+  }
+  return undefined;
 }
 
 export async function registerShareRoutes(
@@ -252,6 +365,15 @@ export async function registerShareRoutes(
     return { type: 'protected-session' as const, shareId, sessionId: claims.sessionId };
   }
 
+  function protectedCookieAuthority(
+    request: { headers: { cookie?: string | undefined } },
+    shareId: string,
+  ) {
+    const token = readViewerSessionCookie(request, shareId);
+    if (token === undefined) throw new ShareNotFoundError();
+    return protectedAuthority(shareId, token);
+  }
+
   function issueAuthority(authorization: {
     shareId: string;
     sessionId: string;
@@ -272,6 +394,31 @@ export async function registerShareRoutes(
       issuedAt: authorization.issuedAt,
       expiresAt: authorization.expiresAt,
     };
+  }
+
+  function sendAuthority(
+    request: { protocol: string },
+    reply: FastifyReply,
+    authorization: {
+      shareId: string;
+      sessionId: string;
+      issuedAt: string;
+      expiresAt: string;
+    },
+  ) {
+    const result = issueAuthority(authorization);
+    void reply.header(
+      'set-cookie',
+      viewerSessionCookie(
+        request,
+        authorization.shareId,
+        result.token,
+        authorization.issuedAt,
+        authorization.expiresAt,
+        clock(),
+      ),
+    );
+    return result;
   }
 
   app.addHook('onRequest', async (request, reply) => {
@@ -469,7 +616,9 @@ export async function registerShareRoutes(
       const params = request.params as { shareId: string };
       const body = request.body as ProtectedSessionEstablishInput;
       if ('secret' in body) {
-        return issueAuthority(
+        return sendAuthority(
+          request,
+          reply,
           await establish({
             shareId: params.shareId,
             sessionId: body.sessionId,
@@ -499,7 +648,7 @@ export async function registerShareRoutes(
       const expiresAt = new Date(
         Math.min(now.getTime() + AUTHORIZATION_LIFETIME_MS, policyExpiry),
       ).toISOString();
-      return issueAuthority({
+      return sendAuthority(request, reply, {
         shareId: claims.shareId,
         sessionId: claims.sessionId,
         issuedAt: now.toISOString(),
@@ -564,6 +713,49 @@ export async function registerShareRoutes(
     },
   );
 
+  app.get(
+    '/api/v1/public/shares/:shareId/content/preview',
+    {
+      schema: {
+        operationId: 'previewProtectedShareContentV1',
+        summary: 'Preview Protected shared file bytes with a viewer-session cookie',
+        description:
+          'Returns the stored media type inline and supports validators and one bytes range. The viewer session is read only from a narrow cookie set by session establishment.',
+        produces: ['application/octet-stream'],
+        tags: ['public shares'],
+        params: PublicShareParamsSchema,
+        headers: ContentHeadersSchema,
+        response: {
+          200: PublicPreviewResponseSchema,
+          206: PublicPreviewPartialResponseSchema,
+          304: PublicPreviewNotModifiedResponseSchema,
+          416: PublicPreviewRangeErrorResponseSchema,
+          ...publicErrors,
+        },
+      },
+    },
+    async (request, reply) => {
+      const params = request.params as { shareId: string };
+      const headers = request.headers as { range?: string; 'if-none-match'?: string };
+      const file = await access.readFile({
+        authority: protectedCookieAuthority(request, params.shareId),
+        signal: requestCancellationSignal(request, reply),
+      });
+      return deliverContent(
+        reply,
+        { range: headers.range, ifNoneMatch: headers['if-none-match'] },
+        {
+          mediaType: file.mediaType,
+          byteCount: file.byteCount,
+          contentHash: file.contentHash,
+          originalFileName: file.originalFileName,
+          read: file.read,
+        },
+        { disposition: 'inline', fallbackFileName: `share-${file.revisionId}.bin` },
+      );
+    },
+  );
+
   app.post(
     '/api/v1/public/shares/:shareId/tree',
     {
@@ -615,9 +807,56 @@ export async function registerShareRoutes(
       });
       return reply
         .type(file.mediaType)
+        .header('Content-Disposition', contentDisposition(file.path, 'file', 'attachment'))
         .header('Content-Length', file.byteCount)
         .header('ETag', `"${file.contentHash}"`)
         .send(Readable.from(await file.read()));
+    },
+  );
+
+  app.get(
+    '/api/v1/public/shares/:shareId/tree/content/preview',
+    {
+      schema: {
+        operationId: 'previewProtectedShareFolderEntryV1',
+        summary: 'Preview one Protected shared folder file with a viewer-session cookie',
+        description:
+          'Returns the stored media type inline and supports validators and one bytes range.',
+        produces: ['application/octet-stream'],
+        tags: ['public shares'],
+        params: PublicShareParamsSchema,
+        headers: ContentHeadersSchema,
+        querystring: PublicTreeFileQuerySchema,
+        response: {
+          200: PublicPreviewResponseSchema,
+          206: PublicPreviewPartialResponseSchema,
+          304: PublicPreviewNotModifiedResponseSchema,
+          416: PublicPreviewRangeErrorResponseSchema,
+          ...publicErrors,
+        },
+      },
+    },
+    async (request, reply) => {
+      const params = request.params as { shareId: string };
+      const query = request.query as { path: string };
+      const headers = request.headers as { range?: string; 'if-none-match'?: string };
+      const file = await access.readTreeFile({
+        authority: protectedCookieAuthority(request, params.shareId),
+        path: query.path,
+        signal: requestCancellationSignal(request, reply),
+      });
+      return deliverContent(
+        reply,
+        { range: headers.range, ifNoneMatch: headers['if-none-match'] },
+        {
+          mediaType: file.mediaType,
+          byteCount: file.byteCount,
+          contentHash: file.contentHash,
+          originalFileName: file.path,
+          read: file.read,
+        },
+        { disposition: 'inline', fallbackFileName: 'file' },
+      );
     },
   );
 
@@ -674,6 +913,49 @@ export async function registerShareRoutes(
   );
 
   app.get(
+    '/api/v1/public/links/:publicCode/content/preview',
+    {
+      schema: {
+        operationId: 'previewPublicLinkContentV1',
+        summary: 'Preview secret-free Public shared file bytes inline',
+        description:
+          'Returns the stored media type inline and supports validators and one bytes range.',
+        produces: ['application/octet-stream'],
+        tags: ['public links'],
+        params: PublicLinkParamsSchema,
+        headers: ContentHeadersSchema,
+        response: {
+          200: PublicPreviewResponseSchema,
+          206: PublicPreviewPartialResponseSchema,
+          304: PublicPreviewNotModifiedResponseSchema,
+          416: PublicPreviewRangeErrorResponseSchema,
+          ...publicErrors,
+        },
+      },
+    },
+    async (request, reply) => {
+      const params = request.params as { publicCode: string };
+      const headers = request.headers as { range?: string; 'if-none-match'?: string };
+      const file = await access.readFile({
+        authority: { type: 'public', publicCode: params.publicCode },
+        signal: requestCancellationSignal(request, reply),
+      });
+      return deliverContent(
+        reply,
+        { range: headers.range, ifNoneMatch: headers['if-none-match'] },
+        {
+          mediaType: file.mediaType,
+          byteCount: file.byteCount,
+          contentHash: file.contentHash,
+          originalFileName: file.originalFileName,
+          read: file.read,
+        },
+        { disposition: 'inline', fallbackFileName: `share-${file.revisionId}.bin` },
+      );
+    },
+  );
+
+  app.get(
     '/api/v1/public/links/:publicCode/tree',
     {
       schema: {
@@ -720,9 +1002,56 @@ export async function registerShareRoutes(
       });
       return reply
         .type(file.mediaType)
+        .header('Content-Disposition', contentDisposition(file.path, 'file', 'attachment'))
         .header('Content-Length', file.byteCount)
         .header('ETag', `"${file.contentHash}"`)
         .send(Readable.from(await file.read()));
+    },
+  );
+
+  app.get(
+    '/api/v1/public/links/:publicCode/tree/content/preview',
+    {
+      schema: {
+        operationId: 'previewPublicLinkFolderEntryV1',
+        summary: 'Preview one secret-free Public shared folder file inline',
+        description:
+          'Returns the stored media type inline and supports validators and one bytes range.',
+        produces: ['application/octet-stream'],
+        tags: ['public links'],
+        params: PublicLinkParamsSchema,
+        headers: ContentHeadersSchema,
+        querystring: PublicTreeFileQuerySchema,
+        response: {
+          200: PublicPreviewResponseSchema,
+          206: PublicPreviewPartialResponseSchema,
+          304: PublicPreviewNotModifiedResponseSchema,
+          416: PublicPreviewRangeErrorResponseSchema,
+          ...publicErrors,
+        },
+      },
+    },
+    async (request, reply) => {
+      const params = request.params as { publicCode: string };
+      const query = request.query as { path: string };
+      const headers = request.headers as { range?: string; 'if-none-match'?: string };
+      const file = await access.readTreeFile({
+        authority: { type: 'public', publicCode: params.publicCode },
+        path: query.path,
+        signal: requestCancellationSignal(request, reply),
+      });
+      return deliverContent(
+        reply,
+        { range: headers.range, ifNoneMatch: headers['if-none-match'] },
+        {
+          mediaType: file.mediaType,
+          byteCount: file.byteCount,
+          contentHash: file.contentHash,
+          originalFileName: file.path,
+          read: file.read,
+        },
+        { disposition: 'inline', fallbackFileName: 'file' },
+      );
     },
   );
 }

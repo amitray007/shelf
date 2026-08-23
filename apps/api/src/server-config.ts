@@ -11,9 +11,13 @@ import { shelfPersistenceConfigFromEnv } from './persistence-env.js';
 
 export type ShelfServerEnvironment = ShelfEnvironment;
 
+export const DEFAULT_MAX_FILE_BYTES = 256 * 1024 * 1024;
+export const MAX_CONFIGURED_FILE_BYTES = 1024 * 1024 * 1024;
+
 export interface ShelfServerConfig {
   host: string;
   port: number;
+  maxFileBytes: number;
   installationId: string;
   auth: { baseUrl: string; secret: string };
   share: { signingKey: string };
@@ -46,6 +50,22 @@ function isLoopback(hostname: string): boolean {
     hostname === '127.0.0.1' ||
     (isIP(hostname) === 4 && hostname.startsWith('127.'))
   );
+}
+
+function parseMaxFileBytes(value: string | undefined): number {
+  if (value === undefined) return DEFAULT_MAX_FILE_BYTES;
+  if (!/^\d+$/u.test(value)) {
+    throw new Error(
+      `SHELF_MAX_FILE_BYTES must be a positive safe integer no greater than ${MAX_CONFIGURED_FILE_BYTES}.`,
+    );
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0 || parsed > MAX_CONFIGURED_FILE_BYTES) {
+    throw new Error(
+      `SHELF_MAX_FILE_BYTES must be a positive safe integer no greater than ${MAX_CONFIGURED_FILE_BYTES}.`,
+    );
+  }
+  return parsed;
 }
 
 export async function loadSecret(
@@ -113,6 +133,8 @@ export async function loadShelfServerConfig(
     throw new Error('SHELF_PORT must be an integer from 1 to 65535.');
   }
 
+  const maxFileBytes = parseMaxFileBytes(environment.SHELF_MAX_FILE_BYTES);
+
   const host = environment.SHELF_HOST ?? '127.0.0.1';
   if (
     host.length === 0 ||
@@ -148,6 +170,7 @@ export async function loadShelfServerConfig(
   return {
     host,
     port,
+    maxFileBytes,
     installationId,
     auth: {
       baseUrl: baseUrl.toString().replace(/\/$/u, ''),

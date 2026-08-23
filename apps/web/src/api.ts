@@ -48,6 +48,7 @@ export interface PublicFilePayload {
   readonly resolution: FileShareResolution;
   readonly authority: ViewerAuthority;
   readonly bytes: ArrayBuffer | null;
+  readonly previewUrl?: string;
   readonly rendererOrigin?: string;
 }
 
@@ -56,6 +57,7 @@ export interface PublicFolderPayload {
   readonly resolution: FolderShareResolution;
   readonly authority: ViewerAuthority;
   readonly entries: readonly FolderEntry[];
+  readonly rendererOrigin?: string;
 }
 
 export type PublicSharePayload = PublicFilePayload | PublicFolderPayload;
@@ -186,10 +188,10 @@ export async function establishProtectedSession(
   signal?: AbortSignal,
 ): Promise<ProtectedSessionAuthority> {
   const value = await responseJson(
-    await anonymousFetch(
-      `/api/v1/public/shares/${encodeURIComponent(shareId)}/sessions`,
-      jsonPost({ sessionId, ...authority }, signal),
-    ),
+    await anonymousFetch(`/api/v1/public/shares/${encodeURIComponent(shareId)}/sessions`, {
+      ...jsonPost({ sessionId, ...authority }, signal),
+      credentials: 'include',
+    }),
   );
   if (
     !isProtectedSessionAuthority(value) ||
@@ -227,6 +229,34 @@ export function viewerShareActionUrl(
   if (cursor === undefined) return resolution.action.path;
   const query = new URLSearchParams({ limit: '100', cursor });
   return `${resolution.action.path}?${query.toString()}`;
+}
+
+/**
+ * Returns an inline preview URL with no bearer token or capability material.
+ * Protected viewers establish the narrow HttpOnly cookie before this URL is used.
+ */
+export function viewerSharePreviewUrl(
+  resolution: FileShareResolution | FolderShareResolution,
+  authority: ViewerAuthority,
+  path?: string,
+): string {
+  const action = viewerShareActionUrl(resolution, authority);
+  if (resolution.action.type === 'content') return `${action}/preview`;
+  if (path === undefined || path.length === 0) throw new PublicShareUnavailableError();
+  const query = new URLSearchParams({ path });
+  return `${action}/content/preview?${query.toString()}`;
+}
+
+export function viewerShareDownloadUrl(
+  resolution: FileShareResolution | FolderShareResolution,
+  authority: ViewerAuthority,
+  path?: string,
+): string {
+  const action = viewerShareActionUrl(resolution, authority);
+  if (resolution.action.type === 'content') return action;
+  if (path === undefined || path.length === 0) throw new PublicShareUnavailableError();
+  const query = new URLSearchParams({ path });
+  return `${action}/content?${query.toString()}`;
 }
 
 export async function resolveViewerShare(

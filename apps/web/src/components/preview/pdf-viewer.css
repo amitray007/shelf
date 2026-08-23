@@ -1,0 +1,218 @@
+.pdf-viewer {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.pdf-viewer:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--focus-ring);
+}
+
+.pdf-viewer-toolbar {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.pdf-viewer-page-controls,
+.pdf-viewer-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.pdf-viewer-zoom-controls {
+  margin-left: auto;
+}
+
+.pdf-viewer-button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+
+.pdf-viewer-button:hover:not(:disabled) {
+  border-color: var(--rule-strong);
+  background: var(--elevated);
+  color: var(--text);
+}
+
+.pdf-viewer-button:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.pdf-viewer-button:focus-visible,
+.pdf-viewer-page-input input:focus-visible,
+.pdf-viewer-retry:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.pdf-viewer-page-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-family: "Geist Mono Variable", ui-monospace, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pdf-viewer-page-input input {
+  width: 43px;
+  height: 28px;
+  padding: 0 5px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--canvas);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+}
+
+.pdf-viewer-page-input input::-webkit-inner-spin-button,
+.pdf-viewer-page-input input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.pdf-viewer-zoom-label {
+  min-width: 42px;
+  color: var(--text-muted);
+  font-family: "Geist Mono Variable", ui-monospace, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.pdf-viewer-status {
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 4px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pdf-viewer-spinner {
+  animation: pdf-viewer-spin 0.9s linear infinite;
+}
+
+.pdf-viewer-retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+.pdf-viewer-page-status {
+  min-height: 18px;
+  padding: 3px 12px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.pdf-viewer-page-shell {
+  display: flex;
+  min-width: 0;
+  min-height: 220px;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+  background: var(--canvas);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.pdf-viewer-canvas {
+  display: block;
+  max-width: none;
+  background: #fff;
+  box-shadow: 0 5px 24px rgb(0 0 0 / 35%);
+}
+
+.pdf-viewer-help {
+  margin: 0;
+  padding: 8px 12px 11px;
+  border-top: 1px solid var(--rule);
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.pdf-viewer-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.pdf-viewer-measure {
+  display: none;
+}
+
+@keyframes pdf-viewer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 520px) {
+  .pdf-viewer-toolbar {
+    gap: 8px;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .pdf-viewer-page-shell {
+    padding: 10px;
+  }
+
+  .pdf-viewer-help {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdf-viewer-spinner {
+    animation: none;
+  }
+}

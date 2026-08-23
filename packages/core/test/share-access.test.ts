@@ -163,6 +163,9 @@ describe('public share access', () => {
     });
     const chunks = [];
     for await (const chunk of await file.read()) chunks.push(chunk);
+    for await (const _chunk of await file.read({ start: 1, end: 3 })) {
+      // Consume the guarded range stream to exercise the storage boundary.
+    }
 
     expect(new TextDecoder().decode(Buffer.concat(chunks))).toBe('<html>');
     expect(file).toMatchObject({
@@ -174,6 +177,10 @@ describe('public share access', () => {
     expect(read).toHaveBeenCalledWith(
       expect.not.objectContaining({ contentId: undefined }),
       expect.objectContaining({}),
+    );
+    expect(read).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ contentId: undefined }),
+      expect.objectContaining({ range: { start: 1, end: 3 } }),
     );
     expect(JSON.stringify(file)).not.toMatch(/private|actor|workspace|installation|provider/i);
   });

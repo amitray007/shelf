@@ -13,6 +13,8 @@ import {
   PublicShareUnavailableError,
   resolveViewerShare,
   type ViewerAuthority,
+  viewerShareDownloadUrl,
+  viewerSharePreviewUrl,
 } from './api.js';
 import {
   capabilityStorageKey,
@@ -34,11 +36,11 @@ import { reviewPanelStorageKey, useViewerReview } from './components/review/use-
 import { ViewerRail } from './components/viewer-shell.js';
 import { ViewerSidebarSplit } from './components/viewer-sidebar-split.js';
 import {
-  normalizeMediaType,
   type PassiveRenderer,
   prefetchRendererModules,
+  requiresClientBytes,
   selectRenderer,
-  supportsSourceView,
+  usesPreviewUrl,
 } from './rendering.js';
 import {
   type FileShareResolution,
@@ -50,6 +52,7 @@ import {
 interface PreparedFile {
   readonly renderer: PassiveRenderer;
   readonly text?: string;
+  readonly bytes?: ArrayBuffer;
 }
 
 export function updateViewerThreadUrl(currentUrl: string, threadId: string): string {
@@ -73,9 +76,16 @@ function prepareFile(
   bytes: ArrayBuffer | null,
   rendererOrigin: string | undefined,
 ): PreparedFile {
-  const selected = selectRenderer(resolution.revision.mediaType, rendererOrigin);
-  if (bytes === null || !supportsSourceView(resolution.revision.mediaType)) {
+  const selected = selectRenderer(
+    resolution.revision.mediaType,
+    rendererOrigin,
+    resolution.revision.originalFileName,
+  );
+  if (bytes === null || !requiresClientBytes(selected)) {
     return { renderer: selected };
+  }
+  if (selected.kind === 'docx' || selected.kind === 'workbook') {
+    return { bytes, renderer: selected };
   }
   const text = decodeFileSource(bytes);
   return text === null ? { renderer: { kind: 'download' } } : { renderer: selected, text };
@@ -153,19 +163,30 @@ export async function loadViewerPayload(
       resolution,
       authority,
       entries: await loadViewerFolderEntries(resolution, authority, signal),
+      ...(rendererOrigin === undefined ? {} : { rendererOrigin }),
     };
   }
   if (!isFileShareResolution(resolution)) throw new PublicShareUnavailableError();
-  prefetchRendererModules({ kind: 'file', mediaType: resolution.revision.mediaType });
-  const renderer = selectRenderer(resolution.revision.mediaType, rendererOrigin);
-  const needsBytes =
-    ['text', 'json', 'markdown', 'image'].includes(renderer.kind) ||
-    supportsSourceView(resolution.revision.mediaType);
+  prefetchRendererModules({
+    kind: 'file',
+    mediaType: resolution.revision.mediaType,
+    originalFileName: resolution.revision.originalFileName,
+  });
+  const renderer = selectRenderer(
+    resolution.revision.mediaType,
+    rendererOrigin,
+    resolution.revision.originalFileName,
+  );
+  const needsBytes = requiresClientBytes(renderer);
+  const previewUrl = usesPreviewUrl(renderer)
+    ? viewerSharePreviewUrl(resolution, authority)
+    : undefined;
   return {
     kind: 'file',
     resolution,
     authority,
     bytes: needsBytes ? await loadViewerFileBytes(resolution, authority, signal) : null,
+    ...(previewUrl === undefined ? {} : { previewUrl }),
     ...(rendererOrigin === undefined ? {} : { rendererOrigin }),
   };
 }
@@ -181,33 +202,15 @@ function FileArtifact({
   readonly sidebarOpen?: boolean | undefined;
   readonly onOpenSidebar?: (() => void) | undefined;
 }) {
-  const downloadUrl = useMemo(
-    () =>
-      payload.bytes === null ||
-      (selectRenderer(payload.resolution.revision.mediaType, payload.rendererOrigin).kind !==
-        'image' &&
-        normalizeMediaType(payload.resolution.revision.mediaType) !== 'image/svg+xml')
-        ? undefined
-        : URL.createObjectURL(
-            new Blob([payload.bytes], { type: payload.resolution.revision.mediaType }),
-          ),
-    [payload.bytes, payload.rendererOrigin, payload.resolution.revision.mediaType],
-  );
-  useEffect(
-    () => () => {
-      if (downloadUrl !== undefined) URL.revokeObjectURL(downloadUrl);
-    },
-    [downloadUrl],
-  );
-
   const prepared = useMemo(
     () => prepareFile(payload.resolution, payload.bytes, payload.rendererOrigin),
     [payload.bytes, payload.rendererOrigin, payload.resolution],
   );
   return (
     <ArtifactContent
-      {...(downloadUrl === undefined ? {} : { downloadUrl })}
+      {...(payload.previewUrl === undefined ? {} : { previewUrl: payload.previewUrl })}
       {...(prepared.text === undefined ? {} : { text: prepared.text })}
+      {...(prepared.bytes === undefined ? {} : { bytes: prepared.bytes })}
       renderer={prepared.renderer}
       resolution={payload.resolution}
       authority={payload.authority}
@@ -223,21 +226,71 @@ function FileArtifact({
 function FolderArtifact({
   payload,
   review,
+  sidebarOpen,
+  onSidebarToggle,
 }: {
   readonly payload: Extract<PublicSharePayload, { kind: 'folder' }>;
   readonly review?: FolderBrowserReview | undefined;
+  readonly sidebarOpen: boolean;
+  readonly onSidebarToggle: () => void;
 }) {
   const loadFile = useCallback(
     (path: string, signal: AbortSignal) =>
       loadViewerFolderEntryBytes(payload.resolution, payload.authority, path, signal),
     [payload.authority, payload.resolution],
   );
+  const loadPreviewUrl = useCallback(
+    (path: string) => viewerSharePreviewUrl(payload.resolution, payload.authority, path),
+    [payload.authority, payload.resolution],
+  );
+  const downloadFile = useCallback(
+    (path: string) => {
+      let action: string;
+      try {
+        action = viewerShareDownloadUrl(payload.resolution, payload.authority, path);
+      } catch {
+        return;
+      }
+      const form = document.createElement('form');
+      form.action = action;
+      form.method = payload.authority.accessType === 'protected' ? 'post' : 'get';
+      form.hidden = true;
+      if (payload.authority.accessType === 'protected') {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'token';
+        input.value = payload.authority.token;
+        form.append(input);
+      }
+      document.body.append(form);
+      try {
+        form.submit();
+      } finally {
+        form.remove();
+      }
+    },
+    [payload.authority, payload.resolution],
+  );
   return (
     <FolderBrowser
+      authority={payload.authority}
       entries={payload.entries}
       key={payload.resolution.revision.revisionId}
       loadFile={loadFile}
-      review={review}
+      loadPreviewUrl={loadPreviewUrl}
+      downloadFile={downloadFile}
+      publicShare={true}
+      rendererOrigin={payload.rendererOrigin}
+      resolution={payload.resolution}
+      {...(review === undefined
+        ? {
+            navigation: {
+              onSidebarToggle,
+              sidebarControlsId: 'viewer-folder-sidebar',
+              sidebarOpen,
+            },
+          }
+        : { review })}
     />
   );
 }
@@ -413,6 +466,8 @@ export function ViewerPage() {
                   }
                 : undefined
             }
+            onSidebarToggle={() => setDiscussionVisibility(!discussionOpen)}
+            sidebarOpen={discussionOpen}
           />
         )}
       </div>

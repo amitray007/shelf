@@ -184,6 +184,8 @@ a {
   min-width: 0 !important;
   max-width: 0 !important;
   flex-basis: 0 !important;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .viewer-sidebar-split-collapsed > [data-separator] {
@@ -1278,6 +1280,27 @@ a {
   scrollbar-width: thin;
 }
 
+.artifact-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(20px, 4vw, 48px);
+}
+
+.artifact-preview-with-download {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.artifact-preview-with-download > :not(.artifact-preview-action) {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
 .artifact-code {
   padding: clamp(18px, 3vw, 40px);
 }
@@ -1861,6 +1884,7 @@ a {
 .file-view-toolbar {
   display: flex;
   min-height: 40px;
+  min-width: 0;
   flex: 0 0 40px;
   align-items: center;
   justify-content: flex-start;
@@ -1868,6 +1892,8 @@ a {
   padding: 0 12px;
   border-bottom: 1px solid var(--rule);
   background: var(--canvas);
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .file-view-meta {
@@ -1876,6 +1902,7 @@ a {
   flex: 1;
   align-items: center;
   gap: 12px;
+  overflow: hidden;
 }
 
 .file-view-meta strong {
@@ -1897,8 +1924,44 @@ a {
     monospace;
 }
 
+.file-view-toolbar-share {
+  gap: 8px;
+}
+
+.file-view-toolbar-share .file-view-meta {
+  gap: 8px;
+}
+
+.file-view-toolbar-share .file-view-meta strong {
+  color: var(--text);
+}
+
+.file-view-toolbar-share .file-view-format {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .file-view-tabs {
   flex: 0 0 auto;
+}
+
+.file-view-actions {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.file-view-actions button {
+  min-height: 30px;
+  white-space: nowrap;
+}
+
+.file-view-download-label {
+  display: inline;
 }
 
 .file-view-content {
@@ -1997,6 +2060,10 @@ a {
   padding: 0;
 }
 
+.folder-browser .review-sidebar-close {
+  display: none;
+}
+
 .folder-browser-pierre-tree {
   display: block;
   width: 100%;
@@ -2029,8 +2096,11 @@ a {
 
 .folder-browser-preview {
   display: flex;
+  width: 100%;
   min-width: 0;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .folder-browser-content {
@@ -2038,7 +2108,17 @@ a {
   min-width: 0;
   min-height: 0;
   flex: 1;
+  flex-direction: column;
   overflow: hidden;
+}
+
+.folder-browser-download {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--canvas);
 }
 
 .folder-browser-content .artifact-document .markdown-body {
@@ -2125,6 +2205,38 @@ a {
   place-items: center;
 }
 
+.download-only-state {
+  width: min(100%, 360px);
+  box-sizing: border-box;
+  gap: 8px;
+  padding: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.download-only-state > svg {
+  color: var(--text-muted);
+}
+
+.download-only-state h2 {
+  margin: 2px 0 0;
+  color: var(--text-subtle);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+
+.download-only-state p {
+  max-width: 320px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .state-center {
   display: flex;
   flex-direction: column;
@@ -2162,10 +2274,6 @@ a {
 .unavailable-mark {
   margin-bottom: 8px;
   color: var(--text-muted);
-}
-
-.download-empty button {
-  margin-top: 22px;
 }
 
 .viewer-pending .state-center,
@@ -2335,10 +2443,6 @@ a {
 
   .folder-browser .viewer-sidebar-split {
     display: grid !important;
-    grid-template-rows: minmax(120px, 34vh) minmax(0, 1fr);
-  }
-
-  .folder-browser .viewer-sidebar-split-collapsed {
     grid-template-rows: 0 minmax(0, 1fr);
   }
 
@@ -2355,6 +2459,9 @@ a {
 
   .folder-browser
     .folder-browser-sidebar-split-review.viewer-sidebar-split-open
+    > [data-testid="viewer-sidebar"],
+  .folder-browser
+    .folder-browser-sidebar-split-tree.viewer-sidebar-split-open
     > [data-testid="viewer-sidebar"] {
     position: fixed;
     inset: var(--bar-size) 0 0;
@@ -2365,6 +2472,9 @@ a {
 
   .folder-browser
     .folder-browser-sidebar-split-review.viewer-sidebar-split-collapsed
+    > [data-testid="viewer-sidebar"],
+  .folder-browser
+    .folder-browser-sidebar-split-tree.viewer-sidebar-split-collapsed
     > [data-testid="viewer-sidebar"] {
     position: static;
     width: 0 !important;
@@ -2378,6 +2488,10 @@ a {
     padding: 0;
     border-right: 0;
     border-bottom: 1px solid var(--rule);
+  }
+
+  .folder-browser .review-sidebar-close {
+    display: inline-grid;
   }
 
   .folder-browser-tree:has(> [aria-label="Review tools"] [aria-expanded="true"]),
@@ -2408,6 +2522,24 @@ a {
 }
 
 @media (max-width: 360px) {
+  .file-view-toolbar-share {
+    gap: 4px;
+    padding-inline: 8px;
+  }
+
+  .file-view-toolbar-share .file-view-meta {
+    gap: 4px;
+  }
+
+  .file-view-toolbar-share .file-view-tabs button {
+    padding-inline: 6px;
+    font-size: 11px;
+  }
+
+  .file-view-toolbar-share .file-view-download-label {
+    display: none;
+  }
+
   .target-state {
     overflow: hidden;
     max-width: 122px;

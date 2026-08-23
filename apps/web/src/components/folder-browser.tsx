@@ -1,21 +1,39 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable previews must be keyboard reachable.
 
+import { Button } from '@cloudflare/kumo/components/button';
+import { DownloadSimpleIcon } from '@phosphor-icons/react/DownloadSimple';
 import type { FileTreeDirectoryHandle } from '@pierre/trees';
 import { FileTree, useFileTree } from '@pierre/trees/react';
 import type { CommentAnchor, CommentThread, FolderEntry } from '@shelf/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { normalizeMediaType, selectRenderer, supportsSourceView } from '../rendering.js';
+import type { ViewerAuthority } from '../api.js';
+import {
+  prefersSourceView,
+  requiresClientBytes,
+  selectRenderer,
+  supportsSourceView,
+  usesPreviewUrl,
+} from '../rendering.js';
+import type { FolderShareResolution } from '../share-types.js';
+import { DownloadOnlyState } from './download-only-state.js';
 import {
   CodeView,
   decodeFileSource,
   FileLoadingState,
   FileView,
-  formatJson,
   viewerSessionStorageKey,
 } from './file-view.js';
-import { formatBytes } from './format.js';
+import { formatBytes, formatFileType } from './format.js';
 import { LazyMarkdownView as MarkdownView } from './lazy-views.js';
+import { DelimitedTablePreview } from './preview/delimited-table-preview.js';
+import { AudioPreview, VideoPreview } from './preview/media-preview.js';
+import { DocxPreview } from './preview/office-document-preview.js';
+import { pdfJsAdapter } from './preview/pdf-js.js';
+import { PdfViewer } from './preview/pdf-viewer.js';
+import { StructuredDataPreview } from './preview/structured-data-preview.js';
+import { WorkbookPreview } from './preview/workbook-preview.js';
+import { RendererFrame } from './renderer-frame.js';
 import { DiscussionPanel } from './review/discussion-panel.js';
 import { ReviewSidebarToolbar } from './review/sidebar-toolbar.js';
 import type { ReviewSidebarMode, ReviewThreadFilter } from './review/types.js';
@@ -51,8 +69,15 @@ export interface FolderBrowserReview {
 }
 
 interface FolderBrowserProps {
+  readonly authority?: ViewerAuthority | undefined;
   readonly entries: readonly FolderEntry[];
   readonly loadFile: (path: string, signal: AbortSignal) => Promise<ArrayBuffer>;
+  readonly loadPreviewUrl?: ((path: string) => string) | undefined;
+  readonly downloadFile?: ((path: string) => void) | undefined;
+  /** Public shares opt in to the compact outer file toolbar. */
+  readonly publicShare?: boolean | undefined;
+  readonly rendererOrigin?: string | undefined;
+  readonly resolution?: FolderShareResolution | undefined;
   readonly review?: FolderBrowserReview | undefined;
   readonly navigation?: FolderBrowserNavigation | undefined;
 }
@@ -100,21 +125,38 @@ function expandedTreePaths(
 
 function FolderImage({
   bytes,
+  src,
   mediaType,
   path,
 }: {
-  bytes: ArrayBuffer;
+  bytes?: ArrayBuffer | undefined;
   mediaType: string;
   path: string;
+  src?: string | undefined;
 }) {
   const source = useMemo(
-    () => URL.createObjectURL(new Blob([bytes], { type: mediaType })),
-    [bytes, mediaType],
+    () =>
+      src === undefined && bytes !== undefined
+        ? URL.createObjectURL(new Blob([bytes], { type: mediaType }))
+        : src,
+    [bytes, mediaType, src],
   );
-  useEffect(() => () => URL.revokeObjectURL(source), [source]);
+  useEffect(
+    () => () => {
+      if (src === undefined && source?.startsWith('blob:')) URL.revokeObjectURL(source);
+    },
+    [source, src],
+  );
   return (
     <section className="artifact-surface artifact-image">
-      <img alt={path} className="folder-preview-image" referrerPolicy="no-referrer" src={source} />
+      {source === undefined ? null : (
+        <img
+          alt={path}
+          className="folder-preview-image"
+          referrerPolicy="no-referrer"
+          src={source}
+        />
+      )}
     </section>
   );
 }
@@ -146,7 +188,18 @@ export function isProgrammaticFolderSelection(
   return selectedPath === programmaticPath;
 }
 
-export function FolderBrowser({ entries, loadFile, navigation, review }: FolderBrowserProps) {
+export function FolderBrowser({
+  authority,
+  entries,
+  loadFile,
+  loadPreviewUrl,
+  downloadFile,
+  navigation,
+  publicShare = false,
+  rendererOrigin,
+  resolution,
+  review,
+}: FolderBrowserProps) {
   const firstFile = entries.find((entry) => entry.kind === 'file');
   const paths = useMemo(
     () => entries.map((entry) => (entry.kind === 'directory' ? `${entry.path}/` : entry.path)),
@@ -168,6 +221,7 @@ export function FolderBrowser({ entries, loadFile, navigation, review }: FolderB
     () => readSelectedFilePath(filePaths) ?? firstFile?.path,
   );
   const [bytes, setBytes] = useState<ArrayBuffer>();
+  const [previewUrl, setPreviewUrl] = useState<string>();
   const [failed, setFailed] = useState(false);
   const [treeSearchOpen, setTreeSearchOpen] = useState(false);
   const [discussionSearchOpen, setDiscussionSearchOpen] = useState(false);
@@ -254,6 +308,39 @@ export function FolderBrowser({ entries, loadFile, navigation, review }: FolderB
     }
   }, [model, selectedPath]);
 
+  const toggleSidebar = review?.onSidebarToggle ?? navigation?.onSidebarToggle;
+  const previousSidebarOpenRef = useRef(sidebarOpen);
+
+  useEffect(() => {
+    const wasOpen = previousSidebarOpenRef.current;
+    previousSidebarOpenRef.current = sidebarOpen;
+    if (
+      wasOpen ||
+      !sidebarOpen ||
+      toggleSidebar === undefined ||
+      typeof window === 'undefined' ||
+      window.innerWidth > 640
+    )
+      return;
+    const frame = window.requestAnimationFrame(() => {
+      const sidebar = document.getElementById(sidebarControlsId);
+      const target = sidebar?.querySelector<HTMLElement>('.review-sidebar-close, button, input');
+      target?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [sidebarControlsId, sidebarOpen, toggleSidebar]);
+
+  useEffect(() => {
+    if (!sidebarOpen || toggleSidebar === undefined) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || window.innerWidth > 640) return;
+      event.preventDefault();
+      toggleSidebar();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [sidebarOpen, toggleSidebar]);
+
   useEffect(() => {
     const persistExpansion = () => {
       try {
@@ -296,7 +383,24 @@ export function FolderBrowser({ entries, loadFile, navigation, review }: FolderB
     if (selected === undefined) return;
     const controller = new AbortController();
     setBytes(undefined);
+    setPreviewUrl(undefined);
     setFailed(false);
+    const renderer = selectRenderer(selected.mediaType, rendererOrigin, selected.path);
+    const sourceView = supportsSourceView(selected.mediaType, selected.path);
+    if (publicShare && renderer.kind === 'download') {
+      return () => controller.abort();
+    }
+    const remote =
+      loadPreviewUrl !== undefined && usesPreviewUrl(renderer)
+        ? loadPreviewUrl(selected.path)
+        : undefined;
+    if (remote !== undefined) {
+      setPreviewUrl(remote);
+      return () => controller.abort();
+    }
+    if (!requiresClientBytes(renderer) && renderer.kind !== 'image' && !sourceView) {
+      return () => controller.abort();
+    }
     void loadFile(selected.path, controller.signal).then(
       (value) => setBytes(value),
       () => {
@@ -304,24 +408,65 @@ export function FolderBrowser({ entries, loadFile, navigation, review }: FolderB
       },
     );
     return () => controller.abort();
-  }, [loadFile, selected]);
+  }, [loadFile, loadPreviewUrl, publicShare, rendererOrigin, selected]);
 
+  const selectedRenderer =
+    selected === undefined
+      ? undefined
+      : selectRenderer(selected.mediaType, rendererOrigin, selected.path);
   const source =
-    selected !== undefined && bytes !== undefined && supportsSourceView(selected.mediaType)
+    selected !== undefined &&
+    selectedRenderer !== undefined &&
+    selectedRenderer.kind !== 'docx' &&
+    selectedRenderer.kind !== 'workbook' &&
+    bytes !== undefined &&
+    (requiresClientBytes(selectedRenderer) || supportsSourceView(selected.mediaType, selected.path))
       ? decodeFileSource(bytes)
       : null;
 
   const preview = useMemo(() => {
     if (selected === undefined)
       return <p className="folder-preview-state">This folder is empty.</p>;
+    const renderer = selectedRenderer;
+    if (publicShare && renderer?.kind === 'download') {
+      return (
+        <div className="artifact-surface artifact-download">
+          <DownloadOnlyState fileName={selected.path} mediaType={selected.mediaType} />
+        </div>
+      );
+    }
+    if (
+      !publicShare &&
+      renderer?.kind === 'download' &&
+      !supportsSourceView(selected.mediaType, selected.path)
+    ) {
+      return <p className="folder-preview-state">Preview unavailable for this file type.</p>;
+    }
+    if (renderer?.kind === 'html' && authority !== undefined && resolution !== undefined) {
+      return (
+        <div className="artifact-surface artifact-html">
+          <RendererFrame
+            authority={authority}
+            path={selected.path}
+            renderer={renderer}
+            resolution={resolution}
+          />
+        </div>
+      );
+    }
     if (failed) return <p className="folder-preview-state">This file could not be loaded.</p>;
-    if (bytes === undefined) return <FileLoadingState />;
-    const normalizedMediaType = normalizeMediaType(selected.mediaType);
-    const renderer = selectRenderer(selected.mediaType, undefined);
+    if (bytes === undefined && previewUrl === undefined) return <FileLoadingState />;
+    if (renderer === undefined)
+      return <p className="folder-preview-state">This folder is empty.</p>;
     let renderedPreview: React.ReactNode | undefined;
-    if (renderer.kind === 'image' || normalizedMediaType === 'image/svg+xml') {
+    if (renderer.kind === 'image' && (previewUrl !== undefined || bytes !== undefined)) {
       renderedPreview = (
-        <FolderImage bytes={bytes} mediaType={selected.mediaType} path={selected.path} />
+        <FolderImage
+          bytes={bytes}
+          mediaType={selected.mediaType}
+          path={selected.path}
+          src={previewUrl}
+        />
       );
     } else if (renderer.kind === 'markdown' && source !== null) {
       renderedPreview = (
@@ -335,26 +480,111 @@ export function FolderBrowser({ entries, loadFile, navigation, review }: FolderB
       );
     } else if (renderer.kind === 'json' && source !== null) {
       renderedPreview = (
-        <CodeView
+        <StructuredDataPreview
           fileName={selected.path}
-          label="Artifact data preview"
-          source={formatJson(source)}
+          mediaType={selected.mediaType}
+          {...(publicShare ? { showFileIdentity: false } : {})}
+          showModeTabs={false}
+          source={source}
         />
       );
+    } else if (renderer.kind === 'table' && source !== null) {
+      renderedPreview = (
+        <DelimitedTablePreview
+          fileName={selected.path}
+          mediaType={selected.mediaType}
+          {...(publicShare ? { showFileIdentity: false } : {})}
+          showModeTabs={false}
+          source={source}
+        />
+      );
+    } else if (renderer.kind === 'docx' && bytes !== undefined) {
+      renderedPreview = (
+        <DocxPreview
+          metadata={{
+            byteCount: bytes.byteLength,
+            fileName: selected.path,
+            mediaType: selected.mediaType,
+          }}
+          src={bytes}
+          title={selected.path}
+        />
+      );
+    } else if (renderer.kind === 'workbook' && bytes !== undefined) {
+      renderedPreview = (
+        <WorkbookPreview
+          metadata={{
+            byteCount: bytes.byteLength,
+            fileName: selected.path,
+            format: 'xlsx',
+            mediaType: selected.mediaType,
+          }}
+          src={bytes}
+          title={selected.path}
+          {...(publicShare ? { showFileIdentity: false } : {})}
+        />
+      );
+    } else if (renderer.kind === 'text' && source !== null) {
+      renderedPreview = (
+        <CodeView fileName={selected.path} label="Artifact source preview" source={source} />
+      );
+    } else if (renderer.kind === 'pdf' && previewUrl !== undefined) {
+      renderedPreview = <PdfViewer adapter={pdfJsAdapter} src={previewUrl} title="PDF preview" />;
+    } else if (renderer.kind === 'audio' && previewUrl !== undefined) {
+      renderedPreview = (
+        <AudioPreview
+          {...(publicShare ? { showFileIdentity: false } : {})}
+          src={previewUrl}
+          title={selected.path}
+        />
+      );
+    } else if (renderer.kind === 'video' && previewUrl !== undefined) {
+      renderedPreview = <VideoPreview src={previewUrl} title={selected.path} />;
     }
     if (renderedPreview === undefined && source === null) {
       return <p className="folder-preview-state">Preview unavailable for this file type.</p>;
     }
     return renderedPreview;
-  }, [bytes, failed, selected, source]);
+  }, [
+    authority,
+    bytes,
+    failed,
+    previewUrl,
+    publicShare,
+    resolution,
+    selected,
+    selectedRenderer,
+    source,
+  ]);
 
   const fileHeader =
-    selected === undefined ? undefined : (
+    !publicShare && selected !== undefined ? (
       <>
         <strong title={selected.path}>{selected.path}</strong>
         <span>{formatBytes(selected.byteCount)}</span>
       </>
-    );
+    ) : undefined;
+
+  const shareToolbar =
+    !publicShare || selected === undefined
+      ? undefined
+      : {
+          download:
+            downloadFile === undefined ? undefined : (
+              <Button
+                aria-label="Download"
+                icon={DownloadSimpleIcon}
+                onClick={() => downloadFile(selected.path)}
+                size="sm"
+                title={`Download ${selected.path}`}
+                type="button"
+                variant="primary"
+              >
+                <span className="file-view-download-label">Download</span>
+              </Button>
+            ),
+          formatLabel: formatFileType(selected.path, selected.mediaType),
+        };
 
   const selectedAnchor: CommentAnchor | undefined =
     selected === undefined || review === undefined || !review.canCreateThread
@@ -372,7 +602,25 @@ export function FolderBrowser({ entries, loadFile, navigation, review }: FolderB
         content={
           <div className="folder-browser-preview">
             <div className="folder-browser-content">
+              {!publicShare && selected !== undefined && downloadFile !== undefined ? (
+                <div className="artifact-preview-action folder-browser-download">
+                  <Button
+                    icon={DownloadSimpleIcon}
+                    onClick={() => downloadFile(selected.path)}
+                    size="sm"
+                    type="button"
+                    variant="primary"
+                  >
+                    Download
+                  </Button>
+                </div>
+              ) : null}
               <FileView
+                defaultMode={
+                  selected !== undefined && prefersSourceView(selected.mediaType, selected.path)
+                    ? 'source'
+                    : 'preview'
+                }
                 {...(fileHeader === undefined ? {} : { header: fileHeader })}
                 {...(source === null ? {} : { source })}
                 {...(selected === undefined ? {} : { fileName: selected.path })}
@@ -397,7 +645,7 @@ export function FolderBrowser({ entries, loadFile, navigation, review }: FolderB
                 {...(review === undefined && navigation === undefined
                   ? {}
                   : {
-                      onOpenSidebar: review?.onSidebarToggle ?? navigation?.onSidebarToggle,
+                      onOpenSidebar: toggleSidebar,
                       sidebarControlsId,
                       sidebarLabel:
                         review === undefined
@@ -407,6 +655,7 @@ export function FolderBrowser({ entries, loadFile, navigation, review }: FolderB
                     })}
                 key={folderFileViewKey(selected?.path, bytes === undefined)}
                 preview={preview}
+                {...(shareToolbar === undefined ? {} : { shareToolbar })}
               />
             </div>
           </div>
@@ -430,6 +679,7 @@ export function FolderBrowser({ entries, loadFile, navigation, review }: FolderB
                       ? setDiscussionSearchOpen((open) => !open)
                       : setTreeSearchOpen((open) => !open)
                   }
+                  onClose={toggleSidebar}
                   searchLabel={
                     review?.mode === 'discussion' ? 'Search discussions' : 'Search files'
                   }
