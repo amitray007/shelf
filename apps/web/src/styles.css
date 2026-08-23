@@ -449,6 +449,8 @@ a {
   padding: 0;
   background: transparent;
   color: inherit;
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 86px;
   text-align: left;
 }
 .review-thread-select {
@@ -1035,6 +1037,8 @@ a {
   padding: 12px 0;
   border: 0;
   background: transparent;
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 72px;
 }
 
 .review-chat-message .review-post-heading {
@@ -1175,6 +1179,18 @@ a {
   min-height: 0;
   flex: 1;
   flex-direction: column;
+}
+
+.folder-browser-sidebar-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.folder-browser-sidebar-pane[hidden] {
+  display: none;
 }
 
 .folder-browser-sidebar-content > .review-panel {
