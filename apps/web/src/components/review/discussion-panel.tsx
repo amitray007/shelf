@@ -5,7 +5,7 @@ import { CaretDownIcon } from '@phosphor-icons/react/CaretDown';
 import { CaretRightIcon } from '@phosphor-icons/react/CaretRight';
 import { DotsThreeIcon } from '@phosphor-icons/react/DotsThree';
 import type { CommentAnchor, CommentThread } from '@shelf/contracts';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReviewAvatar,
   ReviewAvatarImage,
@@ -27,6 +27,17 @@ function threadLabel(thread: CommentThread): string {
   if (thread.anchor.path !== undefined) return thread.anchor.path;
   if (thread.anchor.startLine !== undefined) return `Line ${thread.anchor.startLine}`;
   return 'File discussion';
+}
+
+const threadSearchTextCache = new WeakMap<CommentThread, string>();
+
+function threadSearchText(thread: CommentThread): string {
+  const cached = threadSearchTextCache.get(thread);
+  if (cached !== undefined) return cached;
+  const value =
+    `${threadLabel(thread)} ${thread.posts.map((post) => post.body).join(' ')}`.toLowerCase();
+  threadSearchTextCache.set(thread, value);
+  return value;
 }
 
 export interface DiscussionPanelProps {
@@ -237,13 +248,16 @@ export function DiscussionPanel({
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const activeThread = threads.find((thread) => thread.threadId === activeThreadId);
+  const activeThread = useMemo(
+    () => threads.find((thread) => thread.threadId === activeThreadId),
+    [activeThreadId, threads],
+  );
   const searchOpen = controlledSearchOpen ?? localSearchOpen;
   const toggleSearch = onSearchToggle ?? (() => setLocalSearchOpen((open) => !open));
   const threadFilter = controlledThreadFilter ?? localThreadFilter;
   const setThreadFilter = onThreadFilterChange ?? setLocalThreadFilter;
+  const normalizedQuery = useDeferredValue(query.trim().toLowerCase());
   const threadGroups = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
     const groups = new Map<
       string,
       { label: string; unresolved: CommentThread[]; resolved: CommentThread[] }
@@ -254,10 +268,7 @@ export function DiscussionPanel({
         (threadFilter === 'resolved' && thread.resolvedAt === null)
       )
         continue;
-      if (normalized !== '') {
-        const text = thread.posts.map((post) => post.body).join(' ');
-        if (!`${threadLabel(thread)} ${text}`.toLowerCase().includes(normalized)) continue;
-      }
+      if (normalizedQuery !== '' && !threadSearchText(thread).includes(normalizedQuery)) continue;
       const groupKey = thread.anchor.path ?? 'file-discussion';
       let group = groups.get(groupKey);
       if (group === undefined) {
@@ -268,13 +279,13 @@ export function DiscussionPanel({
       else group.resolved.push(thread);
     }
     return [...groups.values()];
-  }, [query, threadFilter, threads]);
+  }, [normalizedQuery, threadFilter, threads]);
   const visibleThreadCount = threadGroups.reduce(
     (count, group) => count + group.unresolved.length + group.resolved.length,
     0,
   );
   let emptyMessage = emptyLabel;
-  if (query.trim() === '') {
+  if (normalizedQuery === '') {
     if (threadFilter === 'unresolved') emptyMessage = 'No unresolved discussions.';
     else if (threadFilter === 'resolved') emptyMessage = 'No resolved discussions.';
   }

@@ -200,15 +200,25 @@ export function FolderBrowser({
   resolution,
   review,
 }: FolderBrowserProps) {
-  const firstFile = entries.find((entry) => entry.kind === 'file');
-  const paths = useMemo(
-    () => entries.map((entry) => (entry.kind === 'directory' ? `${entry.path}/` : entry.path)),
-    [entries],
-  );
-  const filePaths = useMemo(
-    () => new Set(entries.filter((entry) => entry.kind === 'file').map((entry) => entry.path)),
-    [entries],
-  );
+  const { fileEntriesByPath, filePaths, firstFile, paths } = useMemo(() => {
+    const nextPaths: string[] = [];
+    const nextFilePaths = new Set<string>();
+    const nextFileEntriesByPath = new Map<string, Extract<FolderEntry, { kind: 'file' }>>();
+    let nextFirstFile: Extract<FolderEntry, { kind: 'file' }> | undefined;
+    for (const entry of entries) {
+      nextPaths.push(entry.kind === 'directory' ? `${entry.path}/` : entry.path);
+      if (entry.kind !== 'file') continue;
+      nextFirstFile ??= entry;
+      nextFilePaths.add(entry.path);
+      nextFileEntriesByPath.set(entry.path, entry);
+    }
+    return {
+      fileEntriesByPath: nextFileEntriesByPath,
+      filePaths: nextFilePaths,
+      firstFile: nextFirstFile,
+      paths: nextPaths,
+    };
+  }, [entries]);
   const filePathsRef = useRef(filePaths);
   filePathsRef.current = filePaths;
   const focusRequestId = review?.focusRequestId;
@@ -230,6 +240,7 @@ export function FolderBrowser({
   const sidebarControlsId =
     review?.sidebarControlsId ?? navigation?.sidebarControlsId ?? 'folder-browser-sidebar-content';
   const restoredExpandedPaths = useMemo(() => readExpandedTreePaths(paths), [paths]);
+  const appliedPathsRef = useRef(paths);
   const handleSelectionChange = useCallback((selectedPaths: readonly string[]) => {
     const nextFile = [...selectedPaths].reverse().find((path) => filePathsRef.current.has(path));
     if (nextFile === undefined) return;
@@ -284,8 +295,12 @@ export function FolderBrowser({
   }, [model, treeSearchOpen]);
 
   useEffect(() => {
-    const expandedPaths = expandedTreePaths(paths, model);
-    if (selectedPath !== undefined) programmaticSelectionPathRef.current = selectedPath;
+    if (appliedPathsRef.current === paths) return;
+    const availablePaths = new Set(paths);
+    const expandedPaths = expandedTreePaths(appliedPathsRef.current, model).filter((path) =>
+      availablePaths.has(path),
+    );
+    appliedPathsRef.current = paths;
     model.resetPaths(paths, { initialExpandedPaths: expandedPaths });
     try {
       window.sessionStorage.setItem(
@@ -295,7 +310,7 @@ export function FolderBrowser({
     } catch {
       // Session storage can be unavailable in privacy-restricted browser contexts.
     }
-  }, [model, paths, selectedPath]);
+  }, [model, paths]);
 
   useEffect(() => {
     if (selectedPath === undefined) return;
@@ -342,7 +357,12 @@ export function FolderBrowser({
   }, [sidebarOpen, toggleSidebar]);
 
   useEffect(() => {
+    let visibleCount = model.getVisibleCount();
+    let pending = false;
+    let timeout: number | undefined;
     const persistExpansion = () => {
+      pending = false;
+      timeout = undefined;
       try {
         window.sessionStorage.setItem(
           viewerSessionStorageKey('folder-tree'),
@@ -352,14 +372,30 @@ export function FolderBrowser({
         // Session storage can be unavailable in privacy-restricted browser contexts.
       }
     };
-    persistExpansion();
-    return model.subscribe(persistExpansion);
+    const scheduleExpansionPersistence = () => {
+      const nextVisibleCount = model.getVisibleCount();
+      const expansionChanged = nextVisibleCount !== visibleCount;
+      visibleCount = nextVisibleCount;
+      if (model.isSearchOpen()) {
+        pending = false;
+        if (timeout !== undefined) window.clearTimeout(timeout);
+        timeout = undefined;
+        return;
+      }
+      if (!expansionChanged) return;
+      pending = true;
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      timeout = window.setTimeout(persistExpansion, 150);
+    };
+    const unsubscribe = model.subscribe(scheduleExpansionPersistence);
+    return () => {
+      unsubscribe();
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      if (pending) persistExpansion();
+    };
   }, [model, paths]);
 
-  const selected = entries.find(
-    (entry): entry is Extract<FolderEntry, { kind: 'file' }> =>
-      entry.kind === 'file' && entry.path === selectedPath,
-  );
+  const selected = selectedPath === undefined ? undefined : fileEntriesByPath.get(selectedPath);
 
   useEffect(() => {
     if (selectedPath === undefined || filePaths.has(selectedPath)) return;
@@ -688,30 +724,47 @@ export function FolderBrowser({
                     ? { threadFilter, onThreadFilterChange: setThreadFilter }
                     : {})}
                 />
-                {review?.mode === 'discussion' ? (
-                  <DiscussionPanel
-                    activeThreadId={review.activeThreadId}
-                    error={review.error}
-                    loading={review.loading}
-                    newAnchor={selectedAnchor}
-                    onCreateThread={review.onCreateThread}
-                    onDeletePost={review.onDeletePost}
-                    onEditPost={review.onEditPost}
-                    onReply={review.onReply}
-                    onModeratePost={review.onModeratePost}
-                    onNavigateToThread={review.onNavigateToThread}
-                    onSelectThread={review.onSelectThread}
-                    onSetThreadStatus={review.onSetThreadStatus}
-                    moderator={review.moderator}
-                    saving={review.saving}
-                    selectedPath={selectedPath}
-                    onSearchToggle={() => setDiscussionSearchOpen((open) => !open)}
-                    searchOpen={discussionSearchOpen}
-                    showToolbar={false}
-                    threadFilter={threadFilter}
-                    onThreadFilterChange={setThreadFilter}
-                    threads={review.threads}
-                  />
+                {review !== undefined ? (
+                  <>
+                    <div
+                      className="folder-browser-sidebar-pane"
+                      hidden={review.mode !== 'discussion'}
+                    >
+                      <DiscussionPanel
+                        activeThreadId={review.activeThreadId}
+                        error={review.error}
+                        loading={review.loading}
+                        newAnchor={selectedAnchor}
+                        onCreateThread={review.onCreateThread}
+                        onDeletePost={review.onDeletePost}
+                        onEditPost={review.onEditPost}
+                        onReply={review.onReply}
+                        onModeratePost={review.onModeratePost}
+                        onNavigateToThread={review.onNavigateToThread}
+                        onSelectThread={review.onSelectThread}
+                        onSetThreadStatus={review.onSetThreadStatus}
+                        moderator={review.moderator}
+                        saving={review.saving}
+                        selectedPath={selectedPath}
+                        onSearchToggle={() => setDiscussionSearchOpen((open) => !open)}
+                        searchOpen={discussionSearchOpen}
+                        showToolbar={false}
+                        threadFilter={threadFilter}
+                        onThreadFilterChange={setThreadFilter}
+                        threads={review.threads}
+                      />
+                    </div>
+                    <div
+                      className="folder-browser-sidebar-pane"
+                      hidden={review.mode === 'discussion'}
+                    >
+                      <FileTree
+                        aria-label="Folder contents"
+                        className="folder-browser-pierre-tree"
+                        model={model}
+                      />
+                    </div>
+                  </>
                 ) : (
                   <FileTree
                     aria-label="Folder contents"

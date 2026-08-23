@@ -1,10 +1,10 @@
 # Self-hosting the single-host alpha
 
 Shelf's first runnable reference profile is deliberately small: one Shelf application/API process,
-one isolated active-HTML renderer process, one PostgreSQL database, and one durable local-content
-volume. The application process serves the built dark web client. It proves explicit
-initialization, generated share URLs, and durable restart behavior; it is not yet a
-high-availability or production-hardening guide.
+one isolated active-HTML renderer process, one PostgreSQL database, and either one durable
+local-content volume or one private Cloudflare R2 bucket. The application process serves the built
+dark web client. It proves explicit initialization, generated share URLs, and durable restart
+behavior; it is not yet a high-availability or production-hardening guide.
 
 ## Known limitations
 
@@ -51,6 +51,18 @@ and persistence settings, but not the authentication secret, privacy key, or She
 The three application secrets must remain independent; rotating the share-signing key invalidates
 existing protected share links. Compose mounts the three application secrets as files inside only
 the services that need them. `.env` is ignored by Git.
+
+The example selects Local File storage. To use R2, set `SHELF_STORAGE_DRIVER=r2` and provide
+`SHELF_R2_ACCOUNT_ID`, `SHELF_R2_BUCKET`, `SHELF_R2_ACCESS_KEY_ID`, and
+`SHELF_R2_SECRET_ACCESS_KEY`. `SHELF_STORAGE_PREFIX` defaults to `shelf`, and
+`SHELF_R2_SESSION_TOKEN` is optional. Compose passes the same storage selection to Shelf and the
+renderer. The local named volume remains attached for profile compatibility but is unused while R2
+is selected.
+
+Do not switch an existing Local File installation to R2 without migrating its content first. Shelf
+does not yet provide that migration command. A migration must preserve every content ID, copy and
+verify every referenced object, and keep the local volume until important revisions have been read
+successfully from R2.
 
 In Dokploy, select `./docker-compose.yaml`, put the same variables in the Environment tab, enable
 isolated deployments, and configure two domains: the Shelf hostname routes to service `shelf` on

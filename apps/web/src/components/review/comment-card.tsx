@@ -1,6 +1,6 @@
 import { CheckIcon } from '@phosphor-icons/react/Check';
 import type { CommentPost, CommentThread } from '@shelf/contracts';
-import { type MouseEvent, useState } from 'react';
+import { type MouseEvent, memo, useState } from 'react';
 
 export interface ReviewParticipant {
   readonly participantId: string;
@@ -142,7 +142,7 @@ export function ReviewParticipantAvatar({
   );
 }
 
-export function ReviewBody({ body }: { readonly body: string }) {
+export const ReviewBody = memo(function ReviewBody({ body }: { readonly body: string }) {
   const keys = new Map<string, number>();
   const keyFor = (value: string) => {
     const count = keys.get(value) ?? 0;
@@ -165,9 +165,9 @@ export function ReviewBody({ body }: { readonly body: string }) {
       ))}
     </div>
   );
-}
+});
 
-export function ReviewThreadCard({
+export const ReviewThreadCard = memo(function ReviewThreadCard({
   compact = false,
   location,
   onNavigate,
@@ -231,4 +231,4 @@ export function ReviewThreadCard({
       ) : null}
     </article>
   );
-}
+});

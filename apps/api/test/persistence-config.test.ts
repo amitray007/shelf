@@ -40,6 +40,30 @@ describe('shelfPersistenceConfigFromEnv', () => {
     });
   });
 
+  it('treats blank optional R2 variables as unset', () => {
+    expect(
+      shelfPersistenceConfigFromEnv({
+        DATABASE_URL: 'postgresql://shelf@postgres/shelf',
+        SHELF_STORAGE_DRIVER: 'r2',
+        SHELF_R2_ACCOUNT_ID: '0123456789abcdef0123456789abcdef',
+        SHELF_R2_BUCKET: 'shelf-content',
+        SHELF_R2_ACCESS_KEY_ID: 'access-key',
+        SHELF_R2_SECRET_ACCESS_KEY: 'secret-key',
+        SHELF_R2_SESSION_TOKEN: '',
+        SHELF_STORAGE_PREFIX: '',
+      }),
+    ).toEqual({
+      postgres: { connectionString: 'postgresql://shelf@postgres/shelf' },
+      content: {
+        driver: 'r2',
+        accountId: '0123456789abcdef0123456789abcdef',
+        bucket: 'shelf-content',
+        accessKeyId: 'access-key',
+        secretAccessKey: 'secret-key',
+      },
+    });
+  });
+
   it('names a missing variable without echoing another credential', () => {
     expect(() =>
       shelfPersistenceConfigFromEnv({
