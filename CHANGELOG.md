@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.4](https://github.com/amitray007/shelf/compare/v0.1.3...v0.1.4) (2026-08-23)
+
+
+### Features
+
+* add artifact retention and Trash lifecycle ([15ee7c0](https://github.com/amitray007/shelf/commit/15ee7c06955e5e3a1f17c3707b5ddf502670af41))
+* add artifact retention and Trash lifecycle ([802642a](https://github.com/amitray007/shelf/commit/802642a8b416cdf4e40195505a243ff6930028f6))
+* **web:** add rich previews for common artifact formats ([0d2a47c](https://github.com/amitray007/shelf/commit/0d2a47c8d67221612a145958077a88da917daac2))
+* **web:** add rich previews for common artifact formats ([2cdb960](https://github.com/amitray007/shelf/commit/2cdb96064900afb72449299c9422e8c00a7953d4))
+
 ## [0.1.3](https://github.com/amitray007/shelf/compare/v0.1.2...v0.1.3) (2026-08-21)
 
 
