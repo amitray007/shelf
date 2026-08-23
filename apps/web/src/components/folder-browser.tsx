@@ -478,18 +478,6 @@ export function FolderBrowser({
     ) {
       return <p className="folder-preview-state">Preview unavailable for this file type.</p>;
     }
-    if (renderer?.kind === 'html' && authority !== undefined && resolution !== undefined) {
-      return (
-        <div className="artifact-surface artifact-html">
-          <RendererFrame
-            authority={authority}
-            path={selected.path}
-            renderer={renderer}
-            resolution={resolution}
-          />
-        </div>
-      );
-    }
     if (failed) return <p className="folder-preview-state">This file could not be loaded.</p>;
     if (bytes === undefined && previewUrl === undefined) return <FileLoadingState />;
     if (renderer === undefined)
@@ -581,17 +569,7 @@ export function FolderBrowser({
       return <p className="folder-preview-state">Preview unavailable for this file type.</p>;
     }
     return renderedPreview;
-  }, [
-    authority,
-    bytes,
-    failed,
-    previewUrl,
-    publicShare,
-    resolution,
-    selected,
-    selectedRenderer,
-    source,
-  ]);
+  }, [bytes, failed, previewUrl, publicShare, selected, selectedRenderer, source]);
 
   const fileHeader =
     !publicShare && selected !== undefined ? (
@@ -690,6 +668,23 @@ export function FolderBrowser({
                       sidebarOpen,
                     })}
                 key={folderFileViewKey(selected?.path, bytes === undefined)}
+                {...(selectedRenderer?.kind !== 'html' ||
+                authority === undefined ||
+                resolution === undefined
+                  ? {}
+                  : {
+                      htmlPreview: (theme) => (
+                        <div className="artifact-surface artifact-html">
+                          <RendererFrame
+                            authority={authority}
+                            path={selected?.path}
+                            renderer={selectedRenderer}
+                            resolution={resolution}
+                            theme={theme}
+                          />
+                        </div>
+                      ),
+                    })}
                 preview={preview}
                 {...(shareToolbar === undefined ? {} : { shareToolbar })}
               />

@@ -5,16 +5,20 @@ import type { PassiveRenderer } from '../rendering.js';
 import type { FileShareResolution, FolderShareResolution } from '../share-types.js';
 
 type HtmlRenderer = Extract<PassiveRenderer, { kind: 'html' }>;
+export type HtmlPreviewTheme = 'dark' | 'light';
+
 export function RendererFrame({
   renderer,
   resolution,
   authority,
   path,
+  theme,
 }: {
   readonly renderer: HtmlRenderer;
   readonly resolution: FileShareResolution | FolderShareResolution;
   readonly authority: ViewerAuthority;
   readonly path?: string | undefined;
+  readonly theme: HtmlPreviewTheme;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const nonceRef = useRef<string>(window.crypto.randomUUID());
@@ -164,6 +168,7 @@ export function RendererFrame({
       <iframe
         allow=""
         className="renderer-frame"
+        data-preview-theme={theme}
         name={frameNameRef.current}
         onError={() => setStatus('unavailable')}
         onLoad={stopPostReadyNavigation}
@@ -171,6 +176,7 @@ export function RendererFrame({
         referrerPolicy="no-referrer"
         sandbox="allow-scripts"
         src="about:blank"
+        style={{ colorScheme: theme }}
         title={`${path ?? resolution.artifact.name} isolated preview`}
       />
     </div>

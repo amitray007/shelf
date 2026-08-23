@@ -172,10 +172,16 @@ export function ArtifactContent({
   };
 
   let preview: React.ReactNode | undefined;
+  let htmlPreview: React.ComponentProps<typeof FileView>['htmlPreview'];
   if (renderer.kind === 'html') {
-    preview = (
+    htmlPreview = (theme) => (
       <div className="artifact-surface artifact-html">
-        <RendererFrame authority={authority} renderer={renderer} resolution={resolution} />
+        <RendererFrame
+          authority={authority}
+          renderer={renderer}
+          resolution={resolution}
+          theme={theme}
+        />
       </div>
     );
   } else if (renderer.kind === 'image' && (previewUrl !== undefined || downloadUrl !== undefined)) {
@@ -276,7 +282,12 @@ export function ArtifactContent({
     );
   }
 
-  if (preview !== undefined || text !== undefined || bytes !== undefined) {
+  if (
+    preview !== undefined ||
+    htmlPreview !== undefined ||
+    text !== undefined ||
+    bytes !== undefined
+  ) {
     return (
       <FileView
         {...(text === undefined ? {} : { source: text })}
@@ -286,6 +297,7 @@ export function ArtifactContent({
             : 'preview'
         }
         fileName={resolution.revision.originalFileName}
+        {...(htmlPreview === undefined ? {} : { htmlPreview })}
         key={resolution.revision.revisionId}
         preview={preview}
         review={review}

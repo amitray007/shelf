@@ -912,6 +912,32 @@ test('reduced motion and the 200 percent layout equivalent preserve utility', as
   diagnostics.assertClean();
 });
 
+test('HTML preview starts dark and can be checked in light mode', async ({ page }) => {
+  await page.goto(`/s/${htmlShareId}#${shareSecret}`);
+
+  const controls = page.getByRole('region', { name: 'idea.html view controls' });
+  const themeControls = controls.getByRole('group', { name: 'HTML preview theme' });
+  const frame = page.locator('iframe[title="idea.html isolated preview"]');
+
+  await expect(themeControls.getByRole('tab', { name: 'Dark' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect
+    .poll(() => frame.evaluate((element) => getComputedStyle(element).colorScheme))
+    .toBe('dark');
+
+  await themeControls.getByRole('tab', { name: 'Light' }).click();
+  await expect(themeControls.getByRole('tab', { name: 'Light' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect
+    .poll(() => frame.evaluate((element) => getComputedStyle(element).colorScheme))
+    .toBe('light');
+  await expectNoHorizontalOverflow(page, [controls]);
+});
+
 test('the active renderer cannot escape its opaque sandbox', async ({
   page,
   context,

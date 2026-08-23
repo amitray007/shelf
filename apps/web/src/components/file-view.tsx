@@ -23,6 +23,7 @@ import {
   useState,
 } from 'react';
 import { formatFileDisplayName } from './format.js';
+import type { HtmlPreviewTheme } from './renderer-frame.js';
 import { ReviewComposer } from './review/discussion-panel.js';
 import { InlineSourceThread, type InlineSourceThreadData } from './review/inline-source-thread.js';
 
@@ -905,6 +906,7 @@ export function FileView({
   sidebarLabel,
   sidebarOpen,
   onOpenSidebar,
+  htmlPreview,
   shareToolbar,
   source,
 }: {
@@ -920,6 +922,7 @@ export function FileView({
   readonly sidebarLabel?: string | undefined;
   readonly sidebarOpen?: boolean | undefined;
   readonly onOpenSidebar?: (() => void) | undefined;
+  readonly htmlPreview?: ((theme: HtmlPreviewTheme) => React.ReactNode) | undefined;
   /** Explicit opt-in chrome for public share pages. Managed views keep their own header. */
   readonly shareToolbar?:
     | {
@@ -929,16 +932,13 @@ export function FileView({
     | undefined;
   readonly source?: string;
 }) {
-  const hasContent = preview !== undefined || source !== undefined;
-  const hasModes = preview !== undefined && source !== undefined;
+  const hasPreview = preview !== undefined || htmlPreview !== undefined;
+  const hasContent = hasPreview || source !== undefined;
+  const hasModes = hasPreview && source !== undefined;
   const [mode, setMode] = useState<FileViewMode>(() =>
-    readFileViewMode(
-      fileName ?? 'source.txt',
-      preview !== undefined,
-      source !== undefined,
-      defaultMode,
-    ),
+    readFileViewMode(fileName ?? 'source.txt', hasPreview, source !== undefined, defaultMode),
   );
+  const [htmlPreviewTheme, setHtmlPreviewTheme] = useState<HtmlPreviewTheme>('dark');
   const requestedFocusLine = focusLine ?? review?.focusLine;
   const requestedFocusRequestId = focusRequestId ?? review?.focusRequestId;
   const openSidebarButtonRef = useRef<HTMLButtonElement>(null);
@@ -972,7 +972,7 @@ export function FileView({
 
   if (!hasContent && header === undefined && !showSidebarToggle && !isShareToolbar) return null;
   if (header === undefined && !hasModes && !showSidebarToggle && !isShareToolbar) {
-    if (preview === undefined)
+    if (!hasPreview)
       return (
         <SourceView
           {...(annotations === undefined ? {} : { annotations })}
@@ -983,7 +983,7 @@ export function FileView({
           source={source ?? ''}
         />
       );
-    return preview;
+    return htmlPreview?.(htmlPreviewTheme) ?? preview;
   }
 
   const activeMode = mode === 'source' ? 'source' : 'preview';
@@ -1036,6 +1036,22 @@ export function FileView({
             variant="segmented"
           />
         ) : null}
+        {htmlPreview !== undefined && activeMode === 'preview' ? (
+          <fieldset className="file-view-theme-tabs">
+            <legend className="visually-hidden">HTML preview theme</legend>
+            <Tabs
+              activateOnFocus={false}
+              onValueChange={(value) => setHtmlPreviewTheme(value === 'light' ? 'light' : 'dark')}
+              size="sm"
+              tabs={[
+                { value: 'dark', label: 'Dark' },
+                { value: 'light', label: 'Light' },
+              ]}
+              value={htmlPreviewTheme}
+              variant="segmented"
+            />
+          </fieldset>
+        ) : null}
         {isShareToolbar && shareToolbar.download !== undefined ? (
           <div className="file-view-actions">{shareToolbar.download}</div>
         ) : null}
@@ -1053,10 +1069,11 @@ export function FileView({
                 source={source ?? ''}
               />
             ) : (
-              preview
+              (htmlPreview?.(htmlPreviewTheme) ?? preview)
             )
           ) : (
-            (preview ?? (
+            (htmlPreview?.(htmlPreviewTheme) ??
+            preview ?? (
               <SourceView
                 {...(annotations === undefined ? {} : { annotations })}
                 fileName={fileName}

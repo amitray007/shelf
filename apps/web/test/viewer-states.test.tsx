@@ -797,6 +797,33 @@ describe('viewer content states', () => {
     expect(raster).not.toContain('Source');
   });
 
+  it('offers dark and light controls for HTML preview with dark selected by default', () => {
+    const html = renderToStaticMarkup(
+      <FileView
+        fileName="index.html"
+        htmlPreview={(theme) => <div data-html-theme={theme}>Rendered HTML</div>}
+        source="<!doctype html>"
+      />,
+    );
+
+    expect(html).toContain('HTML preview theme');
+    expect(html).toContain('>Dark</button>');
+    expect(html).toContain('>Light</button>');
+    expect(html).toContain('data-html-theme="dark"');
+    expect(html).toContain('>Preview</button>');
+    expect(html).toContain('>Source</button>');
+
+    const source = renderToStaticMarkup(
+      <FileView
+        defaultMode="source"
+        fileName="index.html"
+        htmlPreview={(theme) => <div data-html-theme={theme}>Rendered HTML</div>}
+        source="<!doctype html>"
+      />,
+    );
+    expect(source).not.toContain('HTML preview theme');
+  });
+
   it('can open a readable code file directly in source mode', () => {
     const html = renderToStaticMarkup(
       <FileView
