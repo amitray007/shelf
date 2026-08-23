@@ -5,6 +5,7 @@ import {
   type ArtifactDefaultShares,
   type ArtifactDeletionResult,
   type ArtifactPage,
+  type ArtifactPermanentDeletionResult,
   type ArtifactRecoveryResult,
   type ArtifactRetentionMode,
   type ArtifactRevisionPage,
@@ -20,6 +21,7 @@ import {
   isArtifactDefaultShares,
   isArtifactDeletionResult,
   isArtifactPage,
+  isArtifactPermanentDeletionResult,
   isArtifactRecoveryResult,
   isArtifactRevisionPage,
   isCommentPost,
@@ -33,6 +35,7 @@ import {
   isShareCreateInput,
   isShareCreateResult,
   isSharePage,
+  isTrashEmptyResult,
   isTrashedArtifact,
   isTrashPage,
   type PublisherMetadata,
@@ -43,6 +46,7 @@ import {
   type ShareCreateResult,
   type ShareManagementSummary,
   type SharePage,
+  type TrashEmptyResult,
   type TrashedArtifact,
   type TrashPage,
 } from '@shelf/contracts';
@@ -115,6 +119,16 @@ export interface ListTrashOptions {
 }
 
 export type DeleteArtifactOptions = GetArtifactOptions;
+export interface PermanentlyDeleteArtifactOptions extends GetArtifactOptions {
+  confirmation: string;
+}
+export interface EmptyTrashOptions {
+  installationUrl: string;
+  workspaceId: string;
+  confirmation: string;
+  token: string;
+  allowInsecureLoopback?: boolean;
+}
 export interface RecoverArtifactOptions extends GetArtifactOptions {
   idempotencyKey: string;
 }
@@ -567,6 +581,49 @@ export async function getTrashedArtifact(
     { token: options.token, allowInsecureLoopback },
     dependencies,
     isTrashedArtifact,
+  );
+}
+
+export async function permanentlyDeleteArtifact(
+  options: PermanentlyDeleteArtifactOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<ArtifactPermanentDeletionResult> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(`/api/v1/trash/${encodeURIComponent(options.artifactId)}`, origin);
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'DELETE',
+      body: JSON.stringify({ confirmArtifactId: options.confirmation }),
+    },
+    dependencies,
+    isArtifactPermanentDeletionResult,
+  );
+}
+
+export async function emptyTrash(
+  options: EmptyTrashOptions,
+  dependencies: Pick<ShelfClientDependencies, 'fetch'> = defaultDependencies,
+): Promise<TrashEmptyResult> {
+  const allowInsecureLoopback = options.allowInsecureLoopback ?? false;
+  const origin = installationOrigin(options.installationUrl, allowInsecureLoopback);
+  const url = new URL(
+    `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/trash`,
+    origin,
+  );
+  return requestApiJson(
+    url,
+    {
+      token: options.token,
+      allowInsecureLoopback,
+      method: 'DELETE',
+      body: JSON.stringify({ confirmWorkspaceId: options.confirmation }),
+    },
+    dependencies,
+    isTrashEmptyResult,
   );
 }
 

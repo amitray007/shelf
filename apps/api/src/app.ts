@@ -6,6 +6,7 @@ import type { DashboardAccessService, HumanAuth } from '@shelf/auth';
 import {
   ArtifactDefaultSharesSchema,
   ArtifactDeletionResultSchema,
+  ArtifactPermanentDeletionResultSchema,
   ArtifactRecoveryResultSchema,
   CommentPostSchema,
   CommentSummarySchema,
@@ -27,6 +28,7 @@ import {
   ShareCreateResultSchema,
   ShareManagementSummarySchema,
   SharePageSchema,
+  TrashEmptyResultSchema,
   WorkspaceCreateResultSchema,
   WorkspaceDeleteResultSchema,
 } from '@shelf/contracts';
@@ -270,6 +272,8 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   app.addSchema(FolderTreePageSchema);
   app.addSchema(ErrorEnvelopeSchema);
   app.addSchema(ArtifactDeletionResultSchema);
+  app.addSchema(ArtifactPermanentDeletionResultSchema);
+  app.addSchema(TrashEmptyResultSchema);
   app.addSchema(withoutNestedSchemaIds(ArtifactRecoveryResultSchema));
   app.addSchema(RevisionComparisonSchema);
   app.addSchema(withoutNestedSchemaIds(ShareManagementSummarySchema));

@@ -4,21 +4,25 @@ import type {
   Artifact,
   ArtifactDeletionResult,
   ArtifactPage,
+  ArtifactPermanentDeletionResult,
   ArtifactRecoveryResult,
   ArtifactRevisionPage,
   RestoreResult,
   ShareManagementSummary,
+  TrashEmptyResult,
   TrashedArtifact,
   TrashPage,
 } from '@shelf/contracts';
 
 import {
   deleteArtifact,
+  emptyTrash,
   getArtifact,
   getTrashedArtifact,
   listArtifactRevisions,
   listArtifacts,
   listTrash,
+  permanentlyDeleteArtifact,
   recoverArtifact,
   renameArtifact,
   resolveManagedShare,
@@ -63,6 +67,18 @@ export interface DeleteArtifactCommandOptions extends ShowArtifactCommandOptions
 }
 export interface RecoverArtifactCommandOptions extends ShowArtifactCommandOptions {
   idempotencyKey?: string;
+}
+
+export interface PermanentlyDeleteArtifactCommandOptions extends ShowArtifactCommandOptions {
+  confirm: string;
+}
+
+export interface EmptyTrashCommandOptions {
+  profile?: string;
+  url?: string;
+  workspace?: string;
+  confirm: string;
+  allowInsecureLoopback?: boolean;
 }
 
 export interface SetArtifactRetentionCommandOptions extends ShowArtifactCommandOptions {
@@ -239,6 +255,43 @@ export async function executeRecoverArtifact(
       ...transportFields(context),
       artifactId: artifactId(options.artifact),
       idempotencyKey: recoveryIdempotencyKey,
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
+export async function executePermanentlyDeleteArtifact(
+  options: PermanentlyDeleteArtifactCommandOptions,
+  runtime: CliRuntime,
+): Promise<ArtifactPermanentDeletionResult> {
+  const confirmedArtifactId = artifactId(options.artifact);
+  if (options.confirm !== confirmedArtifactId) {
+    throw usageFailure('The permanent deletion confirmation must exactly match the artifact ID.');
+  }
+  const context = await resolveRemoteContext(options, runtime);
+  return permanentlyDeleteArtifact(
+    {
+      ...transportFields(context),
+      artifactId: confirmedArtifactId,
+      confirmation: options.confirm,
+    },
+    runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
+  );
+}
+
+export async function executeEmptyTrash(
+  options: EmptyTrashCommandOptions,
+  runtime: CliRuntime,
+): Promise<TrashEmptyResult> {
+  const context = await resolveWorkspaceContext(options, runtime);
+  if (options.confirm !== context.workspaceId) {
+    throw usageFailure('The Empty Trash confirmation must exactly match the workspace ID.');
+  }
+  return emptyTrash(
+    {
+      ...transportFields(context),
+      workspaceId: context.workspaceId,
+      confirmation: options.confirm,
     },
     runtime.fetch === undefined ? undefined : { fetch: runtime.fetch },
   );

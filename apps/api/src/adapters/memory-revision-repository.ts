@@ -565,6 +565,46 @@ export class MemoryRevisionRepository
     };
   }
 
+  async purgeTrashedArtifacts(request: {
+    installationId: string;
+    workspaceId: string;
+    purgedAt: string;
+    artifactId?: string;
+  }): Promise<number> {
+    const artifactIds = [...this.#deletions.keys()].filter((artifactId) => {
+      const artifact = this.#artifacts.get(artifactId);
+      return (
+        artifact !== undefined &&
+        artifact.installationId === request.installationId &&
+        artifact.workspaceId === request.workspaceId &&
+        (request.artifactId === undefined || artifactId === request.artifactId)
+      );
+    });
+    for (const artifactId of artifactIds) {
+      this.#artifacts.delete(artifactId);
+      this.#artifactRevisions.delete(artifactId);
+      this.#deletions.delete(artifactId);
+      for (const [revisionId, revision] of this.#revisions) {
+        if (revision.artifactId === artifactId) this.#revisions.delete(revisionId);
+      }
+      for (const [revisionId, revision] of this.#folderRevisions) {
+        if (revision.artifactId !== artifactId) continue;
+        this.#folderRevisions.delete(revisionId);
+        this.#folderEntries.delete(revisionId);
+      }
+      for (const [key, record] of this.#idempotency) {
+        if (record.result?.artifactId === artifactId) this.#idempotency.delete(key);
+      }
+      for (const [key, record] of this.#folderIdempotency) {
+        if (record.result?.artifactId === artifactId) this.#folderIdempotency.delete(key);
+      }
+      for (const [key, record] of this.#restoreIdempotency) {
+        if (record.result.artifactId === artifactId) this.#restoreIdempotency.delete(key);
+      }
+    }
+    return artifactIds.length;
+  }
+
   async listArtifactRevisions(request: {
     installationId: string;
     artifactId: string;

@@ -6,10 +6,13 @@ import { Command, CommanderError } from 'commander';
 import {
   type ArtifactHistoryCommandOptions,
   type DeleteArtifactCommandOptions,
+  type EmptyTrashCommandOptions,
   executeArtifactHistory,
   executeDeleteArtifact,
+  executeEmptyTrash,
   executeListArtifacts,
   executeListTrash,
+  executePermanentlyDeleteArtifact,
   executeRecoverArtifact,
   executeRenameArtifact,
   executeResolveArtifact,
@@ -19,6 +22,7 @@ import {
   executeShowTrashedArtifact,
   type ListArtifactsCommandOptions,
   type ListTrashCommandOptions,
+  type PermanentlyDeleteArtifactCommandOptions,
   type RecoverArtifactCommandOptions,
   type RenameArtifactCommandOptions,
   type ResolveArtifactCommandOptions,
@@ -688,6 +692,48 @@ Examples:
     .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
     .action(async (options: RecoverArtifactCommandOptions) => {
       result = await executeRecoverArtifact(options, runtime);
+    });
+  trash
+    .command('delete')
+    .description('Permanently delete one artifact from Trash')
+    .option('--profile <name>', 'use one configured profile instead of --url')
+    .option('--url <url>', 'installation origin to write to; conflicts with --profile')
+    .requiredOption('--artifact <artifact-id>', 'trashed artifact to delete permanently')
+    .requiredOption('--confirm <artifact-id>', 'must exactly match --artifact')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+This cannot be undone. Metadata is removed immediately and unreferenced content is queued for
+deletion from the configured Local File or R2 storage backend.
+
+Example:
+  shelf trash delete --profile default --artifact art_<id> --confirm art_<id>
+`,
+    )
+    .action(async (options: PermanentlyDeleteArtifactCommandOptions) => {
+      result = await executePermanentlyDeleteArtifact(options, runtime);
+    });
+  trash
+    .command('empty')
+    .description('Permanently delete every artifact from one workspace Trash')
+    .option('--profile <name>', 'use one configured profile instead of --url and --workspace')
+    .option('--url <url>', 'installation origin to write to; conflicts with --profile')
+    .option('--workspace <workspace>', 'workspace ID whose Trash should be emptied; requires --url')
+    .requiredOption('--confirm <workspace-id>', 'must exactly match the resolved workspace ID')
+    .option('--allow-insecure-loopback', 'allow HTTP only for loopback development')
+    .addHelpText(
+      'after',
+      `
+This cannot be undone. Metadata is removed immediately and unreferenced content is queued for
+deletion from the configured Local File or R2 storage backend.
+
+Example:
+  shelf trash empty --profile default --confirm workspace-main
+`,
+    )
+    .action(async (options: EmptyTrashCommandOptions) => {
+      result = await executeEmptyTrash(options, runtime);
     });
 
   const shares = program.command('shares').description('Create and manage share links');

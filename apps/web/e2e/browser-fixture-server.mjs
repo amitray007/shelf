@@ -33,6 +33,7 @@ const artifactsById = new Map(
 );
 const historiesByArtifactId = new Map(historyPages.map((page) => [page.artifactId, page]));
 const deletedArtifacts = new Set();
+const purgedArtifacts = new Set();
 const createdWorkspaces = new Set();
 const filesByRevisionId = new Map(
   historyPages.flatMap((page) =>
@@ -248,7 +249,11 @@ async function api(request, response, url) {
     const cursor = url.searchParams.get('cursor');
     const offset = cursor?.startsWith('fixture-') ? Number(cursor.slice('fixture-'.length)) : 0;
     const availableArtifacts = artifactPage.items
-      .filter((artifact) => !deletedArtifacts.has(deletedArtifactKey(request, artifact.artifactId)))
+      .filter(
+        (artifact) =>
+          !deletedArtifacts.has(deletedArtifactKey(request, artifact.artifactId)) &&
+          !purgedArtifacts.has(deletedArtifactKey(request, artifact.artifactId)),
+      )
       .toSorted((left, right) => {
         const timestamp = left[sort].localeCompare(right[sort]) * direction;
         return timestamp === 0 ? left.artifactId.localeCompare(right.artifactId) : timestamp;
@@ -263,9 +268,31 @@ async function api(request, response, url) {
     return;
   }
   if (path === `/api/v1/workspaces/${workspaceId}/trash`) {
+    if (request.method === 'DELETE') {
+      const value = JSON.parse(await body(request));
+      if (value.confirmWorkspaceId !== workspaceId) {
+        json(response, 400, {
+          error: { code: 'INVALID_REQUEST', message: 'Invalid confirmation.' },
+        });
+        return;
+      }
+      const prefix = `${fixtureSession(request)}:`;
+      const keys = [...deletedArtifacts].filter((key) => key.startsWith(prefix));
+      for (const key of keys) {
+        deletedArtifacts.delete(key);
+        purgedArtifacts.add(key);
+      }
+      json(response, 200, {
+        apiVersion: 'v1',
+        workspaceId,
+        purgedArtifactCount: keys.length,
+      });
+      return;
+    }
     const search = url.searchParams.get('search')?.toLowerCase();
     const items = artifactPage.items
       .filter((artifact) => deletedArtifacts.has(deletedArtifactKey(request, artifact.artifactId)))
+      .filter((artifact) => !purgedArtifacts.has(deletedArtifactKey(request, artifact.artifactId)))
       .filter(
         (artifact) =>
           search === undefined ||
@@ -285,6 +312,31 @@ async function api(request, response, url) {
         reason: 'manual',
       }));
     json(response, 200, { apiVersion: 'v1', items, nextCursor: null });
+    return;
+  }
+  const permanentDeleteMatch = /^\/api\/v1\/trash\/(art_[A-Za-z0-9_-]{22})$/u.exec(path);
+  if (request.method === 'DELETE' && permanentDeleteMatch !== null) {
+    const requestedArtifactId = permanentDeleteMatch[1];
+    const value = JSON.parse(await body(request));
+    const key = deletedArtifactKey(request, requestedArtifactId);
+    if (value.confirmArtifactId !== requestedArtifactId) {
+      json(response, 400, { error: { code: 'INVALID_REQUEST', message: 'Invalid confirmation.' } });
+      return;
+    }
+    if (!deletedArtifacts.has(key)) {
+      json(response, 404, {
+        error: { code: 'ARTIFACT_NOT_FOUND', message: 'Artifact not found.' },
+      });
+      return;
+    }
+    deletedArtifacts.delete(key);
+    purgedArtifacts.add(key);
+    json(response, 200, {
+      apiVersion: 'v1',
+      workspaceId,
+      artifactId: requestedArtifactId,
+      status: 'purged',
+    });
     return;
   }
   const createdWorkspaceArtifacts = /^\/api\/v1\/workspaces\/([^/]+)\/artifacts$/u.exec(path);
@@ -344,7 +396,10 @@ async function api(request, response, url) {
   const deleteMatch = /^\/api\/v1\/artifacts\/(art_[A-Za-z0-9_-]{22})$/u.exec(path);
   if (request.method === 'DELETE' && deleteMatch !== null) {
     const requestedArtifactId = deleteMatch[1];
-    if (!artifactsById.has(requestedArtifactId)) {
+    if (
+      !artifactsById.has(requestedArtifactId) ||
+      purgedArtifacts.has(deletedArtifactKey(request, requestedArtifactId))
+    ) {
       json(response, 404, {
         error: {
           code: 'ARTIFACT_NOT_FOUND',
@@ -370,7 +425,10 @@ async function api(request, response, url) {
   const artifactMatch = /^\/api\/v1\/artifacts\/(art_[A-Za-z0-9_-]{22})(\/revisions)?$/u.exec(path);
   if (artifactMatch !== null) {
     const requestedArtifactId = artifactMatch[1];
-    if (deletedArtifacts.has(deletedArtifactKey(request, requestedArtifactId))) {
+    if (
+      deletedArtifacts.has(deletedArtifactKey(request, requestedArtifactId)) ||
+      purgedArtifacts.has(deletedArtifactKey(request, requestedArtifactId))
+    ) {
       json(response, 404, {
         error: {
           code: 'ARTIFACT_NOT_FOUND',

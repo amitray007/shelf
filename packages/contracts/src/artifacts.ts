@@ -201,6 +201,25 @@ export const TrashPageSchema = Type.Object(
   { additionalProperties: false, $id: 'TrashPage' },
 );
 
+export const ArtifactPermanentDeletionResultSchema = Type.Object(
+  {
+    apiVersion: Type.Literal('v1'),
+    workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
+    artifactId: OpaqueArtifactIdSchema,
+    status: Type.Literal('purged'),
+  },
+  { additionalProperties: false, $id: 'ArtifactPermanentDeletionResult' },
+);
+
+export const TrashEmptyResultSchema = Type.Object(
+  {
+    apiVersion: Type.Literal('v1'),
+    workspaceId: Type.String({ minLength: 1, maxLength: 128 }),
+    purgedArtifactCount: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+  },
+  { additionalProperties: false, $id: 'TrashEmptyResult' },
+);
+
 export const ArtifactRecoveryResultSchema = Type.Object(
   {
     apiVersion: Type.Literal('v1'),
@@ -273,6 +292,8 @@ export type ArtifactRetentionMode = Static<typeof ArtifactRetentionModeSchema>;
 export type ArtifactRetention = Static<typeof ArtifactRetentionSchema>;
 export type TrashedArtifact = Static<typeof TrashedArtifactSchema>;
 export type TrashPage = Static<typeof TrashPageSchema>;
+export type ArtifactPermanentDeletionResult = Static<typeof ArtifactPermanentDeletionResultSchema>;
+export type TrashEmptyResult = Static<typeof TrashEmptyResultSchema>;
 export type ArtifactRecoveryResult = Static<typeof ArtifactRecoveryResultSchema>;
 export type RestoreResult = Static<typeof RestoreResultSchema>;
 
@@ -298,6 +319,16 @@ export function isTrashedArtifact(value: unknown): value is TrashedArtifact {
 
 export function isTrashPage(value: unknown): value is TrashPage {
   return Check(TrashPageSchema, value);
+}
+
+export function isArtifactPermanentDeletionResult(
+  value: unknown,
+): value is ArtifactPermanentDeletionResult {
+  return Check(ArtifactPermanentDeletionResultSchema, value);
+}
+
+export function isTrashEmptyResult(value: unknown): value is TrashEmptyResult {
+  return Check(TrashEmptyResultSchema, value);
 }
 
 export function isArtifactRecoveryResult(value: unknown): value is ArtifactRecoveryResult {

@@ -46,6 +46,12 @@ describe('CLI wire contract', () => {
     expect(document.paths['/api/v1/artifacts/{artifactId}'].delete).toMatchObject({
       operationId: 'deleteArtifactV1',
     });
+    expect(document.paths['/api/v1/trash/{artifactId}'].delete).toMatchObject({
+      operationId: 'permanentlyDeleteArtifactV1',
+    });
+    expect(document.paths['/api/v1/workspaces/{workspaceId}/trash'].delete).toMatchObject({
+      operationId: 'emptyTrashV1',
+    });
     expect(document.paths['/api/v1/artifacts/{artifactId}/recovery'].post).toMatchObject({
       operationId: 'recoverArtifactV1',
       parameters: expect.arrayContaining([

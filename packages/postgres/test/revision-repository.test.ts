@@ -739,6 +739,73 @@ describePostgres('PostgresRevisionRepository', () => {
     await database.destroy();
   });
 
+  it('queues a permanently deleted folder manifest and every file entry', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const repository = new PostgresRevisionRepository(database);
+    await database
+      .insertInto('shelf_actors')
+      .values({
+        actor_id: 'actor-folder-purge',
+        installation_id: 'installation-main',
+        actor_kind: 'service',
+        actor_name: 'Folder purge actor',
+        auth_user_id: null,
+        created_by_actor_id: null,
+        created_at: new Date('2026-08-18T12:00:00.000Z'),
+        disabled_at: null,
+      })
+      .onConflict((conflict) => conflict.column('actor_id').doNothing())
+      .execute();
+    const base = folderInput();
+    const artifactId = 'art_folder_purge_AAAAAAAAA';
+    const revisionId = 'rev_folder_purge_AAAAAAAAA';
+    const manifestId = 'cnt_folder_purge_manifest_aaaaaaa';
+    const fileId = 'cnt_folder_purge_file_aaaaaaaaaaa';
+    const input: CommitFolderPublishInput = {
+      ...base,
+      namespace: { ...base.namespace, key: 'publish-folder-for-purge' },
+      result: {
+        ...base.result,
+        artifactId,
+        revisionId,
+        manifest: { ...base.result.manifest, contentId: manifestId },
+      },
+      entries: base.entries.map((entry) =>
+        entry.kind === 'file'
+          ? { ...entry, content: { ...entry.content, contentId: fileId } }
+          : entry,
+      ),
+    };
+    await expect(repository.commitFolderPublish(input)).resolves.toMatchObject({
+      status: 'committed',
+    });
+    await expect(
+      repository.deleteArtifact({
+        installationId: input.result.installationId,
+        workspaceId: input.result.workspaceId,
+        artifactId,
+        actorId: 'actor-folder-purge',
+        deletedAt: '2026-08-24T00:00:00.000Z',
+        recoverableUntil: '2026-09-23T00:00:00.000Z',
+        reason: 'manual',
+      }),
+    ).resolves.toMatchObject({ status: 'deleted' });
+    await expect(
+      repository.purgeTrashedArtifacts({
+        installationId: input.result.installationId,
+        workspaceId: input.result.workspaceId,
+        artifactId,
+        purgedAt: '2026-08-24T00:01:00.000Z',
+      }),
+    ).resolves.toBe(1);
+    const queued = await repository.listQueuedContentPurges(100);
+    expect(queued.map((item) => item.content_id)).toEqual(
+      expect.arrayContaining([manifestId, fileId]),
+    );
+    await expect(repository.findTrashedArtifact(artifactId)).resolves.toBeUndefined();
+    await database.destroy();
+  });
+
   it('inventories unique referenced content within one installation', async () => {
     const database = createPostgresDatabase({ connectionString });
     const repository = new PostgresRevisionRepository(database);

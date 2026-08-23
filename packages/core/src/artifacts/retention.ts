@@ -1,4 +1,11 @@
-import type { Artifact, ArtifactRetentionMode, TrashedArtifact, TrashPage } from '@shelf/contracts';
+import type {
+  Artifact,
+  ArtifactPermanentDeletionResult,
+  ArtifactRetentionMode,
+  TrashEmptyResult,
+  TrashedArtifact,
+  TrashPage,
+} from '@shelf/contracts';
 import { PUBLISH_OPERATION, READ_REVISION_OPERATION } from '@shelf/contracts';
 
 import { boundaryFailure, ShelfCoreError } from '../errors.js';
@@ -35,10 +42,16 @@ export interface ArtifactRetentionRepository {
     items: StoredTrashedArtifact[];
     next?: { deletedAt: string; artifactId: string };
   }>;
+  purgeTrashedArtifacts(request: {
+    installationId: string;
+    workspaceId: string;
+    purgedAt: string;
+    artifactId?: string;
+  }): Promise<number>;
 }
 
 export class InvalidArtifactRetentionRequestError extends ShelfCoreError {
-  constructor(field: 'artifactId' | 'cursor' | 'limit' | 'mode' | 'search') {
+  constructor(field: 'artifactId' | 'confirmation' | 'cursor' | 'limit' | 'mode' | 'search') {
     super('INVALID_REQUEST', 'The artifact retention request is invalid.', {
       retryable: false,
       details: [{ field, reason: `must be a valid ${field}` }],
@@ -214,6 +227,93 @@ export function createArtifactRetentionService(dependencies: {
           page.next === undefined
             ? null
             : encodeCursor({ ...page.next, ...(search === undefined ? {} : { search }) }),
+      };
+    },
+
+    async permanentlyDelete(request: {
+      installationId: string;
+      actorId: string;
+      artifactId: string;
+      confirmation: string;
+      signal?: AbortSignal;
+    }): Promise<ArtifactPermanentDeletionResult> {
+      if (!ARTIFACT_ID_PATTERN.test(request.artifactId)) {
+        throw new InvalidArtifactRetentionRequestError('artifactId');
+      }
+      if (request.confirmation !== request.artifactId) {
+        throw new InvalidArtifactRetentionRequestError('confirmation');
+      }
+      let item: StoredTrashedArtifact | undefined;
+      try {
+        item = await dependencies.artifacts.findTrashedArtifact(request.artifactId);
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Trash lookup failed.', error);
+      }
+      if (item === undefined || item.artifact.installationId !== request.installationId) {
+        throw new ArtifactNotFoundError();
+      }
+      await dependencies.authorizer.authorize(
+        {
+          installationId: request.installationId,
+          workspaceId: item.artifact.workspaceId,
+          actorId: request.actorId,
+          action: PUBLISH_OPERATION,
+        },
+        request.signal,
+      );
+      let purged: number;
+      try {
+        purged = await dependencies.artifacts.purgeTrashedArtifacts({
+          installationId: request.installationId,
+          workspaceId: item.artifact.workspaceId,
+          artifactId: request.artifactId,
+          purgedAt: clock().toISOString(),
+        });
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Permanent artifact deletion failed.', error);
+      }
+      if (purged !== 1) throw new ArtifactNotFoundError();
+      return {
+        apiVersion: 'v1',
+        workspaceId: item.artifact.workspaceId,
+        artifactId: request.artifactId,
+        status: 'purged',
+      };
+    },
+
+    async emptyTrash(request: {
+      installationId: string;
+      workspaceId: string;
+      actorId: string;
+      confirmation: string;
+      signal?: AbortSignal;
+    }): Promise<TrashEmptyResult> {
+      if (request.confirmation !== request.workspaceId) {
+        throw new InvalidArtifactRetentionRequestError('confirmation');
+      }
+      await dependencies.authorizer.authorize(
+        {
+          installationId: request.installationId,
+          workspaceId: request.workspaceId,
+          actorId: request.actorId,
+          action: PUBLISH_OPERATION,
+        },
+        request.signal,
+      );
+      let purgedArtifactCount: number;
+      try {
+        purgedArtifactCount = await dependencies.artifacts.purgeTrashedArtifacts({
+          installationId: request.installationId,
+          workspaceId: request.workspaceId,
+          purgedAt: clock().toISOString(),
+        });
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Empty Trash failed.', error);
+      }
+      return {
+        apiVersion: 'v1',
+        workspaceId: request.workspaceId,
+        purgedArtifactCount,
       };
     },
   };

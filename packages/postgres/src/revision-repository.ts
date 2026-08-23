@@ -1695,19 +1695,38 @@ export class PostgresRevisionRepository
     });
   }
 
-  async purgeExpiredArtifacts(now: Date, limit: number): Promise<number> {
+  async #purgeTrashedArtifacts(request: {
+    purgedAt: Date;
+    limit?: number;
+    expiredOnly?: boolean;
+    installationId?: string;
+    workspaceId?: string;
+    artifactId?: string;
+  }): Promise<number> {
     return this.#database.transaction().execute(async (transaction) => {
-      const artifacts = await transaction
+      let query = transaction
         .selectFrom('shelf_artifacts')
         .select(['installation_id', 'workspace_id', 'artifact_id'])
-        .where('deleted_at', 'is not', null)
-        .where('recoverable_until', '<=', now)
-        .orderBy('recoverable_until', 'asc')
-        .orderBy('artifact_id', 'asc')
-        .limit(limit)
-        .forUpdate()
-        .skipLocked()
-        .execute();
+        .where('deleted_at', 'is not', null);
+      if (request.expiredOnly === true) {
+        query = query.where('recoverable_until', '<=', request.purgedAt);
+      }
+      if (request.installationId !== undefined) {
+        query = query.where('installation_id', '=', request.installationId);
+      }
+      if (request.workspaceId !== undefined) {
+        query = query.where('workspace_id', '=', request.workspaceId);
+      }
+      if (request.artifactId !== undefined) {
+        query = query.where('artifact_id', '=', request.artifactId);
+      }
+      let ordered = query.orderBy('recoverable_until', 'asc').orderBy('artifact_id', 'asc');
+      if (request.limit !== undefined) ordered = ordered.limit(request.limit);
+      const locked = ordered.forUpdate();
+      const artifacts = await (request.expiredOnly === true
+        ? locked.skipLocked()
+        : locked
+      ).execute();
       for (const artifact of artifacts) {
         const contents = await sql<{ content_id: string }>`
           select distinct content_id
@@ -1732,7 +1751,7 @@ export class PostgresRevisionRepository
             .values({
               content_id: content.content_id,
               artifact_id: artifact.artifact_id,
-              queued_at: now,
+              queued_at: request.purgedAt,
               attempts: 0,
               last_attempt_at: null,
             })
@@ -1832,6 +1851,24 @@ export class PostgresRevisionRepository
       }
       return artifacts.length;
     });
+  }
+
+  purgeTrashedArtifacts(request: {
+    installationId: string;
+    workspaceId: string;
+    purgedAt: string;
+    artifactId?: string;
+  }): Promise<number> {
+    return this.#purgeTrashedArtifacts({
+      installationId: request.installationId,
+      workspaceId: request.workspaceId,
+      ...(request.artifactId === undefined ? {} : { artifactId: request.artifactId }),
+      purgedAt: new Date(request.purgedAt),
+    });
+  }
+
+  purgeExpiredArtifacts(now: Date, limit: number): Promise<number> {
+    return this.#purgeTrashedArtifacts({ purgedAt: now, limit, expiredOnly: true });
   }
 
   async listQueuedContentPurges(limit: number) {

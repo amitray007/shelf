@@ -3,6 +3,7 @@ import {
   type ArtifactDefaultShares,
   type ArtifactDeletionResult,
   type ArtifactPage,
+  type ArtifactPermanentDeletionResult,
   type ArtifactRecoveryResult,
   type ArtifactRetentionMode,
   type ArtifactRevisionPage,
@@ -22,6 +23,7 @@ import {
   isArtifactDefaultShares,
   isArtifactDeletionResult,
   isArtifactPage,
+  isArtifactPermanentDeletionResult,
   isArtifactRecoveryResult,
   isArtifactRevisionPage,
   isCommentThread,
@@ -34,6 +36,7 @@ import {
   isRestoreResult,
   isShareCreateResult,
   isSharePage,
+  isTrashEmptyResult,
   isTrashPage,
   isWorkspaceCreateResult,
   isWorkspaceDeleteResult,
@@ -42,6 +45,7 @@ import {
   type ShareCreateResult,
   type ShareManagementSummary,
   type SharePage,
+  type TrashEmptyResult,
   type TrashPage,
   type WorkspaceCreateResult,
   type WorkspaceDeleteResult,
@@ -592,6 +596,30 @@ export async function deleteArtifact(artifactId: string): Promise<ArtifactDeleti
     requestOptions({ method: 'DELETE' }),
   );
   if (!isArtifactDeletionResult(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
+  }
+  return value;
+}
+
+export async function permanentlyDeleteArtifact(
+  artifactId: string,
+): Promise<ArtifactPermanentDeletionResult> {
+  const value = await requestJson(
+    `/api/v1/trash/${encodeURIComponent(artifactId)}`,
+    jsonRequest('DELETE', { confirmArtifactId: artifactId }),
+  );
+  if (!isArtifactPermanentDeletionResult(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
+  }
+  return value;
+}
+
+export async function emptyTrash(workspaceId: string): Promise<TrashEmptyResult> {
+  const value = await requestJson(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/trash`,
+    jsonRequest('DELETE', { confirmWorkspaceId: workspaceId }),
+  );
+  if (!isTrashEmptyResult(value)) {
     throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
   }
   return value;

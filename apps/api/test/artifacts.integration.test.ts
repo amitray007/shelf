@@ -411,6 +411,70 @@ describe('artifact catalog HTTP API', () => {
     });
   });
 
+  it('permanently deletes one trashed artifact and empties the remaining workspace Trash', async () => {
+    const app = await fixture();
+    const first = await publish(app, 'first', 'first.txt', 'permanent-first');
+    const second = await publish(app, 'second', 'second.txt', 'permanent-second');
+    const firstId = first.json().artifactId as string;
+    const secondId = second.json().artifactId as string;
+    for (const artifactId of [firstId, secondId]) {
+      const deleted = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/artifacts/${artifactId}`,
+        headers: { authorization: 'Bearer test' },
+      });
+      expect(deleted.statusCode, deleted.body).toBe(200);
+    }
+
+    const rejected = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/trash/${firstId}`,
+      headers: { authorization: 'Bearer test' },
+      payload: { confirmArtifactId: secondId },
+    });
+    expect(rejected.statusCode, rejected.body).toBe(400);
+    expect(rejected.json()).toMatchObject({ error: { code: 'INVALID_REQUEST' } });
+
+    const purged = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/trash/${firstId}`,
+      headers: { authorization: 'Bearer test' },
+      payload: { confirmArtifactId: firstId },
+    });
+    expect(purged.statusCode, purged.body).toBe(200);
+    expect(purged.json()).toEqual({
+      apiVersion: 'v1',
+      workspaceId: 'workspace-main',
+      artifactId: firstId,
+      status: 'purged',
+    });
+    const missing = await app.inject({
+      method: 'GET',
+      url: `/api/v1/trash/${firstId}`,
+      headers: { authorization: 'Bearer test' },
+    });
+    expect(missing.statusCode).toBe(404);
+
+    const emptied = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/workspaces/workspace-main/trash',
+      headers: { authorization: 'Bearer test' },
+      payload: { confirmWorkspaceId: 'workspace-main' },
+    });
+    expect(emptied.statusCode, emptied.body).toBe(200);
+    expect(emptied.json()).toEqual({
+      apiVersion: 'v1',
+      workspaceId: 'workspace-main',
+      purgedArtifactCount: 1,
+    });
+    const trash = await app.inject({
+      method: 'GET',
+      url: '/api/v1/workspaces/workspace-main/trash',
+      headers: { authorization: 'Bearer test' },
+    });
+    expect(trash.json()).toMatchObject({ items: [], nextCursor: null });
+  });
+
   it('uses revision.read authorization for every catalog surface', async () => {
     const root = await mkdtemp(join(tmpdir(), 'shelf-artifact-denied-'));
     roots.push(root);

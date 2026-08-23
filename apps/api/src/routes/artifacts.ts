@@ -4,12 +4,14 @@ import {
   ArtifactDeletionResultSchema,
   ArtifactNameSchema,
   ArtifactPageSchema,
+  ArtifactPermanentDeletionResultSchema,
   ArtifactRetentionModeSchema,
   ArtifactRevisionPageSchema,
   ArtifactSchema,
   OpaqueArtifactIdSchema,
   OpaqueRevisionIdSchema,
   RestoreResultSchema,
+  TrashEmptyResultSchema,
   TrashedArtifactSchema,
   TrashPageSchema,
 } from '@shelf/contracts';
@@ -56,6 +58,16 @@ const RestoreArtifactBodySchema = Type.Object(
 
 const ArtifactRetentionBodySchema = Type.Object(
   { mode: ArtifactRetentionModeSchema },
+  { additionalProperties: false },
+);
+
+const PermanentArtifactDeletionBodySchema = Type.Object(
+  { confirmArtifactId: OpaqueArtifactIdSchema },
+  { additionalProperties: false },
+);
+
+const EmptyTrashBodySchema = Type.Object(
+  { confirmWorkspaceId: Type.String({ minLength: 1, maxLength: 128 }) },
   { additionalProperties: false },
 );
 
@@ -184,6 +196,33 @@ export async function registerArtifactRoutes(
     },
   );
 
+  app.delete(
+    '/api/v1/workspaces/:workspaceId/trash',
+    {
+      schema: {
+        operationId: 'emptyTrashV1',
+        summary: 'Permanently delete every recoverable artifact in one workspace Trash',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        tags: ['artifacts'],
+        params: WorkspaceParamsSchema,
+        body: EmptyTrashBodySchema,
+        response: { 200: TrashEmptyResultSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { workspaceId: string };
+      const body = request.body as { confirmWorkspaceId: string };
+      return retention.emptyTrash({
+        installationId: identity.installationId,
+        workspaceId: params.workspaceId,
+        actorId: identity.actorId,
+        confirmation: body.confirmWorkspaceId,
+        signal: requestCancellationSignal(request, reply),
+      });
+    },
+  );
+
   app.get(
     '/api/v1/trash/:artifactId',
     {
@@ -203,6 +242,33 @@ export async function registerArtifactRoutes(
         installationId: identity.installationId,
         actorId: identity.actorId,
         artifactId: params.artifactId,
+        signal: requestCancellationSignal(request, reply),
+      });
+    },
+  );
+
+  app.delete(
+    '/api/v1/trash/:artifactId',
+    {
+      schema: {
+        operationId: 'permanentlyDeleteArtifactV1',
+        summary: 'Permanently delete one recoverable artifact and queue its unreferenced content',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        tags: ['artifacts'],
+        params: ArtifactParamsSchema,
+        body: PermanentArtifactDeletionBodySchema,
+        response: { 200: ArtifactPermanentDeletionResultSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const identity = await authenticate(request, dependencies.authenticator);
+      const params = request.params as { artifactId: string };
+      const body = request.body as { confirmArtifactId: string };
+      return retention.permanentlyDelete({
+        installationId: identity.installationId,
+        actorId: identity.actorId,
+        artifactId: params.artifactId,
+        confirmation: body.confirmArtifactId,
         signal: requestCancellationSignal(request, reply),
       });
     },

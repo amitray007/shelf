@@ -698,6 +698,112 @@ describe('shelf artifacts', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('permanently deletes one Trash artifact and empties a workspace Trash', async () => {
+    const permanentResult = {
+      apiVersion: 'v1',
+      workspaceId: artifact.workspaceId,
+      artifactId: artifact.artifactId,
+      status: 'purged',
+    };
+    const emptyResult = {
+      apiVersion: 'v1',
+      workspaceId: artifact.workspaceId,
+      purgedArtifactCount: 3,
+    };
+    const stdout = capture();
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json(permanentResult))
+      .mockResolvedValueOnce(Response.json(emptyResult));
+    const runtime = {
+      env: { SHELF_TOKEN: 'secret-token' },
+      stdout: stdout.write,
+      stderr() {},
+      fetch,
+    };
+
+    expect(
+      await runCli(
+        [
+          'node',
+          'shelf',
+          'trash',
+          'delete',
+          '--url',
+          'https://shelf.example',
+          '--artifact',
+          artifact.artifactId,
+          '--confirm',
+          artifact.artifactId,
+        ],
+        runtime,
+      ),
+    ).toBe(0);
+    expect(JSON.parse(stdout.value())).toEqual(permanentResult);
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe(
+      `https://shelf.example/api/v1/trash/${artifact.artifactId}`,
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'DELETE',
+      body: JSON.stringify({ confirmArtifactId: artifact.artifactId }),
+    });
+
+    const emptyStdout = capture();
+    expect(
+      await runCli(
+        [
+          'node',
+          'shelf',
+          'trash',
+          'empty',
+          '--url',
+          'https://shelf.example',
+          '--workspace',
+          artifact.workspaceId,
+          '--confirm',
+          artifact.workspaceId,
+        ],
+        { ...runtime, stdout: emptyStdout.write },
+      ),
+    ).toBe(0);
+    expect(JSON.parse(emptyStdout.value())).toEqual(emptyResult);
+    expect(fetch.mock.calls[1]?.[0].toString()).toBe(
+      `https://shelf.example/api/v1/workspaces/${artifact.workspaceId}/trash`,
+    );
+    expect(fetch.mock.calls[1]?.[1]).toMatchObject({
+      method: 'DELETE',
+      body: JSON.stringify({ confirmWorkspaceId: artifact.workspaceId }),
+    });
+  });
+
+  it('refuses Empty Trash when confirmation does not match without fetching', async () => {
+    const stderr = capture();
+    const fetch = vi.fn();
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'trash',
+        'empty',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        artifact.workspaceId,
+        '--confirm',
+        'workspace-other',
+      ],
+      {
+        env: { SHELF_TOKEN: 'secret-token' },
+        stdout() {},
+        stderr: stderr.write,
+        fetch,
+      },
+    );
+    expect(exitCode).toBe(2);
+    expect(JSON.parse(stderr.value())).toMatchObject({ error: { code: 'INVALID_REQUEST' } });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('recovers an artifact through the shelf command', async () => {
     const stdout = capture();
     const fetch = vi.fn(async () => Response.json(recoveryResult));

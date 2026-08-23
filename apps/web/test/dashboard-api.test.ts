@@ -7,6 +7,7 @@ import {
   DashboardApiError,
   DashboardAuthenticationError,
   deleteArtifact,
+  emptyTrash,
   ensureArtifactDefaultShares,
   folderEntryDownloadUrl,
   folderEntryPreviewUrl,
@@ -15,6 +16,7 @@ import {
   loadDashboardCredentials,
   loadDashboardSession,
   loadFolderEntries,
+  permanentlyDeleteArtifact,
   recoverArtifact,
   renameArtifact,
   restoreArtifact,
@@ -459,10 +461,23 @@ describe('dashboard API client', () => {
         replayed: false,
       },
     };
+    const permanentDeletion = {
+      apiVersion: 'v1',
+      workspaceId: 'workspace-main',
+      artifactId,
+      status: 'purged',
+    };
+    const emptied = {
+      apiVersion: 'v1',
+      workspaceId: 'workspace-main',
+      purgedArtifactCount: 2,
+    };
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(json(deleted))
-      .mockResolvedValueOnce(json(recovery));
+      .mockResolvedValueOnce(json(recovery))
+      .mockResolvedValueOnce(json(permanentDeletion))
+      .mockResolvedValueOnce(json(emptied));
     globalThis.fetch = fetch;
 
     await expect(deleteArtifact(artifactId)).resolves.toEqual(deleted);
@@ -473,6 +488,18 @@ describe('dashboard API client', () => {
     expect(fetch.mock.calls[1]?.[1]).toMatchObject({
       method: 'POST',
       headers: { 'Idempotency-Key': 'recovery-key' },
+    });
+    await expect(permanentlyDeleteArtifact(artifactId)).resolves.toEqual(permanentDeletion);
+    await expect(emptyTrash('workspace-main')).resolves.toEqual(emptied);
+    expect(fetch.mock.calls[2]?.[0]).toBe(`/api/v1/trash/${artifactId}`);
+    expect(fetch.mock.calls[2]?.[1]).toMatchObject({
+      method: 'DELETE',
+      body: JSON.stringify({ confirmArtifactId: artifactId }),
+    });
+    expect(fetch.mock.calls[3]?.[0]).toBe('/api/v1/workspaces/workspace-main/trash');
+    expect(fetch.mock.calls[3]?.[1]).toMatchObject({
+      method: 'DELETE',
+      body: JSON.stringify({ confirmWorkspaceId: 'workspace-main' }),
     });
   });
 

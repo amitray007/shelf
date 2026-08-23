@@ -2,19 +2,21 @@ import { Button } from '@cloudflare/kumo/components/button';
 import { ClipboardText } from '@cloudflare/kumo/components/clipboard-text';
 import { Input } from '@cloudflare/kumo/components/input';
 import { Table } from '@cloudflare/kumo/components/table';
-import type { TrashPage as TrashPagePayload } from '@shelf/contracts';
+import type { TrashedArtifact, TrashPage as TrashPagePayload } from '@shelf/contracts';
 import { useState } from 'react';
 import {
   Link,
   useLoaderData,
   useLocation,
   useNavigate,
+  useParams,
   useRevalidator,
   useSearchParams,
 } from 'react-router';
 
 import { DashboardApiError, recoverArtifact } from './api.js';
 import { ArtifactIcon } from './artifact-icon.js';
+import { EmptyTrashDialog, PermanentlyDeleteArtifactDialog } from './trash-deletion-dialogs.js';
 import './artifact-index.css';
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
@@ -32,12 +34,16 @@ export function TrashPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
+  const workspaceId = useParams().workspaceId ?? '';
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [recovering, setRecovering] = useState<string>();
   const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string>();
   const [recoveryLink, setRecoveryLink] = useState<string>();
+  const [deleteTarget, setDeleteTarget] = useState<TrashedArtifact>();
+  const [emptyDialogOpen, setEmptyDialogOpen] = useState(false);
+  const [cleanupStatus, setCleanupStatus] = useState<string>();
   const items = page.items.filter((item) => !removed.has(item.artifact.artifactId));
 
   const submitSearch = (event: React.FormEvent<HTMLFormElement>) => {
@@ -51,6 +57,7 @@ export function TrashPage() {
     setRecovering(artifactId);
     setError(undefined);
     setRecoveryLink(undefined);
+    setCleanupStatus(undefined);
     try {
       const result = await recoverArtifact(
         artifactId,
@@ -73,6 +80,9 @@ export function TrashPage() {
           <h1>Trash</h1>
           <p>Recover artifacts before their permanent cleanup date.</p>
         </div>
+        <Button onClick={() => setEmptyDialogOpen(true)} type="button" variant="destructive">
+          Empty Trash
+        </Button>
       </header>
 
       {error === undefined ? null : (
@@ -91,6 +101,14 @@ export function TrashPage() {
             size="sm"
             text={recoveryLink}
           />
+        </div>
+      )}
+      {cleanupStatus === undefined ? null : (
+        <div className="artifact-deletion-toast" role="status">
+          <div>
+            <strong>Permanent deletion started</strong>
+            <span>{cleanupStatus}</span>
+          </div>
         </div>
       )}
 
@@ -167,16 +185,27 @@ export function TrashPage() {
                       </span>
                     </Table.Cell>
                     <Table.Cell className="artifact-actions-cell">
-                      <Button
-                        disabled={recovering !== undefined}
-                        loading={recovering === artifact.artifactId}
-                        onClick={() => void recover(artifact.artifactId)}
-                        size="sm"
-                        type="button"
-                        variant="secondary"
-                      >
-                        Recover
-                      </Button>
+                      <div className="trash-row-actions">
+                        <Button
+                          disabled={recovering !== undefined}
+                          loading={recovering === artifact.artifactId}
+                          onClick={() => void recover(artifact.artifactId)}
+                          size="sm"
+                          type="button"
+                          variant="secondary"
+                        >
+                          Recover
+                        </Button>
+                        <Button
+                          disabled={recovering !== undefined}
+                          onClick={() => setDeleteTarget(item)}
+                          size="sm"
+                          type="button"
+                          variant="destructive"
+                        >
+                          Delete permanently
+                        </Button>
+                      </div>
                     </Table.Cell>
                   </Table.Row>
                 );
@@ -200,6 +229,39 @@ export function TrashPage() {
           </Link>
         </nav>
       )}
+      <PermanentlyDeleteArtifactDialog
+        item={deleteTarget}
+        onDeleted={(artifactId) => {
+          setDeleteTarget(undefined);
+          setRemoved((current) => new Set(current).add(artifactId));
+          setCleanupStatus(
+            'The artifact cannot be recovered. Storage cleanup continues in the background.',
+          );
+          void revalidator.revalidate();
+        }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(undefined);
+        }}
+      />
+      <EmptyTrashDialog
+        onEmptied={(purgedArtifactCount) => {
+          setEmptyDialogOpen(false);
+          setRemoved((current) => {
+            const next = new Set(current);
+            for (const item of page.items) next.add(item.artifact.artifactId);
+            return next;
+          });
+          setCleanupStatus(
+            purgedArtifactCount === 1
+              ? '1 artifact was permanently deleted. Storage cleanup continues in the background.'
+              : `${purgedArtifactCount} artifacts were permanently deleted. Storage cleanup continues in the background.`,
+          );
+          void revalidator.revalidate();
+        }}
+        onOpenChange={setEmptyDialogOpen}
+        open={emptyDialogOpen}
+        workspaceId={workspaceId}
+      />
     </div>
   );
 }

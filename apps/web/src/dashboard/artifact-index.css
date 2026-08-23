@@ -467,6 +467,17 @@
   text-align: center;
 }
 
+.trash-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.trash-row-actions button {
+  white-space: nowrap;
+}
+
 .artifact-row-actions {
   display: flex;
   align-items: center;

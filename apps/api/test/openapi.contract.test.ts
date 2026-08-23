@@ -71,6 +71,14 @@ describe('OpenAPI v1', () => {
       'renameArtifactV1',
     );
     expect(document).toHaveProperty(
+      ['paths', '/api/v1/trash/{artifactId}', 'delete', 'operationId'],
+      'permanentlyDeleteArtifactV1',
+    );
+    expect(document).toHaveProperty(
+      ['paths', '/api/v1/workspaces/{workspaceId}/trash', 'delete', 'operationId'],
+      'emptyTrashV1',
+    );
+    expect(document).toHaveProperty(
       [
         'paths',
         '/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/restores',
@@ -258,6 +266,8 @@ describe('OpenAPI v1', () => {
       ['/api/v1/artifacts/{artifactId}', 'patch'],
       ['/api/v1/artifacts/{artifactId}/revisions', 'get'],
       ['/api/v1/workspaces/{workspaceId}/artifacts/{artifactId}/restores', 'post'],
+      ['/api/v1/trash/{artifactId}', 'delete'],
+      ['/api/v1/workspaces/{workspaceId}/trash', 'delete'],
       ['/api/v1/revisions/{revisionId}/content', 'get'],
       ['/api/v1/revisions/{revisionId}/tree', 'get'],
       ['/api/v1/revisions/{baseRevisionId}/comparisons/{targetRevisionId}', 'get'],

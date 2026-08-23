@@ -106,6 +106,8 @@ describe('shelf schema', () => {
       'trash list',
       'trash show',
       'trash recover',
+      'trash delete',
+      'trash empty',
       'shares create',
       'shares list',
       'shares revoke',
