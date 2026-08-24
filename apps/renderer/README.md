@@ -1,8 +1,9 @@
 # Shelf renderer boundary
 
 `@shelf/renderer` is a separate-origin Fastify service for one deliberately narrow case:
-self-contained `text/html` shared artifacts. It receives a share capability only through a
-parent-owned form POST and never receives Shelf cookies or authentication credentials.
+`text/html` shared artifacts. It receives a share capability only through a parent-owned form POST
+and never receives Shelf cookies or authentication credentials. For folder artifacts, it embeds
+bounded same-revision raster image bytes and assigns them through document-local `blob:` URLs.
 
 ## Browser contract
 
@@ -26,8 +27,10 @@ parent-owned form POST and never receives Shelf cookies or authentication creden
 
 The final artifact response applies the restrictive CSP directly: no fetch/connect, external
 subresources, forms, nested frames, workers, object content, or base URL; only inline scripts and
-styles plus embedded data/blob media are allowed. Every response is `no-store`, `no-referrer`,
-`nosniff`, and denies browser permissions.
+styles plus embedded data/blob media are allowed. Relative image paths and exact Public image URLs
+for the active share can resolve only to raster files in the same immutable folder revision. The
+renderer embeds those bytes under the configured expanded-document limit. Every response is
+`no-store`, `no-referrer`, `nosniff`, and denies browser permissions.
 
 ## Known browser limit
 

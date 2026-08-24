@@ -12,6 +12,7 @@ const html = '<!doctype html><title>Artifact</title><h1>Hello</h1>';
 
 function resolver(options: Parameters<typeof rendererDependencies>[0] = {}, maxHtmlBytes?: number) {
   return createCoreHtmlResolver({
+    appOrigin: 'https://shelf.example',
     ...rendererDependencies(options),
     viewerSessionTokenCodec: {
       verify: (token) =>
@@ -174,6 +175,7 @@ describe('core HTML resolver', () => {
 
     await expect(
       createCoreHtmlResolver({
+        appOrigin: 'https://shelf.example',
         ...dependencies,
         viewerSessionTokenCodec: {
           verify: () => ({

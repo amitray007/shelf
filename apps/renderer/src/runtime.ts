@@ -35,6 +35,7 @@ export async function createRendererRuntime(
       port: config.port,
       appOrigin: config.appOrigin,
       resolver: createCoreHtmlResolver({
+        appOrigin: config.appOrigin,
         shares: dataPlane.shares,
         viewerSessionTokenCodec: dataPlane.viewerSessionTokenCodec,
         revisions: dataPlane.revisions,

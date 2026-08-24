@@ -370,6 +370,7 @@ describe('isolated HTML renderer', () => {
       const app = await createRendererApp({
         appOrigin,
         resolver: createCoreHtmlResolver({
+          appOrigin,
           ...testCase.dependencies,
           viewerSessionTokenCodec: {
             verify: (token) =>

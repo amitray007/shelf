@@ -9,8 +9,10 @@ import {
 } from '@shelf/core';
 
 import type { RendererHtmlResolver } from './app.js';
+import { inlineFolderImageSources } from './folder-assets.js';
 
 export const DEFAULT_MAX_HTML_BYTES = 10 * 1024 * 1024;
+export const RENDERED_HTML_EXPANSION_FACTOR = 3;
 
 export interface ViewerSessionTokenVerifier {
   verify(
@@ -46,6 +48,7 @@ async function readExactUtf8(
 }
 
 export function createCoreHtmlResolver(dependencies: {
+  appOrigin: string;
   shares: ShareRepository;
   viewerSessionTokenCodec: ViewerSessionTokenVerifier;
   revisions: RevisionRepository;
@@ -58,6 +61,7 @@ export function createCoreHtmlResolver(dependencies: {
   if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1) {
     throw new Error('Renderer maxHtmlBytes must be a positive safe integer.');
   }
+  const appOrigin = new URL(dependencies.appOrigin).origin;
   const access = createShareAccessService({
     shares: dependencies.shares,
     revisions: dependencies.revisions,
@@ -99,7 +103,28 @@ export function createCoreHtmlResolver(dependencies: {
           return { status: 'unavailable' };
         }
         const html = await readExactUtf8(await file.read(), file.byteCount, maximumBytes);
-        return html === undefined ? { status: 'unavailable' } : { status: 'available', html };
+        if (html === undefined) return { status: 'unavailable' };
+        if (request.path === undefined) return { status: 'available', html };
+        const renderedHtml = await inlineFolderImageSources({
+          html,
+          htmlPath: request.path,
+          appOrigin,
+          ...(request.accessType === 'public' ? { publicCode: request.publicCode } : {}),
+          maximumOutputBytes: maximumBytes * RENDERED_HTML_EXPANSION_FACTOR,
+          async readAsset(path) {
+            const asset = await access.readTreeFile({
+              authority,
+              path,
+              ...(request.signal === undefined ? {} : { signal: request.signal }),
+            });
+            return {
+              mediaType: asset.mediaType,
+              byteCount: asset.byteCount,
+              read: () => asset.read(undefined),
+            };
+          },
+        });
+        return { status: 'available', html: renderedHtml };
       } catch (error) {
         if (error instanceof ShareNotFoundError) return { status: 'unavailable' };
         throw error;
