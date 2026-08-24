@@ -141,6 +141,10 @@ a {
   overflow: hidden;
 }
 
+.viewer-sidebar-split-content {
+  display: flex;
+}
+
 .viewer-sidebar-split > [data-testid="viewer-sidebar"],
 .viewer-sidebar-split-sidebar,
 .viewer-sidebar-split-separator {

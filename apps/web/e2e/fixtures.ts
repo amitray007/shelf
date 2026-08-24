@@ -560,7 +560,10 @@ function publicFileResolution(
 
 export const markdownResolution = publicFileResolution(markdownShareId, 'text/markdown', 'idea.md');
 
-export const htmlResolution = publicFileResolution(htmlShareId, 'text/html', 'idea.html');
+export const htmlResolution = {
+  ...publicFileResolution(htmlShareId, 'text/html', 'idea.html'),
+  commentPolicy: 'shared',
+} satisfies PublicShareResolution;
 
 function richResolution(input: {
   readonly accessType: 'protected' | 'public';

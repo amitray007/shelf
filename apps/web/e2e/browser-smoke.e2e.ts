@@ -953,6 +953,19 @@ test('HTML preview starts dark and can be checked in light mode', async ({ page 
   const themeControls = controls.getByRole('group', { name: 'HTML preview theme' });
   const frame = page.locator('iframe[title="idea.html isolated preview"]');
 
+  await expect(page.getByRole('button', { name: 'Open file discussions sidebar' })).toBeVisible();
+  await expect
+    .poll(() =>
+      page.locator('.file-view').evaluate((fileView) => {
+        const contentPanel = fileView.parentElement;
+        if (contentPanel === null) return Number.POSITIVE_INFINITY;
+        return Math.abs(
+          fileView.getBoundingClientRect().height - contentPanel.getBoundingClientRect().height,
+        );
+      }),
+    )
+    .toBeLessThanOrEqual(1);
+
   await expect(themeControls.getByRole('tab', { name: 'Dark' })).toHaveAttribute(
     'aria-selected',
     'true',
