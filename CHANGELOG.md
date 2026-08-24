@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/amitray007/shelf/compare/v0.1.4...v0.1.5) (2026-08-24)
+
+
+### Features
+
+* **trash:** add permanent deletion controls ([d9ae080](https://github.com/amitray007/shelf/commit/d9ae080ee411c650c2d63d63103287950c36d72a))
+
 ## [0.1.4](https://github.com/amitray007/shelf/compare/v0.1.3...v0.1.4) (2026-08-23)
 
 
