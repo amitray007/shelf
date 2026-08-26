@@ -39,7 +39,7 @@ const VIEWER_TOKEN_PATTERN = /^[A-Za-z0-9._-]{24,4096}$/u;
 const NONCE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/u;
 
 function applyBoundaryHeaders(reply: FastifyReply, contentSecurityPolicy: string): void {
-  void reply.header('Cache-Control', 'no-store');
+  void reply.header('Cache-Control', 'no-store, no-transform');
   void reply.header('Content-Security-Policy', contentSecurityPolicy);
   void reply.header('Permissions-Policy', DENIED_PERMISSIONS_POLICY);
   void reply.header('Referrer-Policy', 'no-referrer');

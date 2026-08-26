@@ -11,7 +11,7 @@ export interface WebAppOptions {
 
 function applyDocumentHeaders(reply: FastifyReply, rendererOrigin: string | undefined): void {
   const rendererSource = rendererOrigin ?? "'none'";
-  void reply.header('Cache-Control', 'no-store');
+  void reply.header('Cache-Control', 'no-store, no-transform');
   void reply.header(
     'Content-Security-Policy',
     [

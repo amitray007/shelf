@@ -45,7 +45,7 @@ describe('production web application boundary', () => {
 
     expect(document.statusCode).toBe(200);
     expect(document.body).toContain('<title>shelf</title>');
-    expect(document.headers['cache-control']).toBe('no-store');
+    expect(document.headers['cache-control']).toBe('no-store, no-transform');
     expect(document.headers['referrer-policy']).toBe('no-referrer');
     expect(document.headers['content-security-policy']).toContain(
       'frame-src https://renderer.shelf.example',
@@ -57,7 +57,7 @@ describe('production web application boundary', () => {
       "img-src 'self' https://api.dicebear.com data: blob:",
     );
     expect(dashboard.statusCode).toBe(200);
-    expect(dashboard.headers['cache-control']).toBe('no-store');
+    expect(dashboard.headers['cache-control']).toBe('no-store, no-transform');
     expect(asset.statusCode).toBe(200);
     expect(asset.headers['cache-control']).toContain('immutable');
     expect(favicon.statusCode).toBe(200);

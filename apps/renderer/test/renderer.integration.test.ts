@@ -63,14 +63,15 @@ describe('isolated HTML renderer', () => {
     const response = await app.inject({ method: 'GET', url: '/' });
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['cache-control']).toBe('no-store, no-transform');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['x-robots-tag']).toBe('noindex, nofollow, noarchive');
     expect(response.headers['permissions-policy']).toContain('camera=()');
     expect(response.headers['content-security-policy']).toContain("default-src 'none'");
     expect(response.headers['content-security-policy']).toContain("connect-src 'none'");
-    expect(response.headers['content-security-policy']).toContain("navigate-to 'none'");
+    expect(response.headers['permissions-policy']).not.toContain('ambient-light-sensor');
+    expect(response.headers['content-security-policy']).not.toContain('navigate-to');
     expect(response.headers['content-security-policy']).toContain(`frame-ancestors ${appOrigin}`);
     expect(response.headers['content-security-policy']).toContain('sandbox allow-scripts');
     expect(response.body).not.toContain('<script');
@@ -87,7 +88,7 @@ describe('isolated HTML renderer', () => {
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['cache-control']).toBe('no-store, no-transform');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['x-robots-tag']).toBe('noindex, nofollow, noarchive');
@@ -122,14 +123,15 @@ describe('isolated HTML renderer', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('text/html');
-    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['cache-control']).toBe('no-store, no-transform');
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['x-robots-tag']).toBe('noindex, nofollow, noarchive');
     expect(response.headers['permissions-policy']).toContain('geolocation=()');
     expect(response.headers['content-security-policy']).toContain("default-src 'none'");
     expect(response.headers['content-security-policy']).toContain("connect-src 'none'");
-    expect(response.headers['content-security-policy']).toContain("navigate-to 'none'");
+    expect(response.headers['permissions-policy']).not.toContain('ambient-light-sensor');
+    expect(response.headers['content-security-policy']).not.toContain('navigate-to');
     expect(response.headers['content-security-policy']).toContain("form-action 'none'");
     expect(response.headers['content-security-policy']).toContain("base-uri 'none'");
     expect(response.headers['content-security-policy']).toContain("object-src 'none'");
@@ -397,7 +399,7 @@ describe('isolated HTML renderer', () => {
 
     for (const response of responses) {
       expect(response.statusCode).toBe(404);
-      expect(response.headers['cache-control']).toBe('no-store');
+      expect(response.headers['cache-control']).toBe('no-store, no-transform');
       expect(response.headers['content-security-policy']).toContain("connect-src 'none'");
       expect(response.body).toContain('shelf:renderer-unavailable');
       expect(response.body).toContain(nonce);
