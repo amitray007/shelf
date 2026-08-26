@@ -2,7 +2,6 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 export const DENIED_PERMISSIONS_POLICY = [
   'accelerometer=()',
-  'ambient-light-sensor=()',
   'autoplay=()',
   'camera=()',
   'clipboard-read=()',
@@ -51,9 +50,6 @@ function commonPolicy(appOrigin: string): string[] {
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
-    // Chromium currently does not enforce navigate-to. Keep it as defense in depth while the
-    // parent also terminates every navigation after the artifact's first completed load.
-    "navigate-to 'none'",
     "frame-src 'none'",
     "worker-src 'none'",
     `frame-ancestors ${appOrigin}`,

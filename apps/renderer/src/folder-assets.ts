@@ -13,9 +13,34 @@ const RASTER_MEDIA_TYPES = new Set([
   'image/webp',
   'image/x-icon',
 ]);
-const IMAGE_SOURCE_GATE = /<img\b[^>]*\bsrc\s*=/iu;
+const AUDIO_MEDIA_TYPES = new Set([
+  'application/ogg',
+  'audio/aac',
+  'audio/flac',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/ogg',
+  'audio/wav',
+  'audio/webm',
+  'audio/x-m4a',
+  'audio/x-wav',
+]);
+const VIDEO_MEDIA_TYPES = new Set([
+  'application/ogg',
+  'video/mp4',
+  'video/ogg',
+  'video/quicktime',
+  'video/webm',
+  'video/x-m4v',
+]);
+const TRACK_MEDIA_TYPES = new Set(['text/vtt']);
+const ASSET_SOURCE_GATE = /<(?:audio|img|source|track|video)\b/iu;
 const ABSOLUTE_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/u;
-const EMBEDDED_IMAGE_ATTRIBUTE = 'data-shelf-embedded-image';
+const EMBEDDED_ATTRIBUTES = {
+  poster: 'data-shelf-embedded-poster',
+  src: 'data-shelf-embedded-src',
+} as const;
+const EMBEDDED_ATTRIBUTE_NAMES = new Set<string>(Object.values(EMBEDDED_ATTRIBUTES));
 const EMBEDDED_SCRIPT_OVERHEAD_BYTES = 2_048;
 
 interface FolderAsset {
@@ -24,17 +49,19 @@ interface FolderAsset {
   read(): Promise<AsyncIterable<Uint8Array>>;
 }
 
-interface ImageReference {
+interface AssetReference {
+  acceptedMediaTypes: ReadonlySet<string>;
   attribute: DefaultTreeAdapterTypes.Element['attrs'][number];
   element: DefaultTreeAdapterTypes.Element;
   path: string;
+  targetAttribute: keyof typeof EMBEDDED_ATTRIBUTES;
 }
 
 function normalizedMediaType(value: string): string {
   return value.split(';', 1)[0]?.trim().toLowerCase() ?? '';
 }
 
-function exactPublicImagePath(
+function exactPublicAssetPath(
   reference: URL,
   appOrigin: string,
   publicCode: string | undefined,
@@ -60,13 +87,13 @@ function referencedFolderPath(options: {
   if (value === '' || value.startsWith('#') || value.startsWith('//')) return undefined;
   try {
     if (ABSOLUTE_SCHEME.test(value)) {
-      const exactPath = exactPublicImagePath(new URL(value), options.appOrigin, options.publicCode);
+      const exactPath = exactPublicAssetPath(new URL(value), options.appOrigin, options.publicCode);
       return exactPath === undefined ? undefined : normalizePortableFolderPath(exactPath);
     }
 
     const reference = new URL(value, new URL(`/${options.htmlPath}`, options.appOrigin));
     if (reference.origin !== options.appOrigin) return undefined;
-    const exactPath = exactPublicImagePath(reference, options.appOrigin, options.publicCode);
+    const exactPath = exactPublicAssetPath(reference, options.appOrigin, options.publicCode);
     if (exactPath !== undefined) return normalizePortableFolderPath(exactPath);
     const decodedPath = decodeURIComponent(reference.pathname).replace(/^\/+/, '');
     return normalizePortableFolderPath(decodedPath);
@@ -75,28 +102,46 @@ function referencedFolderPath(options: {
   }
 }
 
-function imageReferences(
+function assetReferences(
   html: string,
   options: { htmlPath: string; appOrigin: string; publicCode?: string },
-): { document: DefaultTreeAdapterTypes.Document; references: ImageReference[] } | undefined {
-  if (!IMAGE_SOURCE_GATE.test(html)) return undefined;
+): { document: DefaultTreeAdapterTypes.Document; references: AssetReference[] } | undefined {
+  if (!ASSET_SOURCE_GATE.test(html)) return undefined;
   const document = parse(html);
-  const references: ImageReference[] = [];
-  const visit = (node: DefaultTreeAdapterTypes.Node): void => {
+  const references: AssetReference[] = [];
+  const addReference = (
+    element: DefaultTreeAdapterTypes.Element,
+    targetAttribute: keyof typeof EMBEDDED_ATTRIBUTES,
+    acceptedMediaTypes: ReadonlySet<string>,
+  ): void => {
+    const attribute = element.attrs.find((candidate) => candidate.name === targetAttribute);
+    if (attribute === undefined) return;
+    const path = referencedFolderPath({ value: attribute.value, ...options });
+    if (path !== undefined && path !== options.htmlPath) {
+      references.push({ acceptedMediaTypes, attribute, element, path, targetAttribute });
+    }
+  };
+  const visit = (node: DefaultTreeAdapterTypes.Node, mediaContext?: 'audio' | 'video'): void => {
+    let childMediaContext = mediaContext;
     if ('tagName' in node) {
       if (node.tagName === 'img') {
-        const source = node.attrs.find((attribute) => attribute.name === 'src');
-        if (source !== undefined) {
-          const path = referencedFolderPath({ value: source.value, ...options });
-          if (path !== undefined && path !== options.htmlPath) {
-            references.push({ attribute: source, element: node, path });
-          }
-        }
+        addReference(node, 'src', RASTER_MEDIA_TYPES);
+      } else if (node.tagName === 'video') {
+        addReference(node, 'poster', RASTER_MEDIA_TYPES);
+        addReference(node, 'src', VIDEO_MEDIA_TYPES);
+        childMediaContext = 'video';
+      } else if (node.tagName === 'audio') {
+        addReference(node, 'src', AUDIO_MEDIA_TYPES);
+        childMediaContext = 'audio';
+      } else if (node.tagName === 'source' && mediaContext !== undefined) {
+        addReference(node, 'src', mediaContext === 'video' ? VIDEO_MEDIA_TYPES : AUDIO_MEDIA_TYPES);
+      } else if (node.tagName === 'track' && mediaContext !== undefined) {
+        addReference(node, 'src', TRACK_MEDIA_TYPES);
       }
       if (node.tagName === 'template' && 'content' in node) visit(node.content);
     }
     if ('childNodes' in node) {
-      for (const child of node.childNodes) visit(child);
+      for (const child of node.childNodes) visit(child, childMediaContext);
     }
   };
   visit(document);
@@ -128,9 +173,11 @@ function javascriptLiteral(value: unknown): string {
 function assetBootstrapScript(
   assets: readonly (readonly [string, readonly [string, string]])[],
 ): string {
-  const marker = javascriptLiteral(EMBEDDED_IMAGE_ATTRIBUTE);
+  const markers = javascriptLiteral(
+    Object.entries(EMBEDDED_ATTRIBUTES).map(([attribute, marker]) => [marker, attribute]),
+  );
   const payload = javascriptLiteral(assets);
-  return `<script>(()=>{const marker=${marker};const assets=new Map(${payload});const urls=new Map();const apply=root=>{const elements=[];if(root.matches?.(\`[\${marker}]\`))elements.push(root);root.querySelectorAll?.(\`[\${marker}]\`).forEach(element=>elements.push(element));for(const element of elements){const id=element.getAttribute(marker);const asset=id===null?undefined:assets.get(id);if(asset===undefined)continue;let url=urls.get(id);if(url===undefined){const binary=atob(asset[1]);const bytes=Uint8Array.from(binary,value=>value.charCodeAt(0));url=URL.createObjectURL(new Blob([bytes],{type:asset[0]}));urls.set(id,url)}element.setAttribute("src",url);element.removeAttribute(marker)}};const observer=new MutationObserver(records=>{for(const record of records)for(const node of record.addedNodes)if(node.nodeType===1)apply(node)});observer.observe(document,{childList:true,subtree:true});addEventListener("DOMContentLoaded",()=>{if(document.documentElement!==null)apply(document.documentElement);observer.disconnect()},{once:true});addEventListener("pagehide",()=>{for(const url of urls.values())URL.revokeObjectURL(url)},{once:true})})()</script>`;
+  return `<script>(()=>{const markers=${markers};const selector=markers.map(([marker])=>\`[\${marker}]\`).join(",");const assets=new Map(${payload});const urls=new Map();const apply=root=>{const elements=[];if(root.matches?.(selector))elements.push(root);root.querySelectorAll?.(selector).forEach(element=>elements.push(element));for(const element of elements)for(const [marker,attribute] of markers){const id=element.getAttribute(marker);const asset=id===null?undefined:assets.get(id);if(asset===undefined)continue;let url=urls.get(id);if(url===undefined){const binary=atob(asset[1]);const bytes=Uint8Array.from(binary,value=>value.charCodeAt(0));url=URL.createObjectURL(new Blob([bytes],{type:asset[0]}));urls.set(id,url)}element.setAttribute(attribute,url);element.removeAttribute(marker)}};const observer=new MutationObserver(records=>{for(const record of records)for(const node of record.addedNodes)if(node.nodeType===1)apply(node)});observer.observe(document,{childList:true,subtree:true});addEventListener("DOMContentLoaded",()=>{if(document.documentElement!==null)apply(document.documentElement);observer.disconnect()},{once:true});addEventListener("pagehide",()=>{for(const url of urls.values())URL.revokeObjectURL(url)},{once:true})})()</script>`;
 }
 
 function injectAfterDoctype(html: string, script: string): string {
@@ -140,7 +187,7 @@ function injectAfterDoctype(html: string, script: string): string {
     : `${doctype[0]}${script}${html.slice(doctype[0].length)}`;
 }
 
-export async function inlineFolderImageSources(options: {
+export async function inlineFolderAssetSources(options: {
   html: string;
   htmlPath: string;
   appOrigin: string;
@@ -148,7 +195,7 @@ export async function inlineFolderImageSources(options: {
   maximumOutputBytes: number;
   readAsset(path: string): Promise<FolderAsset | undefined>;
 }): Promise<string> {
-  const found = imageReferences(options.html, options);
+  const found = assetReferences(options.html, options);
   if (found === undefined || found.references.length === 0) return options.html;
 
   const originalByteCount = Buffer.byteLength(options.html);
@@ -161,7 +208,7 @@ export async function inlineFolderImageSources(options: {
         if (asset === undefined) return undefined;
         if (!Number.isSafeInteger(asset.byteCount) || asset.byteCount < 0) return undefined;
         const mediaType = normalizedMediaType(asset.mediaType);
-        return RASTER_MEDIA_TYPES.has(mediaType)
+        return references.every((reference) => reference.acceptedMediaTypes.has(mediaType))
           ? { asset, mediaType, path, references }
           : undefined;
       } catch (error) {
@@ -176,7 +223,12 @@ export async function inlineFolderImageSources(options: {
     const { asset, mediaType, references } = candidate;
     const base64Length = 4 * Math.ceil(asset.byteCount / 3);
     const replacementByteCount =
-      base64Length + mediaType.length + references.length * (EMBEDDED_IMAGE_ATTRIBUTE.length + 16);
+      base64Length +
+      mediaType.length +
+      references.reduce(
+        (total, reference) => total + EMBEDDED_ATTRIBUTES[reference.targetAttribute].length + 16,
+        0,
+      );
     const replacedByteCount = references.reduce(
       (total, reference) => total + Buffer.byteLength(reference.attribute.value),
       0,
@@ -194,15 +246,23 @@ export async function inlineFolderImageSources(options: {
       bytes: await readExactBytes(await candidate.asset.read(), candidate.asset.byteCount),
     })),
   );
+  const available = embedded.flatMap((candidate) =>
+    candidate.bytes === undefined ? [] : [{ ...candidate, bytes: candidate.bytes }],
+  );
+  const markedElements = new Set(
+    available.flatMap((candidate) => candidate.references.map((reference) => reference.element)),
+  );
+  for (const element of markedElements) {
+    element.attrs = element.attrs.filter(
+      (attribute) => !EMBEDDED_ATTRIBUTE_NAMES.has(attribute.name),
+    );
+  }
   const assets: Array<readonly [string, readonly [string, string]]> = [];
-  for (const { bytes, id, mediaType, references } of embedded) {
-    if (bytes === undefined) continue;
+  for (const { bytes, id, mediaType, references } of available) {
     assets.push([id, [mediaType, Buffer.from(bytes).toString('base64')]]);
-    for (const { attribute, element } of references) {
-      element.attrs = element.attrs.filter(
-        (candidate) => candidate !== attribute && candidate.name !== EMBEDDED_IMAGE_ATTRIBUTE,
-      );
-      element.attrs.push({ name: EMBEDDED_IMAGE_ATTRIBUTE, value: id });
+    for (const { attribute, element, targetAttribute } of references) {
+      element.attrs = element.attrs.filter((candidate) => candidate !== attribute);
+      element.attrs.push({ name: EMBEDDED_ATTRIBUTES[targetAttribute], value: id });
     }
   }
 

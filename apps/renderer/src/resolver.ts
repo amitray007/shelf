@@ -9,7 +9,7 @@ import {
 } from '@shelf/core';
 
 import type { RendererHtmlResolver } from './app.js';
-import { inlineFolderImageSources } from './folder-assets.js';
+import { inlineFolderAssetSources } from './folder-assets.js';
 
 export const DEFAULT_MAX_HTML_BYTES = 10 * 1024 * 1024;
 export const RENDERED_HTML_EXPANSION_FACTOR = 3;
@@ -105,7 +105,7 @@ export function createCoreHtmlResolver(dependencies: {
         const html = await readExactUtf8(await file.read(), file.byteCount, maximumBytes);
         if (html === undefined) return { status: 'unavailable' };
         if (request.path === undefined) return { status: 'available', html };
-        const renderedHtml = await inlineFolderImageSources({
+        const renderedHtml = await inlineFolderAssetSources({
           html,
           htmlPath: request.path,
           appOrigin,
