@@ -23,6 +23,7 @@ function applyDocumentHeaders(reply: FastifyReply, rendererOrigin: string | unde
       `frame-src ${rendererSource}`,
       "frame-ancestors 'none'",
       "img-src 'self' https://api.dicebear.com data: blob:",
+      "media-src 'self'",
       "object-src 'none'",
       "script-src 'self'",
       "style-src 'self' 'unsafe-inline'",
