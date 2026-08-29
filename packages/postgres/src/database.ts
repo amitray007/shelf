@@ -84,6 +84,8 @@ export interface ShareTable {
   revoked_by_actor_id: string | null;
   is_default: boolean;
   comment_policy: 'off' | 'private' | 'shared';
+  revision_access: 'target-only' | 'shared-history';
+  history_from_revision_number: string | null;
   retention_role: 'default' | 'custom' | 'recovery-lease';
 }
 

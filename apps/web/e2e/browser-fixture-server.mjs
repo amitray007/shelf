@@ -20,6 +20,7 @@ import {
   htmlShareId,
   markdownResolution,
   markdownShareId,
+  previousRevisionId,
   rendererOrigin,
   revisionId,
   richPreviewFixtures,
@@ -699,11 +700,37 @@ async function api(request, response, url) {
       path === `/api/v1/public/shares/${htmlShareId}/resolve`)
   ) {
     const value = JSON.parse(await body(request));
-    if (value.token !== viewerToken || Object.keys(value).length !== 1) {
+    const selectedPrevious =
+      path.includes(markdownShareId) && value.revisionId === previousRevisionId;
+    if (
+      value.token !== viewerToken ||
+      (!selectedPrevious && Object.keys(value).length !== 1) ||
+      (selectedPrevious && Object.keys(value).length !== 2)
+    ) {
       json(response, 404, {});
       return;
     }
-    json(response, 200, path.includes(markdownShareId) ? markdownResolution : htmlResolution);
+    json(
+      response,
+      200,
+      selectedPrevious
+        ? {
+            ...markdownResolution,
+            revision: {
+              ...markdownResolution.revision,
+              revisionId: previousRevisionId,
+              revisionNumber: 11,
+              createdAt: '2026-08-17T16:30:00.000Z',
+            },
+            navigation: {
+              previous: null,
+              next: markdownResolution.latestRevision,
+            },
+          }
+        : path.includes(markdownShareId)
+          ? markdownResolution
+          : htmlResolution,
+    );
     return;
   }
   if (
@@ -712,7 +739,15 @@ async function api(request, response, url) {
       path === `/api/v1/public/shares/${htmlShareId}/content`)
   ) {
     const value = JSON.parse(await body(request));
-    if (value.token !== viewerToken || Object.keys(value).length !== 1) {
+    const selectedPrevious =
+      path.includes(markdownShareId) && value.revisionId === previousRevisionId;
+    const selectedLatest =
+      path.includes(markdownShareId) && value.revisionId === markdownResolution.revision.revisionId;
+    if (
+      value.token !== viewerToken ||
+      (!selectedPrevious && !selectedLatest && Object.keys(value).length !== 1) ||
+      ((selectedPrevious || selectedLatest) && Object.keys(value).length !== 2)
+    ) {
       json(response, 404, {});
       return;
     }
@@ -723,7 +758,9 @@ async function api(request, response, url) {
     });
     response.end(
       isMarkdown
-        ? '# One useful idea\n\nA durable artifact should stay quick to share.'
+        ? selectedPrevious
+          ? '# Earlier useful idea\n\nA shared revision stays available for review.'
+          : '# One useful idea\n\nA durable artifact should stay quick to share.'
         : '<!doctype html><html lang="en"><title>One useful idea</title><body><p>A durable artifact should stay quick to share.</p></body></html>',
     );
     return;

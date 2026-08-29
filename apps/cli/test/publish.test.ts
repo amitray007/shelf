@@ -106,6 +106,7 @@ describe('shelf publish', () => {
     expect(stdout.value()).toContain('--description <description>');
     expect(stdout.value()).toContain('--user-bypass');
     expect(stdout.value()).toContain('--access <protected|public>');
+    expect(stdout.value()).toContain('--revision-access <target-only|shared-history>');
     expect(stdout.value()).toContain('Agent publishes require');
   });
 

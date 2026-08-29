@@ -294,6 +294,10 @@ function ShareRow({ share }: { readonly share: ShareManagementSummary }) {
             <span className="share-policy-badge">{share.commentPolicy ?? 'off'}</span>
           </dd>
         </div>
+        <div>
+          <dt>Revisions</dt>
+          <dd>{share.revisionAccess === 'shared-history' ? 'Shared history' : 'Target only'}</dd>
+        </div>
       </dl>
       {revocable ? (
         <footer className="share-row-actions">

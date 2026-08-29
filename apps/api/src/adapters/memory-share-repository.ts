@@ -34,6 +34,8 @@ function namespaceKey(namespace: ShareCreateIdempotencyNamespace): string {
 function copyShare(value: StoredShare): StoredShare {
   const copy = structuredClone(value);
   copy.commentPolicy ??= 'off';
+  copy.revisionAccess ??= 'target-only';
+  copy.historyFromRevisionNumber ??= null;
   return copy;
 }
 

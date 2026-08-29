@@ -15,6 +15,7 @@ import {
   longFolderPath,
   markdownShareId,
   pdfShareId,
+  previousRevisionId,
   publicPdfCode,
   rendererOrigin,
   shareSecret,
@@ -693,6 +694,24 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
     freshTab.getByRole('heading', { level: 1, name: 'This artifact is unavailable' }),
   ).toBeVisible();
   await freshTab.close();
+  diagnostics.assertClean();
+});
+
+test('a shared-history viewer moves between revisions and returns to Latest', async ({ page }) => {
+  const diagnostics = trackPageErrors(page);
+
+  await page.goto(`/s/${markdownShareId}#${shareSecret}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
+  await page.getByRole('button', { name: 'View 11th Revision' }).click();
+  await expect(page).toHaveURL(new RegExp(`revision=${previousRevisionId}$`, 'u'));
+  await expect(page.getByRole('heading', { level: 1, name: 'Earlier useful idea' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '12th Revision available' })).toBeVisible();
+
+  await page.getByRole('button', { name: '12th Revision available' }).click();
+  await expect(page).not.toHaveURL(/[?&]revision=/u);
+  await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
+  await expectNoHorizontalOverflow(page, [page.locator('.artifact-surface')]);
+  await expectNoAxeViolations(page);
   diagnostics.assertClean();
 });
 

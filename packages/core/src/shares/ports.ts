@@ -1,4 +1,4 @@
-import type { CommentPolicy, ShareTarget } from '@shelf/contracts';
+import type { CommentPolicy, RevisionAccess, ShareTarget } from '@shelf/contracts';
 
 import type { StoredArtifact, StoredArtifactRevision } from '../artifacts/catalog.js';
 
@@ -11,6 +11,8 @@ export interface StoredShare {
   visibility: 'unlisted';
   accessType: 'protected' | 'public';
   commentPolicy: CommentPolicy;
+  revisionAccess?: RevisionAccess;
+  historyFromRevisionNumber?: number | null;
   publicCode: string | null;
   target: ShareTarget;
   createdByActorId: string;

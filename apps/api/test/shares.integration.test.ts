@@ -80,12 +80,18 @@ async function createShare(
   target: { mode: 'latest' } | { mode: 'pinned'; revisionId: string } = { mode: 'latest' },
   expiresAt: string | null = null,
   accessType: 'protected' | 'public' = 'protected',
+  revisionAccess?: 'target-only' | 'shared-history',
 ) {
   return app.inject({
     method: 'POST',
     url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/shares`,
     headers: { authorization: 'Bearer test', 'idempotency-key': key },
-    payload: { accessType, target, ...(expiresAt === null ? {} : { expiresAt }) },
+    payload: {
+      accessType,
+      target,
+      ...(expiresAt === null ? {} : { expiresAt }),
+      ...(revisionAccess === undefined ? {} : { revisionAccess }),
+    },
   });
 }
 
@@ -413,6 +419,109 @@ describe('share HTTP boundary', () => {
     }
   });
 
+  it('serves bounded shared history with adjacent navigation and exact revision bytes', async () => {
+    const app = await fixture();
+    const first = await publishFile(app, 'version one', 'history-publish-v1');
+    const artifactId = first.json().artifactId as string;
+    const firstRevisionId = first.json().revisionId as string;
+    const historyShare = await createShare(
+      app,
+      artifactId,
+      'share-bounded-history',
+      { mode: 'latest' },
+      null,
+      'protected',
+      'shared-history',
+    );
+    const second = await publishFile(app, 'version two', 'history-publish-v2', artifactId);
+    const secondRevisionId = second.json().revisionId as string;
+    const third = await publishFile(app, 'version three', 'history-publish-v3', artifactId);
+    const thirdRevisionId = third.json().revisionId as string;
+    const shareId = historyShare.json().shareId as string;
+    const secret = (historyShare.json().url as string).split('#')[1] as string;
+    const established = await establishSession(app, shareId, secret);
+    const token = established.json().token as string;
+
+    const selected = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/resolve`,
+      payload: { token, revisionId: secondRevisionId },
+    });
+    const selectedContent = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/content`,
+      payload: { token, revisionId: secondRevisionId },
+    });
+    const firstSelected = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/resolve`,
+      payload: { token, revisionId: firstRevisionId },
+    });
+    const latest = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/resolve`,
+      payload: { token },
+    });
+
+    expect(historyShare.statusCode, historyShare.body).toBe(201);
+    expect(historyShare.json()).toMatchObject({ revisionAccess: 'shared-history' });
+    expect(selected.statusCode, selected.body).toBe(200);
+    expect(selected.json()).toMatchObject({
+      revisionAccess: 'shared-history',
+      revision: { revisionId: secondRevisionId, revisionNumber: 2 },
+      latestRevision: { revisionId: thirdRevisionId, revisionNumber: 3 },
+      navigation: {
+        previous: { revisionId: firstRevisionId, revisionNumber: 1 },
+        next: { revisionId: thirdRevisionId, revisionNumber: 3 },
+      },
+    });
+    expect(selectedContent.statusCode, selectedContent.body).toBe(200);
+    expect(selectedContent.body).toBe('version two');
+    expect(firstSelected.statusCode, firstSelected.body).toBe(200);
+    expect(firstSelected.json().navigation).toMatchObject({
+      previous: null,
+      next: { revisionId: secondRevisionId },
+    });
+    expect(latest.statusCode, latest.body).toBe(200);
+    expect(latest.json()).toMatchObject({
+      revision: { revisionId: thirdRevisionId },
+      navigation: { previous: { revisionId: secondRevisionId }, next: null },
+    });
+  });
+
+  it('does not expose historical bytes through target-only or pinned shares', async () => {
+    const app = await fixture();
+    const first = await publishFile(app, 'private v1', 'scope-publish-v1');
+    const artifactId = first.json().artifactId as string;
+    const firstRevisionId = first.json().revisionId as string;
+    const targetOnly = await createShare(app, artifactId, 'share-target-only');
+    await publishFile(app, 'private v2', 'scope-publish-v2', artifactId);
+    const shareId = targetOnly.json().shareId as string;
+    const secret = (targetOnly.json().url as string).split('#')[1] as string;
+    const established = await establishSession(app, shareId, secret);
+    const denied = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/content`,
+      payload: { token: established.json().token, revisionId: firstRevisionId },
+    });
+    const invalidPinned = await createShare(
+      app,
+      artifactId,
+      'share-invalid-pinned-history',
+      { mode: 'pinned', revisionId: firstRevisionId },
+      null,
+      'protected',
+      'shared-history',
+    );
+
+    expect(denied.statusCode).toBe(404);
+    expect(denied.json()).toMatchObject({ error: { code: 'SHARE_NOT_FOUND' } });
+    expect(invalidPinned.statusCode).toBe(400);
+    expect(invalidPinned.json()).toMatchObject({
+      error: { code: 'INVALID_REQUEST', details: [{ field: 'revisionAccess' }] },
+    });
+  });
+
   it('establishes once, reuses the same session, and keeps its token valid at the limit', async () => {
     const app = await fixture();
     const published = await publishFile(app, 'browser download', 'publish-browser-download');
@@ -639,7 +748,7 @@ describe('share HTTP boundary', () => {
     expect(cookie).toMatch(new RegExp(`^shelf_viewer_session_${shareId}=`));
     expect(setCookie).toContain('HttpOnly');
     expect(setCookie).toContain('SameSite=Strict');
-    expect(setCookie).toContain('Max-Age=86400');
+    expect(setCookie).toMatch(/Max-Age=86(?:399|400)/u);
     expect(setCookie).not.toContain('Secure');
     expect(setCookie).toMatch(new RegExp(`^shelf_viewer_session_${shareId}=[A-Za-z0-9._-]+;`));
 

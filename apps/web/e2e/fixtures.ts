@@ -19,6 +19,7 @@ export const shortArtifactId = `art_${'h'.repeat(22)}`;
 export const jsonArtifactId = `art_${'i'.repeat(22)}`;
 export const archiveArtifactId = `art_${'j'.repeat(22)}`;
 export const revisionId = `rev_${'b'.repeat(22)}`;
+export const previousRevisionId = `rev_${'k'.repeat(22)}`;
 export const folderRevisionId = `rev_${'g'.repeat(22)}`;
 export const markdownShareId = `shr_${'c'.repeat(22)}`;
 export const htmlShareId = `shr_${'d'.repeat(22)}`;
@@ -558,7 +559,23 @@ function publicFileResolution(
   };
 }
 
-export const markdownResolution = publicFileResolution(markdownShareId, 'text/markdown', 'idea.md');
+export const markdownResolution = {
+  ...publicFileResolution(markdownShareId, 'text/markdown', 'idea.md'),
+  revisionAccess: 'shared-history',
+  latestRevision: {
+    revisionId,
+    revisionNumber: revision.revisionNumber,
+    createdAt: revision.createdAt,
+  },
+  navigation: {
+    previous: {
+      revisionId: previousRevisionId,
+      revisionNumber: 11,
+      createdAt: '2026-08-17T16:30:00.000Z',
+    },
+    next: null,
+  },
+} satisfies PublicShareResolution;
 
 export const htmlResolution = {
   ...publicFileResolution(htmlShareId, 'text/html', 'idea.html'),

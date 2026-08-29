@@ -679,4 +679,35 @@ describePostgres('PostgresShareRepository', () => {
       await secondDatabase.destroy();
     }
   });
+
+  it('round-trips shared-history policy and enforces its Latest target invariant', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    try {
+      const repository = new PostgresShareRepository(database);
+      const shareId = 'shr_HHHHHHHHHHHHHHHHHHHHHH';
+      const historyShare = {
+        ...share(shareId),
+        revisionAccess: 'shared-history' as const,
+        historyFromRevisionNumber: 1,
+      };
+
+      await expect(
+        repository.commitCreate(createInput(historyShare, 'history-policy-roundtrip')),
+      ).resolves.toMatchObject({ status: 'committed' });
+      await expect(repository.findShare(shareId)).resolves.toMatchObject({
+        revisionAccess: 'shared-history',
+        historyFromRevisionNumber: 1,
+        target: { mode: 'latest' },
+      });
+      await expect(
+        database
+          .updateTable('shelf_shares')
+          .set({ target_mode: 'pinned', target_revision_id: ids.firstRevision })
+          .where('share_id', '=', shareId)
+          .execute(),
+      ).rejects.toThrow(/shelf_shares_revision_access/u);
+    } finally {
+      await database.destroy();
+    }
+  });
 });

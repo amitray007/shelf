@@ -59,6 +59,7 @@ describe('shelf shares', () => {
     expect(output.stdout.value()).toContain('--expires-in <preset>');
     expect(output.stdout.value()).toContain('--max-sessions <count>');
     expect(output.stdout.value()).toContain('--comments <off|private|shared>');
+    expect(output.stdout.value()).toContain('--revision-access <target-only|shared-history>');
     expect(output.stdout.value()).toContain('Targets default to Latest');
     expect(output.stdout.value()).toContain('non-confidential');
   });
@@ -150,6 +151,46 @@ describe('shelf shares', () => {
         target: { mode: 'latest' },
         commentPolicy: 'private',
         expiresIn: '24hr',
+      }),
+    });
+  });
+
+  it('requests shared revision history for a Latest share', async () => {
+    const result = {
+      ...summary,
+      revisionAccess: 'shared-history' as const,
+      requestId: 'request-history-share',
+      replayed: false,
+    };
+    const fetch = vi.fn(async () => Response.json(result, { status: 201 }));
+    const output = runtime(fetch);
+
+    const exitCode = await runCli(
+      [
+        'node',
+        'shelf',
+        'shares',
+        'create',
+        '--url',
+        'https://shelf.example',
+        '--workspace',
+        'workspace-main',
+        '--artifact',
+        ids.artifact,
+        '--revision-access',
+        'shared-history',
+        '--idempotency-key',
+        'share-history',
+      ],
+      output.value,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      body: JSON.stringify({
+        accessType: 'protected',
+        target: { mode: 'latest' },
+        revisionAccess: 'shared-history',
       }),
     });
   });
@@ -529,6 +570,32 @@ describe('shelf shares', () => {
     [
       'invalid comment policy',
       ['create', '--artifact', ids.artifact, '--comments', 'team', '--idempotency-key', 'key'],
+    ],
+    [
+      'invalid revision access',
+      [
+        'create',
+        '--artifact',
+        ids.artifact,
+        '--revision-access',
+        'everything',
+        '--idempotency-key',
+        'key',
+      ],
+    ],
+    [
+      'shared history on a pinned target',
+      [
+        'create',
+        '--artifact',
+        ids.artifact,
+        '--revision',
+        ids.revision,
+        '--revision-access',
+        'shared-history',
+        '--idempotency-key',
+        'key',
+      ],
     ],
   ])('rejects an invalid %s before making a network request', async (_case, command) => {
     const fetch = vi.fn();

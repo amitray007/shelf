@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  type ArtifactCatalogRepository,
   createProtectedSessionEstablishmentService,
   createShareResolutionService,
   type ShareRepository,
@@ -11,6 +12,7 @@ const ids = {
   artifact: 'art_AAAAAAAAAAAAAAAAAAAAAA',
   firstRevision: 'rev_BBBBBBBBBBBBBBBBBBBBBB',
   secondRevision: 'rev_CCCCCCCCCCCCCCCCCCCCCC',
+  thirdRevision: 'rev_FFFFFFFFFFFFFFFFFFFFFF',
   latestShare: 'shr_DDDDDDDDDDDDDDDDDDDDDD',
   pinnedShare: 'shr_EEEEEEEEEEEEEEEEEEEEEE',
 };
@@ -103,6 +105,147 @@ const capabilityCodec = {
 };
 
 describe('anonymous share resolution', () => {
+  it('allows only post-share history and returns adjacent revision navigation', async () => {
+    const first = fileRevision(ids.firstRevision, 1);
+    const second = fileRevision(ids.secondRevision, 2);
+    const third = fileRevision(ids.thirdRevision, 3);
+    const historyShare = share(ids.latestShare, {
+      revisionAccess: 'shared-history',
+      historyFromRevisionNumber: 2,
+    });
+    const resolved = {
+      share: historyShare,
+      artifact: {
+        installationId: historyShare.installationId,
+        workspaceId: historyShare.workspaceId,
+        artifactId: historyShare.artifactId,
+        kind: 'file' as const,
+        name: 'Launch notes',
+        createdAt: '2026-08-17T11:00:00.000Z',
+        updatedAt: third.createdAt,
+        latestRevision: third,
+      },
+      revision: {
+        installationId: historyShare.installationId,
+        workspaceId: historyShare.workspaceId,
+        artifactId: historyShare.artifactId,
+        revision: third,
+      },
+    };
+    const revisions: ArtifactCatalogRepository = {
+      async findArtifact() {
+        return resolved.artifact;
+      },
+      async listArtifacts() {
+        return { items: [resolved.artifact] };
+      },
+      async listArtifactRevisions(request) {
+        const ordered =
+          request.order === 'newest' ? [third, second, first] : [first, second, third];
+        const candidates = ordered.filter((revision) =>
+          request.cursorRevisionNumber === undefined
+            ? true
+            : request.order === 'newest'
+              ? revision.revisionNumber < request.cursorRevisionNumber
+              : revision.revisionNumber > request.cursorRevisionNumber,
+        );
+        return { items: candidates.slice(0, request.limit) };
+      },
+    };
+    const resolve = createShareResolutionService({
+      shares: repository({
+        async resolveShareTarget() {
+          return resolved;
+        },
+        async findRevisionForShare(revisionId) {
+          const revision = [first, second, third].find((item) => item.revisionId === revisionId);
+          return revision === undefined
+            ? undefined
+            : {
+                installationId: historyShare.installationId,
+                workspaceId: historyShare.workspaceId,
+                artifactId: historyShare.artifactId,
+                revision,
+              };
+        },
+      }),
+      revisions,
+    });
+    const authority = {
+      type: 'protected-session' as const,
+      shareId: ids.latestShare,
+      sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    };
+
+    await expect(resolve({ authority, revisionId: ids.secondRevision })).resolves.toMatchObject({
+      revisionAccess: 'shared-history',
+      revision: { revisionId: ids.secondRevision, revisionNumber: 2 },
+      latestRevision: { revisionId: ids.thirdRevision, revisionNumber: 3 },
+      navigation: {
+        previous: null,
+        next: { revisionId: ids.thirdRevision, revisionNumber: 3 },
+      },
+    });
+    await expect(resolve({ authority, revisionId: ids.firstRevision })).rejects.toMatchObject({
+      code: 'SHARE_NOT_FOUND',
+    });
+  });
+
+  it('keeps target-only and pinned shares scoped to their resolved revision', async () => {
+    const first = fileRevision(ids.firstRevision, 1);
+    const second = fileRevision(ids.secondRevision, 2);
+    const record = (stored: StoredShare, revision: typeof first) => ({
+      share: stored,
+      artifact: {
+        installationId: stored.installationId,
+        workspaceId: stored.workspaceId,
+        artifactId: stored.artifactId,
+        kind: 'file' as const,
+        name: 'Launch notes',
+        createdAt: '2026-08-17T11:00:00.000Z',
+        updatedAt: second.createdAt,
+        latestRevision: second,
+      },
+      revision: {
+        installationId: stored.installationId,
+        workspaceId: stored.workspaceId,
+        artifactId: stored.artifactId,
+        revision,
+      },
+    });
+    const targetOnly = share(ids.latestShare);
+    const pinned = share(ids.pinnedShare, {
+      target: { mode: 'pinned', revisionId: ids.firstRevision },
+    });
+    const resolve = createShareResolutionService({
+      shares: repository({
+        async resolveShareTarget(shareId) {
+          return shareId === ids.pinnedShare ? record(pinned, first) : record(targetOnly, second);
+        },
+        async findRevisionForShare() {
+          return {
+            installationId: targetOnly.installationId,
+            workspaceId: targetOnly.workspaceId,
+            artifactId: targetOnly.artifactId,
+            revision: first,
+          };
+        },
+      }),
+    });
+    const authority = (shareId: string) => ({
+      type: 'protected-session' as const,
+      shareId,
+      sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    });
+
+    await expect(
+      resolve({ authority: authority(ids.latestShare), revisionId: ids.firstRevision }),
+    ).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
+    await expect(
+      resolve({ authority: authority(ids.pinnedShare), revisionId: ids.secondRevision }),
+    ).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
+  });
+
   it('advances a latest target on every request while keeping a pinned target exact', async () => {
     const first = fileRevision(ids.firstRevision, 1);
     let current = first;
@@ -263,6 +406,7 @@ describe('anonymous share resolution', () => {
       shareId: ids.latestShare,
       accessType: 'protected',
       commentPolicy: 'off',
+      revisionAccess: 'target-only',
       target: { mode: 'latest' },
       artifact: { artifactId: ids.artifact, kind: 'file', name: 'Launch notes' },
       revision: {
@@ -273,6 +417,11 @@ describe('anonymous share resolution', () => {
         originalFileName: 'launch.md',
         mediaType: 'text/markdown',
         byteCount: revision.byteCount,
+      },
+      latestRevision: {
+        revisionId: ids.secondRevision,
+        revisionNumber: 2,
+        createdAt: revision.createdAt,
       },
       action: {
         type: 'content',
@@ -343,6 +492,7 @@ describe('anonymous share resolution', () => {
       shareId: ids.pinnedShare,
       accessType: 'protected',
       commentPolicy: 'off',
+      revisionAccess: 'target-only',
       target: { mode: 'pinned', revisionId: ids.firstRevision },
       artifact: { artifactId: ids.artifact, kind: 'folder', name: 'Prototype' },
       revision: {
@@ -353,6 +503,11 @@ describe('anonymous share resolution', () => {
         rootName: 'prototype',
         byteCount: 2048,
         fileCount: 7,
+      },
+      latestRevision: {
+        revisionId: ids.firstRevision,
+        revisionNumber: 1,
+        createdAt: revision.createdAt,
       },
       action: {
         type: 'tree',

@@ -33,9 +33,11 @@ async function postRender(
     publicCode?: string;
     nonce?: string;
     path?: string;
+    revisionId?: string;
   } = {},
 ) {
   const path = values.path === undefined ? {} : { path: values.path };
+  const revisionId = values.revisionId === undefined ? {} : { revisionId: values.revisionId };
   return app.inject({
     method: 'POST',
     url: '/render',
@@ -50,8 +52,14 @@ async function postRender(
             viewerToken: values.viewerToken ?? viewerToken,
             nonce: values.nonce ?? 'n'.repeat(22),
             ...path,
+            ...revisionId,
           }
-        : { publicCode: values.publicCode, nonce: values.nonce ?? 'n'.repeat(22), ...path },
+        : {
+            publicCode: values.publicCode,
+            nonce: values.nonce ?? 'n'.repeat(22),
+            ...path,
+            ...revisionId,
+          },
     ).toString(),
   });
 }
@@ -185,6 +193,7 @@ describe('isolated HTML renderer', () => {
     const response = await postRender(app, {
       publicCode: 'AbCdEf0123_-',
       path: 'site/index.html',
+      revisionId: 'rev_AAAAAAAAAAAAAAAAAAAAAA',
     });
 
     expect(response.statusCode).toBe(200);
@@ -194,6 +203,7 @@ describe('isolated HTML renderer', () => {
         accessType: 'public',
         publicCode: 'AbCdEf0123_-',
         path: 'site/index.html',
+        revisionId: 'rev_AAAAAAAAAAAAAAAAAAAAAA',
       }),
     );
   });

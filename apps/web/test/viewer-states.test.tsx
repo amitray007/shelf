@@ -1172,4 +1172,47 @@ describe('viewer content states', () => {
     );
     expect(pinnedHtml).toContain('Pinned');
   });
+
+  it('shows shared-history navigation and a newer revision notice', () => {
+    const previousRevisionId = `rev_${'d'.repeat(22)}`;
+    const nextRevisionId = `rev_${'e'.repeat(22)}`;
+    const html = renderToStaticMarkup(
+      <ViewerRail
+        authority={{ accessType: 'public', publicCode: 'pub_1234567890' }}
+        latestAvailable={{
+          revisionId: nextRevisionId,
+          revisionNumber: 3,
+          createdAt: '2026-08-18T14:00:00.000Z',
+        }}
+        resolution={{
+          ...FILE_RESOLUTION,
+          revisionAccess: 'shared-history',
+          revision: { ...FILE_RESOLUTION.revision, revisionNumber: 2 },
+          latestRevision: {
+            revisionId: nextRevisionId,
+            revisionNumber: 3,
+            createdAt: '2026-08-18T14:00:00.000Z',
+          },
+          navigation: {
+            previous: {
+              revisionId: previousRevisionId,
+              revisionNumber: 1,
+              createdAt: '2026-08-18T12:00:00.000Z',
+            },
+            next: {
+              revisionId: nextRevisionId,
+              revisionNumber: 3,
+              createdAt: '2026-08-18T14:00:00.000Z',
+            },
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain('Revision navigation');
+    expect(html).toContain('View 1st Revision');
+    expect(html).toContain('View 3rd Revision');
+    expect(html).toContain('History · 2nd Revision');
+    expect(html).toContain('3rd Revision available');
+  });
 });

@@ -105,6 +105,7 @@ shelf profiles remove staging --yes
 | Publish and share in one run | `shelf publish ./report.md --title "..." --description "..." --share` |
 | Share protected, expiring | `shelf shares create --artifact art_... --access protected --expires-in 7d --idempotency-key k` |
 | Share public, short URL | `shelf shares create --artifact art_... --access public --expires-in 24hr --idempotency-key k` |
+| Share Latest with bounded revision navigation | `shelf shares create --artifact art_... --revision-access shared-history --idempotency-key k` |
 | Get the two prepared Latest links | `shelf shares defaults --artifact art_...` |
 | Find something I published earlier | `shelf artifacts list --search "notes" --sort updated` |
 | Resolve an artifact from a share link | `shelf artifacts resolve --from '<share-link>'` |
@@ -162,6 +163,8 @@ shelf publish ./report.md --artifact art_9fK2xQ1bTn7Lp0RcZsVe4W \
 
 Both link types can follow Latest or pin one exact revision with `--revision`. Both are excluded from search-engine indexing.
 
+Revision access defaults to `target-only`. A Latest link with `--revision-access shared-history` lets a visitor move from the revision current when the link was created through later revisions. It never exposes earlier revisions. Pinned links remain exact and reject `shared-history`.
+
 - **Protected**: a capability URL. The secret lives in the URL fragment. It can be permanent, expiring, session-limited, or all three. Use for anything not meant to be world-readable.
 - **Public**: a short unlisted URL with no secret. A finite public link lasts at most 30 days.
 
@@ -177,9 +180,13 @@ shelf publish ./draft.md --title "Draft" --description "First pass" \
 shelf shares create --artifact art_... --revision rev_... \
   --access protected --expires-in 7d --max-sessions 5 \
   --idempotency-key share-report-v3
+
+# Latest link with viewer revision navigation from this revision forward
+shelf shares create --artifact art_... --revision-access shared-history \
+  --access protected --idempotency-key share-report-history
 ```
 
-With `--share` and no finite or session policy, Shelf returns the prepared permanent default for `--access` (protected when omitted) rather than creating a new link. Adding `--expires-in`, `--expires-at`, or `--max-sessions` creates a custom link instead. `--expires-in` and `--expires-at` conflict; use one.
+With `--share` and no finite, session, or shared-history policy, Shelf returns the prepared permanent default for `--access` (protected when omitted) rather than creating a new link. Adding `--expires-in`, `--expires-at`, `--max-sessions`, or `--revision-access shared-history` creates a custom link instead. `--expires-in` and `--expires-at` conflict; use one.
 
 Prepared default links do not keep an automatic-retention artifact active. Any non-default custom
 share does until it is revoked, expires, or exhausts its Protected session budget. If no custom

@@ -1264,6 +1264,66 @@ a {
     monospace;
 }
 
+.viewer-revision-navigation {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.viewer-revision-control,
+.viewer-update-check,
+.viewer-latest-available {
+  min-height: 28px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-subtle);
+  font: inherit;
+  cursor: pointer;
+}
+
+.viewer-revision-control {
+  width: 28px;
+  padding: 0;
+}
+
+.viewer-update-check,
+.viewer-latest-available {
+  padding: 0 9px;
+}
+
+.viewer-latest-available {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--rule));
+  color: var(--accent);
+}
+
+.viewer-latest-notice {
+  color: var(--accent);
+}
+
+.viewer-revision-control:hover,
+.viewer-update-check:hover,
+.viewer-latest-available:hover {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.viewer-revision-control:focus-visible,
+.viewer-update-check:focus-visible,
+.viewer-latest-available:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.viewer-update-check:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .artifact-title {
   overflow: hidden;
   color: var(--text-subtle);
@@ -2557,6 +2617,22 @@ a {
     overflow: hidden;
     max-width: 122px;
     text-overflow: ellipsis;
+  }
+
+  .viewer-update-check {
+    width: 28px;
+    overflow: hidden;
+    padding: 0;
+    color: transparent;
+  }
+
+  .viewer-update-check::after {
+    content: "↻";
+    color: var(--text-subtle);
+  }
+
+  .viewer-latest-notice {
+    display: none;
   }
 
   .rail-muted,

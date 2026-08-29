@@ -9,6 +9,7 @@ import {
   type CommentPolicy,
   PROTECTED_SHARE_EXPIRY_OPTIONS,
   PUBLIC_SHARE_EXPIRY_OPTIONS,
+  type RevisionAccess,
 } from '@shelf/contracts';
 import { type FormEvent, useId, useRef, useState } from 'react';
 import { useRevalidator } from 'react-router';
@@ -56,6 +57,11 @@ const commentPolicySummaries: Record<CommentPolicy, string> = {
   shared: 'Shared comments',
 };
 
+const revisionAccessSummaries: Record<RevisionAccess, string> = {
+  'target-only': 'Target only',
+  'shared-history': 'Shared history',
+};
+
 export function expirySummary(choice: ShareExpiryChoice): string {
   if (choice === 'never') return 'Never expires';
   if (choice === 'custom') return 'Custom expiry';
@@ -95,6 +101,7 @@ export function ShareDialog({
   const [customExpiresAt, setCustomExpiresAt] = useState('');
   const [maxSessions, setMaxSessions] = useState('');
   const [commentPolicy, setCommentPolicy] = useState<CommentPolicy>('off');
+  const [revisionAccess, setRevisionAccess] = useState<RevisionAccess>('target-only');
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string>();
   const [createdSummary, setCreatedSummary] = useState<string>();
@@ -114,6 +121,7 @@ export function ShareDialog({
       setCustomExpiresAt(defaults.customExpiresAt);
       setMaxSessions(defaults.maxSessions);
       setCommentPolicy('off');
+      setRevisionAccess('target-only');
       setOptionsOpen(false);
       setShareUrl(undefined);
       setCreatedSummary(undefined);
@@ -143,6 +151,7 @@ export function ShareDialog({
       customExpiresAt,
       maxSessions,
       commentPolicy,
+      revisionAccess,
     });
     if ('error' in built) {
       failCreate(built.error);
@@ -174,6 +183,7 @@ export function ShareDialog({
           'previewAt' in expiry
             ? `expires ${expiryFormatter.format(new Date(expiry.previewAt))}`
             : 'never expires',
+          ...(revisionAccess === 'shared-history' ? ['shared history'] : []),
         ].join(' · '),
       );
       void revalidator.revalidate();
@@ -190,6 +200,7 @@ export function ShareDialog({
     targetSummary(mode, revisions, revisionId),
     expirySummary(expiryChoice),
     commentPolicySummaries[commentPolicy],
+    revisionAccessSummaries[revisionAccess],
     ...(accessType === 'protected' && maxSessions !== '' ? [`${maxSessions} sessions`] : []),
   ].join(' · ');
   return (
@@ -245,7 +256,11 @@ export function ShareDialog({
                   <Select<'latest' | 'pinned'>
                     className="share-option-select"
                     label="Target"
-                    onValueChange={(value) => setMode(value === 'pinned' ? 'pinned' : 'latest')}
+                    onValueChange={(value) => {
+                      const nextMode = value === 'pinned' ? 'pinned' : 'latest';
+                      setMode(nextMode);
+                      if (nextMode === 'pinned') setRevisionAccess('target-only');
+                    }}
                     renderValue={(value) =>
                       value === 'pinned' ? 'Pinned revision' : 'Latest revision'
                     }
@@ -275,6 +290,28 @@ export function ShareDialog({
                         </Select.Option>
                       ))}
                     </Select>
+                  ) : null}
+                  {mode === 'latest' ? (
+                    <Select<RevisionAccess>
+                      className="share-option-select"
+                      label="Revision access"
+                      onValueChange={(value) =>
+                        setRevisionAccess(
+                          value === 'shared-history' ? 'shared-history' : 'target-only',
+                        )
+                      }
+                      renderValue={(value) => revisionAccessSummaries[value ?? 'target-only']}
+                      value={revisionAccess}
+                    >
+                      <Select.Option value="target-only">Target only</Select.Option>
+                      <Select.Option value="shared-history">Shared history</Select.Option>
+                    </Select>
+                  ) : null}
+                  {revisionAccess === 'shared-history' ? (
+                    <p className="share-policy-help">
+                      Visitors can move between the current revision and revisions published after
+                      this link is created.
+                    </p>
                   ) : null}
                 </div>
 

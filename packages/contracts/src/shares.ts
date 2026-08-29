@@ -11,6 +11,12 @@ export const CommentPolicySchema = Type.Union(
 
 export const SHARE_CREATE_OPERATION = 'share.create' as const;
 
+export const REVISION_ACCESS_MODES = ['target-only', 'shared-history'] as const;
+export const RevisionAccessSchema = Type.Union(
+  [Type.Literal('target-only'), Type.Literal('shared-history')],
+  { $id: 'RevisionAccess' },
+);
+
 export const SHARE_EXPIRY_PRESETS = [
   '5m',
   '30m',
@@ -150,14 +156,17 @@ export const ShareAccessPolicyInputSchema = Type.Union([
 ]);
 
 const CommentPolicyInputField = { commentPolicy: Type.Optional(CommentPolicySchema) };
+const RevisionAccessInputField = { revisionAccess: Type.Optional(RevisionAccessSchema) };
 const ProtectedCreateFields = {
   ...ProtectedPolicyFields,
   ...CommentPolicyInputField,
+  ...RevisionAccessInputField,
   target: ShareTargetSchema,
 };
 const PublicCreateFields = {
   ...PublicPolicyFields,
   ...CommentPolicyInputField,
+  ...RevisionAccessInputField,
   target: ShareTargetSchema,
 };
 
@@ -195,6 +204,7 @@ const ShareManagementFields = {
   revokedAt: NullableIsoInstantSchema,
   status: ShareLifecycleStatusSchema,
   commentPolicy: Type.Optional(CommentPolicySchema),
+  revisionAccess: Type.Optional(RevisionAccessSchema),
 };
 
 export const ProtectedShareUrlSchema = Type.String({
@@ -346,11 +356,26 @@ const PublicRevisionFields = {
   createdAt: IsoInstantSchema,
 };
 
+const PublicRevisionPointerSchema = Type.Object(PublicRevisionFields, {
+  additionalProperties: false,
+});
+
+const PublicRevisionNavigationSchema = Type.Object(
+  {
+    previous: Type.Union([PublicRevisionPointerSchema, Type.Null()]),
+    next: Type.Union([PublicRevisionPointerSchema, Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 const PublicShareFields = {
   apiVersion: Type.Literal('v1'),
   shareId: OpaqueShareIdSchema,
   target: ShareTargetSchema,
   expiresAt: NullableIsoInstantSchema,
+  revisionAccess: Type.Optional(RevisionAccessSchema),
+  latestRevision: Type.Optional(PublicRevisionPointerSchema),
+  navigation: Type.Optional(PublicRevisionNavigationSchema),
 };
 
 const ProtectedResolutionFields = {
@@ -478,6 +503,7 @@ export const ProtectedSessionAuthoritySchema = Type.Object(
 
 export type ShareTarget = Static<typeof ShareTargetSchema>;
 export type CommentPolicy = Static<typeof CommentPolicySchema>;
+export type RevisionAccess = Static<typeof RevisionAccessSchema>;
 export type ShareExpiryPreset = Static<typeof ShareExpiryPresetSchema>;
 export type ShareExpiryPresetWithNever = Static<typeof ShareExpiryPresetWithNeverSchema>;
 export type ProtectedShareExpiryPreset = ShareExpiryPresetWithNever;

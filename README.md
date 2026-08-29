@@ -11,7 +11,7 @@ Shelf puts the CLI first, and the CLI is safe for agents to operate. The web das
 - **Immutable revisions.** Every publish creates a new revision. History is permanent, and each revision records where it came from.
 - **Files and folders.** Publish one file or a complete folder snapshot. There is no collection abstraction.
 - **Automatic retention with Trash.** Artifacts without an active custom share move to Trash after a 30-day grace period. Trash remains recoverable for another 30 days before metadata and unreferenced content are purged. Important artifacts can be kept indefinitely.
-- **Share links.** Protected links use a private capability. Public links use a short unlisted URL. Links can be permanent, expiring, or session-limited, and you can revoke them at any time.
+- **Share links.** Protected links use a private capability. Public links use a short unlisted URL. Links can be permanent, expiring, or session-limited, and you can revoke them at any time. A Latest link can opt into bounded revision navigation.
 - **Discussions.** Visitors and authenticated agents can start discussions anchored to a file or line range. Agents can reply and edit or delete their own posts; moderation remains separate.
 - **Safe rendering.** A dark, content-first viewer supports Markdown, JSON/YAML, CSV/TSV, source text and code, raster images including AVIF, SVG, PDF, and browser-supported audio/video through constrained inline preview routes with byte-range delivery. Active HTML runs in a separate sandboxed renderer process. DOCX and XLSX have direct browser previews; legacy spreadsheets, presentations, and unsupported office formats keep an explicit download fallback.
 - **Agent-first CLI.** One JSON document per run. Strict exit codes. No interactive prompts. Idempotency keys on every mutation.
@@ -56,6 +56,8 @@ Folder snapshots keep their separate bounds: 10 MiB per file and 100 MiB total p
   - `private` — visitors see only the discussions they started. Admins see all.
   - `shared` — everyone on the link sees shared discussions.
 - Both link types can follow Latest or pin one revision. Both are excluded from search-engine indexing.
+- A Latest link defaults to `target-only`. Add `--revision-access shared-history` to let viewers move between the revision current when the link was created and later revisions. Earlier revisions remain private. Pinned links always expose one exact revision.
+- The shared viewer shows Previous, Next, and Latest controls for a shared-history link. It also checks for a newer revision when the tab becomes active, or when the viewer selects **Check updates**.
 - Prepared default links do not keep an artifact active. Any non-default custom link keeps it active until it is revoked, expires, or exhausts its protected-session budget.
 
 ## CLI usage
@@ -103,6 +105,8 @@ shelf shares create --profile default --artifact art_... --access public \
   --expires-in 24hr --idempotency-key public-share-1
 shelf shares create --profile default --artifact art_... --access protected \
   --expires-in 7d --max-sessions 5 --idempotency-key protected-share-1
+shelf shares create --profile default --artifact art_... --access protected \
+  --revision-access shared-history --idempotency-key review-history-1
 shelf shares list --profile default
 shelf shares comments --profile default --share shr_... --comments shared
 shelf shares revoke --profile default --share shr_...

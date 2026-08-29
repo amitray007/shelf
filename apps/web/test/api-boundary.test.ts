@@ -11,6 +11,7 @@ import {
   updateViewerCommentPost,
   updateViewerCommentThread,
   ViewerCommentRevisionMismatchError,
+  viewerShareActionUrl,
   viewerSharePreviewUrl,
 } from '../src/api.js';
 import {
@@ -114,6 +115,49 @@ describe('viewer content boundary', () => {
         'a.wav',
       ),
     ).toBe(`/api/v1/public/links/${PUBLIC_CODE}/tree/content/preview?path=a.wav`);
+  });
+
+  it('carries shared-history revision selection without putting capabilities in URLs', () => {
+    const resolution = {
+      ...folderResolution(),
+      revisionAccess: 'shared-history' as const,
+      latestRevision: {
+        revisionId: `rev_${'d'.repeat(22)}`,
+        revisionNumber: 2,
+        createdAt: '2026-08-18T13:00:00.000Z',
+      },
+    };
+    const protectedAuthority = {
+      accessType: 'protected' as const,
+      shareId: SHARE_ID,
+      sessionId: SESSION_ID,
+      token: TOKEN,
+    };
+    expect(viewerShareActionUrl(resolution, protectedAuthority)).toBe(
+      `/api/v1/public/shares/${SHARE_ID}/tree`,
+    );
+    expect(viewerSharePreviewUrl(resolution, protectedAuthority, 'docs/report.pdf')).toBe(
+      `/api/v1/public/shares/${SHARE_ID}/tree/content/preview?revisionId=${REVISION_ID}&path=docs%2Freport.pdf`,
+    );
+
+    const publicResolution = {
+      ...resolution,
+      accessType: 'public' as const,
+      publicCode: PUBLIC_CODE,
+      action: { type: 'tree' as const, path: `/api/v1/public/links/${PUBLIC_CODE}/tree` },
+    };
+    expect(
+      viewerShareActionUrl(publicResolution, { accessType: 'public', publicCode: PUBLIC_CODE }),
+    ).toBe(`/api/v1/public/links/${PUBLIC_CODE}/tree?revisionId=${REVISION_ID}`);
+    expect(
+      viewerSharePreviewUrl(
+        publicResolution,
+        { accessType: 'public', publicCode: PUBLIC_CODE },
+        'a.wav',
+      ),
+    ).toBe(
+      `/api/v1/public/links/${PUBLIC_CODE}/tree/content/preview?revisionId=${REVISION_ID}&path=a.wav`,
+    );
   });
 
   it('projects a Latest revision race as an actionable review error', async () => {

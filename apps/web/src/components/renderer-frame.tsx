@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ViewerAuthority } from '../api.js';
 import type { PassiveRenderer } from '../rendering.js';
-import type { FileShareResolution, FolderShareResolution } from '../share-types.js';
+import {
+  type FileShareResolution,
+  type FolderShareResolution,
+  shareRevisionAccess,
+} from '../share-types.js';
 
 type HtmlRenderer = Extract<PassiveRenderer, { kind: 'html' }>;
 export type HtmlPreviewTheme = 'dark' | 'light';
@@ -108,6 +112,10 @@ export function RendererFrame({
     for (const [name, value] of Object.entries({
       ...fields,
       ...(path === undefined ? {} : { path }),
+      ...(resolution.target.mode === 'pinned' ||
+      shareRevisionAccess(resolution) === 'shared-history'
+        ? { revisionId: resolution.revision.revisionId }
+        : {}),
     })) {
       const input = document.createElement('input');
       input.type = 'hidden';
@@ -125,7 +133,7 @@ export function RendererFrame({
     }
     clearDeadline();
     timeoutRef.current = window.setTimeout(terminateFrame, 8_000);
-  }, [authority, clearDeadline, path, renderer.url, terminateFrame]);
+  }, [authority, clearDeadline, path, renderer.url, resolution, terminateFrame]);
 
   const stopPostReadyNavigation = useCallback(() => {
     if (terminatedRef.current) return;

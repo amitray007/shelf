@@ -4,6 +4,7 @@ import { Readable } from 'node:stream';
 import {
   FOLDER_LIMITS,
   OpaqueArtifactIdSchema,
+  OpaqueRevisionIdSchema,
   OpaqueShareIdSchema,
   PortableFolderPathSchema,
   type ProtectedSessionEstablishInput,
@@ -102,6 +103,7 @@ const HttpShareCreateBodySchema = Type.Unsafe<ShareCreateInput>({
     },
     maxSessions: { type: 'integer', minimum: 1, maximum: 1_000_000 },
     commentPolicy: { type: 'string', enum: ['off', 'private', 'shared'] },
+    revisionAccess: { type: 'string', enum: ['target-only', 'shared-history'] },
   },
   required: ['accessType', 'target'],
   additionalProperties: false,
@@ -116,18 +118,24 @@ const SharePageQuerySchema = Type.Object(
 const ViewerTokenBodySchema = Type.Object(
   {
     token: Type.String({ minLength: 24, maxLength: 4096, pattern: '^[A-Za-z0-9._-]+$' }),
+    revisionId: Type.Optional(OpaqueRevisionIdSchema),
   },
+  { additionalProperties: false },
+);
+const RevisionSelectionQuerySchema = Type.Object(
+  { revisionId: Type.Optional(OpaqueRevisionIdSchema) },
   { additionalProperties: false },
 );
 const PublicTreeQuerySchema = Type.Object(
   {
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: FOLDER_LIMITS.treePageSize })),
     cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 2048 })),
+    revisionId: Type.Optional(OpaqueRevisionIdSchema),
   },
   { additionalProperties: false },
 );
 const PublicTreeFileQuerySchema = Type.Object(
-  { path: PortableFolderPathSchema },
+  { path: PortableFolderPathSchema, revisionId: Type.Optional(OpaqueRevisionIdSchema) },
   { additionalProperties: false },
 );
 const ContentHeadersSchema = Type.Object(
@@ -323,10 +331,17 @@ export async function registerShareRoutes(
     (_request, body, done) => {
       const parameters = new URLSearchParams(String(body));
       const keys = [...parameters.keys()];
+      const token = parameters.getAll('token');
+      const revisionId = parameters.getAll('revisionId');
       done(
         null,
-        keys.length === 1 && keys[0] === 'token' && parameters.getAll('token').length === 1
-          ? { token: parameters.get('token') }
+        keys.every((key) => key === 'token' || key === 'revisionId') &&
+          token.length === 1 &&
+          revisionId.length <= 1
+          ? {
+              token: token[0],
+              ...(revisionId[0] === undefined ? {} : { revisionId: revisionId[0] }),
+            }
           : {},
       );
     },
@@ -340,6 +355,7 @@ export async function registerShareRoutes(
   });
   const resolution = createShareResolutionService({
     shares: dependencies.shareRepository,
+    revisions: dependencies.revisionRepository,
     ...(dependencies.shareClock === undefined ? {} : { clock: dependencies.shareClock }),
   });
   const establish = createProtectedSessionEstablishmentService({
@@ -480,6 +496,9 @@ export async function registerShareRoutes(
           : {}),
         ...('commentPolicy' in body && body.commentPolicy !== undefined
           ? { commentPolicy: body.commentPolicy }
+          : {}),
+        ...('revisionAccess' in body && body.revisionAccess !== undefined
+          ? { revisionAccess: body.revisionAccess }
           : {}),
         idempotencyKey: headers['idempotency-key'],
         requestId: request.id,
@@ -674,9 +693,10 @@ export async function registerShareRoutes(
     },
     async (request, reply) => {
       const params = request.params as { shareId: string };
-      const body = request.body as { token: string };
+      const body = request.body as { token: string; revisionId?: string };
       return resolution({
         authority: protectedAuthority(params.shareId, body.token),
+        ...(body.revisionId === undefined ? {} : { revisionId: body.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
     },
@@ -697,9 +717,10 @@ export async function registerShareRoutes(
     },
     async (request, reply) => {
       const params = request.params as { shareId: string };
-      const body = request.body as { token: string };
+      const body = request.body as { token: string; revisionId?: string };
       const file = await access.readFile({
         authority: protectedAuthority(params.shareId, body.token),
+        ...(body.revisionId === undefined ? {} : { revisionId: body.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
       return reply
@@ -725,6 +746,7 @@ export async function registerShareRoutes(
         tags: ['public shares'],
         params: PublicShareParamsSchema,
         headers: ContentHeadersSchema,
+        querystring: RevisionSelectionQuerySchema,
         response: {
           200: PublicPreviewResponseSchema,
           206: PublicPreviewPartialResponseSchema,
@@ -736,9 +758,11 @@ export async function registerShareRoutes(
     },
     async (request, reply) => {
       const params = request.params as { shareId: string };
+      const query = request.query as { revisionId?: string };
       const headers = request.headers as { range?: string; 'if-none-match'?: string };
       const file = await access.readFile({
         authority: protectedCookieAuthority(request, params.shareId),
+        ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
       return deliverContent(
@@ -771,10 +795,11 @@ export async function registerShareRoutes(
     },
     async (request, reply) => {
       const params = request.params as { shareId: string };
-      const body = request.body as { token: string };
-      const query = request.query as { limit?: number; cursor?: string };
+      const body = request.body as { token: string; revisionId?: string };
+      const query = request.query as { limit?: number; cursor?: string; revisionId?: string };
       return access.readTree({
         authority: protectedAuthority(params.shareId, body.token),
+        ...(body.revisionId === undefined ? {} : { revisionId: body.revisionId }),
         limit: query.limit ?? FOLDER_LIMITS.treePageSize,
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         signal: requestCancellationSignal(request, reply),
@@ -798,11 +823,12 @@ export async function registerShareRoutes(
     },
     async (request, reply) => {
       const params = request.params as { shareId: string };
-      const query = request.query as { path: string };
-      const body = request.body as { token: string };
+      const query = request.query as { path: string; revisionId?: string };
+      const body = request.body as { token: string; revisionId?: string };
       const file = await access.readTreeFile({
         authority: protectedAuthority(params.shareId, body.token),
         path: query.path,
+        ...(body.revisionId === undefined ? {} : { revisionId: body.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
       return reply
@@ -838,11 +864,12 @@ export async function registerShareRoutes(
     },
     async (request, reply) => {
       const params = request.params as { shareId: string };
-      const query = request.query as { path: string };
+      const query = request.query as { path: string; revisionId?: string };
       const headers = request.headers as { range?: string; 'if-none-match'?: string };
       const file = await access.readTreeFile({
         authority: protectedCookieAuthority(request, params.shareId),
         path: query.path,
+        ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
       return deliverContent(
@@ -868,6 +895,7 @@ export async function registerShareRoutes(
         summary: 'Resolve a secret-free Public share link',
         tags: ['public links'],
         params: PublicLinkParamsSchema,
+        querystring: RevisionSelectionQuerySchema,
         response: {
           200: anonymousResponse(Type.Ref('PublicShareResolution')),
           ...publicErrors,
@@ -876,8 +904,10 @@ export async function registerShareRoutes(
     },
     async (request, reply) => {
       const params = request.params as { publicCode: string };
+      const query = request.query as { revisionId?: string };
       return resolution({
         authority: { type: 'public', publicCode: params.publicCode },
+        ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
     },
@@ -892,13 +922,16 @@ export async function registerShareRoutes(
         produces: ['application/octet-stream'],
         tags: ['public links'],
         params: PublicLinkParamsSchema,
+        querystring: RevisionSelectionQuerySchema,
         response: { 200: PublicContentResponseSchema, ...publicErrors },
       },
     },
     async (request, reply) => {
       const params = request.params as { publicCode: string };
+      const query = request.query as { revisionId?: string };
       const file = await access.readFile({
         authority: { type: 'public', publicCode: params.publicCode },
+        ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
       return reply
@@ -924,6 +957,7 @@ export async function registerShareRoutes(
         tags: ['public links'],
         params: PublicLinkParamsSchema,
         headers: ContentHeadersSchema,
+        querystring: RevisionSelectionQuerySchema,
         response: {
           200: PublicPreviewResponseSchema,
           206: PublicPreviewPartialResponseSchema,
@@ -935,9 +969,11 @@ export async function registerShareRoutes(
     },
     async (request, reply) => {
       const params = request.params as { publicCode: string };
+      const query = request.query as { revisionId?: string };
       const headers = request.headers as { range?: string; 'if-none-match'?: string };
       const file = await access.readFile({
         authority: { type: 'public', publicCode: params.publicCode },
+        ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
       return deliverContent(
@@ -969,9 +1005,10 @@ export async function registerShareRoutes(
     },
     async (request, reply) => {
       const params = request.params as { publicCode: string };
-      const query = request.query as { limit?: number; cursor?: string };
+      const query = request.query as { limit?: number; cursor?: string; revisionId?: string };
       return access.readTree({
         authority: { type: 'public', publicCode: params.publicCode },
+        ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
         limit: query.limit ?? FOLDER_LIMITS.treePageSize,
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         signal: requestCancellationSignal(request, reply),
@@ -994,10 +1031,11 @@ export async function registerShareRoutes(
     },
     async (request, reply) => {
       const params = request.params as { publicCode: string };
-      const query = request.query as { path: string };
+      const query = request.query as { path: string; revisionId?: string };
       const file = await access.readTreeFile({
         authority: { type: 'public', publicCode: params.publicCode },
         path: query.path,
+        ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
       return reply
@@ -1033,11 +1071,12 @@ export async function registerShareRoutes(
     },
     async (request, reply) => {
       const params = request.params as { publicCode: string };
-      const query = request.query as { path: string };
+      const query = request.query as { path: string; revisionId?: string };
       const headers = request.headers as { range?: string; 'if-none-match'?: string };
       const file = await access.readTreeFile({
         authority: { type: 'public', publicCode: params.publicCode },
         path: query.path,
+        ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
       return deliverContent(
