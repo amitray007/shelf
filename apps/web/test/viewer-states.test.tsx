@@ -1232,7 +1232,7 @@ describe('viewer content states', () => {
     expect(html).toContain('View next revision');
     expect(html).toContain('1st Revision');
     expect(html).toContain('2nd Revision');
-    expect(html).toContain('3rd Revision (Latest)');
+    expect(html).toContain('Latest Revision');
     expect(html).toContain('3rd Revision available');
   });
 });
