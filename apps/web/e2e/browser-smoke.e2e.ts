@@ -883,6 +883,25 @@ test('rich protected and public media shares expose inline preview controls and 
   await expect(page.getByRole('button', { name: 'Previous PDF page' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Fit PDF page to width' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Zoom in PDF' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'PDF preview' })).toHaveAttribute(
+    'aria-busy',
+    'false',
+  );
+  const pdfZoom = page.getByLabel('PDF zoom');
+  const fittedPdfZoom = Number((await pdfZoom.textContent())?.replace('%', ''));
+  expect(fittedPdfZoom).toBeGreaterThanOrEqual(50);
+  expect(fittedPdfZoom).toBeLessThanOrEqual(150);
+  await page.getByRole('button', { name: 'Zoom out PDF' }).click();
+  const manualPdfZoom = Math.max(50, fittedPdfZoom - 25);
+  await expect(pdfZoom).toHaveText(`${manualPdfZoom}%`);
+  await page.reload();
+  await expect(page.locator('canvas[role="img"]')).toBeVisible();
+  await expect(pdfZoom).toHaveText(`${manualPdfZoom}%`);
+  await page.getByRole('button', { name: 'Fit PDF page to width' }).click();
+  await expect(pdfZoom).toHaveText(`${fittedPdfZoom}%`);
+  await page.reload();
+  await expect(page.locator('canvas[role="img"]')).toBeVisible();
+  await expect(pdfZoom).toHaveText(`${fittedPdfZoom}%`);
 
   const protectedPreviewUrl = `/api/v1/public/shares/${pdfShareId}/content/preview`;
   const protectedRange = await page.evaluate(async (url) => {

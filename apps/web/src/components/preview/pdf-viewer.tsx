@@ -115,11 +115,37 @@ export interface PdfViewerProps {
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 5;
+const MAX_FIT_WIDTH_ZOOM = 1.5;
 const ZOOM_STEP = 0.25;
+const PDF_ZOOM_STORAGE_KEY = 'shelf:pdf-zoom:v1';
 
 function clampZoom(value: number): number {
   if (!Number.isFinite(value)) return 1;
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+}
+
+function readPersistedZoom(): number | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const stored = window.sessionStorage.getItem(PDF_ZOOM_STORAGE_KEY);
+    if (stored === null) return undefined;
+    const value = Number(stored);
+    return Number.isFinite(value) ? clampZoom(value) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function persistZoom(value: number | undefined): void {
+  try {
+    if (value === undefined) {
+      window.sessionStorage.removeItem(PDF_ZOOM_STORAGE_KEY);
+    } else {
+      window.sessionStorage.setItem(PDF_ZOOM_STORAGE_KEY, String(clampZoom(value)));
+    }
+  } catch {
+    // Zoom controls remain usable when browser storage is unavailable.
+  }
 }
 
 function sourceKey(source: PdfSource): string | Uint8Array {
@@ -181,6 +207,14 @@ export function PdfViewer({
   const [reloadToken, setReloadToken] = useState(0);
 
   const sourceValue = sourceKey(src);
+
+  useEffect(() => {
+    const persistedZoom = readPersistedZoom();
+    if (persistedZoom === undefined) return;
+    setZoom(persistedZoom);
+    setRenderedZoom(persistedZoom);
+    setFitWidth(false);
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -252,7 +286,7 @@ export function PdfViewer({
       const baseViewport = page.getViewport({ scale: 1 });
       const availableWidth = Math.max(pageShell.clientWidth - 32, 240);
       const nextZoom = fitWidth
-        ? clampZoom(availableWidth / Math.max(baseViewport.width, 1))
+        ? clampZoom(Math.min(MAX_FIT_WIDTH_ZOOM, availableWidth / Math.max(baseViewport.width, 1)))
         : clampZoom(zoom);
       const viewport = page.getViewport({ scale: nextZoom });
       const context = canvas.getContext('2d');
@@ -307,6 +341,18 @@ export function PdfViewer({
     setPageNumber(Math.min(pageCount, Math.max(1, nextPage)));
   };
 
+  const setManualZoom = (nextZoom: number) => {
+    const clampedZoom = clampZoom(nextZoom);
+    setZoom(clampedZoom);
+    setFitWidth(false);
+    persistZoom(clampedZoom);
+  };
+
+  const fitPageToWidth = () => {
+    setFitWidth(true);
+    persistZoom(undefined);
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
     if (event.key === 'PageDown' || event.key === 'ArrowRight') {
@@ -323,15 +369,13 @@ export function PdfViewer({
       goToPage(pageCount);
     } else if (event.key === '+' || event.key === '=') {
       event.preventDefault();
-      setFitWidth(false);
-      setZoom((value) => clampZoom(value + ZOOM_STEP));
+      setManualZoom(currentZoom + ZOOM_STEP);
     } else if (event.key === '-') {
       event.preventDefault();
-      setFitWidth(false);
-      setZoom((value) => clampZoom(value - ZOOM_STEP));
+      setManualZoom(currentZoom - ZOOM_STEP);
     } else if (event.key === '0') {
       event.preventDefault();
-      setFitWidth(true);
+      fitPageToWidth();
     }
   };
 
@@ -386,10 +430,7 @@ export function PdfViewer({
           <PdfIconButton
             disabled={currentZoom <= MIN_ZOOM}
             label="Zoom out PDF"
-            onClick={() => {
-              setZoom(clampZoom(currentZoom - ZOOM_STEP));
-              setFitWidth(false);
-            }}
+            onClick={() => setManualZoom(currentZoom - ZOOM_STEP)}
           >
             <MinusIcon aria-hidden="true" size={16} />
           </PdfIconButton>
@@ -399,17 +440,14 @@ export function PdfViewer({
           <PdfIconButton
             disabled={currentZoom >= MAX_ZOOM}
             label="Zoom in PDF"
-            onClick={() => {
-              setZoom(clampZoom(currentZoom + ZOOM_STEP));
-              setFitWidth(false);
-            }}
+            onClick={() => setManualZoom(currentZoom + ZOOM_STEP)}
           >
             <PlusIcon aria-hidden="true" size={16} />
           </PdfIconButton>
           <PdfIconButton
             disabled={loading || pageCount === 0}
             label="Fit PDF page to width"
-            onClick={() => setFitWidth(true)}
+            onClick={fitPageToWidth}
           >
             <ArrowsInIcon aria-hidden="true" size={16} />
           </PdfIconButton>
