@@ -93,7 +93,7 @@ export function ViewerRail({
                 size="sm"
                 value={revision.revisionId}
               >
-                {resolution.navigation.revisions.map((candidate) => (
+                {[...resolution.navigation.revisions].reverse().map((candidate) => (
                   <Select.Option
                     className="viewer-revision-option"
                     key={candidate.revisionId}

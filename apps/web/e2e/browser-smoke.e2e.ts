@@ -707,18 +707,18 @@ test('a shared-history viewer moves between revisions and returns to Latest', as
   const revisionOptions = page.getByRole('option');
   await expect(revisionOptions).toHaveCount(12);
   await expect(revisionOptions).toHaveText([
-    '1st Revision',
-    '2nd Revision',
-    '3rd Revision',
-    '4th Revision',
-    '5th Revision',
-    '6th Revision',
-    '7th Revision',
-    '8th Revision',
-    '9th Revision',
-    '10th Revision',
-    '11th Revision',
     'Latest Revision',
+    '11th Revision',
+    '10th Revision',
+    '9th Revision',
+    '8th Revision',
+    '7th Revision',
+    '6th Revision',
+    '5th Revision',
+    '4th Revision',
+    '3rd Revision',
+    '2nd Revision',
+    '1st Revision',
   ]);
   const revisionList = page.getByRole('listbox');
   const revisionListGeometry = await revisionList.evaluate((element) => ({
