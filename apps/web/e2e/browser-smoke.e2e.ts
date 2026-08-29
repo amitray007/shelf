@@ -707,9 +707,9 @@ test('a shared-history viewer moves between revisions and returns to Latest', as
   await revisionSelector.selectOption(previousRevisionId);
   await expect(page).toHaveURL(new RegExp(`revision=${previousRevisionId}$`, 'u'));
   await expect(page.getByRole('heading', { level: 1, name: 'Earlier useful idea' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '12th Revision available' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Latest Revision available' })).toBeVisible();
 
-  await page.getByRole('button', { name: '12th Revision available' }).click();
+  await page.getByRole('button', { name: 'Latest Revision available' }).click();
   await expect(page).not.toHaveURL(/[?&]revision=/u);
   await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
   await expectNoHorizontalOverflow(page, [page.locator('.artifact-surface')]);

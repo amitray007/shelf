@@ -108,12 +108,10 @@ export function ViewerRail({
             onClick={() => onRevisionSelect?.(null)}
             type="button"
           >
-            {revisionLabel(latestAvailable.revisionNumber)} available
+            Latest Revision available
           </button>
         ) : (
-          <span className="viewer-latest-notice">
-            {revisionLabel(latestAvailable.revisionNumber)} available
-          </span>
+          <span className="viewer-latest-notice">Latest Revision available</span>
         )}
         {onCheckUpdates === undefined ? null : (
           <button
