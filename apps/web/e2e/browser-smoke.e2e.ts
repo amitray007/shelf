@@ -702,7 +702,23 @@ test('a shared-history viewer moves between revisions and returns to Latest', as
 
   await page.goto(`/s/${markdownShareId}#${shareSecret}`);
   await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
+  const refreshButton = page.locator('.viewer-update-check');
+  await expect(refreshButton).toHaveAccessibleName('Refresh');
+  const refreshResolvePattern = `**/api/v1/public/shares/${markdownShareId}/resolve`;
+  await page.route(refreshResolvePattern, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await route.continue();
+  });
+  await refreshButton.click();
+  await expect(refreshButton).toBeDisabled();
+  await expect(refreshButton).toHaveAccessibleName('Refreshing…');
+  await expect(refreshButton).toContainText('Refresh');
+  const refreshIcon = refreshButton.locator('.viewer-update-icon');
+  await expect(refreshIcon).toHaveAttribute('data-refreshing', 'true');
+  await expect(refreshIcon).toHaveCSS('animation-name', 'loading-turn');
+  await expect(refreshButton.locator('span')).toHaveCSS('animation-name', 'none');
+  await expect(refreshButton).toBeEnabled();
+  await page.unroute(refreshResolvePattern);
   const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
   await revisionSelector.click();
   const revisionOptions = page.getByRole('option');

@@ -1318,6 +1318,11 @@ a {
   gap: 5px;
 }
 
+.viewer-update-icon[data-refreshing="true"] {
+  animation: loading-turn 700ms linear infinite;
+  transform-origin: center;
+}
+
 .viewer-latest-available {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--rule));
   color: var(--accent);

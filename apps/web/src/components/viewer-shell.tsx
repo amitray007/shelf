@@ -137,8 +137,13 @@ export function ViewerRail({
             onClick={onCheckUpdates}
             type="button"
           >
-            <ArrowClockwiseIcon aria-hidden="true" size={14} />
-            <span>{checkingUpdates ? 'Refreshing…' : 'Refresh'}</span>
+            <ArrowClockwiseIcon
+              aria-hidden="true"
+              className="viewer-update-icon"
+              data-refreshing={checkingUpdates || undefined}
+              size={14}
+            />
+            <span>Refresh</span>
           </button>
         )}
       </div>

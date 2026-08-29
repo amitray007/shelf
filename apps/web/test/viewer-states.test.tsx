@@ -1205,7 +1205,8 @@ describe('viewer content states', () => {
     expect(html).toContain('<span>Refresh</span>');
     expect(html).not.toContain('Check updates');
     expect(checkingHtml).toContain('aria-label="Refreshing…"');
-    expect(checkingHtml).toContain('<span>Refreshing…</span>');
+    expect(checkingHtml).toContain('data-refreshing="true"');
+    expect(checkingHtml).toContain('<span>Refresh</span>');
     expect(checkingHtml).toContain('disabled=""');
   });
 
