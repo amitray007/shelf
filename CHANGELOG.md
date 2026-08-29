@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6](https://github.com/amitray007/shelf/compare/v0.1.5...v0.1.6) (2026-08-29)
+
+
+### Features
+
+* add shared revision navigation ([29dc60c](https://github.com/amitray007/shelf/commit/29dc60c361e40516fe962bf3eaf4af3f44ae6365))
+* add shared revision navigation ([c6128d9](https://github.com/amitray007/shelf/commit/c6128d96928209e0e2690e78138840c5e81d96db))
+
 ## [0.1.5](https://github.com/amitray007/shelf/compare/v0.1.4...v0.1.5) (2026-08-24)
 
 
