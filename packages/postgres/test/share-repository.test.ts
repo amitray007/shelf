@@ -684,7 +684,7 @@ describePostgres('PostgresShareRepository', () => {
     const database = createPostgresDatabase({ connectionString });
     try {
       const repository = new PostgresShareRepository(database);
-      const shareId = 'shr_HHHHHHHHHHHHHHHHHHHHHH';
+      const shareId = 'shr_KKKKKKKKKKKKKKKKKKKKKK';
       const historyShare = {
         ...share(shareId),
         revisionAccess: 'shared-history' as const,
