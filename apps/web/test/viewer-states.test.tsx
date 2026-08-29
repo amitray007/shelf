@@ -42,7 +42,7 @@ import {
   ViewerSidebarSplit,
   viewerSidebarBounds,
 } from '../src/components/viewer-sidebar-split.js';
-import { readViewerSidebarOpen } from '../src/viewer-page.js';
+import { readViewerSidebarOpen, ViewerRevisionLoadingState } from '../src/viewer-page.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -1147,6 +1147,15 @@ describe('viewer content states', () => {
     const html = renderToStaticMarkup(<UnavailableView />);
     expect(html).toContain('This artifact is unavailable');
     expect(html).not.toMatch(/revoked|expired|secret|permission/i);
+  });
+
+  it('shows revision loading inside the viewer content layout', () => {
+    const html = renderToStaticMarkup(<ViewerRevisionLoadingState />);
+
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('viewer-revision-loading');
+    expect(html).toContain('Loading revision…');
   });
 
   it('presents a compact artifact map without decorative trust indicators', () => {

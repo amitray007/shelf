@@ -710,6 +710,9 @@ async function api(request, response, url) {
       json(response, 404, {});
       return;
     }
+    if (selectedPrevious) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+    }
     json(
       response,
       200,

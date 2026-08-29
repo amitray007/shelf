@@ -1,7 +1,13 @@
 import type { CommentAnchor } from '@shelf/contracts';
 import { useCallback, useEffect, useState } from 'react';
 import type { LoaderFunctionArgs } from 'react-router';
-import { useLoaderData, useLocation, useNavigate, useRevalidator } from 'react-router';
+import {
+  useLoaderData,
+  useLocation,
+  useNavigate,
+  useNavigation,
+  useRevalidator,
+} from 'react-router';
 
 import {
   establishProtectedSession,
@@ -330,11 +336,22 @@ function FolderArtifact({
   );
 }
 
+export function ViewerRevisionLoadingState() {
+  return (
+    <div aria-live="polite" className="state-center viewer-revision-loading" role="status">
+      <span aria-hidden="true" className="loading-mark" />
+      <p>Loading revision…</p>
+    </div>
+  );
+}
+
 export function ViewerPage() {
   const payload = useLoaderData() as PublicSharePayload;
   const location = useLocation();
   const navigate = useNavigate();
+  const navigation = useNavigation();
   const { revalidate } = useRevalidator();
+  const revisionLoading = navigation.state === 'loading';
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [latestAvailable, setLatestAvailable] = useState<ShareRevisionPointer | undefined>(() => {
     const latestRevision = shareLatestRevision(payload.resolution);
@@ -482,8 +499,10 @@ export function ViewerPage() {
         resolution={payload.resolution}
         {...(latestAvailable === undefined ? {} : { latestAvailable })}
       />
-      <main className="viewer-main">
-        {payload.kind === 'file' ? (
+      <main aria-busy={revisionLoading} className="viewer-main">
+        {revisionLoading ? (
+          <ViewerRevisionLoadingState />
+        ) : payload.kind === 'file' ? (
           review.enabled ? (
             <ViewerSidebarSplit
               content={

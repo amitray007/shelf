@@ -705,8 +705,10 @@ test('a shared-history viewer moves between revisions and returns to Latest', as
   const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
   await expect(revisionSelector.locator('option')).toHaveText(['11th Revision', 'Latest Revision']);
   await revisionSelector.selectOption(previousRevisionId);
+  await expect(page.getByRole('status').filter({ hasText: 'Loading revision…' })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`revision=${previousRevisionId}$`, 'u'));
   await expect(page.getByRole('heading', { level: 1, name: 'Earlier useful idea' })).toBeVisible();
+  await expect(page.getByText('Loading revision…')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Latest Revision available' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Latest Revision available' }).click();

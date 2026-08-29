@@ -2356,7 +2356,8 @@ a {
 }
 
 .viewer-pending .state-center,
-.viewer-unavailable .state-center {
+.viewer-unavailable .state-center,
+.viewer-revision-loading {
   min-height: 0;
   flex: 1;
 }
