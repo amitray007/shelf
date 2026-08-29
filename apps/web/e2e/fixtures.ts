@@ -569,6 +569,11 @@ export const markdownResolution = {
   },
   navigation: {
     revisions: [
+      ...Array.from({ length: 10 }, (_, index) => ({
+        revisionId: `rev_${String(index).repeat(22)}`,
+        revisionNumber: index + 1,
+        createdAt: new Date(Date.UTC(2026, 7, index + 1)).toISOString(),
+      })),
       {
         revisionId: previousRevisionId,
         revisionNumber: 11,

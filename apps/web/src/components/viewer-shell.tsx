@@ -94,7 +94,11 @@ export function ViewerRail({
                 value={revision.revisionId}
               >
                 {resolution.navigation.revisions.map((candidate) => (
-                  <Select.Option key={candidate.revisionId} value={candidate.revisionId}>
+                  <Select.Option
+                    className="viewer-revision-option"
+                    key={candidate.revisionId}
+                    value={candidate.revisionId}
+                  >
                     {candidate.revisionId === latestRevision.revisionId
                       ? 'Latest Revision'
                       : revisionLabel(candidate.revisionNumber)}

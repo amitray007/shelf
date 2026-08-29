@@ -704,7 +704,34 @@ test('a shared-history viewer moves between revisions and returns to Latest', as
   await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
   const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
   await revisionSelector.click();
-  await expect(page.getByRole('option')).toHaveText(['11th Revision', 'Latest Revision']);
+  const revisionOptions = page.getByRole('option');
+  await expect(revisionOptions).toHaveCount(12);
+  await expect(revisionOptions).toHaveText([
+    '1st Revision',
+    '2nd Revision',
+    '3rd Revision',
+    '4th Revision',
+    '5th Revision',
+    '6th Revision',
+    '7th Revision',
+    '8th Revision',
+    '9th Revision',
+    '10th Revision',
+    '11th Revision',
+    'Latest Revision',
+  ]);
+  const revisionList = page.getByRole('listbox');
+  const revisionListGeometry = await revisionList.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    firstOptionHeight:
+      element.querySelector('[role="option"]')?.getBoundingClientRect().height ?? 0,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(revisionListGeometry.firstOptionHeight).toBeGreaterThan(0);
+  expect(revisionListGeometry.clientHeight).toBeLessThanOrEqual(
+    revisionListGeometry.firstOptionHeight * 10 + 1,
+  );
+  expect(revisionListGeometry.scrollHeight).toBeGreaterThan(revisionListGeometry.clientHeight);
   await page.getByRole('option', { name: '11th Revision' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Loading revision…' })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`revision=${previousRevisionId}$`, 'u'));

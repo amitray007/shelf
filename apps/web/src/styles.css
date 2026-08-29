@@ -1297,6 +1297,15 @@ a {
   padding: 0 9px;
 }
 
+.viewer-revision-option {
+  min-height: 32px;
+}
+
+[role="listbox"]:has(> .viewer-revision-option) {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
 .viewer-update-check,
 .viewer-latest-available {
   padding: 0 9px;
