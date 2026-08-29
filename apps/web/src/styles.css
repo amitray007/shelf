@@ -1406,6 +1406,12 @@ a {
   }
 }
 
+@media (max-width: 900px) {
+  .artifact-private-preview .rail-title-group {
+    display: none;
+  }
+}
+
 .artifact-surface {
   min-width: 0;
   min-height: 0;
@@ -2512,8 +2518,8 @@ a {
     margin-left: auto;
   }
 
-  .artifact-private-preview .target-state {
-    display: none;
+  .artifact-private-preview .rail-context {
+    width: 100%;
   }
 
   .artifact-document {
@@ -2688,6 +2694,10 @@ a {
 
   .viewer-latest-available,
   .viewer-latest-notice {
+    display: none;
+  }
+
+  .artifact-private-preview .preview-open-artifact span {
     display: none;
   }
 

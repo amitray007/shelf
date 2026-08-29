@@ -14,12 +14,15 @@ import {
   createdShareId,
   credentialPage,
   dashboardSession,
+  folderResolution,
+  folderShareId,
   folderTreePage,
   historyPages,
   htmlResolution,
   htmlShareId,
   markdownResolution,
   markdownShareId,
+  previousFolderRevisionId,
   previousRevisionId,
   rendererOrigin,
   revisionId,
@@ -570,11 +573,23 @@ async function api(request, response, url) {
     });
     return;
   }
-  if (path === `/api/v1/revisions/${folderTreePage.revisionId}/tree`) {
-    json(response, 200, folderTreePage);
+  if (
+    path === `/api/v1/revisions/${folderTreePage.revisionId}/tree` ||
+    path === `/api/v1/revisions/${previousFolderRevisionId}/tree`
+  ) {
+    json(response, 200, {
+      ...folderTreePage,
+      revisionId:
+        path === `/api/v1/revisions/${previousFolderRevisionId}/tree`
+          ? previousFolderRevisionId
+          : folderTreePage.revisionId,
+    });
     return;
   }
-  if (path === `/api/v1/revisions/${folderTreePage.revisionId}/tree/content`) {
+  if (
+    path === `/api/v1/revisions/${folderTreePage.revisionId}/tree/content` ||
+    path === `/api/v1/revisions/${previousFolderRevisionId}/tree/content`
+  ) {
     const requestedPath = url.searchParams.get('path');
     const entry = folderTreePage.items.find(
       (item) => item.kind === 'file' && item.path === requestedPath,
@@ -664,7 +679,7 @@ async function api(request, response, url) {
   if (request.method === 'POST' && sessionMatch !== null) {
     const value = JSON.parse(await body(request));
     const knownShare =
-      [markdownShareId, htmlShareId].includes(sessionMatch[1]) ||
+      [markdownShareId, htmlShareId, folderShareId].includes(sessionMatch[1]) ||
       richFixturesByShareId.has(sessionMatch[1]);
     const validSession =
       typeof value.sessionId === 'string' &&
@@ -692,6 +707,75 @@ async function api(request, response, url) {
       'set-cookie': `shelf_viewer_session_${sessionMatch[1]}=${viewerCookieToken}; Path=/api/v1/public/shares/${sessionMatch[1]}; HttpOnly; SameSite=Strict`,
     });
     response.end(JSON.stringify(result));
+    return;
+  }
+  if (request.method === 'POST' && path === `/api/v1/public/shares/${folderShareId}/resolve`) {
+    const value = JSON.parse(await body(request));
+    const selectedPrevious = value.revisionId === previousFolderRevisionId;
+    if (
+      value.token !== viewerToken ||
+      (!selectedPrevious && Object.keys(value).length !== 1) ||
+      (selectedPrevious && Object.keys(value).length !== 2)
+    ) {
+      json(response, 404, {});
+      return;
+    }
+    if (selectedPrevious) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+    }
+    json(
+      response,
+      200,
+      selectedPrevious
+        ? {
+            ...folderResolution,
+            revision: {
+              ...folderResolution.revision,
+              revisionId: previousFolderRevisionId,
+              revisionNumber: 7,
+              createdAt: '2026-08-14T12:00:00.000Z',
+              byteCount: 27_965,
+              fileCount: 2,
+            },
+            navigation: {
+              revisions: folderResolution.navigation.revisions,
+              previous: null,
+              next: folderResolution.latestRevision,
+            },
+          }
+        : folderResolution,
+    );
+    return;
+  }
+  if (
+    request.method === 'POST' &&
+    (path === `/api/v1/public/shares/${folderShareId}/tree` ||
+      path === `/api/v1/public/shares/${folderShareId}/tree/content`)
+  ) {
+    const value = JSON.parse(await body(request));
+    const selectedRevisionId = value.revisionId ?? folderResolution.revision.revisionId;
+    if (
+      value.token !== viewerToken ||
+      ![folderResolution.revision.revisionId, previousFolderRevisionId].includes(selectedRevisionId)
+    ) {
+      json(response, 404, {});
+      return;
+    }
+    if (path.endsWith('/tree/content')) {
+      response.writeHead(200, {
+        'cache-control': 'no-store',
+        'content-type': 'application/json; charset=utf-8',
+      });
+      response.end(JSON.stringify({ revisionId: selectedRevisionId, source: 'folder-share' }));
+      return;
+    }
+    json(response, 200, {
+      ...folderTreePage,
+      revisionId: selectedRevisionId,
+      ...(selectedRevisionId === previousFolderRevisionId
+        ? { byteCount: 27_965, fileCount: 2 }
+        : {}),
+    });
     return;
   }
   if (

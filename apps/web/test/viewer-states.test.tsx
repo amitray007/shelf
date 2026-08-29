@@ -34,7 +34,11 @@ import {
   reviewPanelStorageKey,
   reviewSurfaceVisible,
 } from '../src/components/review/use-review.js';
-import { UnavailableView, ViewerRail } from '../src/components/viewer-shell.js';
+import {
+  UnavailableView,
+  ViewerRail,
+  ViewerRevisionLoadingState,
+} from '../src/components/viewer-shell.js';
 import {
   clampViewerSidebarWidth,
   readViewerSidebarWidth,
@@ -42,7 +46,7 @@ import {
   ViewerSidebarSplit,
   viewerSidebarBounds,
 } from '../src/components/viewer-sidebar-split.js';
-import { readViewerSidebarOpen, ViewerRevisionLoadingState } from '../src/viewer-page.js';
+import { readViewerSidebarOpen } from '../src/viewer-page.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -232,12 +236,12 @@ describe('viewer content states', () => {
       revision: { ...FOLDER_RESOLUTION.revision, revisionId: `rev_${'g'.repeat(22)}` },
     };
     expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(false);
-    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(false);
 
     storage.setItem(reviewPanelStorageKey(FILE_RESOLUTION), 'malformed');
     storage.setItem(reviewPanelStorageKey(folderResolution), 'malformed');
     expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(false);
-    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(false);
 
     storage.setItem(reviewPanelStorageKey(FILE_RESOLUTION), 'open');
     storage.setItem(reviewPanelStorageKey(folderResolution), 'closed');

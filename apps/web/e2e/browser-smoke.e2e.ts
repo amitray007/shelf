@@ -9,12 +9,14 @@ import {
   createdShareId,
   csvShareId,
   folderArtifactId,
+  folderShareId,
   htmlShareId,
   longArtifactName,
   longFolderName,
   longFolderPath,
   markdownShareId,
   pdfShareId,
+  previousFolderRevisionId,
   previousRevisionId,
   publicPdfCode,
   rendererOrigin,
@@ -380,7 +382,65 @@ test('private file preview reuses the canonical file surface', async ({ page }) 
   await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
     'One useful idea',
   );
+  const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
+  await expect(revisionSelector).toContainText('Latest Revision');
+  const refreshButton = page.locator('.viewer-update-check');
+  await page.route(`**/api/v1/artifacts/${artifactId}`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await route.continue();
+  });
+  await refreshButton.click();
+  await expect(refreshButton).toBeDisabled();
+  await expect(refreshButton.locator('.viewer-update-icon')).toHaveCSS(
+    'animation-name',
+    'loading-turn',
+  );
+  await expect(refreshButton).toBeEnabled();
+  await page.unroute(`**/api/v1/artifacts/${artifactId}`);
+
+  await page.route(`**/api/v1/revisions/${previousRevisionId}/content`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await route.continue();
+  });
+  await revisionSelector.click();
+  await expect(page.getByRole('option')).toHaveText([
+    'Latest Revision',
+    '11th Revision',
+    '10th Revision',
+    '9th Revision',
+  ]);
+  await page.getByRole('option', { name: '11th Revision' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Loading revision…' })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`revision=${previousRevisionId}$`, 'u'));
+  await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
+    'research-synthesis.md',
+  );
+  await revisionSelector.click();
+  await page.getByRole('option', { name: 'Latest Revision' }).click();
+  await expect(page).not.toHaveURL(/[?&]revision=/u);
+  await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
+    'One useful idea',
+  );
   await expectNoHorizontalOverflow(page, [page.locator('.artifact-surface')]);
+  diagnostics.assertClean();
+});
+
+test('private folder previews expose revision navigation without opening the sidebar', async ({
+  page,
+}) => {
+  const diagnostics = trackPageErrors(page);
+
+  await page.goto(`/preview/${folderArtifactId}`);
+  await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Open folder .* sidebar/u })).toBeVisible();
+  const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
+  await revisionSelector.click();
+  await expect(page.getByRole('option')).toHaveText(['Latest Revision', '7th Revision']);
+  await page.getByRole('option', { name: '7th Revision' }).click();
+  await expect(page).toHaveURL(new RegExp(`revision=${previousFolderRevisionId}$`, 'u'));
+  await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open folder files sidebar' })).toBeVisible();
+  await expectNoHorizontalOverflow(page, [page.getByRole('region', { name: 'Folder browser' })]);
   diagnostics.assertClean();
 });
 
@@ -787,6 +847,29 @@ test('a shared-history viewer moves between revisions and returns to Latest', as
   await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
   await expectNoHorizontalOverflow(page, [page.locator('.artifact-surface')]);
   await expectNoAxeViolations(page);
+  diagnostics.assertClean();
+});
+
+test('a protected folder share moves between revisions with its sidebar minimized', async ({
+  page,
+}) => {
+  const diagnostics = trackPageErrors(page);
+
+  await page.goto(`/s/${folderShareId}#${shareSecret}`);
+  await expect(page).toHaveURL(`/s/${folderShareId}`);
+  await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Open folder .* sidebar/u })).toBeVisible();
+  const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
+  await revisionSelector.click();
+  await expect(page.getByRole('option')).toHaveText(['Latest Revision', '7th Revision']);
+  await page.getByRole('option', { name: '7th Revision' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Loading revision…' })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`revision=${previousFolderRevisionId}$`, 'u'));
+  await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
+  await revisionSelector.click();
+  await page.getByRole('option', { name: 'Latest Revision' }).click();
+  await expect(page).not.toHaveURL(/[?&]revision=/u);
+  await expectNoHorizontalOverflow(page, [page.getByRole('region', { name: 'Folder browser' })]);
   diagnostics.assertClean();
 });
 

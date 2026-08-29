@@ -40,7 +40,7 @@ import { DiscussionPanel } from './components/review/discussion-panel.js';
 import { readReviewValue, writeReviewValue } from './components/review/persistence.js';
 import type { ReviewSidebarMode } from './components/review/types.js';
 import { reviewPanelStorageKey, useViewerReview } from './components/review/use-review.js';
-import { ViewerRail } from './components/viewer-shell.js';
+import { ViewerRail, ViewerRevisionLoadingState } from './components/viewer-shell.js';
 import { ViewerSidebarSplit } from './components/viewer-sidebar-split.js';
 import {
   prefetchRendererModules,
@@ -71,7 +71,7 @@ export function readViewerSidebarOpen(
   const persisted = readReviewValue(reviewPanelStorageKey(resolution));
   if (persisted === 'open') return true;
   if (persisted === 'closed') return false;
-  return isFolderShareResolution(resolution);
+  return false;
 }
 
 export async function viewerLoader({
@@ -333,15 +333,6 @@ function FolderArtifact({
           }
         : { review })}
     />
-  );
-}
-
-export function ViewerRevisionLoadingState() {
-  return (
-    <div aria-live="polite" className="state-center viewer-revision-loading" role="status">
-      <span aria-hidden="true" className="loading-mark" />
-      <p>Loading revision…</p>
-    </div>
   );
 }
 
