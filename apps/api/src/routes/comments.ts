@@ -15,8 +15,10 @@ import {
 import {
   CommentNotFoundError,
   createCommentService,
+  createShareResolutionService,
   InvalidCommentRequestError,
   type ResolvedStoredShare,
+  ShareNotFoundError,
   type StoredShare,
   shareLifecycleStatus,
 } from '@shelf/core';
@@ -302,20 +304,21 @@ function commentPage(page: { items: unknown; nextCursor: string | null }): {
   return { items: page.items, nextCursor: page.nextCursor };
 }
 
-function viewerToken(dependencies: ShelfAppDependencies, shareId: string, token: string): void {
+function viewerToken(dependencies: ShelfAppDependencies, shareId: string, token: string) {
   const claims = dependencies.viewerSessionTokenCodec.verify(token, {
     now: dependencies.shareClock?.() ?? new Date(),
     shareId,
   });
   if (claims === undefined) throw new CommentNotFoundError();
+  return claims;
 }
 
 async function protectedShare(
   dependencies: ShelfAppDependencies,
   shareId: string,
   token: string,
-): Promise<ResolvedStoredShare> {
-  viewerToken(dependencies, shareId, token);
+): Promise<{ resolved: ResolvedStoredShare; sessionId: string }> {
+  const claims = viewerToken(dependencies, shareId, token);
   const resolved = await dependencies.shareRepository.resolveShareTarget(shareId);
   if (resolved === undefined) throw new CommentNotFoundError();
   const share = resolved.share;
@@ -324,7 +327,7 @@ async function protectedShare(
     shareLifecycleStatus(share, dependencies.shareClock?.() ?? new Date()) !== 'active'
   )
     throw new CommentNotFoundError();
-  return resolved;
+  return { resolved, sessionId: claims.sessionId };
 }
 
 async function publicShare(
@@ -342,10 +345,6 @@ async function publicShare(
   return resolved;
 }
 
-function currentRevision(resolved: ResolvedStoredShare): string {
-  return resolved.revision.revision.revisionId;
-}
-
 export async function registerCommentRoutes(
   app: FastifyInstance,
   dependencies: ShelfAppDependencies,
@@ -356,20 +355,48 @@ export async function registerCommentRoutes(
     ...(dependencies.shareClock === undefined ? {} : { clock: dependencies.shareClock }),
   });
   const lifecycle = createAuthenticatedShareLifecycle(dependencies);
+  const resolveAnonymous = createShareResolutionService({
+    shares: dependencies.shareRepository,
+    revisions: dependencies.revisionRepository,
+    ...(dependencies.shareClock === undefined ? {} : { clock: dependencies.shareClock }),
+  });
 
   type AnonymousContext = {
-    resolved: ResolvedStoredShare;
+    currentRevisionId: string;
     share: StoredShare;
     installationId: string;
     workspaceId: string;
     shareId: string;
   };
 
-  async function protectedContext(shareId: string, token: string): Promise<AnonymousContext> {
-    const resolved = await protectedShare(dependencies, shareId, token);
+  async function protectedContext(
+    shareId: string,
+    token: string,
+    revisionId?: string,
+  ): Promise<AnonymousContext> {
+    const protectedResult = await protectedShare(dependencies, shareId, token);
+    const { resolved } = protectedResult;
     const share = resolved.share;
+    let selectedRevisionId: string;
+    try {
+      selectedRevisionId = (
+        await resolveAnonymous({
+          authority: {
+            type: 'protected-session',
+            shareId,
+            sessionId: protectedResult.sessionId,
+          },
+          ...(revisionId === undefined || share.revisionAccess !== 'shared-history'
+            ? {}
+            : { revisionId }),
+        })
+      ).revision.revisionId;
+    } catch (error) {
+      if (error instanceof ShareNotFoundError) throw new CommentNotFoundError();
+      throw error;
+    }
     return {
-      resolved,
+      currentRevisionId: selectedRevisionId,
       share,
       installationId: share.installationId,
       workspaceId: share.workspaceId,
@@ -377,14 +404,29 @@ export async function registerCommentRoutes(
     };
   }
 
-  async function publicContext(publicCode: string): Promise<AnonymousContext> {
+  async function publicContext(publicCode: string, revisionId?: string): Promise<AnonymousContext> {
     const resolved = await publicShare(dependencies, publicCode);
+    const share = resolved.share;
+    let selectedRevisionId: string;
+    try {
+      selectedRevisionId = (
+        await resolveAnonymous({
+          authority: { type: 'public', publicCode },
+          ...(revisionId === undefined || share.revisionAccess !== 'shared-history'
+            ? {}
+            : { revisionId }),
+        })
+      ).revision.revisionId;
+    } catch (error) {
+      if (error instanceof ShareNotFoundError) throw new CommentNotFoundError();
+      throw error;
+    }
     return {
-      resolved,
-      share: resolved.share,
-      installationId: resolved.share.installationId,
-      workspaceId: resolved.share.workspaceId,
-      shareId: resolved.share.shareId,
+      currentRevisionId: selectedRevisionId,
+      share,
+      installationId: share.installationId,
+      workspaceId: share.workspaceId,
+      shareId: share.shareId,
     };
   }
 
@@ -436,12 +478,11 @@ export async function registerCommentRoutes(
     context: AnonymousContext,
     body: { visitorToken?: string; cursor?: string; limit?: number },
   ) {
-    const currentRevisionId = currentRevision(context.resolved);
     const items = await service.listThreads({
       installationId: context.installationId,
       workspaceId: context.workspaceId,
       shareId: context.shareId,
-      currentRevisionId,
+      currentRevisionId: context.currentRevisionId,
       ...(body.cursor === undefined ? {} : { cursor: body.cursor }),
       ...(body.limit === undefined ? {} : { limit: body.limit }),
       authority: visitorAuthority(context.installationId, body.visitorToken),
@@ -466,10 +507,17 @@ export async function registerCommentRoutes(
       kind === 'protected' ? ProtectedThreadParamsSchema : PublicThreadParamsSchema;
     const postParamsSchema =
       kind === 'protected' ? ProtectedPostParamsSchema : PublicPostParamsSchema;
-    const getContext = async (params: Record<string, string>, body: Record<string, unknown>) =>
-      kind === 'protected'
-        ? protectedContext(params.shareId as string, body.token as string)
-        : publicContext(params.publicCode as string);
+    const getContext = async (params: Record<string, string>, body: Record<string, unknown>) => {
+      const revisionId =
+        typeof body.currentRevisionId === 'string'
+          ? body.currentRevisionId
+          : typeof body.revisionId === 'string'
+            ? body.revisionId
+            : undefined;
+      return kind === 'protected'
+        ? protectedContext(params.shareId as string, body.token as string, revisionId)
+        : publicContext(params.publicCode as string, revisionId);
+    };
 
     app.post(
       `${prefix}/comments/query`,
@@ -509,7 +557,7 @@ export async function registerCommentRoutes(
         const params = request.params as Record<string, string>;
         const body = request.body as Record<string, unknown>;
         const context = await getContext(params, body);
-        if (body.revisionId !== context.resolved.revision.revision.revisionId) {
+        if (body.revisionId !== context.currentRevisionId) {
           throw new InvalidCommentRequestError([
             { field: 'revisionId', reason: 'must match the revision rendered by the shared link' },
           ]);

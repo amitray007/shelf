@@ -1,4 +1,8 @@
-import { CommentThreadPostLimitError, commentParticipantId } from '@shelf/core';
+import {
+  CommentThreadPostLimitError,
+  commentParticipantId,
+  decodeCommentThreadCursor,
+} from '@shelf/core';
 import { describe, expect, it } from 'vitest';
 
 import { MemoryCommentRepository } from '../src/adapters/memory-comment-repository.js';
@@ -134,6 +138,58 @@ describe('MemoryCommentRepository', () => {
         post: post(100),
       }),
     ).rejects.toBeInstanceOf(CommentThreadPostLimitError);
+  });
+
+  it('uses the same code-point order for sorting and cursor bounds', async () => {
+    const repository = new MemoryCommentRepository();
+    const createdAt = '2026-08-17T12:00:00.000Z';
+    for (const threadId of ['thd_Z', 'thd_a', 'thd_A']) {
+      await repository.createThread({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        artifactId: 'artifact-main',
+        shareId: 'share-main',
+        threadId,
+        revisionId: 'revision-main',
+        visibility: 'shared',
+        anchor: { kind: 'file', revisionId: 'revision-main' },
+        post: {
+          postId: `post-${threadId}`,
+          body: threadId,
+          author: {
+            kind: 'visitor',
+            participantId: commentParticipantId('visitor', 'visitor-pagination-order'),
+            displayName: 'Pager',
+          },
+          visitorKey: 'visitor-pagination-order',
+          actorId: null,
+          createdAt,
+          editedAt: null,
+          deletedAt: null,
+          hiddenAt: null,
+        },
+      });
+    }
+
+    const scope = {
+      kind: 'share' as const,
+      installationId: 'installation-main',
+      workspaceId: 'workspace-main',
+      shareId: 'share-main',
+    };
+    const first = await repository.listThreads({ ...scope, scope, limit: 2 });
+    const cursor = first.nextCursor && decodeCommentThreadCursor(first.nextCursor);
+    if (cursor === null || cursor === undefined) throw new Error('Expected a second page cursor.');
+    const second = await repository.listThreads({
+      ...scope,
+      scope,
+      limit: 2,
+      cursor,
+    });
+
+    expect(first.items.map((thread) => thread.threadId)).toEqual(['thd_a', 'thd_Z']);
+    expect(second.items.map((thread) => thread.threadId)).toEqual(['thd_A']);
+    expect(second.nextCursor).toBeNull();
   });
 
   it('deletes a thread and all replies without crossing tenant scope', async () => {

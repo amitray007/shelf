@@ -196,6 +196,10 @@ Review comments:
     .option('--access <protected|public>', 'share access policy; defaults to protected')
     .option('--comments <off|private|shared>', 'comment policy; defaults to off')
     .option(
+      '--revision-access <target-only|shared-history>',
+      'revision access for Latest links; defaults to target-only',
+    )
+    .option(
       '--expires-in <preset>',
       'share duration: never, 5m, 30m, 2hr, 6hr, 24hr, 3d, 7d, 15d, or 30d',
     )
@@ -751,6 +755,10 @@ Example:
     .option('--revision <revision-id>', 'pin the share to one immutable revision')
     .option('--access <protected|public>', 'access policy; defaults to protected')
     .option('--comments <off|private|shared>', 'comment policy; defaults to off')
+    .option(
+      '--revision-access <target-only|shared-history>',
+      'revision access for Latest links; defaults to target-only',
+    )
     .option(
       '--expires-in <preset>',
       'duration: never, 5m, 30m, 2hr, 6hr, 24hr, 3d, 7d, 15d, or 30d',

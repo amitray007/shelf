@@ -86,12 +86,18 @@ async function createShare(
   accessType: 'protected' | 'public',
   key: string,
   target: { mode: 'latest' } | { mode: 'pinned'; revisionId: string } = { mode: 'latest' },
+  revisionAccess?: 'target-only' | 'shared-history',
 ) {
   return app.inject({
     method: 'POST',
     url: `/api/v1/workspaces/workspace-main/artifacts/${artifactId}/shares`,
     headers: { authorization: 'Bearer test', 'idempotency-key': key },
-    payload: { accessType, target, commentPolicy: 'shared' },
+    payload: {
+      accessType,
+      target,
+      commentPolicy: 'shared',
+      ...(revisionAccess === undefined ? {} : { revisionAccess }),
+    },
   });
 }
 
@@ -328,6 +334,57 @@ describe('comment HTTP boundary', () => {
     });
     expect(publicHistory.statusCode, publicHistory.body).toBe(200);
     expect(publicHistory.json().items[0].anchorStatus).toBe('exact');
+  });
+
+  it('anchors and reads comments on a selected shared-history revision', async () => {
+    const app = await fixture();
+    const first = await publish(app, 'comment-history-publish-v1');
+    const artifactId = first.json().artifactId as string;
+    const firstRevisionId = first.json().revisionId as string;
+    const share = await createShare(
+      app,
+      artifactId,
+      'public',
+      'comment-shared-history',
+      { mode: 'latest' },
+      'shared-history',
+    );
+    const second = await publishRevision(
+      app,
+      artifactId,
+      '# second revision',
+      'comment-history-publish-v2',
+    );
+    const secondRevisionId = second.json().revisionId as string;
+    const publicCode = share.json().publicCode as string;
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/links/${publicCode}/comments/threads`,
+      payload: {
+        visitorToken,
+        displayName: 'Ada',
+        revisionId: firstRevisionId,
+        anchor: { revisionId: firstRevisionId, kind: 'file' },
+        body: 'Review the earlier shared revision.',
+      },
+    });
+    const atFirst = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/links/${publicCode}/comments/query`,
+      payload: { visitorToken, currentRevisionId: firstRevisionId },
+    });
+    const atSecond = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/links/${publicCode}/comments/query`,
+      payload: { visitorToken, currentRevisionId: secondRevisionId },
+    });
+
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json()).toMatchObject({ revisionId: firstRevisionId, anchorStatus: 'exact' });
+    expect(atFirst.statusCode, atFirst.body).toBe(200);
+    expect(atFirst.json().items[0]).toMatchObject({ anchorStatus: 'exact' });
+    expect(atSecond.statusCode, atSecond.body).toBe(200);
+    expect(atSecond.json().items[0]).toMatchObject({ anchorStatus: 'outdated' });
   });
 
   it('paginates comment history with scoped cursors', async () => {

@@ -1101,6 +1101,18 @@
                           }
                         ]
                       },
+                      "revisionAccess": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["target-only"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["shared-history"]
+                          }
+                        ]
+                      },
                       "accessType": {
                         "type": "string",
                         "enum": ["protected"]
@@ -1272,6 +1284,18 @@
                           }
                         ]
                       },
+                      "revisionAccess": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["target-only"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["shared-history"]
+                          }
+                        ]
+                      },
                       "accessType": {
                         "type": "string",
                         "enum": ["protected"]
@@ -1436,6 +1460,18 @@
                       {
                         "type": "string",
                         "enum": ["shared"]
+                      }
+                    ]
+                  },
+                  "revisionAccess": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["target-only"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared-history"]
                       }
                     ]
                   },
@@ -2283,6 +2319,18 @@
                       }
                     ]
                   },
+                  "revisionAccess": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["target-only"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared-history"]
+                      }
+                    ]
+                  },
                   "accessType": {
                     "type": "string",
                     "enum": ["protected"]
@@ -2449,6 +2497,18 @@
                       }
                     ]
                   },
+                  "revisionAccess": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["target-only"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared-history"]
+                      }
+                    ]
+                  },
                   "accessType": {
                     "type": "string",
                     "enum": ["protected"]
@@ -2608,6 +2668,18 @@
                   {
                     "type": "string",
                     "enum": ["shared"]
+                  }
+                ]
+              },
+              "revisionAccess": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["target-only"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared-history"]
                   }
                 ]
               },
@@ -2789,6 +2861,18 @@
                       }
                     ]
                   },
+                  "revisionAccess": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["target-only"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared-history"]
+                      }
+                    ]
+                  },
                   "accessType": {
                     "type": "string",
                     "enum": ["protected"]
@@ -2955,6 +3039,18 @@
                       }
                     ]
                   },
+                  "revisionAccess": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["target-only"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared-history"]
+                      }
+                    ]
+                  },
                   "accessType": {
                     "type": "string",
                     "enum": ["protected"]
@@ -3114,6 +3210,18 @@
                   {
                     "type": "string",
                     "enum": ["shared"]
+                  }
+                ]
+              },
+              "revisionAccess": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["target-only"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared-history"]
                   }
                 ]
               },
@@ -3279,6 +3387,18 @@
                       {
                         "type": "string",
                         "enum": ["shared"]
+                      }
+                    ]
+                  },
+                  "revisionAccess": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["target-only"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared-history"]
                       }
                     ]
                   },
@@ -3450,6 +3570,18 @@
                       {
                         "type": "string",
                         "enum": ["shared"]
+                      }
+                    ]
+                  },
+                  "revisionAccess": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["target-only"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared-history"]
                       }
                     ]
                   },
@@ -3620,6 +3752,18 @@
                   }
                 ]
               },
+              "revisionAccess": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["target-only"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared-history"]
+                  }
+                ]
+              },
               "accessType": {
                 "type": "string",
                 "enum": ["public"]
@@ -3719,6 +3863,18 @@
                   }
                 ]
               },
+              "revisionAccess": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["target-only"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared-history"]
+                  }
+                ]
+              },
               "target": {
                 "anyOf": [
                   {
@@ -3779,6 +3935,18 @@
                   {
                     "type": "string",
                     "enum": ["shared"]
+                  }
+                ]
+              },
+              "revisionAccess": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["target-only"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared-history"]
                   }
                 ]
               },
@@ -3890,6 +4058,18 @@
                   {
                     "type": "string",
                     "enum": ["shared"]
+                  }
+                ]
+              },
+              "revisionAccess": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["target-only"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared-history"]
                   }
                 ]
               },
@@ -3955,6 +4135,18 @@
                   }
                 ]
               },
+              "revisionAccess": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["target-only"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared-history"]
+                  }
+                ]
+              },
               "target": {
                 "anyOf": [
                   {
@@ -4010,6 +4202,18 @@
                   {
                     "type": "string",
                     "enum": ["shared"]
+                  }
+                ]
+              },
+              "revisionAccess": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["target-only"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared-history"]
                   }
                 ]
               },
@@ -4116,6 +4320,18 @@
                   {
                     "type": "string",
                     "enum": ["shared"]
+                  }
+                ]
+              },
+              "revisionAccess": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["target-only"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["shared-history"]
                   }
                 ]
               },
@@ -4269,6 +4485,18 @@
                             {
                               "type": "string",
                               "enum": ["shared"]
+                            }
+                          ]
+                        },
+                        "revisionAccess": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["target-only"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["shared-history"]
                             }
                           ]
                         },
@@ -4438,6 +4666,18 @@
                             }
                           ]
                         },
+                        "revisionAccess": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["target-only"]
+                            },
+                            {
+                              "type": "string",
+                              "enum": ["shared-history"]
+                            }
+                          ]
+                        },
                         "accessType": {
                           "type": "string",
                           "enum": ["protected"]
@@ -4600,6 +4840,18 @@
                         }
                       ]
                     },
+                    "revisionAccess": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": ["target-only"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["shared-history"]
+                        }
+                      ]
+                    },
                     "accessType": {
                       "type": "string",
                       "enum": ["public"]
@@ -4748,6 +5000,128 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "revisionAccess": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["target-only"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared-history"]
+                      }
+                    ]
+                  },
+                  "latestRevision": {
+                    "type": "object",
+                    "required": ["revisionId", "revisionNumber", "createdAt"],
+                    "properties": {
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      },
+                      "revisionNumber": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "navigation": {
+                    "type": "object",
+                    "required": ["revisions", "previous", "next"],
+                    "properties": {
+                      "revisions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["revisionId", "revisionNumber", "createdAt"],
+                          "properties": {
+                            "revisionId": {
+                              "type": "string",
+                              "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                              "description": "Opaque revision identifier containing 128 bits of entropy."
+                            },
+                            "revisionNumber": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 100
+                      },
+                      "previous": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": ["revisionId", "revisionNumber", "createdAt"],
+                            "properties": {
+                              "revisionId": {
+                                "type": "string",
+                                "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                                "description": "Opaque revision identifier containing 128 bits of entropy."
+                              },
+                              "revisionNumber": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "next": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": ["revisionId", "revisionNumber", "createdAt"],
+                            "properties": {
+                              "revisionId": {
+                                "type": "string",
+                                "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                                "description": "Opaque revision identifier containing 128 bits of entropy."
+                              },
+                              "revisionNumber": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
                   },
                   "accessType": {
                     "type": "string",
@@ -4919,6 +5293,128 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "revisionAccess": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["target-only"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared-history"]
+                      }
+                    ]
+                  },
+                  "latestRevision": {
+                    "type": "object",
+                    "required": ["revisionId", "revisionNumber", "createdAt"],
+                    "properties": {
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      },
+                      "revisionNumber": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "navigation": {
+                    "type": "object",
+                    "required": ["revisions", "previous", "next"],
+                    "properties": {
+                      "revisions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["revisionId", "revisionNumber", "createdAt"],
+                          "properties": {
+                            "revisionId": {
+                              "type": "string",
+                              "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                              "description": "Opaque revision identifier containing 128 bits of entropy."
+                            },
+                            "revisionNumber": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 100
+                      },
+                      "previous": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": ["revisionId", "revisionNumber", "createdAt"],
+                            "properties": {
+                              "revisionId": {
+                                "type": "string",
+                                "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                                "description": "Opaque revision identifier containing 128 bits of entropy."
+                              },
+                              "revisionNumber": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "next": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": ["revisionId", "revisionNumber", "createdAt"],
+                            "properties": {
+                              "revisionId": {
+                                "type": "string",
+                                "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                                "description": "Opaque revision identifier containing 128 bits of entropy."
+                              },
+                              "revisionNumber": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
                   },
                   "accessType": {
                     "type": "string",
@@ -5098,6 +5594,128 @@
                       }
                     ]
                   },
+                  "revisionAccess": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["target-only"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared-history"]
+                      }
+                    ]
+                  },
+                  "latestRevision": {
+                    "type": "object",
+                    "required": ["revisionId", "revisionNumber", "createdAt"],
+                    "properties": {
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      },
+                      "revisionNumber": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "navigation": {
+                    "type": "object",
+                    "required": ["revisions", "previous", "next"],
+                    "properties": {
+                      "revisions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["revisionId", "revisionNumber", "createdAt"],
+                          "properties": {
+                            "revisionId": {
+                              "type": "string",
+                              "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                              "description": "Opaque revision identifier containing 128 bits of entropy."
+                            },
+                            "revisionNumber": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 100
+                      },
+                      "previous": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": ["revisionId", "revisionNumber", "createdAt"],
+                            "properties": {
+                              "revisionId": {
+                                "type": "string",
+                                "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                                "description": "Opaque revision identifier containing 128 bits of entropy."
+                              },
+                              "revisionNumber": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "next": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": ["revisionId", "revisionNumber", "createdAt"],
+                            "properties": {
+                              "revisionId": {
+                                "type": "string",
+                                "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                                "description": "Opaque revision identifier containing 128 bits of entropy."
+                              },
+                              "revisionNumber": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
                   "accessType": {
                     "type": "string",
                     "enum": ["protected"]
@@ -5268,6 +5886,128 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "revisionAccess": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["target-only"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["shared-history"]
+                      }
+                    ]
+                  },
+                  "latestRevision": {
+                    "type": "object",
+                    "required": ["revisionId", "revisionNumber", "createdAt"],
+                    "properties": {
+                      "revisionId": {
+                        "type": "string",
+                        "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                        "description": "Opaque revision identifier containing 128 bits of entropy."
+                      },
+                      "revisionNumber": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "navigation": {
+                    "type": "object",
+                    "required": ["revisions", "previous", "next"],
+                    "properties": {
+                      "revisions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["revisionId", "revisionNumber", "createdAt"],
+                          "properties": {
+                            "revisionId": {
+                              "type": "string",
+                              "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                              "description": "Opaque revision identifier containing 128 bits of entropy."
+                            },
+                            "revisionNumber": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 100
+                      },
+                      "previous": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": ["revisionId", "revisionNumber", "createdAt"],
+                            "properties": {
+                              "revisionId": {
+                                "type": "string",
+                                "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                                "description": "Opaque revision identifier containing 128 bits of entropy."
+                              },
+                              "revisionNumber": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "next": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": ["revisionId", "revisionNumber", "createdAt"],
+                            "properties": {
+                              "revisionId": {
+                                "type": "string",
+                                "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                                "description": "Opaque revision identifier containing 128 bits of entropy."
+                              },
+                              "revisionNumber": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
                   },
                   "accessType": {
                     "type": "string",
@@ -13987,6 +14727,10 @@
                   "commentPolicy": {
                     "type": "string",
                     "enum": ["off", "private", "shared"]
+                  },
+                  "revisionAccess": {
+                    "type": "string",
+                    "enum": ["target-only", "shared-history"]
                   }
                 },
                 "required": ["accessType", "target"],
@@ -14926,6 +15670,11 @@
                     "minLength": 24,
                     "maxLength": 4096,
                     "pattern": "^[A-Za-z0-9._-]+$"
+                  },
+                  "revisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
                   }
                 },
                 "additionalProperties": false
@@ -15182,6 +15931,11 @@
                     "minLength": 24,
                     "maxLength": 4096,
                     "pattern": "^[A-Za-z0-9._-]+$"
+                  },
+                  "revisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
                   }
                 },
                 "additionalProperties": false
@@ -15441,6 +16195,16 @@
         "tags": ["public shares"],
         "description": "Returns the stored media type inline and supports validators and one bytes range. The viewer session is read only from a narrow cookie set by session establishment.",
         "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "query",
+            "name": "revisionId",
+            "required": false,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          },
           {
             "schema": {
               "type": "string",
@@ -15883,6 +16647,11 @@
                     "minLength": 24,
                     "maxLength": 4096,
                     "pattern": "^[A-Za-z0-9._-]+$"
+                  },
+                  "revisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
                   }
                 },
                 "additionalProperties": false
@@ -15910,6 +16679,16 @@
             "in": "query",
             "name": "cursor",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "query",
+            "name": "revisionId",
+            "required": false,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
           },
           {
             "schema": {
@@ -16159,6 +16938,11 @@
                     "minLength": 24,
                     "maxLength": 4096,
                     "pattern": "^[A-Za-z0-9._-]+$"
+                  },
+                  "revisionId": {
+                    "type": "string",
+                    "pattern": "^rev_[A-Za-z0-9_-]{22}$",
+                    "description": "Opaque revision identifier containing 128 bits of entropy."
                   }
                 },
                 "additionalProperties": false
@@ -16177,6 +16961,16 @@
             "in": "query",
             "name": "path",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "query",
+            "name": "revisionId",
+            "required": false,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
           },
           {
             "schema": {
@@ -16439,6 +17233,16 @@
             "in": "query",
             "name": "path",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "query",
+            "name": "revisionId",
+            "required": false,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
           },
           {
             "schema": {
@@ -16873,6 +17677,16 @@
           {
             "schema": {
               "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "query",
+            "name": "revisionId",
+            "required": false,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          },
+          {
+            "schema": {
+              "type": "string",
               "pattern": "^[A-Za-z0-9_-]{12}$"
             },
             "in": "path",
@@ -17106,6 +17920,16 @@
         "summary": "Download secret-free Public shared file bytes",
         "tags": ["public links"],
         "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "query",
+            "name": "revisionId",
+            "required": false,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          },
           {
             "schema": {
               "type": "string",
@@ -17357,6 +18181,16 @@
         "tags": ["public links"],
         "description": "Returns the stored media type inline and supports validators and one bytes range.",
         "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "query",
+            "name": "revisionId",
+            "required": false,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          },
           {
             "schema": {
               "type": "string",
@@ -17810,6 +18644,16 @@
           {
             "schema": {
               "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "query",
+            "name": "revisionId",
+            "required": false,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
+          },
+          {
+            "schema": {
+              "type": "string",
               "pattern": "^[A-Za-z0-9_-]{12}$"
             },
             "in": "path",
@@ -18053,6 +18897,16 @@
             "in": "query",
             "name": "path",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "query",
+            "name": "revisionId",
+            "required": false,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
           },
           {
             "schema": {
@@ -18315,6 +19169,16 @@
             "in": "query",
             "name": "path",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^rev_[A-Za-z0-9_-]{22}$"
+            },
+            "in": "query",
+            "name": "revisionId",
+            "required": false,
+            "description": "Opaque revision identifier containing 128 bits of entropy."
           },
           {
             "schema": {

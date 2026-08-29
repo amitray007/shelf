@@ -189,6 +189,9 @@ describe('shelf schema', () => {
     expect(optionAt(commandAt(document, 'shares create'), '--comments').flags).toBe(
       '--comments <off|private|shared>',
     );
+    expect(optionAt(commandAt(document, 'shares create'), '--revision-access').flags).toBe(
+      '--revision-access <target-only|shared-history>',
+    );
     expect(optionAt(commandAt(document, 'artifacts list'), '--sort').flags).toBe(
       '--sort <created|updated>',
     );

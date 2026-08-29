@@ -132,6 +132,11 @@ function storedShare(row: ShareTable): StoredShare {
     visibility: row.visibility,
     accessType: row.access_type,
     commentPolicy: row.comment_policy ?? 'off',
+    revisionAccess: row.revision_access ?? 'target-only',
+    historyFromRevisionNumber:
+      row.history_from_revision_number === null
+        ? null
+        : safeInteger(row.history_from_revision_number, { positive: true }),
     publicCode: row.public_code,
     target,
     createdByActorId: row.created_by_actor_id,
@@ -251,6 +256,11 @@ function shareValues(result: StoredShare, purpose: CommitShareCreateInput['purpo
     visibility: result.visibility,
     access_type: result.accessType,
     comment_policy: result.commentPolicy ?? 'off',
+    revision_access: result.revisionAccess ?? 'target-only',
+    history_from_revision_number:
+      result.historyFromRevisionNumber === undefined || result.historyFromRevisionNumber === null
+        ? null
+        : String(result.historyFromRevisionNumber),
     public_code: result.publicCode,
     target_mode: result.target.mode,
     target_revision_id: result.target.mode === 'pinned' ? result.target.revisionId : null,

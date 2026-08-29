@@ -97,7 +97,7 @@ One person may act as the owner, publisher, viewer, and operator of a personal i
 **Sharing and lifecycle**
 
 - R10. Artifacts are private by default. Shares remain unlisted and non-indexed while choosing either Protected capability access or short Public access; Public means secretless and non-confidential, not discoverable.
-- R11. A share must expose a stable URL, target either the latest state or an exact revision, and retain that targeting behavior for its lifetime.
+- R11. A share must expose a stable URL, target either the latest state or an exact revision, and retain that targeting behavior for its lifetime. Revision access defaults to target-only. A Latest share may opt into navigation from the revision current at link creation through later revisions, without exposing earlier history. A pinned share remains exact.
 - R12. Share expiry, revocation, and protected-session exhaustion must stop access. For automatic-retention artifacts, the final inactive custom share starts a 30-day grace period; prepared default links never count as activity.
 - R13. Artifacts default to automatic retention with an explicit `keep` override. Due artifacts enter visible Trash for 30 days before permanent metadata and unreferenced-content purge. Recovery creates a seven-day Protected lease, and creating a normal custom share recovers a trashed artifact.
 

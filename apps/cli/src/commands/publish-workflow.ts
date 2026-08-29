@@ -67,7 +67,8 @@ function usesPreparedDefault(input: ShareCreateInput): boolean {
     input.target.mode === 'latest' &&
     !('expiresAt' in input) &&
     (!('expiresIn' in input) || input.expiresIn === 'never') &&
-    !('maxSessions' in input)
+    !('maxSessions' in input) &&
+    (input.revisionAccess ?? 'target-only') === 'target-only'
   );
 }
 

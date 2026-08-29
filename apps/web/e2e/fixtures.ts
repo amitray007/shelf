@@ -19,8 +19,11 @@ export const shortArtifactId = `art_${'h'.repeat(22)}`;
 export const jsonArtifactId = `art_${'i'.repeat(22)}`;
 export const archiveArtifactId = `art_${'j'.repeat(22)}`;
 export const revisionId = `rev_${'b'.repeat(22)}`;
+export const previousRevisionId = `rev_${'k'.repeat(22)}`;
 export const folderRevisionId = `rev_${'g'.repeat(22)}`;
+export const previousFolderRevisionId = `rev_${'n'.repeat(22)}`;
 export const markdownShareId = `shr_${'c'.repeat(22)}`;
+export const folderShareId = `shr_${'f'.repeat(22)}`;
 export const htmlShareId = `shr_${'d'.repeat(22)}`;
 export const yamlShareId = `shr_${'y'.repeat(22)}`;
 export const csvShareId = `shr_${'x'.repeat(22)}`;
@@ -153,7 +156,7 @@ const latestFolderRevision = folderRevision({
   files: 3,
 });
 const previousFolderRevision = folderRevision({
-  id: `rev_${'n'.repeat(22)}`,
+  id: previousFolderRevisionId,
   number: 7,
   createdAt: '2026-08-14T12:00:00.000Z',
   hashCharacter: 'f',
@@ -558,7 +561,88 @@ function publicFileResolution(
   };
 }
 
-export const markdownResolution = publicFileResolution(markdownShareId, 'text/markdown', 'idea.md');
+export const markdownResolution = {
+  ...publicFileResolution(markdownShareId, 'text/markdown', 'idea.md'),
+  revisionAccess: 'shared-history',
+  latestRevision: {
+    revisionId,
+    revisionNumber: revision.revisionNumber,
+    createdAt: revision.createdAt,
+  },
+  navigation: {
+    revisions: [
+      ...Array.from({ length: 10 }, (_, index) => ({
+        revisionId: `rev_${String(index).repeat(22)}`,
+        revisionNumber: index + 1,
+        createdAt: new Date(Date.UTC(2026, 7, index + 1)).toISOString(),
+      })),
+      {
+        revisionId: previousRevisionId,
+        revisionNumber: 11,
+        createdAt: '2026-08-17T16:30:00.000Z',
+      },
+      {
+        revisionId,
+        revisionNumber: revision.revisionNumber,
+        createdAt: revision.createdAt,
+      },
+    ],
+    previous: {
+      revisionId: previousRevisionId,
+      revisionNumber: 11,
+      createdAt: '2026-08-17T16:30:00.000Z',
+    },
+    next: null,
+  },
+} satisfies PublicShareResolution;
+
+export const folderResolution = {
+  apiVersion: 'v1',
+  shareId: folderShareId,
+  accessType: 'protected',
+  target: { mode: 'latest' },
+  revisionAccess: 'shared-history',
+  expiresAt: null,
+  artifact: { artifactId: folderArtifactId, kind: 'folder', name: longFolderName },
+  revision: {
+    revisionId: latestFolderRevision.revisionId,
+    revisionNumber: latestFolderRevision.revisionNumber,
+    createdAt: latestFolderRevision.createdAt,
+    kind: 'folder',
+    rootName: latestFolderRevision.rootName,
+    byteCount: latestFolderRevision.byteCount,
+    fileCount: latestFolderRevision.fileCount,
+  },
+  latestRevision: {
+    revisionId: latestFolderRevision.revisionId,
+    revisionNumber: latestFolderRevision.revisionNumber,
+    createdAt: latestFolderRevision.createdAt,
+  },
+  navigation: {
+    revisions: [
+      {
+        revisionId: previousFolderRevision.revisionId,
+        revisionNumber: previousFolderRevision.revisionNumber,
+        createdAt: previousFolderRevision.createdAt,
+      },
+      {
+        revisionId: latestFolderRevision.revisionId,
+        revisionNumber: latestFolderRevision.revisionNumber,
+        createdAt: latestFolderRevision.createdAt,
+      },
+    ],
+    previous: {
+      revisionId: previousFolderRevision.revisionId,
+      revisionNumber: previousFolderRevision.revisionNumber,
+      createdAt: previousFolderRevision.createdAt,
+    },
+    next: null,
+  },
+  action: {
+    type: 'tree',
+    path: `/api/v1/public/shares/${folderShareId}/tree`,
+  },
+} satisfies PublicShareResolution;
 
 export const htmlResolution = {
   ...publicFileResolution(htmlShareId, 'text/html', 'idea.html'),

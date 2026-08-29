@@ -1230,7 +1230,7 @@ a {
 }
 
 .rail-context {
-  gap: 20px;
+  gap: 8px;
   color: var(--text-muted);
   font:
     500 12px / 1.2 "Geist Mono Variable",
@@ -1264,6 +1264,122 @@ a {
     monospace;
 }
 
+.viewer-revision-navigation {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.viewer-revision-navigation > * {
+  position: relative;
+}
+
+.viewer-revision-navigation > * + * {
+  margin-inline-start: -1px;
+}
+
+.viewer-revision-navigation > *:focus-within,
+.viewer-revision-navigation > .viewer-revision-control:hover {
+  z-index: 1;
+}
+
+.viewer-revision-control,
+.viewer-revision-select,
+.viewer-update-check,
+.viewer-latest-available {
+  min-height: 28px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-subtle);
+  font: inherit;
+  cursor: pointer;
+}
+
+.viewer-revision-control {
+  width: 28px;
+  padding: 0;
+}
+
+.viewer-revision-navigation > .viewer-revision-control:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.viewer-revision-navigation > .viewer-revision-control:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.viewer-revision-select {
+  min-width: 148px;
+  padding: 0 9px;
+  border-radius: 0;
+}
+
+.viewer-revision-option {
+  min-height: 32px;
+}
+
+[role="listbox"]:has(> .viewer-revision-option) {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.viewer-update-check,
+.viewer-latest-available {
+  padding: 0 9px;
+}
+
+.viewer-update-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.viewer-update-icon[data-refreshing="true"] {
+  animation: loading-turn 700ms linear infinite;
+  transform-origin: center;
+}
+
+.viewer-latest-available {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--rule));
+  color: var(--accent);
+}
+
+.viewer-latest-notice {
+  color: var(--accent);
+}
+
+.viewer-revision-control:hover:not(:disabled),
+.viewer-revision-select:hover,
+.viewer-update-check:hover,
+.viewer-latest-available:hover {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.viewer-revision-control:focus-visible,
+.viewer-revision-select:focus-visible,
+.viewer-update-check:focus-visible,
+.viewer-latest-available:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.viewer-update-check:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.viewer-revision-control:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
 .artifact-title {
   overflow: hidden;
   color: var(--text-subtle);
@@ -1287,6 +1403,12 @@ a {
 @media (hover: hover) and (pointer: fine) {
   .preview-open-artifact:hover {
     color: var(--text);
+  }
+}
+
+@media (max-width: 900px) {
+  .artifact-private-preview .rail-title-group {
+    display: none;
   }
 }
 
@@ -2283,7 +2405,8 @@ a {
 }
 
 .viewer-pending .state-center,
-.viewer-unavailable .state-center {
+.viewer-unavailable .state-center,
+.viewer-revision-loading {
   min-height: 0;
   flex: 1;
 }
@@ -2395,8 +2518,8 @@ a {
     margin-left: auto;
   }
 
-  .artifact-private-preview .target-state {
-    display: none;
+  .artifact-private-preview .rail-context {
+    width: 100%;
   }
 
   .artifact-document {
@@ -2557,6 +2680,25 @@ a {
     overflow: hidden;
     max-width: 122px;
     text-overflow: ellipsis;
+  }
+
+  .viewer-update-check {
+    width: 28px;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .viewer-update-check span {
+    display: none;
+  }
+
+  .viewer-latest-available,
+  .viewer-latest-notice {
+    display: none;
+  }
+
+  .artifact-private-preview .preview-open-artifact span {
+    display: none;
   }
 
   .rail-muted,

@@ -5,6 +5,7 @@ import {
   type CommentPolicy,
   PUBLISH_OPERATION,
   READ_REVISION_OPERATION,
+  type RevisionAccess,
   SHARE_CREATE_OPERATION,
   SHARE_SESSION_LIMITS,
   type ShareCreateResult,
@@ -123,6 +124,10 @@ function validateTarget(target: ShareTarget): void {
   }
 }
 
+function revisionAccess(stored: StoredShare): RevisionAccess {
+  return stored.revisionAccess ?? 'target-only';
+}
+
 export function createShareFingerprint(input: {
   artifactId: string;
   target: ShareTarget;
@@ -160,12 +165,21 @@ export function createSharePolicyFingerprint(input: {
   expiry: { expiresIn: ShareExpiryPresetWithNever } | { expiresAt: string | null };
   maxSessions: number | null;
   commentPolicy?: CommentPolicy;
+  revisionAccess?: RevisionAccess;
   purpose?: 'artifact-default' | 'artifact-recovery';
 }): string {
   const canonical = JSON.stringify({
     version: 3,
     commentPolicy: input.commentPolicy ?? 'off',
-    ...input,
+    artifactId: input.artifactId,
+    target: input.target,
+    accessType: input.accessType,
+    expiry: input.expiry,
+    maxSessions: input.maxSessions,
+    ...(input.revisionAccess === undefined || input.revisionAccess === 'target-only'
+      ? {}
+      : { revisionAccess: input.revisionAccess }),
+    ...(input.purpose === undefined ? {} : { purpose: input.purpose }),
   });
   return `share-create-request/v2:sha256:${createHash('sha256').update(canonical).digest('hex')}`;
 }
@@ -243,6 +257,7 @@ function summary(
     revokedAt: stored.revokedAt,
     status: shareLifecycleStatus(stored, now),
     commentPolicy: stored.commentPolicy ?? 'off',
+    revisionAccess: revisionAccess(stored),
     url: capabilityUrl(stored, capabilityCodec),
   };
   if (stored.accessType === 'public') {
@@ -329,6 +344,7 @@ function createResult(
     revokedAt: stored.revokedAt,
     status: shareLifecycleStatus(stored, now),
     commentPolicy: stored.commentPolicy ?? 'off',
+    revisionAccess: revisionAccess(stored),
     requestId,
     url: capabilityUrl(stored, capabilityCodec),
     replayed,
@@ -445,10 +461,12 @@ export function createShareLifecycleService(dependencies: {
     signal?: AbortSignal;
     purpose?: 'artifact-default' | 'artifact-recovery';
     commentPolicy?: CommentPolicy;
+    revisionAccess?: RevisionAccess;
   }): Promise<ShareCreateResult> => {
     validateIdentity(request, { requestId: true, idempotencyKey: true });
     const target = request.target ?? { mode: 'latest' as const };
     const accessType = request.accessType ?? 'protected';
+    const requestedRevisionAccess = request.revisionAccess ?? 'target-only';
     validateTarget(target);
     if (!ARTIFACT_ID_PATTERN.test(request.artifactId)) {
       throw new InvalidShareRequestError([
@@ -470,6 +488,12 @@ export function createShareLifecycleService(dependencies: {
     if (accessType === 'public' && request.maxSessions !== undefined) {
       details.push({ field: 'maxSessions', reason: 'is not supported for Public shares' });
     }
+    if (requestedRevisionAccess === 'shared-history' && target.mode !== 'latest') {
+      details.push({
+        field: 'revisionAccess',
+        reason: 'shared history is available only for Latest shares',
+      });
+    }
     if (details.length > 0) throw new InvalidShareRequestError(details);
 
     const semanticExpiry =
@@ -480,7 +504,8 @@ export function createShareLifecycleService(dependencies: {
       accessType === 'protected' &&
       request.purpose === undefined &&
       request.expiresIn === undefined &&
-      request.maxSessions === undefined;
+      request.maxSessions === undefined &&
+      requestedRevisionAccess === 'target-only';
     const fingerprint = legacyEquivalent
       ? createShareFingerprint({
           artifactId: request.artifactId,
@@ -495,6 +520,9 @@ export function createShareLifecycleService(dependencies: {
           expiry: semanticExpiry,
           maxSessions: request.maxSessions ?? null,
           ...(request.commentPolicy === undefined ? {} : { commentPolicy: request.commentPolicy }),
+          ...(requestedRevisionAccess === 'target-only'
+            ? {}
+            : { revisionAccess: requestedRevisionAccess }),
           ...(request.purpose === undefined ? {} : { purpose: request.purpose }),
         });
     const legacyFingerprint =
@@ -655,6 +683,11 @@ export function createShareLifecycleService(dependencies: {
       revokedAt: null,
       revokedByActorId: null,
       commentPolicy: request.commentPolicy ?? 'off',
+      revisionAccess: requestedRevisionAccess,
+      historyFromRevisionNumber:
+        requestedRevisionAccess === 'shared-history'
+          ? artifact.latestRevision.revisionNumber
+          : null,
     };
     const attempts = accessType === 'public' ? 3 : 1;
     for (let attempt = 0; attempt < attempts; attempt += 1) {

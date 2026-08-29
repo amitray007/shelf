@@ -63,7 +63,7 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
     (path: string, signal: AbortSignal) => loadFolderEntryBytes(revision.revisionId, path, signal),
     [revision.revisionId],
   );
-  const [previewFolderSidebarOpen, setPreviewFolderSidebarOpen] = useState(true);
+  const [previewFolderSidebarOpen, setPreviewFolderSidebarOpen] = useState(false);
   const togglePreviewFolderSidebar = useCallback(
     () => setPreviewFolderSidebarOpen((open) => !open),
     [],

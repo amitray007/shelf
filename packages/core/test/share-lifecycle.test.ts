@@ -321,6 +321,71 @@ describe('share lifecycle service', () => {
     expect(commitCreate).toHaveBeenCalledOnce();
   });
 
+  it('captures the current revision as the start of shared history', async () => {
+    const commitCreate = vi.fn(async (input) => ({
+      status: 'committed' as const,
+      result: input.result,
+    }));
+    const service = createShareLifecycleService({
+      authorizer: { async authorize() {} },
+      shares: repository({ commitCreate }),
+      capabilityCodec,
+      clock: () => new Date('2026-08-17T12:00:00.000Z'),
+      generateShareId: () => ids.share,
+    });
+
+    await expect(
+      service.createShare({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        actorId: 'actor-publisher',
+        artifactId: ids.artifact,
+        target: { mode: 'latest' },
+        revisionAccess: 'shared-history',
+        idempotencyKey: 'shared-launch-history',
+        requestId: 'request-shared-history',
+      }),
+    ).resolves.toMatchObject({ revisionAccess: 'shared-history' });
+    expect(commitCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: expect.objectContaining({
+          revisionAccess: 'shared-history',
+          historyFromRevisionNumber: 2,
+        }),
+      }),
+    );
+  });
+
+  it('rejects shared history for a pinned share', async () => {
+    const shares = repository();
+    const commitCreate = vi.spyOn(shares, 'commitCreate');
+    const service = createShareLifecycleService({
+      authorizer: { async authorize() {} },
+      shares,
+      capabilityCodec,
+      generateShareId: () => ids.share,
+    });
+
+    await expect(
+      service.createShare({
+        installationId: 'installation-main',
+        workspaceId: 'workspace-main',
+        actorId: 'actor-publisher',
+        artifactId: ids.artifact,
+        target: { mode: 'pinned', revisionId: ids.secondRevision },
+        revisionAccess: 'shared-history',
+        idempotencyKey: 'invalid-shared-pinned',
+        requestId: 'request-invalid-shared-pinned',
+      }),
+    ).rejects.toMatchObject({
+      code: 'INVALID_REQUEST',
+      details: [
+        { field: 'revisionAccess', reason: 'shared history is available only for Latest shares' },
+      ],
+    });
+    expect(commitCreate).not.toHaveBeenCalled();
+  });
+
   it.each([
     [
       'artifact from another workspace',
@@ -416,6 +481,7 @@ describe('share lifecycle service', () => {
           visibility: 'unlisted',
           accessType: 'protected',
           commentPolicy: 'off',
+          revisionAccess: 'target-only',
           target: { mode: 'pinned', revisionId: ids.secondRevision, revisionNumber: 2 },
           createdAt: '2026-08-17T12:00:00.000Z',
           expiresAt: null,

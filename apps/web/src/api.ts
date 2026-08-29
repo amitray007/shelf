@@ -19,6 +19,7 @@ import {
   type FolderShareResolution,
   isFileShareResolution,
   isFolderShareResolution,
+  shareRevisionAccess,
 } from './share-types.js';
 
 const PROTECTED_ACTION = /^\/api\/v1\/public\/shares\/(shr_[A-Za-z0-9_-]{22})\/(content|tree)$/;
@@ -226,9 +227,26 @@ export function viewerShareActionUrl(
   ) {
     throw new PublicShareUnavailableError();
   }
-  if (cursor === undefined) return resolution.action.path;
-  const query = new URLSearchParams({ limit: '100', cursor });
-  return `${resolution.action.path}?${query.toString()}`;
+  const query = new URLSearchParams();
+  if (
+    authority.accessType === 'public' &&
+    (resolution.target.mode === 'pinned' || shareRevisionAccess(resolution) === 'shared-history')
+  ) {
+    query.set('revisionId', resolution.revision.revisionId);
+  }
+  if (cursor !== undefined) {
+    query.set('limit', '100');
+    query.set('cursor', cursor);
+  }
+  return query.size === 0 ? resolution.action.path : `${resolution.action.path}?${query}`;
+}
+
+function selectedRevisionId(
+  resolution: FileShareResolution | FolderShareResolution,
+): string | undefined {
+  return resolution.target.mode === 'pinned' || shareRevisionAccess(resolution) === 'shared-history'
+    ? resolution.revision.revisionId
+    : undefined;
 }
 
 /**
@@ -241,10 +259,14 @@ export function viewerSharePreviewUrl(
   path?: string,
 ): string {
   const action = viewerShareActionUrl(resolution, authority);
-  if (resolution.action.type === 'content') return `${action}/preview`;
+  const url = new URL(action, 'https://shelf.invalid');
+  url.pathname += resolution.action.type === 'content' ? '/preview' : '/content/preview';
+  const revisionId = selectedRevisionId(resolution);
+  if (revisionId !== undefined) url.searchParams.set('revisionId', revisionId);
+  if (resolution.action.type === 'content') return `${url.pathname}${url.search}`;
   if (path === undefined || path.length === 0) throw new PublicShareUnavailableError();
-  const query = new URLSearchParams({ path });
-  return `${action}/content/preview?${query.toString()}`;
+  url.searchParams.set('path', path);
+  return `${url.pathname}${url.search}`;
 }
 
 export function viewerShareDownloadUrl(
@@ -255,23 +277,31 @@ export function viewerShareDownloadUrl(
   const action = viewerShareActionUrl(resolution, authority);
   if (resolution.action.type === 'content') return action;
   if (path === undefined || path.length === 0) throw new PublicShareUnavailableError();
-  const query = new URLSearchParams({ path });
-  return `${action}/content?${query.toString()}`;
+  const url = new URL(action, 'https://shelf.invalid');
+  url.pathname += '/content';
+  url.searchParams.set('path', path);
+  return `${url.pathname}${url.search}`;
 }
 
 export async function resolveViewerShare(
   reference: ViewerShareReference,
   authority: ViewerAuthority,
   signal?: AbortSignal,
+  revisionId?: string,
 ): Promise<FileShareResolution | FolderShareResolution> {
   if (reference.accessType !== authority.accessType) throw new PublicShareUnavailableError();
   const url =
     reference.accessType === 'protected'
       ? `/api/v1/public/shares/${encodeURIComponent(reference.shareId)}/resolve`
-      : `/api/v1/public/links/${encodeURIComponent(reference.publicCode)}/resolve`;
+      : `/api/v1/public/links/${encodeURIComponent(reference.publicCode)}/resolve${
+          revisionId === undefined ? '' : `?${new URLSearchParams({ revisionId }).toString()}`
+        }`;
   const init =
     authority.accessType === 'protected'
-      ? jsonPost({ token: authority.token }, signal)
+      ? jsonPost(
+          { token: authority.token, ...(revisionId === undefined ? {} : { revisionId }) },
+          signal,
+        )
       : { ...anonymousRequest(signal), method: 'GET' };
   const value = await responseJson(await anonymousFetch(url, init));
   if (!isPublicShareResolution(value)) throw new PublicShareUnavailableError();
@@ -288,7 +318,15 @@ export async function loadViewerFileBytes(
   const url = viewerShareActionUrl(resolution, authority);
   const init =
     authority.accessType === 'protected'
-      ? jsonPost({ token: authority.token }, signal)
+      ? jsonPost(
+          {
+            token: authority.token,
+            ...(selectedRevisionId(resolution) === undefined
+              ? {}
+              : { revisionId: selectedRevisionId(resolution) }),
+          },
+          signal,
+        )
       : { ...anonymousRequest(signal), method: 'GET' };
   const response = await anonymousFetch(url, init);
   if (!response.ok) throw new PublicShareUnavailableError();
@@ -307,7 +345,15 @@ export async function loadViewerFolderEntries(
     const url = viewerShareActionUrl(resolution, authority, cursor);
     const init =
       authority.accessType === 'protected'
-        ? jsonPost({ token: authority.token }, signal)
+        ? jsonPost(
+            {
+              token: authority.token,
+              ...(selectedRevisionId(resolution) === undefined
+                ? {}
+                : { revisionId: selectedRevisionId(resolution) }),
+            },
+            signal,
+          )
         : { ...anonymousRequest(signal), method: 'GET' };
     const value = await responseJson(await anonymousFetch(url, init));
     if (!isFolderTreePage(value) || value.revisionId !== resolution.revision.revisionId) {
@@ -340,13 +386,23 @@ export async function loadViewerFolderEntryBytes(
     { accessScope, revisionId: resolution.revision.revisionId, folderPath: path },
     async (cacheSignal) => {
       const query = new URLSearchParams({ path });
+      const revisionId = selectedRevisionId(resolution);
+      if (authority.accessType === 'public' && revisionId !== undefined) {
+        query.set('revisionId', revisionId);
+      }
       const url =
         authority.accessType === 'protected'
           ? `/api/v1/public/shares/${encodeURIComponent(authority.shareId)}/tree/content?${query}`
           : `/api/v1/public/links/${encodeURIComponent(authority.publicCode)}/tree/content?${query}`;
       const init =
         authority.accessType === 'protected'
-          ? jsonPost({ token: authority.token }, cacheSignal)
+          ? jsonPost(
+              {
+                token: authority.token,
+                ...(revisionId === undefined ? {} : { revisionId }),
+              },
+              cacheSignal,
+            )
           : { ...anonymousRequest(cacheSignal), method: 'GET' };
       const response = await anonymousFetch(url, init);
       if (!response.ok) throw new PublicShareUnavailableError();

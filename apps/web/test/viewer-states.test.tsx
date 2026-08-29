@@ -34,7 +34,11 @@ import {
   reviewPanelStorageKey,
   reviewSurfaceVisible,
 } from '../src/components/review/use-review.js';
-import { UnavailableView, ViewerRail } from '../src/components/viewer-shell.js';
+import {
+  UnavailableView,
+  ViewerRail,
+  ViewerRevisionLoadingState,
+} from '../src/components/viewer-shell.js';
 import {
   clampViewerSidebarWidth,
   readViewerSidebarWidth,
@@ -186,9 +190,9 @@ describe('viewer content states', () => {
     const storage = reviewTestStorage();
     expect(clampViewerSidebarWidth(240, bounds)).toBe(280);
     expect(clampViewerSidebarWidth(600, bounds)).toBe(420);
-    expect(readViewerSidebarWidth(storage, bounds)).toBe(320);
+    expect(readViewerSidebarWidth(storage, bounds)).toBe(280);
     storage.setItem(VIEWER_SIDEBAR_WIDTH_STORAGE_KEY, 'not-a-width');
-    expect(readViewerSidebarWidth(storage, bounds)).toBe(320);
+    expect(readViewerSidebarWidth(storage, bounds)).toBe(280);
     storage.setItem(VIEWER_SIDEBAR_WIDTH_STORAGE_KEY, '401.8');
     expect(readViewerSidebarWidth(storage, bounds)).toBe(402);
     expect(
@@ -200,13 +204,13 @@ describe('viewer content states', () => {
         },
         bounds,
       ),
-    ).toBe(320);
+    ).toBe(280);
   });
 
   it('uses the responsive tablet viewer sidebar bounds', () => {
-    expect(viewerSidebarBounds(641)).toEqual({ min: 260, default: 300, max: 360 });
-    expect(viewerSidebarBounds(1023)).toEqual({ min: 260, default: 300, max: 360 });
-    expect(viewerSidebarBounds(1024)).toEqual({ min: 280, default: 320, max: 420 });
+    expect(viewerSidebarBounds(641)).toEqual({ min: 260, default: 260, max: 360 });
+    expect(viewerSidebarBounds(1023)).toEqual({ min: 260, default: 260, max: 360 });
+    expect(viewerSidebarBounds(1024)).toEqual({ min: 280, default: 280, max: 420 });
   });
 
   it('keeps the public viewer split and separator as direct library children', () => {
@@ -232,12 +236,12 @@ describe('viewer content states', () => {
       revision: { ...FOLDER_RESOLUTION.revision, revisionId: `rev_${'g'.repeat(22)}` },
     };
     expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(false);
-    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(false);
 
     storage.setItem(reviewPanelStorageKey(FILE_RESOLUTION), 'malformed');
     storage.setItem(reviewPanelStorageKey(folderResolution), 'malformed');
     expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(false);
-    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(false);
 
     storage.setItem(reviewPanelStorageKey(FILE_RESOLUTION), 'open');
     storage.setItem(reviewPanelStorageKey(folderResolution), 'closed');
@@ -1149,6 +1153,15 @@ describe('viewer content states', () => {
     expect(html).not.toMatch(/revoked|expired|secret|permission/i);
   });
 
+  it('shows revision loading inside the viewer content layout', () => {
+    const html = renderToStaticMarkup(<ViewerRevisionLoadingState />);
+
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('viewer-revision-loading');
+    expect(html).toContain('Loading revision…');
+  });
+
   it('presents a compact artifact map without decorative trust indicators', () => {
     const html = renderToStaticMarkup(
       <ViewerRail
@@ -1171,5 +1184,98 @@ describe('viewer content states', () => {
       />,
     );
     expect(pinnedHtml).toContain('Pinned');
+  });
+
+  it('presents revision updates as an icon Refresh button', () => {
+    const html = renderToStaticMarkup(
+      <ViewerRail
+        authority={{ accessType: 'public', publicCode: 'pub_1234567890' }}
+        onCheckUpdates={() => undefined}
+        resolution={FILE_RESOLUTION}
+      />,
+    );
+    const checkingHtml = renderToStaticMarkup(
+      <ViewerRail
+        authority={{ accessType: 'public', publicCode: 'pub_1234567890' }}
+        checkingUpdates
+        onCheckUpdates={() => undefined}
+        resolution={FILE_RESOLUTION}
+      />,
+    );
+
+    expect(html).toContain('viewer-update-check');
+    expect(html).toContain('aria-label="Refresh"');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain('<span>Refresh</span>');
+    expect(html).not.toContain('Check updates');
+    expect(checkingHtml).toContain('aria-label="Refreshing…"');
+    expect(checkingHtml).toContain('data-refreshing="true"');
+    expect(checkingHtml).toContain('<span>Refresh</span>');
+    expect(checkingHtml).toContain('disabled=""');
+  });
+
+  it('shows shared-history navigation and a newer revision notice', () => {
+    const previousRevisionId = `rev_${'d'.repeat(22)}`;
+    const nextRevisionId = `rev_${'e'.repeat(22)}`;
+    const html = renderToStaticMarkup(
+      <ViewerRail
+        authority={{ accessType: 'public', publicCode: 'pub_1234567890' }}
+        latestAvailable={{
+          revisionId: nextRevisionId,
+          revisionNumber: 3,
+          createdAt: '2026-08-18T14:00:00.000Z',
+        }}
+        resolution={{
+          ...FILE_RESOLUTION,
+          revisionAccess: 'shared-history',
+          revision: { ...FILE_RESOLUTION.revision, revisionNumber: 2 },
+          latestRevision: {
+            revisionId: nextRevisionId,
+            revisionNumber: 3,
+            createdAt: '2026-08-18T14:00:00.000Z',
+          },
+          navigation: {
+            revisions: [
+              {
+                revisionId: previousRevisionId,
+                revisionNumber: 1,
+                createdAt: '2026-08-18T12:00:00.000Z',
+              },
+              {
+                revisionId: FILE_RESOLUTION.revision.revisionId,
+                revisionNumber: 2,
+                createdAt: FILE_RESOLUTION.revision.createdAt,
+              },
+              {
+                revisionId: nextRevisionId,
+                revisionNumber: 3,
+                createdAt: '2026-08-18T14:00:00.000Z',
+              },
+            ],
+            previous: {
+              revisionId: previousRevisionId,
+              revisionNumber: 1,
+              createdAt: '2026-08-18T12:00:00.000Z',
+            },
+            next: {
+              revisionId: nextRevisionId,
+              revisionNumber: 3,
+              createdAt: '2026-08-18T14:00:00.000Z',
+            },
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain('Revision navigation');
+    expect(html).toContain('Select revision');
+    expect(html).toContain('View previous revision');
+    expect(html).toContain('View next revision');
+    expect(html).toContain('role="combobox"');
+    expect(html).toContain('data-kumo-component="Select"');
+    expect(html).not.toContain('<select');
+    expect(html).toContain('2nd Revision');
+    expect(html).toContain('Latest Revision');
+    expect(html).toContain('Latest Revision available');
   });
 });

@@ -21,6 +21,7 @@ The [Product Contract](../plans/2026-08-17-0030-feat-shelf-product-plan.md) owns
 | D13 | Prepared default Protected and Public links do not keep an artifact active. A non-default custom share does until it is revoked, expires, or exhausts its protected-session budget. When no such share remains, automatic retention starts a 30-day grace period before Trash. | Retention lifecycle |
 | D14 | Recovering from Trash creates a seven-day Protected recovery lease and resets retention to automatic. Creating a normal custom share also recovers the artifact. The recovery lease provides a short safety window but does not become an indefinite keep signal. | Retention lifecycle |
 | D12 | Comments are configured per share as Off, Private, or Shared. Prepared default links start Off. A thread snapshots its visibility and revision anchor when created, so later policy or revision changes never broaden old private discussions or erase review history. Shelf provides artifact-level review rather than a workspace-wide comments feed. | R27 and F6 |
+| D15 | Revision access is immutable per share and defaults to target-only. A Latest share can opt into shared history from the revision current at link creation through later revisions. It never exposes earlier history. Pinned shares remain exact. | R10-R13 and R27 |
 
 ## Accepted technical decisions
 

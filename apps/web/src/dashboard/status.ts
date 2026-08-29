@@ -1,5 +1,6 @@
 import {
   type CommentPolicy,
+  type RevisionAccess,
   SHARE_EXPIRY_DURATION_MS,
   type ShareCreateInput,
   type ShareExpiryPreset,
@@ -24,6 +25,7 @@ export interface SharePolicyDraft {
   customExpiresAt: string;
   maxSessions: string;
   readonly commentPolicy?: CommentPolicy;
+  readonly revisionAccess?: RevisionAccess;
 }
 
 export function defaultSharePolicy() {
@@ -92,6 +94,9 @@ export function buildShareCreateInput(
   if (draft.targetMode === 'pinned' && draft.revisionId === '') {
     return { error: 'Choose a revision to pin.' };
   }
+  if (draft.targetMode === 'pinned' && draft.revisionAccess === 'shared-history') {
+    return { error: 'Shared history is available only for Latest links.' };
+  }
   let maxSessions: number | undefined;
   if (draft.accessType === 'protected' && draft.maxSessions !== '') {
     maxSessions = Number(draft.maxSessions);
@@ -110,6 +115,7 @@ export function buildShareCreateInput(
     target,
     ...expiryInput,
     commentPolicy: draft.commentPolicy ?? 'off',
+    ...(draft.revisionAccess === undefined ? {} : { revisionAccess: draft.revisionAccess }),
     ...(maxSessions === undefined ? {} : { maxSessions }),
   } as ShareCreateInput;
   return { input };

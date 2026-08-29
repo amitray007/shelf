@@ -49,6 +49,7 @@ export interface ArtifactDetailPayload {
 export interface ArtifactPreviewPayload {
   artifact: Artifact;
   revision: ArtifactRevision;
+  revisions: readonly ArtifactRevision[];
   bytes: ArrayBuffer | null;
   entries: readonly FolderEntry[];
 }
@@ -234,32 +235,33 @@ export async function artifactPreviewLoader({
   return withSessionRedirect(request, async () => {
     const artifact = await loadArtifact(artifactId, request.signal);
     const requestedRevisionId = new URL(request.url).searchParams.get('revision');
-    let revision = artifact.latestRevision;
-    if (
-      requestedRevisionId !== null &&
-      requestedRevisionId !== artifact.latestRevision.revisionId
-    ) {
-      let cursor: string | undefined;
-      const visited = new Set<string>();
-      let requestedRevision: ArtifactRevision | undefined;
-      do {
-        const page = await loadArtifactHistory(artifactId, 'newest', cursor, request.signal);
-        if (page.artifactId !== artifactId || page.workspaceId !== artifact.workspaceId) {
-          throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
-        }
-        requestedRevision = page.items.find(
-          (candidate) => candidate.revisionId === requestedRevisionId,
-        );
-        cursor = requestedRevision === undefined ? (page.nextCursor ?? undefined) : undefined;
-        if (cursor !== undefined && visited.has(cursor)) {
-          throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned a repeated cursor.');
-        }
-        if (cursor !== undefined) visited.add(cursor);
-      } while (cursor !== undefined);
-      if (requestedRevision === undefined) {
-        throw new DashboardApiError('REVISION_NOT_FOUND', 'The revision was not found.');
+    const revisions: ArtifactRevision[] = [];
+    let cursor: string | undefined;
+    const visited = new Set<string>();
+    do {
+      const page = await loadArtifactHistory(artifactId, 'newest', cursor, request.signal);
+      if (page.artifactId !== artifactId || page.workspaceId !== artifact.workspaceId) {
+        throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
       }
-      revision = requestedRevision;
+      revisions.push(...page.items);
+      cursor = page.nextCursor ?? undefined;
+      if (cursor !== undefined && visited.has(cursor)) {
+        throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned a repeated cursor.');
+      }
+      if (cursor !== undefined) visited.add(cursor);
+    } while (cursor !== undefined);
+
+    if (
+      !revisions.some((candidate) => candidate.revisionId === artifact.latestRevision.revisionId)
+    ) {
+      revisions.unshift(artifact.latestRevision);
+    }
+    const revision =
+      requestedRevisionId === null
+        ? artifact.latestRevision
+        : revisions.find((candidate) => candidate.revisionId === requestedRevisionId);
+    if (revision === undefined) {
+      throw new DashboardApiError('REVISION_NOT_FOUND', 'The revision was not found.');
     }
     let bytes: ArrayBuffer | null = null;
     let entries: readonly FolderEntry[] = [];
@@ -271,6 +273,6 @@ export async function artifactPreviewLoader({
         bytes = await loadRevisionBytes(revision.revisionId, request.signal);
       }
     }
-    return { artifact, revision, bytes, entries };
+    return { artifact, revision, revisions, bytes, entries };
   });
 }

@@ -1,6 +1,7 @@
 import type {
   ArtifactDefaultShares,
   CommentPolicy,
+  RevisionAccess,
   ShareCreateInput,
   ShareCreateResult,
   ShareExpiryPresetWithNever,
@@ -32,6 +33,7 @@ export interface CreateShareCommandOptions extends ShareCommandOptions {
   artifact: string;
   access?: string;
   comments?: string;
+  revisionAccess?: string;
   revision?: string;
   expiresIn?: string;
   expiresAt?: string;
@@ -42,6 +44,7 @@ export interface CreateShareCommandOptions extends ShareCommandOptions {
 export interface SharePolicyCommandOptions {
   access?: string;
   comments?: string;
+  revisionAccess?: string;
   expiresIn?: string;
   expiresAt?: string;
   maxSessions?: string;
@@ -119,6 +122,14 @@ function commentPolicy(value: string | undefined): CommentPolicy | undefined {
   return value as CommentPolicy;
 }
 
+function revisionAccess(value: string | undefined): RevisionAccess | undefined {
+  if (value === undefined) return undefined;
+  if (value !== 'target-only' && value !== 'shared-history') {
+    throw usageFailure('Revision access must be target-only or shared-history.');
+  }
+  return value;
+}
+
 export function shareCreateInput(
   options: SharePolicyCommandOptions,
   shareTarget: ShareTarget,
@@ -132,6 +143,10 @@ export function shareCreateInput(
   }
   const maxSessions = sessionLimit(options.maxSessions);
   const policy = commentPolicy(options.comments);
+  const access = revisionAccess(options.revisionAccess);
+  if (shareTarget.mode === 'pinned' && access === 'shared-history') {
+    throw usageFailure('--revision-access shared-history requires a Latest share.');
+  }
   if (accessType === 'public' && maxSessions !== undefined) {
     throw usageFailure('--max-sessions is available only for protected shares.');
   }
@@ -153,6 +168,7 @@ export function shareCreateInput(
       accessType,
       target: shareTarget,
       ...(policy === undefined ? {} : { commentPolicy: policy }),
+      ...(access === undefined ? {} : { revisionAccess: access }),
       ...(expiresIn === undefined ? {} : { expiresIn }),
       ...(expiresAt === undefined ? {} : { expiresAt }),
     };
@@ -161,6 +177,7 @@ export function shareCreateInput(
     accessType,
     target: shareTarget,
     ...(policy === undefined ? {} : { commentPolicy: policy }),
+    ...(access === undefined ? {} : { revisionAccess: access }),
     ...(expiresIn === undefined ? {} : { expiresIn }),
     ...(expiresAt === undefined ? {} : { expiresAt }),
     ...(maxSessions === undefined ? {} : { maxSessions }),

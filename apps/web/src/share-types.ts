@@ -5,6 +5,23 @@ export type FolderShareResolution = Extract<
   PublicShareResolution,
   { artifact: { kind: 'folder' } }
 >;
+export type ShareRevisionPointer = NonNullable<PublicShareResolution['latestRevision']>;
+
+export function shareRevisionAccess(
+  resolution: PublicShareResolution,
+): 'target-only' | 'shared-history' {
+  return resolution.revisionAccess ?? 'target-only';
+}
+
+export function shareLatestRevision(resolution: PublicShareResolution): ShareRevisionPointer {
+  return (
+    resolution.latestRevision ?? {
+      revisionId: resolution.revision.revisionId,
+      revisionNumber: resolution.revision.revisionNumber,
+      createdAt: resolution.revision.createdAt,
+    }
+  );
+}
 
 export function isFileShareResolution(value: PublicShareResolution): value is FileShareResolution {
   return (

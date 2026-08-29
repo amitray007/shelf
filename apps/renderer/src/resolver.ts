@@ -92,11 +92,13 @@ export function createCoreHtmlResolver(dependencies: {
           request.path === undefined
             ? await access.readFile({
                 authority,
+                ...(request.revisionId === undefined ? {} : { revisionId: request.revisionId }),
                 ...(request.signal === undefined ? {} : { signal: request.signal }),
               })
             : await access.readTreeFile({
                 authority,
                 path: request.path,
+                ...(request.revisionId === undefined ? {} : { revisionId: request.revisionId }),
                 ...(request.signal === undefined ? {} : { signal: request.signal }),
               });
         if (normalizedMediaType(file.mediaType) !== 'text/html' || file.byteCount > maximumBytes) {
@@ -115,6 +117,7 @@ export function createCoreHtmlResolver(dependencies: {
             const asset = await access.readTreeFile({
               authority,
               path,
+              ...(request.revisionId === undefined ? {} : { revisionId: request.revisionId }),
               ...(request.signal === undefined ? {} : { signal: request.signal }),
             });
             return {

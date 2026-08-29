@@ -9,12 +9,15 @@ import {
   createdShareId,
   csvShareId,
   folderArtifactId,
+  folderShareId,
   htmlShareId,
   longArtifactName,
   longFolderName,
   longFolderPath,
   markdownShareId,
   pdfShareId,
+  previousFolderRevisionId,
+  previousRevisionId,
   publicPdfCode,
   rendererOrigin,
   shareSecret,
@@ -379,7 +382,65 @@ test('private file preview reuses the canonical file surface', async ({ page }) 
   await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
     'One useful idea',
   );
+  const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
+  await expect(revisionSelector).toContainText('Latest Revision');
+  const refreshButton = page.locator('.viewer-update-check');
+  await page.route(`**/api/v1/artifacts/${artifactId}`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await route.continue();
+  });
+  await refreshButton.click();
+  await expect(refreshButton).toBeDisabled();
+  await expect(refreshButton.locator('.viewer-update-icon')).toHaveCSS(
+    'animation-name',
+    'loading-turn',
+  );
+  await expect(refreshButton).toBeEnabled();
+  await page.unroute(`**/api/v1/artifacts/${artifactId}`);
+
+  await page.route(`**/api/v1/revisions/${previousRevisionId}/content`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await route.continue();
+  });
+  await revisionSelector.click();
+  await expect(page.getByRole('option')).toHaveText([
+    'Latest Revision',
+    '11th Revision',
+    '10th Revision',
+    '9th Revision',
+  ]);
+  await page.getByRole('option', { name: '11th Revision' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Loading revision…' })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`revision=${previousRevisionId}$`, 'u'));
+  await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
+    'research-synthesis.md',
+  );
+  await revisionSelector.click();
+  await page.getByRole('option', { name: 'Latest Revision' }).click();
+  await expect(page).not.toHaveURL(/[?&]revision=/u);
+  await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
+    'One useful idea',
+  );
   await expectNoHorizontalOverflow(page, [page.locator('.artifact-surface')]);
+  diagnostics.assertClean();
+});
+
+test('private folder previews expose revision navigation without opening the sidebar', async ({
+  page,
+}) => {
+  const diagnostics = trackPageErrors(page);
+
+  await page.goto(`/preview/${folderArtifactId}`);
+  await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Open folder .* sidebar/u })).toBeVisible();
+  const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
+  await revisionSelector.click();
+  await expect(page.getByRole('option')).toHaveText(['Latest Revision', '7th Revision']);
+  await page.getByRole('option', { name: '7th Revision' }).click();
+  await expect(page).toHaveURL(new RegExp(`revision=${previousFolderRevisionId}$`, 'u'));
+  await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open folder files sidebar' })).toBeVisible();
+  await expectNoHorizontalOverflow(page, [page.getByRole('region', { name: 'Folder browser' })]);
   diagnostics.assertClean();
 });
 
@@ -696,6 +757,122 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
   diagnostics.assertClean();
 });
 
+test('a shared-history viewer moves between revisions and returns to Latest', async ({ page }) => {
+  const diagnostics = trackPageErrors(page);
+
+  await page.goto(`/s/${markdownShareId}#${shareSecret}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
+  const refreshButton = page.locator('.viewer-update-check');
+  await expect(refreshButton).toHaveAccessibleName('Refresh');
+  const refreshResolvePattern = `**/api/v1/public/shares/${markdownShareId}/resolve`;
+  await page.route(refreshResolvePattern, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await route.continue();
+  });
+  await refreshButton.click();
+  await expect(refreshButton).toBeDisabled();
+  await expect(refreshButton).toHaveAccessibleName('Refreshing…');
+  await expect(refreshButton).toContainText('Refresh');
+  const refreshIcon = refreshButton.locator('.viewer-update-icon');
+  await expect(refreshIcon).toHaveAttribute('data-refreshing', 'true');
+  await expect(refreshIcon).toHaveCSS('animation-name', 'loading-turn');
+  await expect(refreshButton.locator('span')).toHaveCSS('animation-name', 'none');
+  await expect(refreshButton).toBeEnabled();
+  await page.unroute(refreshResolvePattern);
+  const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
+  const revisionControlGeometry = await page
+    .getByRole('group', { name: 'Revision navigation' })
+    .evaluate((group) => {
+      const previous = group.querySelector('[aria-label="View previous revision"]');
+      const selector = group.querySelector('[aria-label="Select revision"]');
+      const next = group.querySelector('[aria-label="View next revision"]');
+      const refresh = document.querySelector('.viewer-update-check');
+      if (previous === null || selector === null || next === null || refresh === null) return null;
+      const previousRect = previous.getBoundingClientRect();
+      const selectorRect = selector.getBoundingClientRect();
+      const nextRect = next.getBoundingClientRect();
+      const refreshRect = refresh.getBoundingClientRect();
+      return {
+        previousToSelector: selectorRect.left - previousRect.right,
+        selectorToNext: nextRect.left - selectorRect.right,
+        nextToRefresh: refreshRect.left - nextRect.right,
+      };
+    });
+  expect(revisionControlGeometry).not.toBeNull();
+  expect(Math.abs(revisionControlGeometry?.previousToSelector ?? Number.POSITIVE_INFINITY)).toBe(1);
+  expect(Math.abs(revisionControlGeometry?.selectorToNext ?? Number.POSITIVE_INFINITY)).toBe(1);
+  expect(revisionControlGeometry?.nextToRefresh).toBeLessThanOrEqual(8);
+  await revisionSelector.click();
+  const revisionOptions = page.getByRole('option');
+  await expect(revisionOptions).toHaveCount(12);
+  await expect(revisionOptions).toHaveText([
+    'Latest Revision',
+    '11th Revision',
+    '10th Revision',
+    '9th Revision',
+    '8th Revision',
+    '7th Revision',
+    '6th Revision',
+    '5th Revision',
+    '4th Revision',
+    '3rd Revision',
+    '2nd Revision',
+    '1st Revision',
+  ]);
+  const revisionList = page.getByRole('listbox');
+  const revisionListGeometry = await revisionList.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    firstOptionHeight:
+      element.querySelector('[role="option"]')?.getBoundingClientRect().height ?? 0,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(revisionListGeometry.firstOptionHeight).toBeGreaterThan(0);
+  expect(revisionListGeometry.clientHeight).toBeLessThanOrEqual(
+    revisionListGeometry.firstOptionHeight * 10 + 1,
+  );
+  expect(revisionListGeometry.scrollHeight).toBeGreaterThan(revisionListGeometry.clientHeight);
+  await page.getByRole('option', { name: '11th Revision' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Loading revision…' })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`revision=${previousRevisionId}$`, 'u'));
+  await expect(page.getByRole('heading', { level: 1, name: 'Earlier useful idea' })).toBeVisible();
+  await expect(page.getByText('Loading revision…')).toBeHidden();
+  const latestRevisionButton = page.getByRole('button', { name: 'Latest Revision available' });
+  if (await latestRevisionButton.isVisible()) {
+    await latestRevisionButton.click();
+  } else {
+    await revisionSelector.click();
+    await page.getByRole('option', { name: 'Latest Revision' }).click();
+  }
+  await expect(page).not.toHaveURL(/[?&]revision=/u);
+  await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
+  await expectNoHorizontalOverflow(page, [page.locator('.artifact-surface')]);
+  await expectNoAxeViolations(page);
+  diagnostics.assertClean();
+});
+
+test('a protected folder share moves between revisions with its sidebar minimized', async ({
+  page,
+}) => {
+  const diagnostics = trackPageErrors(page);
+
+  await page.goto(`/s/${folderShareId}#${shareSecret}`);
+  await expect(page).toHaveURL(`/s/${folderShareId}`);
+  await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Open folder .* sidebar/u })).toBeVisible();
+  const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
+  await revisionSelector.click();
+  await expect(page.getByRole('option')).toHaveText(['Latest Revision', '7th Revision']);
+  await page.getByRole('option', { name: '7th Revision' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Loading revision…' })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`revision=${previousFolderRevisionId}$`, 'u'));
+  await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
+  await revisionSelector.click();
+  await page.getByRole('option', { name: 'Latest Revision' }).click();
+  await expect(page).not.toHaveURL(/[?&]revision=/u);
+  await expectNoHorizontalOverflow(page, [page.getByRole('region', { name: 'Folder browser' })]);
+  diagnostics.assertClean();
+});
+
 test('rich protected shares render structured and image previews without leaking capability material', async ({
   page,
 }) => {
@@ -832,6 +1009,25 @@ test('rich protected and public media shares expose inline preview controls and 
   await expect(page.getByRole('button', { name: 'Previous PDF page' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Fit PDF page to width' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Zoom in PDF' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'PDF preview' })).toHaveAttribute(
+    'aria-busy',
+    'false',
+  );
+  const pdfZoom = page.getByLabel('PDF zoom');
+  const fittedPdfZoom = Number((await pdfZoom.textContent())?.replace('%', ''));
+  expect(fittedPdfZoom).toBeGreaterThanOrEqual(50);
+  expect(fittedPdfZoom).toBeLessThanOrEqual(150);
+  await page.getByRole('button', { name: 'Zoom out PDF' }).click();
+  const manualPdfZoom = Math.max(50, fittedPdfZoom - 25);
+  await expect(pdfZoom).toHaveText(`${manualPdfZoom}%`);
+  await page.reload();
+  await expect(page.locator('canvas[role="img"]')).toBeVisible();
+  await expect(pdfZoom).toHaveText(`${manualPdfZoom}%`);
+  await page.getByRole('button', { name: 'Fit PDF page to width' }).click();
+  await expect(pdfZoom).toHaveText(`${fittedPdfZoom}%`);
+  await page.reload();
+  await expect(page.locator('canvas[role="img"]')).toBeVisible();
+  await expect(pdfZoom).toHaveText(`${fittedPdfZoom}%`);
 
   const protectedPreviewUrl = `/api/v1/public/shares/${pdfShareId}/content/preview`;
   const protectedRange = await page.evaluate(async (url) => {

@@ -18,10 +18,17 @@ export interface RendererHtmlResolver {
           accessType: 'protected';
           shareId: string;
           viewerToken: string;
+          revisionId?: string;
           path?: string;
           signal?: AbortSignal;
         }
-      | { accessType: 'public'; publicCode: string; path?: string; signal?: AbortSignal },
+      | {
+          accessType: 'public';
+          publicCode: string;
+          revisionId?: string;
+          path?: string;
+          signal?: AbortSignal;
+        },
   ): Promise<{ status: 'available'; html: string } | { status: 'unavailable' }>;
 }
 
@@ -37,6 +44,7 @@ const SHARE_ID_PATTERN = /^shr_[A-Za-z0-9_-]{22}$/u;
 const PUBLIC_CODE_PATTERN = /^[A-Za-z0-9_-]{12}$/u;
 const VIEWER_TOKEN_PATTERN = /^[A-Za-z0-9._-]{24,4096}$/u;
 const NONCE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/u;
+const REVISION_ID_PATTERN = /^rev_[A-Za-z0-9_-]{22}$/u;
 
 function applyBoundaryHeaders(reply: FastifyReply, contentSecurityPolicy: string): void {
   void reply.header('Cache-Control', 'no-store, no-transform');
@@ -50,8 +58,14 @@ function applyBoundaryHeaders(reply: FastifyReply, contentSecurityPolicy: string
 function parseRenderRequest(body: unknown): {
   nonce: string;
   request?:
-    | { accessType: 'protected'; shareId: string; viewerToken: string; path?: string }
-    | { accessType: 'public'; publicCode: string; path?: string };
+    | {
+        accessType: 'protected';
+        shareId: string;
+        viewerToken: string;
+        revisionId?: string;
+        path?: string;
+      }
+    | { accessType: 'public'; publicCode: string; revisionId?: string; path?: string };
 } {
   if (typeof body !== 'string') return { nonce: '' };
   const parameters = new URLSearchParams(body);
@@ -71,9 +85,18 @@ function parseRenderRequest(body: unknown): {
       return { nonce };
     }
   }
+  const revisionValues = parameters.getAll('revisionId');
+  if (revisionValues.length > 1) return { nonce };
+  const revisionId = revisionValues[0];
+  if (revisionId !== undefined && !REVISION_ID_PATTERN.test(revisionId)) return { nonce };
   const keys = [...parameters.keys()];
   const protectedBody = keys.every(
-    (key) => key === 'shareId' || key === 'viewerToken' || key === 'nonce' || key === 'path',
+    (key) =>
+      key === 'shareId' ||
+      key === 'viewerToken' ||
+      key === 'nonce' ||
+      key === 'path' ||
+      key === 'revisionId',
   );
   if (
     protectedBody &&
@@ -90,12 +113,15 @@ function parseRenderRequest(body: unknown): {
             accessType: 'protected',
             shareId,
             viewerToken,
+            ...(revisionId === undefined ? {} : { revisionId }),
             ...(path === undefined ? {} : { path }),
           },
         }
       : { nonce };
   }
-  const publicBody = keys.every((key) => key === 'publicCode' || key === 'nonce' || key === 'path');
+  const publicBody = keys.every(
+    (key) => key === 'publicCode' || key === 'nonce' || key === 'path' || key === 'revisionId',
+  );
   if (
     publicBody &&
     parameters.getAll('publicCode').length === 1 &&
@@ -108,6 +134,7 @@ function parseRenderRequest(body: unknown): {
           request: {
             accessType: 'public',
             publicCode,
+            ...(revisionId === undefined ? {} : { revisionId }),
             ...(path === undefined ? {} : { path }),
           },
         }

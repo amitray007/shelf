@@ -1,7 +1,13 @@
 import type { CommentAnchor } from '@shelf/contracts';
 import { useCallback, useEffect, useState } from 'react';
 import type { LoaderFunctionArgs } from 'react-router';
-import { useLoaderData, useRevalidator } from 'react-router';
+import {
+  useLoaderData,
+  useLocation,
+  useNavigate,
+  useNavigation,
+  useRevalidator,
+} from 'react-router';
 
 import {
   establishProtectedSession,
@@ -34,7 +40,7 @@ import { DiscussionPanel } from './components/review/discussion-panel.js';
 import { readReviewValue, writeReviewValue } from './components/review/persistence.js';
 import type { ReviewSidebarMode } from './components/review/types.js';
 import { reviewPanelStorageKey, useViewerReview } from './components/review/use-review.js';
-import { ViewerRail } from './components/viewer-shell.js';
+import { ViewerRail, ViewerRevisionLoadingState } from './components/viewer-shell.js';
 import { ViewerSidebarSplit } from './components/viewer-sidebar-split.js';
 import {
   prefetchRendererModules,
@@ -47,6 +53,9 @@ import {
   type FolderShareResolution,
   isFileShareResolution,
   isFolderShareResolution,
+  type ShareRevisionPointer,
+  shareLatestRevision,
+  shareRevisionAccess,
 } from './share-types.js';
 
 export function updateViewerThreadUrl(currentUrl: string, threadId: string): string {
@@ -62,7 +71,7 @@ export function readViewerSidebarOpen(
   const persisted = readReviewValue(reviewPanelStorageKey(resolution));
   if (persisted === 'open') return true;
   if (persisted === 'closed') return false;
-  return isFolderShareResolution(resolution);
+  return false;
 }
 
 export async function viewerLoader({
@@ -120,7 +129,8 @@ export async function viewerLoader({
   }
 
   const config = await loadPublicClientConfig(request.signal);
-  return loadViewerPayload(reference, authority, request.signal, config.rendererOrigin);
+  const revisionId = new URL(request.url).searchParams.get('revision') ?? undefined;
+  return loadViewerPayload(reference, authority, request.signal, config.rendererOrigin, revisionId);
 }
 
 export async function loadViewerPayload(
@@ -128,8 +138,9 @@ export async function loadViewerPayload(
   authority: ViewerAuthority,
   signal: AbortSignal | undefined,
   rendererOrigin: string | undefined,
+  revisionId?: string,
 ): Promise<PublicSharePayload> {
-  const resolution = await resolveViewerShare(reference, authority, signal);
+  const resolution = await resolveViewerShare(reference, authority, signal, revisionId);
   if (isFolderShareResolution(resolution)) {
     prefetchRendererModules({ kind: 'folder' });
     return {
@@ -181,6 +192,7 @@ function FileArtifact({
       submitViewerDownload(
         viewerShareActionUrl(payload.resolution, payload.authority),
         payload.authority,
+        payload.resolution,
       );
     } catch {
       return;
@@ -233,7 +245,11 @@ function FileArtifact({
   );
 }
 
-function submitViewerDownload(action: string, authority: ViewerAuthority) {
+function submitViewerDownload(
+  action: string,
+  authority: ViewerAuthority,
+  resolution: FileShareResolution | FolderShareResolution,
+) {
   const form = document.createElement('form');
   form.action = action;
   form.method = authority.accessType === 'protected' ? 'post' : 'get';
@@ -244,6 +260,16 @@ function submitViewerDownload(action: string, authority: ViewerAuthority) {
     input.name = 'token';
     input.value = authority.token;
     form.append(input);
+    if (
+      resolution.target.mode === 'pinned' ||
+      shareRevisionAccess(resolution) === 'shared-history'
+    ) {
+      const revisionInput = document.createElement('input');
+      revisionInput.type = 'hidden';
+      revisionInput.name = 'revisionId';
+      revisionInput.value = resolution.revision.revisionId;
+      form.append(revisionInput);
+    }
   }
   document.body.append(form);
   try {
@@ -279,6 +305,7 @@ function FolderArtifact({
         submitViewerDownload(
           viewerShareDownloadUrl(payload.resolution, payload.authority, path),
           payload.authority,
+          payload.resolution,
         );
       } catch {
         return;
@@ -311,7 +338,71 @@ function FolderArtifact({
 
 export function ViewerPage() {
   const payload = useLoaderData() as PublicSharePayload;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navigation = useNavigation();
   const { revalidate } = useRevalidator();
+  const revisionLoading = navigation.state === 'loading';
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [latestAvailable, setLatestAvailable] = useState<ShareRevisionPointer | undefined>(() => {
+    const latestRevision = shareLatestRevision(payload.resolution);
+    return payload.resolution.revision.revisionId === latestRevision.revisionId
+      ? undefined
+      : latestRevision;
+  });
+  useEffect(() => {
+    const latestRevision = shareLatestRevision(payload.resolution);
+    setLatestAvailable(
+      payload.resolution.revision.revisionId === latestRevision.revisionId
+        ? undefined
+        : latestRevision,
+    );
+  }, [payload.resolution]);
+  const checkForUpdates = useCallback(async () => {
+    if (checkingUpdates) return;
+    setCheckingUpdates(true);
+    const reference: ViewerShareReference =
+      payload.authority.accessType === 'protected'
+        ? { accessType: 'protected', shareId: payload.authority.shareId }
+        : { accessType: 'public', publicCode: payload.authority.publicCode };
+    try {
+      const current = await resolveViewerShare(reference, payload.authority);
+      const latestRevision = shareLatestRevision(current);
+      setLatestAvailable(
+        latestRevision.revisionId === payload.resolution.revision.revisionId
+          ? undefined
+          : latestRevision,
+      );
+    } catch {
+      // A failed background check must not replace content that is already open.
+    } finally {
+      setCheckingUpdates(false);
+    }
+  }, [checkingUpdates, payload.authority, payload.resolution.revision.revisionId]);
+  useEffect(() => {
+    const checkWhenVisible = () => {
+      if (document.visibilityState === 'visible') void checkForUpdates();
+    };
+    window.addEventListener('focus', checkWhenVisible);
+    document.addEventListener('visibilitychange', checkWhenVisible);
+    return () => {
+      window.removeEventListener('focus', checkWhenVisible);
+      document.removeEventListener('visibilitychange', checkWhenVisible);
+    };
+  }, [checkForUpdates]);
+  const selectRevision = useCallback(
+    (revisionId: string | null) => {
+      const next = new URLSearchParams(location.search);
+      if (revisionId === null) next.delete('revision');
+      else next.set('revision', revisionId);
+      next.delete('thread');
+      void navigate(
+        { pathname: location.pathname, search: next.size === 0 ? '' : `?${next}` },
+        { replace: false },
+      );
+    },
+    [location.pathname, location.search, navigate],
+  );
   const handleRevisionMismatch = useCallback(
     (anchor: CommentAnchor) => {
       // A file anchor has no text/range to remap, so refreshing Latest is safe.
@@ -391,9 +482,18 @@ export function ViewerPage() {
 
   return (
     <div className="viewer">
-      <ViewerRail authority={payload.authority} resolution={payload.resolution} />
-      <div className="viewer-main">
-        {payload.kind === 'file' ? (
+      <ViewerRail
+        authority={payload.authority}
+        checkingUpdates={checkingUpdates}
+        onCheckUpdates={() => void checkForUpdates()}
+        onRevisionSelect={selectRevision}
+        resolution={payload.resolution}
+        {...(latestAvailable === undefined ? {} : { latestAvailable })}
+      />
+      <main aria-busy={revisionLoading} className="viewer-main">
+        {revisionLoading ? (
+          <ViewerRevisionLoadingState />
+        ) : payload.kind === 'file' ? (
           review.enabled ? (
             <ViewerSidebarSplit
               content={
@@ -484,7 +584,7 @@ export function ViewerPage() {
             sidebarOpen={discussionOpen}
           />
         )}
-      </div>
+      </main>
     </div>
   );
 }

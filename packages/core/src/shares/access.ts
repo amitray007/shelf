@@ -125,6 +125,7 @@ export function createShareAccessService(dependencies: {
   return {
     async readFile(request: {
       authority: ShareResolutionAuthority;
+      revisionId?: string;
       signal?: AbortSignal;
     }): Promise<PublicSharedFile> {
       const resolved = await resolveShare(request);
@@ -184,6 +185,7 @@ export function createShareAccessService(dependencies: {
 
     async readTree(request: {
       authority: ShareResolutionAuthority;
+      revisionId?: string;
       limit: number;
       cursor?: string;
       signal?: AbortSignal;
@@ -242,6 +244,7 @@ export function createShareAccessService(dependencies: {
 
     async readTreeFile(request: {
       authority: ShareResolutionAuthority;
+      revisionId?: string;
       path: string;
       signal?: AbortSignal;
     }): Promise<PublicSharedFolderFile> {

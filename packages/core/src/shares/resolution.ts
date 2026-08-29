@@ -1,5 +1,5 @@
 import type { PublicShareResolution } from '@shelf/contracts';
-import type { StoredArtifactRevision } from '../artifacts/catalog.js';
+import type { ArtifactCatalogRepository, StoredArtifactRevision } from '../artifacts/catalog.js';
 import { boundaryFailure } from '../errors.js';
 import { ShareNotFoundError, shareLifecycleStatus } from './lifecycle.js';
 import type {
@@ -8,13 +8,17 @@ import type {
   ShareCapabilityCodec,
   ShareClock,
   ShareRepository,
+  StoredShareRevision,
 } from './ports.js';
 
 const SHARE_ID_PATTERN = /^shr_[A-Za-z0-9_-]{22}$/u;
+const REVISION_ID_PATTERN = /^rev_[A-Za-z0-9_-]{22}$/u;
 const PUBLIC_CODE_PATTERN = /^[A-Za-z0-9_-]{12}$/u;
 const CAPABILITY_PATTERN = /^[A-Za-z0-9_-]{32,128}$/u;
 const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const AUTHORIZATION_LIFETIME_MS = 24 * 60 * 60 * 1000;
+const REVISION_SELECTOR_OLDER_LIMIT = 49;
+const REVISION_SELECTOR_NEWER_LIMIT = 50;
 
 function defaultClock(): Date {
   return new Date();
@@ -41,7 +45,28 @@ function validScope(value: ResolvedStoredShare): boolean {
   return revision.revisionId === artifact.latestRevision.revisionId;
 }
 
-function publicResolution(value: ResolvedStoredShare): PublicShareResolution {
+type PublicRevisionPointer = {
+  revisionId: string;
+  revisionNumber: number;
+  createdAt: string;
+};
+
+function revisionPointer(revision: StoredArtifactRevision): PublicRevisionPointer {
+  return {
+    revisionId: revision.revisionId,
+    revisionNumber: revision.revisionNumber,
+    createdAt: revision.createdAt,
+  };
+}
+
+function publicResolution(
+  value: ResolvedStoredShare,
+  navigation?: {
+    revisions: PublicRevisionPointer[];
+    previous: PublicRevisionPointer | null;
+    next: PublicRevisionPointer | null;
+  },
+): PublicShareResolution {
   const { share, artifact, revision: scopedRevision } = value;
   const revision: StoredArtifactRevision = scopedRevision.revision;
   const target =
@@ -66,6 +91,7 @@ function publicResolution(value: ResolvedStoredShare): PublicShareResolution {
     shareId: share.shareId,
     accessType: access.accessType,
     commentPolicy: share.commentPolicy ?? 'off',
+    revisionAccess: share.revisionAccess ?? 'target-only',
     target,
     artifact: {
       artifactId: artifact.artifactId,
@@ -73,6 +99,8 @@ function publicResolution(value: ResolvedStoredShare): PublicShareResolution {
       name: artifact.name,
     },
     expiresAt: access.expiresAt,
+    latestRevision: revisionPointer(artifact.latestRevision),
+    ...(navigation === undefined ? {} : { navigation }),
   };
   if (revision.kind === 'folder') {
     return {
@@ -137,12 +165,14 @@ async function loadResolution(
 
 export function createShareResolutionService(dependencies: {
   shares: ShareRepository;
+  revisions?: ArtifactCatalogRepository;
   clock?: ShareClock;
 }) {
   const clock = dependencies.clock ?? defaultClock;
 
   return async function resolveShare(request: {
     authority: ShareResolutionAuthority;
+    revisionId?: string;
     signal?: AbortSignal;
   }): Promise<PublicShareResolution> {
     const { authority } = request;
@@ -150,7 +180,8 @@ export function createShareResolutionService(dependencies: {
       (authority.type === 'public' && !PUBLIC_CODE_PATTERN.test(authority.publicCode)) ||
       (authority.type === 'protected-session' &&
         (!SHARE_ID_PATTERN.test(authority.shareId) ||
-          !SESSION_ID_PATTERN.test(authority.sessionId)))
+          !SESSION_ID_PATTERN.test(authority.sessionId))) ||
+      (request.revisionId !== undefined && !REVISION_ID_PATTERN.test(request.revisionId))
     ) {
       throw new ShareNotFoundError();
     }
@@ -174,7 +205,108 @@ export function createShareResolutionService(dependencies: {
     ) {
       throw new ShareNotFoundError();
     }
-    return publicResolution(resolved);
+    let selected = resolved.revision;
+    if (
+      request.revisionId !== undefined &&
+      request.revisionId !== resolved.revision.revision.revisionId
+    ) {
+      const historyFrom = share.historyFromRevisionNumber;
+      if (
+        share.target.mode !== 'latest' ||
+        (share.revisionAccess ?? 'target-only') !== 'shared-history' ||
+        historyFrom === undefined ||
+        historyFrom === null ||
+        !Number.isSafeInteger(historyFrom) ||
+        historyFrom < 1
+      ) {
+        throw new ShareNotFoundError();
+      }
+      let candidate: StoredShareRevision | undefined;
+      try {
+        request.signal?.throwIfAborted();
+        candidate = await dependencies.shares.findRevisionForShare(request.revisionId);
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Shared revision lookup failed.', error);
+      }
+      const candidateRevision = candidate?.revision;
+      if (
+        candidate === undefined ||
+        candidateRevision === undefined ||
+        candidate.installationId !== share.installationId ||
+        candidate.workspaceId !== share.workspaceId ||
+        candidate.artifactId !== share.artifactId ||
+        candidateRevision.revisionId !== request.revisionId ||
+        (candidateRevision.kind ?? 'file') !== (resolved.artifact.kind ?? 'file') ||
+        candidateRevision.revisionNumber < historyFrom ||
+        candidateRevision.revisionNumber > resolved.artifact.latestRevision.revisionNumber
+      ) {
+        throw new ShareNotFoundError();
+      }
+      selected = candidate;
+    }
+
+    let navigation:
+      | {
+          revisions: PublicRevisionPointer[];
+          previous: PublicRevisionPointer | null;
+          next: PublicRevisionPointer | null;
+        }
+      | undefined;
+    const historyFrom = share.historyFromRevisionNumber;
+    if (
+      dependencies.revisions !== undefined &&
+      share.target.mode === 'latest' &&
+      (share.revisionAccess ?? 'target-only') === 'shared-history' &&
+      historyFrom !== undefined &&
+      historyFrom !== null &&
+      Number.isSafeInteger(historyFrom) &&
+      historyFrom > 0
+    ) {
+      const currentNumber = selected.revision.revisionNumber;
+      const latestNumber = resolved.artifact.latestRevision.revisionNumber;
+      try {
+        request.signal?.throwIfAborted();
+        const [olderPage, newerPage] = await Promise.all([
+          currentNumber > historyFrom
+            ? dependencies.revisions.listArtifactRevisions({
+                installationId: share.installationId,
+                artifactId: share.artifactId,
+                limit: REVISION_SELECTOR_OLDER_LIMIT,
+                order: 'newest',
+                cursorRevisionNumber: currentNumber,
+              })
+            : Promise.resolve({ items: [] }),
+          currentNumber < latestNumber
+            ? dependencies.revisions.listArtifactRevisions({
+                installationId: share.installationId,
+                artifactId: share.artifactId,
+                limit: REVISION_SELECTOR_NEWER_LIMIT,
+                order: 'oldest',
+                cursorRevisionNumber: currentNumber,
+              })
+            : Promise.resolve({ items: [] }),
+        ]);
+        const older = olderPage.items.filter(
+          (revision) =>
+            revision.revisionNumber >= historyFrom && revision.revisionNumber < currentNumber,
+        );
+        const newer = newerPage.items.filter(
+          (revision) =>
+            revision.revisionNumber > currentNumber && revision.revisionNumber <= latestNumber,
+        );
+        const previous = older[0];
+        const next = newer[0];
+        const revisions = [...older.reverse(), selected.revision, ...newer];
+        navigation = {
+          revisions: revisions.map(revisionPointer),
+          previous: previous === undefined ? null : revisionPointer(previous),
+          next: next === undefined ? null : revisionPointer(next),
+        };
+      } catch (error) {
+        throw boundaryFailure('SERVICE_UNAVAILABLE', 'Shared revision navigation failed.', error);
+      }
+    }
+    return publicResolution({ ...resolved, revision: selected }, navigation);
   };
 }
 
