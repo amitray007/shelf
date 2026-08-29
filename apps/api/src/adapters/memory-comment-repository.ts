@@ -22,6 +22,11 @@ function copy<T>(value: T): T {
   return structuredClone(value);
 }
 
+function descendingCodePointOrder(left: string, right: string): number {
+  if (left === right) return 0;
+  return left < right ? 1 : -1;
+}
+
 /** Process-local comments adapter. Keys and metadata are never exposed by this adapter's output. */
 export class MemoryCommentRepository implements CommentRepository {
   readonly #visitors = new Map<string, StoredCommentVisitor>();
@@ -169,8 +174,8 @@ export class MemoryCommentRepository implements CommentRepository {
       )
       .sort(
         (left, right) =>
-          right.updatedAt.localeCompare(left.updatedAt) ||
-          right.threadId.localeCompare(left.threadId),
+          descendingCodePointOrder(left.updatedAt, right.updatedAt) ||
+          descendingCodePointOrder(left.threadId, right.threadId),
       )
       .filter((thread) => {
         if (request.cursor === undefined || !commentCursorMatchesScope(request.cursor, scope))
@@ -220,8 +225,8 @@ export class MemoryCommentRepository implements CommentRepository {
       )
       .sort(
         (left, right) =>
-          right.updatedAt.localeCompare(left.updatedAt) ||
-          right.threadId.localeCompare(left.threadId),
+          descendingCodePointOrder(left.updatedAt, right.updatedAt) ||
+          descendingCodePointOrder(left.threadId, right.threadId),
       )
       .filter((thread) => {
         if (request.cursor === undefined || !commentCursorMatchesScope(request.cursor, scope))
