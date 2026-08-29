@@ -186,9 +186,9 @@ describe('viewer content states', () => {
     const storage = reviewTestStorage();
     expect(clampViewerSidebarWidth(240, bounds)).toBe(280);
     expect(clampViewerSidebarWidth(600, bounds)).toBe(420);
-    expect(readViewerSidebarWidth(storage, bounds)).toBe(320);
+    expect(readViewerSidebarWidth(storage, bounds)).toBe(280);
     storage.setItem(VIEWER_SIDEBAR_WIDTH_STORAGE_KEY, 'not-a-width');
-    expect(readViewerSidebarWidth(storage, bounds)).toBe(320);
+    expect(readViewerSidebarWidth(storage, bounds)).toBe(280);
     storage.setItem(VIEWER_SIDEBAR_WIDTH_STORAGE_KEY, '401.8');
     expect(readViewerSidebarWidth(storage, bounds)).toBe(402);
     expect(
@@ -200,13 +200,13 @@ describe('viewer content states', () => {
         },
         bounds,
       ),
-    ).toBe(320);
+    ).toBe(280);
   });
 
   it('uses the responsive tablet viewer sidebar bounds', () => {
-    expect(viewerSidebarBounds(641)).toEqual({ min: 260, default: 300, max: 360 });
-    expect(viewerSidebarBounds(1023)).toEqual({ min: 260, default: 300, max: 360 });
-    expect(viewerSidebarBounds(1024)).toEqual({ min: 280, default: 320, max: 420 });
+    expect(viewerSidebarBounds(641)).toEqual({ min: 260, default: 260, max: 360 });
+    expect(viewerSidebarBounds(1023)).toEqual({ min: 260, default: 260, max: 360 });
+    expect(viewerSidebarBounds(1024)).toEqual({ min: 280, default: 280, max: 420 });
   });
 
   it('keeps the public viewer split and separator as direct library children', () => {
@@ -1194,6 +1194,23 @@ describe('viewer content states', () => {
             createdAt: '2026-08-18T14:00:00.000Z',
           },
           navigation: {
+            revisions: [
+              {
+                revisionId: previousRevisionId,
+                revisionNumber: 1,
+                createdAt: '2026-08-18T12:00:00.000Z',
+              },
+              {
+                revisionId: FILE_RESOLUTION.revision.revisionId,
+                revisionNumber: 2,
+                createdAt: FILE_RESOLUTION.revision.createdAt,
+              },
+              {
+                revisionId: nextRevisionId,
+                revisionNumber: 3,
+                createdAt: '2026-08-18T14:00:00.000Z',
+              },
+            ],
             previous: {
               revisionId: previousRevisionId,
               revisionNumber: 1,
@@ -1210,9 +1227,12 @@ describe('viewer content states', () => {
     );
 
     expect(html).toContain('Revision navigation');
-    expect(html).toContain('View 1st Revision');
-    expect(html).toContain('View 3rd Revision');
-    expect(html).toContain('History · 2nd Revision');
+    expect(html).toContain('Select revision');
+    expect(html).toContain('View previous revision');
+    expect(html).toContain('View next revision');
+    expect(html).toContain('1st Revision');
+    expect(html).toContain('2nd Revision');
+    expect(html).toContain('3rd Revision (Latest)');
     expect(html).toContain('3rd Revision available');
   });
 });

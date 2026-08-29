@@ -182,6 +182,10 @@ describe('anonymous share resolution', () => {
       revision: { revisionId: ids.secondRevision, revisionNumber: 2 },
       latestRevision: { revisionId: ids.thirdRevision, revisionNumber: 3 },
       navigation: {
+        revisions: [
+          { revisionId: ids.secondRevision, revisionNumber: 2 },
+          { revisionId: ids.thirdRevision, revisionNumber: 3 },
+        ],
         previous: null,
         next: { revisionId: ids.thirdRevision, revisionNumber: 3 },
       },

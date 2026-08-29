@@ -723,6 +723,7 @@ async function api(request, response, url) {
               createdAt: '2026-08-17T16:30:00.000Z',
             },
             navigation: {
+              revisions: markdownResolution.navigation.revisions,
               previous: null,
               next: markdownResolution.latestRevision,
             },

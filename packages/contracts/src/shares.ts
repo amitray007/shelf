@@ -362,6 +362,7 @@ const PublicRevisionPointerSchema = Type.Object(PublicRevisionFields, {
 
 const PublicRevisionNavigationSchema = Type.Object(
   {
+    revisions: Type.Array(PublicRevisionPointerSchema, { minItems: 1, maxItems: 100 }),
     previous: Type.Union([PublicRevisionPointerSchema, Type.Null()]),
     next: Type.Union([PublicRevisionPointerSchema, Type.Null()]),
   },

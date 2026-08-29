@@ -11,8 +11,8 @@ export interface ViewerSidebarBounds {
 }
 
 export function viewerSidebarBounds(viewportWidth: number): ViewerSidebarBounds {
-  if (viewportWidth < 1024) return { min: 260, default: 300, max: 360 };
-  return { min: 280, default: 320, max: 420 };
+  if (viewportWidth < 1024) return { min: 260, default: 260, max: 360 };
+  return { min: 280, default: 280, max: 420 };
 }
 
 export function clampViewerSidebarWidth(width: number, bounds: ViewerSidebarBounds): number {

@@ -568,6 +568,18 @@ export const markdownResolution = {
     createdAt: revision.createdAt,
   },
   navigation: {
+    revisions: [
+      {
+        revisionId: previousRevisionId,
+        revisionNumber: 11,
+        createdAt: '2026-08-17T16:30:00.000Z',
+      },
+      {
+        revisionId,
+        revisionNumber: revision.revisionNumber,
+        createdAt: revision.createdAt,
+      },
+    ],
     previous: {
       revisionId: previousRevisionId,
       revisionNumber: 11,

@@ -17,6 +17,8 @@ const PUBLIC_CODE_PATTERN = /^[A-Za-z0-9_-]{12}$/u;
 const CAPABILITY_PATTERN = /^[A-Za-z0-9_-]{32,128}$/u;
 const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const AUTHORIZATION_LIFETIME_MS = 24 * 60 * 60 * 1000;
+const REVISION_SELECTOR_OLDER_LIMIT = 49;
+const REVISION_SELECTOR_NEWER_LIMIT = 50;
 
 function defaultClock(): Date {
   return new Date();
@@ -59,7 +61,11 @@ function revisionPointer(revision: StoredArtifactRevision): PublicRevisionPointe
 
 function publicResolution(
   value: ResolvedStoredShare,
-  navigation?: { previous: PublicRevisionPointer | null; next: PublicRevisionPointer | null },
+  navigation?: {
+    revisions: PublicRevisionPointer[];
+    previous: PublicRevisionPointer | null;
+    next: PublicRevisionPointer | null;
+  },
 ): PublicShareResolution {
   const { share, artifact, revision: scopedRevision } = value;
   const revision: StoredArtifactRevision = scopedRevision.revision;
@@ -240,7 +246,11 @@ export function createShareResolutionService(dependencies: {
     }
 
     let navigation:
-      | { previous: PublicRevisionPointer | null; next: PublicRevisionPointer | null }
+      | {
+          revisions: PublicRevisionPointer[];
+          previous: PublicRevisionPointer | null;
+          next: PublicRevisionPointer | null;
+        }
       | undefined;
     const historyFrom = share.historyFromRevisionNumber;
     if (
@@ -256,12 +266,12 @@ export function createShareResolutionService(dependencies: {
       const latestNumber = resolved.artifact.latestRevision.revisionNumber;
       try {
         request.signal?.throwIfAborted();
-        const [previousPage, nextPage] = await Promise.all([
+        const [olderPage, newerPage] = await Promise.all([
           currentNumber > historyFrom
             ? dependencies.revisions.listArtifactRevisions({
                 installationId: share.installationId,
                 artifactId: share.artifactId,
-                limit: 1,
+                limit: REVISION_SELECTOR_OLDER_LIMIT,
                 order: 'newest',
                 cursorRevisionNumber: currentNumber,
               })
@@ -270,23 +280,27 @@ export function createShareResolutionService(dependencies: {
             ? dependencies.revisions.listArtifactRevisions({
                 installationId: share.installationId,
                 artifactId: share.artifactId,
-                limit: 1,
+                limit: REVISION_SELECTOR_NEWER_LIMIT,
                 order: 'oldest',
                 cursorRevisionNumber: currentNumber,
               })
             : Promise.resolve({ items: [] }),
         ]);
-        const previous = previousPage.items[0];
-        const next = nextPage.items[0];
+        const older = olderPage.items.filter(
+          (revision) =>
+            revision.revisionNumber >= historyFrom && revision.revisionNumber < currentNumber,
+        );
+        const newer = newerPage.items.filter(
+          (revision) =>
+            revision.revisionNumber > currentNumber && revision.revisionNumber <= latestNumber,
+        );
+        const previous = older[0];
+        const next = newer[0];
+        const revisions = [...older.reverse(), selected.revision, ...newer];
         navigation = {
-          previous:
-            previous !== undefined && previous.revisionNumber >= historyFrom
-              ? revisionPointer(previous)
-              : null,
-          next:
-            next !== undefined && next.revisionNumber <= latestNumber
-              ? revisionPointer(next)
-              : null,
+          revisions: revisions.map(revisionPointer),
+          previous: previous === undefined ? null : revisionPointer(previous),
+          next: next === undefined ? null : revisionPointer(next),
         };
       } catch (error) {
         throw boundaryFailure('SERVICE_UNAVAILABLE', 'Shared revision navigation failed.', error);

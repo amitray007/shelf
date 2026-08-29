@@ -471,6 +471,11 @@ describe('share HTTP boundary', () => {
       revision: { revisionId: secondRevisionId, revisionNumber: 2 },
       latestRevision: { revisionId: thirdRevisionId, revisionNumber: 3 },
       navigation: {
+        revisions: [
+          { revisionId: firstRevisionId, revisionNumber: 1 },
+          { revisionId: secondRevisionId, revisionNumber: 2 },
+          { revisionId: thirdRevisionId, revisionNumber: 3 },
+        ],
         previous: { revisionId: firstRevisionId, revisionNumber: 1 },
         next: { revisionId: thirdRevisionId, revisionNumber: 3 },
       },
@@ -479,13 +484,26 @@ describe('share HTTP boundary', () => {
     expect(selectedContent.body).toBe('version two');
     expect(firstSelected.statusCode, firstSelected.body).toBe(200);
     expect(firstSelected.json().navigation).toMatchObject({
+      revisions: [
+        { revisionId: firstRevisionId },
+        { revisionId: secondRevisionId },
+        { revisionId: thirdRevisionId },
+      ],
       previous: null,
       next: { revisionId: secondRevisionId },
     });
     expect(latest.statusCode, latest.body).toBe(200);
     expect(latest.json()).toMatchObject({
       revision: { revisionId: thirdRevisionId },
-      navigation: { previous: { revisionId: secondRevisionId }, next: null },
+      navigation: {
+        revisions: [
+          { revisionId: firstRevisionId },
+          { revisionId: secondRevisionId },
+          { revisionId: thirdRevisionId },
+        ],
+        previous: { revisionId: secondRevisionId },
+        next: null,
+      },
     });
   });
 

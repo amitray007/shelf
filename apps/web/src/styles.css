@@ -1275,6 +1275,7 @@ a {
 }
 
 .viewer-revision-control,
+.viewer-revision-select,
 .viewer-update-check,
 .viewer-latest-available {
   min-height: 28px;
@@ -1291,6 +1292,11 @@ a {
   padding: 0;
 }
 
+.viewer-revision-select {
+  min-width: 138px;
+  padding: 0 30px 0 9px;
+}
+
 .viewer-update-check,
 .viewer-latest-available {
   padding: 0 9px;
@@ -1305,7 +1311,8 @@ a {
   color: var(--accent);
 }
 
-.viewer-revision-control:hover,
+.viewer-revision-control:hover:not(:disabled),
+.viewer-revision-select:hover,
 .viewer-update-check:hover,
 .viewer-latest-available:hover {
   border-color: var(--text-muted);
@@ -1313,6 +1320,7 @@ a {
 }
 
 .viewer-revision-control:focus-visible,
+.viewer-revision-select:focus-visible,
 .viewer-update-check:focus-visible,
 .viewer-latest-available:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -1322,6 +1330,11 @@ a {
 .viewer-update-check:disabled {
   cursor: wait;
   opacity: 0.6;
+}
+
+.viewer-revision-control:disabled {
+  cursor: default;
+  opacity: 0.35;
 }
 
 .artifact-title {

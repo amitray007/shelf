@@ -56,34 +56,49 @@ export function ViewerRail({
       </div>
       <div className="rail-context">
         <fieldset aria-label="Revision navigation" className="viewer-revision-navigation">
-          {resolution.navigation?.previous === null ||
-          resolution.navigation?.previous === undefined ? null : (
-            <button
-              aria-label={`View ${revisionLabel(resolution.navigation.previous.revisionNumber)}`}
-              className="viewer-revision-control"
-              onClick={() =>
-                onRevisionSelect?.(resolution.navigation?.previous?.revisionId ?? null)
-              }
-              title="View previous revision"
-              type="button"
-            >
-              ←
-            </button>
-          )}
-          <span className="target-state">
-            {targetLabel} · {revisionLabel(revision.revisionNumber)}
-          </span>
-          {resolution.navigation?.next === null ||
-          resolution.navigation?.next === undefined ? null : (
-            <button
-              aria-label={`View ${revisionLabel(resolution.navigation.next.revisionNumber)}`}
-              className="viewer-revision-control"
-              onClick={() => onRevisionSelect?.(resolution.navigation?.next?.revisionId ?? null)}
-              title="View next revision"
-              type="button"
-            >
-              →
-            </button>
+          {resolution.navigation === undefined ? (
+            <span className="target-state">
+              {targetLabel} · {revisionLabel(revision.revisionNumber)}
+            </span>
+          ) : (
+            <>
+              <button
+                aria-label="View previous revision"
+                className="viewer-revision-control"
+                disabled={resolution.navigation.previous === null}
+                onClick={() =>
+                  onRevisionSelect?.(resolution.navigation?.previous?.revisionId ?? null)
+                }
+                type="button"
+              >
+                ←
+              </button>
+              <select
+                aria-label="Select revision"
+                className="viewer-revision-select"
+                onChange={(event) => {
+                  const revisionId = event.currentTarget.value;
+                  onRevisionSelect?.(revisionId === latestRevision.revisionId ? null : revisionId);
+                }}
+                value={revision.revisionId}
+              >
+                {resolution.navigation.revisions.map((candidate) => (
+                  <option key={candidate.revisionId} value={candidate.revisionId}>
+                    {revisionLabel(candidate.revisionNumber)}
+                    {candidate.revisionId === latestRevision.revisionId ? ' (Latest)' : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                aria-label="View next revision"
+                className="viewer-revision-control"
+                disabled={resolution.navigation.next === null}
+                onClick={() => onRevisionSelect?.(resolution.navigation?.next?.revisionId ?? null)}
+                type="button"
+              >
+                →
+              </button>
+            </>
           )}
         </fieldset>
         {latestAvailable === undefined ? null : resolution.target.mode === 'latest' ? (
