@@ -1,3 +1,4 @@
+import { Select } from '@cloudflare/kumo/components/select';
 import type { PublicShareResolution } from '@shelf/contracts';
 
 import type { ViewerAuthority } from '../api.js';
@@ -73,23 +74,33 @@ export function ViewerRail({
               >
                 ←
               </button>
-              <select
+              <Select<string>
                 aria-label="Select revision"
                 className="viewer-revision-select"
-                onChange={(event) => {
-                  const revisionId = event.currentTarget.value;
+                onValueChange={(revisionId) => {
+                  if (revisionId === null) return;
                   onRevisionSelect?.(revisionId === latestRevision.revisionId ? null : revisionId);
                 }}
+                renderValue={(revisionId) => {
+                  const selected = resolution.navigation?.revisions.find(
+                    (candidate) => candidate.revisionId === revisionId,
+                  );
+                  if (selected === undefined) return null;
+                  return selected.revisionId === latestRevision.revisionId
+                    ? 'Latest Revision'
+                    : revisionLabel(selected.revisionNumber);
+                }}
+                size="sm"
                 value={revision.revisionId}
               >
                 {resolution.navigation.revisions.map((candidate) => (
-                  <option key={candidate.revisionId} value={candidate.revisionId}>
+                  <Select.Option key={candidate.revisionId} value={candidate.revisionId}>
                     {candidate.revisionId === latestRevision.revisionId
                       ? 'Latest Revision'
                       : revisionLabel(candidate.revisionNumber)}
-                  </option>
+                  </Select.Option>
                 ))}
-              </select>
+              </Select>
               <button
                 aria-label="View next revision"
                 className="viewer-revision-control"

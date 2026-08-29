@@ -1239,7 +1239,9 @@ describe('viewer content states', () => {
     expect(html).toContain('Select revision');
     expect(html).toContain('View previous revision');
     expect(html).toContain('View next revision');
-    expect(html).toContain('1st Revision');
+    expect(html).toContain('role="combobox"');
+    expect(html).toContain('data-kumo-component="Select"');
+    expect(html).not.toContain('<select');
     expect(html).toContain('2nd Revision');
     expect(html).toContain('Latest Revision');
     expect(html).toContain('Latest Revision available');
