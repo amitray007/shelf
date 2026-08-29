@@ -1182,6 +1182,33 @@ describe('viewer content states', () => {
     expect(pinnedHtml).toContain('Pinned');
   });
 
+  it('presents revision updates as an icon Refresh button', () => {
+    const html = renderToStaticMarkup(
+      <ViewerRail
+        authority={{ accessType: 'public', publicCode: 'pub_1234567890' }}
+        onCheckUpdates={() => undefined}
+        resolution={FILE_RESOLUTION}
+      />,
+    );
+    const checkingHtml = renderToStaticMarkup(
+      <ViewerRail
+        authority={{ accessType: 'public', publicCode: 'pub_1234567890' }}
+        checkingUpdates
+        onCheckUpdates={() => undefined}
+        resolution={FILE_RESOLUTION}
+      />,
+    );
+
+    expect(html).toContain('viewer-update-check');
+    expect(html).toContain('aria-label="Refresh"');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain('<span>Refresh</span>');
+    expect(html).not.toContain('Check updates');
+    expect(checkingHtml).toContain('aria-label="Refreshing…"');
+    expect(checkingHtml).toContain('<span>Refreshing…</span>');
+    expect(checkingHtml).toContain('disabled=""');
+  });
+
   it('shows shared-history navigation and a newer revision notice', () => {
     const previousRevisionId = `rev_${'d'.repeat(22)}`;
     const nextRevisionId = `rev_${'e'.repeat(22)}`;

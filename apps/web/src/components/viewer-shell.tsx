@@ -1,4 +1,5 @@
 import { Select } from '@cloudflare/kumo/components/select';
+import { ArrowClockwiseIcon } from '@phosphor-icons/react/ArrowClockwise';
 import type { PublicShareResolution } from '@shelf/contracts';
 
 import type { ViewerAuthority } from '../api.js';
@@ -130,13 +131,14 @@ export function ViewerRail({
         )}
         {onCheckUpdates === undefined ? null : (
           <button
-            aria-label="Check for a newer revision"
+            aria-label={checkingUpdates ? 'Refreshing…' : 'Refresh'}
             className="viewer-update-check"
             disabled={checkingUpdates}
             onClick={onCheckUpdates}
             type="button"
           >
-            {checkingUpdates ? 'Checking…' : 'Check updates'}
+            <ArrowClockwiseIcon aria-hidden="true" size={14} />
+            <span>{checkingUpdates ? 'Refreshing…' : 'Refresh'}</span>
           </button>
         )}
       </div>

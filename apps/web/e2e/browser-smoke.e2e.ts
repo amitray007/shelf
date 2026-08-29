@@ -702,6 +702,7 @@ test('a shared-history viewer moves between revisions and returns to Latest', as
 
   await page.goto(`/s/${markdownShareId}#${shareSecret}`);
   await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
   const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
   await revisionSelector.click();
   const revisionOptions = page.getByRole('option');

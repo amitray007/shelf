@@ -1311,6 +1311,13 @@ a {
   padding: 0 9px;
 }
 
+.viewer-update-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
 .viewer-latest-available {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--rule));
   color: var(--accent);
@@ -2646,12 +2653,10 @@ a {
     width: 28px;
     overflow: hidden;
     padding: 0;
-    color: transparent;
   }
 
-  .viewer-update-check::after {
-    content: "↻";
-    color: var(--text-subtle);
+  .viewer-update-check span {
+    display: none;
   }
 
   .viewer-latest-notice {
