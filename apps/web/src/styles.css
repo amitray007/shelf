@@ -1230,7 +1230,7 @@ a {
 }
 
 .rail-context {
-  gap: 20px;
+  gap: 8px;
   color: var(--text-muted);
   font:
     500 12px / 1.2 "Geist Mono Variable",
@@ -1267,11 +1267,24 @@ a {
 .viewer-revision-navigation {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
   min-inline-size: 0;
   margin: 0;
   padding: 0;
   border: 0;
+}
+
+.viewer-revision-navigation > * {
+  position: relative;
+}
+
+.viewer-revision-navigation > * + * {
+  margin-inline-start: -1px;
+}
+
+.viewer-revision-navigation > *:focus-within,
+.viewer-revision-navigation > .viewer-revision-control:hover {
+  z-index: 1;
 }
 
 .viewer-revision-control,
@@ -1292,9 +1305,18 @@ a {
   padding: 0;
 }
 
+.viewer-revision-navigation > .viewer-revision-control:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.viewer-revision-navigation > .viewer-revision-control:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
 .viewer-revision-select {
   min-width: 148px;
   padding: 0 9px;
+  border-radius: 0;
 }
 
 .viewer-revision-option {
@@ -2664,6 +2686,7 @@ a {
     display: none;
   }
 
+  .viewer-latest-available,
   .viewer-latest-notice {
     display: none;
   }

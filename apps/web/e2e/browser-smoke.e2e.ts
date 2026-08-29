@@ -720,6 +720,28 @@ test('a shared-history viewer moves between revisions and returns to Latest', as
   await expect(refreshButton).toBeEnabled();
   await page.unroute(refreshResolvePattern);
   const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
+  const revisionControlGeometry = await page
+    .getByRole('group', { name: 'Revision navigation' })
+    .evaluate((group) => {
+      const previous = group.querySelector('[aria-label="View previous revision"]');
+      const selector = group.querySelector('[aria-label="Select revision"]');
+      const next = group.querySelector('[aria-label="View next revision"]');
+      const refresh = document.querySelector('.viewer-update-check');
+      if (previous === null || selector === null || next === null || refresh === null) return null;
+      const previousRect = previous.getBoundingClientRect();
+      const selectorRect = selector.getBoundingClientRect();
+      const nextRect = next.getBoundingClientRect();
+      const refreshRect = refresh.getBoundingClientRect();
+      return {
+        previousToSelector: selectorRect.left - previousRect.right,
+        selectorToNext: nextRect.left - selectorRect.right,
+        nextToRefresh: refreshRect.left - nextRect.right,
+      };
+    });
+  expect(revisionControlGeometry).not.toBeNull();
+  expect(Math.abs(revisionControlGeometry?.previousToSelector ?? Number.POSITIVE_INFINITY)).toBe(1);
+  expect(Math.abs(revisionControlGeometry?.selectorToNext ?? Number.POSITIVE_INFINITY)).toBe(1);
+  expect(revisionControlGeometry?.nextToRefresh).toBeLessThanOrEqual(8);
   await revisionSelector.click();
   const revisionOptions = page.getByRole('option');
   await expect(revisionOptions).toHaveCount(12);
@@ -754,9 +776,13 @@ test('a shared-history viewer moves between revisions and returns to Latest', as
   await expect(page).toHaveURL(new RegExp(`revision=${previousRevisionId}$`, 'u'));
   await expect(page.getByRole('heading', { level: 1, name: 'Earlier useful idea' })).toBeVisible();
   await expect(page.getByText('Loading revision…')).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Latest Revision available' })).toBeVisible();
-
-  await page.getByRole('button', { name: 'Latest Revision available' }).click();
+  const latestRevisionButton = page.getByRole('button', { name: 'Latest Revision available' });
+  if (await latestRevisionButton.isVisible()) {
+    await latestRevisionButton.click();
+  } else {
+    await revisionSelector.click();
+    await page.getByRole('option', { name: 'Latest Revision' }).click();
+  }
   await expect(page).not.toHaveURL(/[?&]revision=/u);
   await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
   await expectNoHorizontalOverflow(page, [page.locator('.artifact-surface')]);
