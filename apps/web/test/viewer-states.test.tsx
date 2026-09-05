@@ -236,12 +236,12 @@ describe('viewer content states', () => {
       revision: { ...FOLDER_RESOLUTION.revision, revisionId: `rev_${'g'.repeat(22)}` },
     };
     expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(false);
-    expect(readViewerSidebarOpen(folderResolution)).toBe(false);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
 
     storage.setItem(reviewPanelStorageKey(FILE_RESOLUTION), 'malformed');
     storage.setItem(reviewPanelStorageKey(folderResolution), 'malformed');
     expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(false);
-    expect(readViewerSidebarOpen(folderResolution)).toBe(false);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
 
     storage.setItem(reviewPanelStorageKey(FILE_RESOLUTION), 'open');
     storage.setItem(reviewPanelStorageKey(folderResolution), 'closed');
@@ -1162,7 +1162,7 @@ describe('viewer content states', () => {
     expect(html).toContain('Loading revision…');
   });
 
-  it('presents a compact artifact map without decorative trust indicators', () => {
+  it('supplies revision actions without adding another viewer header', () => {
     const html = renderToStaticMarkup(
       <ViewerRail
         authority={{ accessType: 'public', publicCode: 'pub_1234567890' }}
@@ -1170,7 +1170,7 @@ describe('viewer content states', () => {
       />,
     );
 
-    expect(html).toContain('Shared artifact');
+    expect(html).not.toContain('<header');
     expect(html).toContain('Latest');
     expect(html).not.toContain('idea.md');
     expect(html).not.toContain('Download');

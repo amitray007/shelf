@@ -14,11 +14,12 @@ import {
 } from '../rendering.js';
 import type { FolderShareResolution } from '../share-types.js';
 import { type ArtifactFileContent, ArtifactFileView } from './artifact-file-view.js';
-import { viewerSessionStorageKey } from './file-view.js';
+import { FileView, viewerSessionStorageKey } from './file-view.js';
 import { RendererFrame } from './renderer-frame.js';
 import { DiscussionPanel } from './review/discussion-panel.js';
 import { ReviewSidebarToolbar } from './review/sidebar-toolbar.js';
 import type { ReviewSidebarMode, ReviewThreadFilter } from './review/types.js';
+import { useViewerControls } from './viewer-controls.js';
 import { ViewerSidebarSplit } from './viewer-sidebar-split.js';
 
 export interface FolderBrowserReview {
@@ -141,6 +142,7 @@ export function FolderBrowser({
   resolution,
   review,
 }: FolderBrowserProps) {
+  const controls = useViewerControls();
   const { fileEntriesByPath, filePaths, firstFile, paths } = useMemo(() => {
     const nextPaths: string[] = [];
     const nextFilePaths = new Set<string>();
@@ -160,6 +162,10 @@ export function FolderBrowser({
       paths: nextPaths,
     };
   }, [entries]);
+  const landingPath = ['index.html', 'index.htm', 'README.md', 'readme.md'].find((path) =>
+    filePaths.has(path),
+  );
+  const defaultPath = controls === undefined ? firstFile?.path : landingPath;
   const filePathsRef = useRef(filePaths);
   filePathsRef.current = filePaths;
   const focusRequestId = review?.focusRequestId;
@@ -169,7 +175,7 @@ export function FolderBrowser({
   const programmaticSelectionPathRef = useRef<string | undefined>(undefined);
   const treeMountedRef = useRef(false);
   const [selectedPath, setSelectedPath] = useState(
-    () => readSelectedFilePath(filePaths) ?? firstFile?.path,
+    () => readSelectedFilePath(filePaths) ?? defaultPath,
   );
   const selected = selectedPath === undefined ? undefined : fileEntriesByPath.get(selectedPath);
   const [loadedFile, setLoadedFile] = useState<{
@@ -300,7 +306,7 @@ export function FolderBrowser({
   useEffect(() => {
     if (!sidebarOpen || toggleSidebar === undefined) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || window.innerWidth > 640) return;
+      if (event.key !== 'Escape' || event.defaultPrevented || window.innerWidth > 640) return;
       event.preventDefault();
       toggleSidebar();
     };
@@ -349,8 +355,8 @@ export function FolderBrowser({
 
   useEffect(() => {
     if (selectedPath === undefined || filePaths.has(selectedPath)) return;
-    setSelectedPath(firstFile?.path);
-  }, [filePaths, firstFile?.path, selectedPath]);
+    setSelectedPath(defaultPath);
+  }, [filePaths, defaultPath, selectedPath]);
 
   useEffect(() => {
     if (!shouldApplyFolderFocusRequest(focusRequestId, consumedFocusRequestIdRef.current)) return;
@@ -421,6 +427,7 @@ export function FolderBrowser({
   return (
     <section aria-label="Folder browser" className="folder-browser">
       <ViewerSidebarSplit
+        hideWithControls={false}
         className={
           review ? 'folder-browser-sidebar-split-review' : 'folder-browser-sidebar-split-tree'
         }
@@ -428,7 +435,42 @@ export function FolderBrowser({
           <div className="folder-browser-preview">
             <div className="folder-browser-content">
               {selected === undefined ? (
-                <p className="folder-preview-state">This folder is empty.</p>
+                <FileView
+                  fileName={resolution?.artifact.name ?? 'Folder'}
+                  toolbar={{ formatLabel: 'Folder' }}
+                  onOpenSidebar={toggleSidebar}
+                  sidebarControlsId={sidebarControlsId}
+                  sidebarOpen={sidebarOpen}
+                  sidebarLabel="folder files sidebar"
+                  preview={
+                    <section aria-label="Folder files" className="viewer-folder-listing">
+                      <h1>Files</h1>
+                      {entries.length === 0 ? (
+                        <p>This folder is empty.</p>
+                      ) : (
+                        <ul>
+                          {entries.map((entry) => (
+                            <li key={entry.path}>
+                              {entry.kind === 'directory' ? (
+                                <span className="viewer-folder-directory">{entry.path}/</span>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setSelectedPath(entry.path);
+                                    review?.onSelectFile?.(entry.path);
+                                  }}
+                                  type="button"
+                                >
+                                  {entry.path}
+                                </button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  }
+                />
               ) : (
                 <ArtifactFileView
                   capabilities={{

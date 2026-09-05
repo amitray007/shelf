@@ -9,6 +9,7 @@ import { SpinnerGapIcon } from '@phosphor-icons/react/SpinnerGap';
 import { WarningCircleIcon } from '@phosphor-icons/react/WarningCircle';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ViewerToolbarContent } from '../viewer-controls.js';
 import './pdf-viewer.css';
 
 /**
@@ -391,68 +392,70 @@ export function PdfViewer({
       onKeyDown={onKeyDown}
       tabIndex={0}
     >
-      <header className="pdf-viewer-toolbar">
-        <div className="pdf-viewer-page-controls">
-          <PdfIconButton
-            disabled={loading || pageNumber <= 1}
-            label="Previous PDF page"
-            onClick={() => goToPage(pageNumber - 1)}
-          >
-            <CaretLeftIcon aria-hidden="true" size={17} />
-          </PdfIconButton>
-          <label className="pdf-viewer-page-input">
-            <span className="pdf-viewer-visually-hidden">Current PDF page</span>
-            <input
-              aria-label="Current PDF page"
-              disabled={loading || pageCount === 0}
-              inputMode="numeric"
-              max={pageCount || undefined}
-              min={1}
-              onChange={(event) => {
-                const nextPage = Number(event.currentTarget.value);
-                if (Number.isFinite(nextPage)) goToPage(nextPage);
-              }}
-              type="number"
-              value={pageCount === 0 ? '' : pageNumber}
-            />
-            <span aria-hidden="true">/ {pageCount || '—'}</span>
-          </label>
-          <PdfIconButton
-            disabled={loading || pageCount === 0 || pageNumber >= pageCount}
-            label="Next PDF page"
-            onClick={() => goToPage(pageNumber + 1)}
-          >
-            <CaretRightIcon aria-hidden="true" size={17} />
-          </PdfIconButton>
-        </div>
+      <ViewerToolbarContent>
+        <header className="pdf-viewer-toolbar">
+          <div className="pdf-viewer-page-controls">
+            <PdfIconButton
+              disabled={loading || pageNumber <= 1}
+              label="Previous PDF page"
+              onClick={() => goToPage(pageNumber - 1)}
+            >
+              <CaretLeftIcon aria-hidden="true" size={17} />
+            </PdfIconButton>
+            <label className="pdf-viewer-page-input">
+              <span className="pdf-viewer-visually-hidden">Current PDF page</span>
+              <input
+                aria-label="Current PDF page"
+                disabled={loading || pageCount === 0}
+                inputMode="numeric"
+                max={pageCount || undefined}
+                min={1}
+                onChange={(event) => {
+                  const nextPage = Number(event.currentTarget.value);
+                  if (Number.isFinite(nextPage)) goToPage(nextPage);
+                }}
+                type="number"
+                value={pageCount === 0 ? '' : pageNumber}
+              />
+              <span aria-hidden="true">/ {pageCount || '—'}</span>
+            </label>
+            <PdfIconButton
+              disabled={loading || pageCount === 0 || pageNumber >= pageCount}
+              label="Next PDF page"
+              onClick={() => goToPage(pageNumber + 1)}
+            >
+              <CaretRightIcon aria-hidden="true" size={17} />
+            </PdfIconButton>
+          </div>
 
-        <div className="pdf-viewer-zoom-controls">
-          <PdfIconButton
-            disabled={currentZoom <= MIN_ZOOM}
-            label="Zoom out PDF"
-            onClick={() => setManualZoom(currentZoom - ZOOM_STEP)}
-          >
-            <MinusIcon aria-hidden="true" size={16} />
-          </PdfIconButton>
-          <output aria-label="PDF zoom" className="pdf-viewer-zoom-label">
-            {Math.round(currentZoom * 100)}%
-          </output>
-          <PdfIconButton
-            disabled={currentZoom >= MAX_ZOOM}
-            label="Zoom in PDF"
-            onClick={() => setManualZoom(currentZoom + ZOOM_STEP)}
-          >
-            <PlusIcon aria-hidden="true" size={16} />
-          </PdfIconButton>
-          <PdfIconButton
-            disabled={loading || pageCount === 0}
-            label="Fit PDF page to width"
-            onClick={fitPageToWidth}
-          >
-            <ArrowsInIcon aria-hidden="true" size={16} />
-          </PdfIconButton>
-        </div>
-      </header>
+          <div className="pdf-viewer-zoom-controls">
+            <PdfIconButton
+              disabled={currentZoom <= MIN_ZOOM}
+              label="Zoom out PDF"
+              onClick={() => setManualZoom(currentZoom - ZOOM_STEP)}
+            >
+              <MinusIcon aria-hidden="true" size={16} />
+            </PdfIconButton>
+            <output aria-label="PDF zoom" className="pdf-viewer-zoom-label">
+              {Math.round(currentZoom * 100)}%
+            </output>
+            <PdfIconButton
+              disabled={currentZoom >= MAX_ZOOM}
+              label="Zoom in PDF"
+              onClick={() => setManualZoom(currentZoom + ZOOM_STEP)}
+            >
+              <PlusIcon aria-hidden="true" size={16} />
+            </PdfIconButton>
+            <PdfIconButton
+              disabled={loading || pageCount === 0}
+              label="Fit PDF page to width"
+              onClick={fitPageToWidth}
+            >
+              <ArrowsInIcon aria-hidden="true" size={16} />
+            </PdfIconButton>
+          </div>
+        </header>
+      </ViewerToolbarContent>
 
       <div className="pdf-viewer-status" aria-live="polite" role="status">
         {loading && (

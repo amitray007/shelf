@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
+import { useViewerControls } from './viewer-controls.js';
 
 export const VIEWER_SIDEBAR_WIDTH_STORAGE_KEY = 'shelf:viewer-sidebar-width:v1';
 export const VIEWER_SIDEBAR_COLLAPSED_WIDTH = 0;
@@ -67,15 +68,19 @@ export interface ViewerSidebarSplitProps {
   readonly sidebar: ReactNode;
   readonly content: ReactNode;
   readonly sidebarOpen: boolean;
+  readonly hideWithControls?: boolean;
   readonly className?: string | undefined;
 }
 
 export function ViewerSidebarSplit({
   sidebar,
   content,
-  sidebarOpen,
+  sidebarOpen: requestedSidebarOpen,
+  hideWithControls = true,
   className,
 }: ViewerSidebarSplitProps) {
+  const controls = useViewerControls();
+  const sidebarOpen = requestedSidebarOpen && (!hideWithControls || (controls?.visible ?? true));
   const panelRef = usePanelRef();
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === 'undefined' ? 1024 : window.innerWidth,
@@ -137,7 +142,9 @@ export function ViewerSidebarSplit({
         minSize={sidebarOpen ? bounds.min : VIEWER_SIDEBAR_COLLAPSED_WIDTH}
         panelRef={panelRef}
       >
-        {sidebar}
+        <div hidden={!sidebarOpen} className="viewer-sidebar-preserved">
+          {sidebar}
+        </div>
       </Panel>
       <Separator className="viewer-sidebar-split-separator" id="viewer-sidebar-resize">
         <span aria-hidden="true" />

@@ -7,6 +7,8 @@ import axe from 'axe-core';
 
 import {
   artifactPage,
+  folderResolution as baseFolderResolution,
+  markdownResolution as baseMarkdownResolution,
   commentSummaries,
   commentThreads,
   createdCredentialId,
@@ -14,13 +16,11 @@ import {
   createdShareId,
   credentialPage,
   dashboardSession,
-  folderResolution,
   folderShareId,
   folderTreePage,
   historyPages,
   htmlResolution,
   htmlShareId,
-  markdownResolution,
   markdownShareId,
   previousFolderRevisionId,
   previousRevisionId,
@@ -31,6 +31,15 @@ import {
   shareSecret,
   workspaceId,
 } from './fixtures.ts';
+
+// Opt in when running the fixture server for a manual discussion UI preview.
+const demoDiscussions = process.env.SHELF_BROWSER_FIXTURE_DISCUSSIONS === '1';
+const folderResolution = demoDiscussions
+  ? { ...baseFolderResolution, commentPolicy: 'shared' }
+  : baseFolderResolution;
+const markdownResolution = demoDiscussions
+  ? { ...baseMarkdownResolution, commentPolicy: 'shared' }
+  : baseMarkdownResolution;
 
 const artifactsById = new Map(
   artifactPage.items.map((artifact) => [artifact.artifactId, artifact]),
@@ -948,8 +957,7 @@ async function api(request, response, url) {
     await sendRichContent(request, response, fixture, { preview: true });
     return;
   }
-  // The viewer queries discussions on mount. Neither fixture share enables a comment policy, so
-  // the fixture answers with an empty page instead of a 404 the viewer would surface as an error.
+  // Tests use an empty discussion page unless the manual preview opts into sample threads.
   const viewerCommentsMatch =
     /^\/api\/v1\/public\/(?:shares\/shr_[A-Za-z0-9_-]{22}|links\/[A-Za-z0-9_-]{12})\/comments\/query$/u.test(
       path,
@@ -960,7 +968,24 @@ async function api(request, response, url) {
       json(response, 404, {});
       return;
     }
-    json(response, 200, { items: [], nextCursor: null });
+    const discussionResolution = [folderResolution, markdownResolution].find((resolution) =>
+      path.includes(`/shares/${resolution.shareId}/`),
+    );
+    const items =
+      demoDiscussions && discussionResolution !== undefined
+        ? commentThreads.map((thread) => ({
+            ...thread,
+            artifactId: discussionResolution.artifact.artifactId,
+            shareId: discussionResolution.shareId,
+            revisionId: value.currentRevisionId,
+            anchor: {
+              kind: 'file',
+              revisionId: value.currentRevisionId,
+              ...(discussionResolution.artifact.kind === 'folder' ? { path: 'README.md' } : {}),
+            },
+          }))
+        : [];
+    json(response, 200, { items, nextCursor: null });
     return;
   }
   json(response, 404, {

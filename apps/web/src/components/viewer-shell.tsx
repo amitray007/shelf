@@ -3,11 +3,7 @@ import { ArrowClockwiseIcon } from '@phosphor-icons/react/ArrowClockwise';
 import type { PublicShareResolution } from '@shelf/contracts';
 
 import type { ViewerAuthority } from '../api.js';
-import {
-  isFileShareResolution,
-  type ShareRevisionPointer,
-  shareLatestRevision,
-} from '../share-types.js';
+import { type ShareRevisionPointer, shareLatestRevision } from '../share-types.js';
 import { revisionLabel } from './revision-label.js';
 
 export { LoadingView, UnavailableView } from './boot-views.js';
@@ -147,59 +143,38 @@ export function ViewerRail({
       : revision.revisionId === latestRevision.revisionId
         ? 'Latest'
         : 'History';
-  const showArtifactTitle = !isFileShareResolution(resolution);
-
   return (
-    <header className="rail viewer-rail">
-      <div className="rail-title-group">
-        <span className="wordmark">shelf</span>
-        <span className="rail-separator" aria-hidden="true">
-          /
-        </span>
-        <span className="rail-muted">Shared artifact</span>
-        {showArtifactTitle ? (
-          <>
-            <span className="rail-separator rail-secondary-separator" aria-hidden="true">
-              /
-            </span>
-            <strong className="artifact-title" title={resolution.artifact.name}>
-              {resolution.artifact.name}
-            </strong>
-          </>
-        ) : null}
-      </div>
-      <div className="rail-context">
-        {resolution.navigation === undefined ? (
-          <fieldset aria-label="Revision navigation" className="viewer-revision-navigation">
-            <span className="target-state">
-              {targetLabel} · {revisionLabel(revision.revisionNumber)}
-            </span>
-          </fieldset>
-        ) : (
-          <ViewerRevisionNavigation
-            currentRevisionId={revision.revisionId}
-            latestRevisionId={latestRevision.revisionId}
-            nextRevisionId={resolution.navigation.next?.revisionId ?? null}
-            previousRevisionId={resolution.navigation.previous?.revisionId ?? null}
-            revisions={resolution.navigation.revisions}
-            {...(onRevisionSelect === undefined ? {} : { onRevisionSelect })}
-          />
-        )}
-        {latestAvailable === undefined ? null : resolution.target.mode === 'latest' ? (
-          <button
-            className="viewer-latest-available"
-            onClick={() => onRevisionSelect?.(null)}
-            type="button"
-          >
-            Latest Revision available
-          </button>
-        ) : (
-          <span className="viewer-latest-notice">Latest Revision available</span>
-        )}
-        {onCheckUpdates === undefined ? null : (
-          <ViewerRefreshButton checkingUpdates={checkingUpdates} onCheckUpdates={onCheckUpdates} />
-        )}
-      </div>
-    </header>
+    <div className="rail-context">
+      {resolution.navigation === undefined ? (
+        <fieldset aria-label="Revision navigation" className="viewer-revision-navigation">
+          <span className="target-state">
+            {targetLabel} · {revisionLabel(revision.revisionNumber)}
+          </span>
+        </fieldset>
+      ) : (
+        <ViewerRevisionNavigation
+          currentRevisionId={revision.revisionId}
+          latestRevisionId={latestRevision.revisionId}
+          nextRevisionId={resolution.navigation.next?.revisionId ?? null}
+          previousRevisionId={resolution.navigation.previous?.revisionId ?? null}
+          revisions={resolution.navigation.revisions}
+          {...(onRevisionSelect === undefined ? {} : { onRevisionSelect })}
+        />
+      )}
+      {latestAvailable === undefined ? null : resolution.target.mode === 'latest' ? (
+        <button
+          className="viewer-latest-available"
+          onClick={() => onRevisionSelect?.(null)}
+          type="button"
+        >
+          Latest Revision available
+        </button>
+      ) : (
+        <span className="viewer-latest-notice">Latest Revision available</span>
+      )}
+      {onCheckUpdates === undefined ? null : (
+        <ViewerRefreshButton checkingUpdates={checkingUpdates} onCheckUpdates={onCheckUpdates} />
+      )}
+    </div>
   );
 }

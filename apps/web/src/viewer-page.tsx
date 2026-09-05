@@ -8,7 +8,6 @@ import {
   useNavigation,
   useRevalidator,
 } from 'react-router';
-
 import {
   establishProtectedSession,
   loadPublicClientConfig,
@@ -40,6 +39,7 @@ import { DiscussionPanel } from './components/review/discussion-panel.js';
 import { readReviewValue, writeReviewValue } from './components/review/persistence.js';
 import type { ReviewSidebarMode } from './components/review/types.js';
 import { reviewPanelStorageKey, useViewerReview } from './components/review/use-review.js';
+import { ViewerControls } from './components/viewer-controls.js';
 import { ViewerRail, ViewerRevisionLoadingState } from './components/viewer-shell.js';
 import { ViewerSidebarSplit } from './components/viewer-sidebar-split.js';
 import {
@@ -71,7 +71,7 @@ export function readViewerSidebarOpen(
   const persisted = readReviewValue(reviewPanelStorageKey(resolution));
   if (persisted === 'open') return true;
   if (persisted === 'closed') return false;
-  return false;
+  return resolution.artifact.kind === 'folder';
 }
 
 export async function viewerLoader({
@@ -481,15 +481,21 @@ export function ViewerPage() {
   }, [payload.resolution.artifact.name]);
 
   return (
-    <div className="viewer">
-      <ViewerRail
-        authority={payload.authority}
-        checkingUpdates={checkingUpdates}
-        onCheckUpdates={() => void checkForUpdates()}
-        onRevisionSelect={selectRevision}
-        resolution={payload.resolution}
-        {...(latestAvailable === undefined ? {} : { latestAvailable })}
-      />
+    <ViewerControls
+      key={payload.resolution.shareId}
+      title={payload.resolution.artifact.name}
+      reveal={review.enabled && new URLSearchParams(location.search).has('thread')}
+      actions={
+        <ViewerRail
+          authority={payload.authority}
+          checkingUpdates={checkingUpdates}
+          onCheckUpdates={() => void checkForUpdates()}
+          onRevisionSelect={selectRevision}
+          resolution={payload.resolution}
+          {...(latestAvailable === undefined ? {} : { latestAvailable })}
+        />
+      }
+    >
       <main aria-busy={revisionLoading} className="viewer-main">
         {revisionLoading ? (
           <ViewerRevisionLoadingState />
@@ -585,6 +591,6 @@ export function ViewerPage() {
           />
         )}
       </main>
-    </div>
+    </ViewerControls>
   );
 }

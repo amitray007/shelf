@@ -1,7 +1,6 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable code blocks and tables must be keyboard reachable.
 import type { ComponentPropsWithoutRef } from 'react';
 import ReactMarkdown, { type ExtraProps, type UrlTransform } from 'react-markdown';
-import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 
 import 'github-markdown-css/github-markdown-dark.css';
@@ -65,7 +64,7 @@ export function MarkdownView({ source }: { readonly source: string }) {
           pre: ScrollableCodeBlock,
           table: ScrollableTable,
         }}
-        remarkPlugins={[remarkGfm, remarkBreaks]}
+        remarkPlugins={[remarkGfm]}
         skipHtml={true}
         urlTransform={linkTransform}
       >

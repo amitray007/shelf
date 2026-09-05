@@ -63,12 +63,22 @@ describe('Markdown rendering', () => {
     expect(html).toContain('<li>One</li>');
   });
 
-  it('preserves authored line endings inside a paragraph', () => {
+  it('lets ordinary source newlines reflow inside a paragraph', () => {
     const html = renderToStaticMarkup(
       <MarkdownView source={'**Date:** 2026-09-04\n**Scope:** Pricing research'} />,
     );
 
-    expect(html).toContain('<strong>Date:</strong> 2026-09-04<br/>');
+    expect(html).not.toContain('<br');
+    expect(html).toContain('<strong>Date:</strong> 2026-09-04\n');
     expect(html).toContain('<strong>Scope:</strong> Pricing research');
+  });
+
+  it('preserves explicit Markdown line breaks and separate paragraphs', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownView source={'First line  \nSecond line\\\nThird line\n\nNext paragraph'} />,
+    );
+
+    expect(html.match(/<br\/>/g)).toHaveLength(2);
+    expect(html).toContain('<p>Next paragraph</p>');
   });
 });
