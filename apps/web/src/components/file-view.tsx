@@ -26,6 +26,7 @@ import { formatFileDisplayName } from './format.js';
 import type { HtmlPreviewTheme } from './renderer-frame.js';
 import { ReviewComposer } from './review/discussion-panel.js';
 import { InlineSourceThread, type InlineSourceThreadData } from './review/inline-source-thread.js';
+import { useViewerControls, ViewerToolbarContent } from './viewer-controls.js';
 
 type SourceLineAnnotationMetadata =
   | { readonly kind?: 'label'; readonly label: string }
@@ -517,7 +518,10 @@ export function SourceView({
       }
     };
     const closeOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') setSettingsOpen(false);
+      if (event.key === 'Escape' && !event.defaultPrevented) {
+        event.preventDefault();
+        setSettingsOpen(false);
+      }
     };
     document.addEventListener('pointerdown', closeOnPointerDown);
     document.addEventListener('keydown', closeOnEscape);
@@ -650,208 +654,210 @@ export function SourceView({
 
   return (
     <section aria-label="Artifact source" className="source-view">
-      <div
-        className={`source-view-toolbar${settings.stickyHeader ? ' source-view-toolbar-sticky' : ''}`}
-      >
-        <span className="source-view-label">Source</span>
-        <div className="source-view-actions">
-          <Button
-            aria-label={settings.wrap ? 'Disable word wrap' : 'Enable word wrap'}
-            aria-pressed={settings.wrap}
-            icon={TextAlignLeftIcon}
-            onClick={() => updateSettings('wrap', !settings.wrap)}
-            size="sm"
-            title={settings.wrap ? 'Disable word wrap' : 'Enable word wrap'}
-            type="button"
-            variant={settings.wrap ? 'secondary' : 'ghost'}
-          >
-            Wrap
-          </Button>
-          <Button
-            aria-label={settings.lineNumbers ? 'Hide line numbers' : 'Show line numbers'}
-            aria-pressed={settings.lineNumbers}
-            icon={ListNumbersIcon}
-            onClick={() => updateSettings('lineNumbers', !settings.lineNumbers)}
-            size="sm"
-            title={settings.lineNumbers ? 'Hide line numbers' : 'Show line numbers'}
-            type="button"
-            variant={settings.lineNumbers ? 'secondary' : 'ghost'}
-          >
-            Lines
-          </Button>
-          {review === undefined ? null : (
+      <ViewerToolbarContent>
+        <div
+          className={`source-view-toolbar${settings.stickyHeader ? ' source-view-toolbar-sticky' : ''}`}
+        >
+          <span className="source-view-label">Source</span>
+          <div className="source-view-actions">
             <Button
-              aria-label={commentsVisible ? 'Hide comments' : 'Show comments'}
-              aria-pressed={commentsVisible}
-              icon={ChatCircleDotsIcon}
-              onClick={() => setSettings(toggleSourceComments)}
+              aria-label={settings.wrap ? 'Disable word wrap' : 'Enable word wrap'}
+              aria-pressed={settings.wrap}
+              icon={TextAlignLeftIcon}
+              onClick={() => updateSettings('wrap', !settings.wrap)}
               size="sm"
-              title={commentsVisible ? 'Hide comments' : 'Show comments'}
+              title={settings.wrap ? 'Disable word wrap' : 'Enable word wrap'}
               type="button"
-              variant={commentsVisible ? 'secondary' : 'ghost'}
+              variant={settings.wrap ? 'secondary' : 'ghost'}
             >
-              Comments
+              Wrap
             </Button>
-          )}
-          <Button
-            aria-label={copied ? 'Copied source' : 'Copy source'}
-            icon={copied ? CheckIcon : CopyIcon}
-            onClick={() => void copySource()}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            {copied ? 'Copied' : 'Copy'}
-          </Button>
-          <div className="source-view-settings" ref={settingsRef}>
             <Button
-              aria-expanded={settingsOpen}
-              aria-haspopup="dialog"
-              aria-label="Source view settings"
-              icon={GearSixIcon}
-              onClick={() => setSettingsOpen((value) => !value)}
+              aria-label={settings.lineNumbers ? 'Hide line numbers' : 'Show line numbers'}
+              aria-pressed={settings.lineNumbers}
+              icon={ListNumbersIcon}
+              onClick={() => updateSettings('lineNumbers', !settings.lineNumbers)}
               size="sm"
-              title="Source view settings"
+              title={settings.lineNumbers ? 'Hide line numbers' : 'Show line numbers'}
               type="button"
-              variant={settingsOpen ? 'secondary' : 'ghost'}
-            />
-            {settingsOpen ? (
-              <div
-                aria-label="Source view settings"
-                className="source-view-settings-popover"
-                role="dialog"
+              variant={settings.lineNumbers ? 'secondary' : 'ghost'}
+            >
+              Lines
+            </Button>
+            {review === undefined ? null : (
+              <Button
+                aria-label={commentsVisible ? 'Hide comments' : 'Show comments'}
+                aria-pressed={commentsVisible}
+                icon={ChatCircleDotsIcon}
+                onClick={() => setSettings(toggleSourceComments)}
+                size="sm"
+                title={commentsVisible ? 'Hide comments' : 'Show comments'}
+                type="button"
+                variant={commentsVisible ? 'secondary' : 'ghost'}
               >
-                <div className="source-view-settings-heading">
-                  <strong>Source view</strong>
-                  <span>Saved for this session link</span>
+                Comments
+              </Button>
+            )}
+            <Button
+              aria-label={copied ? 'Copied source' : 'Copy source'}
+              icon={copied ? CheckIcon : CopyIcon}
+              onClick={() => void copySource()}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+            <div className="source-view-settings" ref={settingsRef}>
+              <Button
+                aria-expanded={settingsOpen}
+                aria-haspopup="dialog"
+                aria-label="Source view settings"
+                icon={GearSixIcon}
+                onClick={() => setSettingsOpen((value) => !value)}
+                size="sm"
+                title="Source view settings"
+                type="button"
+                variant={settingsOpen ? 'secondary' : 'ghost'}
+              />
+              {settingsOpen ? (
+                <div
+                  aria-label="Source view settings"
+                  className="source-view-settings-popover"
+                  role="dialog"
+                >
+                  <div className="source-view-settings-heading">
+                    <strong>Source view</strong>
+                    <span>Saved for this session link</span>
+                  </div>
+                  <div className="source-view-settings-grid">
+                    <label className="source-view-setting-field">
+                      <span>Font size</span>
+                      <select
+                        onChange={(event) => updateSettings('fontSize', Number(event.target.value))}
+                        value={settings.fontSize}
+                      >
+                        {[11, 12, 13, 14, 15, 16, 18].map((size) => (
+                          <option key={size} value={size}>
+                            {size}px
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="source-view-setting-field">
+                      <span>Line hover</span>
+                      <select
+                        onChange={(event) =>
+                          updateSettings(
+                            'lineHoverHighlight',
+                            event.target.value as LineHoverHighlight,
+                          )
+                        }
+                        value={settings.lineHoverHighlight}
+                      >
+                        <option value="line">Line</option>
+                        <option value="number">Number</option>
+                        <option value="both">Line + number</option>
+                        <option value="disabled">Off</option>
+                      </select>
+                    </label>
+                    <label className="source-view-setting-field">
+                      <span>Long lines</span>
+                      <select
+                        onChange={(event) =>
+                          updateSettings('maxTokenizeLineLength', Number(event.target.value))
+                        }
+                        value={settings.maxTokenizeLineLength}
+                      >
+                        <option value={1000}>Default · 1k</option>
+                        <option value={5000}>5k</option>
+                        <option value={10000}>10k</option>
+                        <option value={25000}>25k</option>
+                      </select>
+                    </label>
+                    <label className="source-view-setting-field">
+                      <span>File limit</span>
+                      <select
+                        onChange={(event) =>
+                          updateSettings('maxTokenizeLength', Number(event.target.value))
+                        }
+                        value={settings.maxTokenizeLength}
+                      >
+                        <option value={100000}>Default · 100k</option>
+                        <option value={250000}>250k</option>
+                        <option value={500000}>500k</option>
+                        <option value={1000000}>1m</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="source-view-settings-section">
+                    <span className="source-view-settings-section-label">Interaction</span>
+                    <label className="source-view-setting-toggle">
+                      <input
+                        checked={settings.stickyHeader}
+                        onChange={(event) => updateSettings('stickyHeader', event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>Sticky file header</span>
+                    </label>
+                    <label className="source-view-setting-toggle">
+                      <input
+                        checked={settings.enableLineSelection}
+                        onChange={(event) =>
+                          updateSettings('enableLineSelection', event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span>Line selection</span>
+                    </label>
+                    <label className="source-view-setting-toggle">
+                      <input
+                        checked={settings.keyboardNavigation}
+                        disabled={!settings.enableLineSelection}
+                        onChange={(event) =>
+                          updateSettings('keyboardNavigation', event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span>Keyboard navigation</span>
+                    </label>
+                    <label className="source-view-setting-toggle">
+                      <input
+                        checked={settings.enableGutterUtility}
+                        disabled={!canCreateThread}
+                        onChange={(event) =>
+                          updateSettings('enableGutterUtility', event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span>Gutter comment button {canCreateThread ? '' : '(unavailable)'}</span>
+                    </label>
+                    <label className="source-view-setting-toggle">
+                      <input
+                        checked={settings.tokenInteractions}
+                        onChange={(event) =>
+                          updateSettings('tokenInteractions', event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span>Token interactions</span>
+                    </label>
+                    <label className="source-view-setting-toggle">
+                      <input
+                        checked={settings.annotations}
+                        disabled={annotationCount === 0}
+                        onChange={(event) => updateSettings('annotations', event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>Annotations {annotationCount === 0 ? '(none available)' : ''}</span>
+                    </label>
+                  </div>
                 </div>
-                <div className="source-view-settings-grid">
-                  <label className="source-view-setting-field">
-                    <span>Font size</span>
-                    <select
-                      onChange={(event) => updateSettings('fontSize', Number(event.target.value))}
-                      value={settings.fontSize}
-                    >
-                      {[11, 12, 13, 14, 15, 16, 18].map((size) => (
-                        <option key={size} value={size}>
-                          {size}px
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="source-view-setting-field">
-                    <span>Line hover</span>
-                    <select
-                      onChange={(event) =>
-                        updateSettings(
-                          'lineHoverHighlight',
-                          event.target.value as LineHoverHighlight,
-                        )
-                      }
-                      value={settings.lineHoverHighlight}
-                    >
-                      <option value="line">Line</option>
-                      <option value="number">Number</option>
-                      <option value="both">Line + number</option>
-                      <option value="disabled">Off</option>
-                    </select>
-                  </label>
-                  <label className="source-view-setting-field">
-                    <span>Long lines</span>
-                    <select
-                      onChange={(event) =>
-                        updateSettings('maxTokenizeLineLength', Number(event.target.value))
-                      }
-                      value={settings.maxTokenizeLineLength}
-                    >
-                      <option value={1000}>Default · 1k</option>
-                      <option value={5000}>5k</option>
-                      <option value={10000}>10k</option>
-                      <option value={25000}>25k</option>
-                    </select>
-                  </label>
-                  <label className="source-view-setting-field">
-                    <span>File limit</span>
-                    <select
-                      onChange={(event) =>
-                        updateSettings('maxTokenizeLength', Number(event.target.value))
-                      }
-                      value={settings.maxTokenizeLength}
-                    >
-                      <option value={100000}>Default · 100k</option>
-                      <option value={250000}>250k</option>
-                      <option value={500000}>500k</option>
-                      <option value={1000000}>1m</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="source-view-settings-section">
-                  <span className="source-view-settings-section-label">Interaction</span>
-                  <label className="source-view-setting-toggle">
-                    <input
-                      checked={settings.stickyHeader}
-                      onChange={(event) => updateSettings('stickyHeader', event.target.checked)}
-                      type="checkbox"
-                    />
-                    <span>Sticky file header</span>
-                  </label>
-                  <label className="source-view-setting-toggle">
-                    <input
-                      checked={settings.enableLineSelection}
-                      onChange={(event) =>
-                        updateSettings('enableLineSelection', event.target.checked)
-                      }
-                      type="checkbox"
-                    />
-                    <span>Line selection</span>
-                  </label>
-                  <label className="source-view-setting-toggle">
-                    <input
-                      checked={settings.keyboardNavigation}
-                      disabled={!settings.enableLineSelection}
-                      onChange={(event) =>
-                        updateSettings('keyboardNavigation', event.target.checked)
-                      }
-                      type="checkbox"
-                    />
-                    <span>Keyboard navigation</span>
-                  </label>
-                  <label className="source-view-setting-toggle">
-                    <input
-                      checked={settings.enableGutterUtility}
-                      disabled={!canCreateThread}
-                      onChange={(event) =>
-                        updateSettings('enableGutterUtility', event.target.checked)
-                      }
-                      type="checkbox"
-                    />
-                    <span>Gutter comment button {canCreateThread ? '' : '(unavailable)'}</span>
-                  </label>
-                  <label className="source-view-setting-toggle">
-                    <input
-                      checked={settings.tokenInteractions}
-                      onChange={(event) =>
-                        updateSettings('tokenInteractions', event.target.checked)
-                      }
-                      type="checkbox"
-                    />
-                    <span>Token interactions</span>
-                  </label>
-                  <label className="source-view-setting-toggle">
-                    <input
-                      checked={settings.annotations}
-                      disabled={annotationCount === 0}
-                      onChange={(event) => updateSettings('annotations', event.target.checked)}
-                      type="checkbox"
-                    />
-                    <span>Annotations {annotationCount === 0 ? '(none available)' : ''}</span>
-                  </label>
-                </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
+      </ViewerToolbarContent>
       <section
         aria-label="Source code"
         className="source-view-content"
@@ -954,6 +960,7 @@ export function FileView({
     | undefined;
   readonly source?: string;
 }) {
+  const viewerControls = useViewerControls();
   const hasPreview = preview !== undefined || htmlPreview !== undefined;
   const hasContent = hasPreview || source !== undefined;
   const hasModes = hasPreview && source !== undefined;
@@ -1014,70 +1021,78 @@ export function FileView({
   // leave the toolbar controls outside every landmark.
   return (
     <div className={`file-view${hasArtifactToolbar ? ' file-view-artifact' : ''}`}>
-      <section
-        aria-label={`${fileName ?? 'File'} view controls`}
-        className={`file-view-toolbar${hasArtifactToolbar ? ' file-view-toolbar-artifact' : ''}`}
-      >
-        {header === undefined && !showSidebarToggle && !hasArtifactToolbar ? null : (
-          <div className="file-view-meta">
-            {showSidebarToggle ? (
-              <button
-                aria-controls={sidebarControlsId}
-                aria-expanded={sidebarOpen}
-                aria-label={sidebarToggleLabel}
-                className="file-view-sidebar-toggle review-sidebar-tool"
-                onClick={onOpenSidebar}
-                ref={openSidebarButtonRef}
-                title={sidebarToggleLabel}
-                type="button"
-              >
-                <SidebarSimpleIcon aria-hidden="true" size={18} weight="regular" />
-              </button>
+      <ViewerToolbarContent slot="file">
+        <section
+          aria-label={`${fileName ?? 'File'} view controls`}
+          className={`file-view-toolbar${hasArtifactToolbar ? ' file-view-toolbar-artifact' : ''}`}
+        >
+          {header === undefined && !showSidebarToggle && !hasArtifactToolbar ? null : (
+            <div className="file-view-meta">
+              {showSidebarToggle ? (
+                <button
+                  aria-controls={sidebarControlsId}
+                  aria-expanded={sidebarOpen}
+                  aria-label={sidebarToggleLabel}
+                  className="file-view-sidebar-toggle review-sidebar-tool"
+                  onClick={onOpenSidebar}
+                  ref={openSidebarButtonRef}
+                  title={sidebarToggleLabel}
+                  type="button"
+                >
+                  <SidebarSimpleIcon aria-hidden="true" size={18} weight="regular" />
+                </button>
+              ) : null}
+              {hasArtifactToolbar ? (
+                <>
+                  <strong title={fileName}>
+                    {viewerControls === undefined ? formatFileDisplayName(fileName) : fileName}
+                  </strong>
+                  <span className="file-view-format">{toolbar.formatLabel}</span>
+                </>
+              ) : (
+                header
+              )}
+            </div>
+          )}
+          <ViewerToolbarContent>
+            {hasModes ? (
+              <Tabs
+                activateOnFocus={false}
+                className="file-view-tabs"
+                onValueChange={(value) => setMode(value === 'source' ? 'source' : 'preview')}
+                size="sm"
+                tabs={[
+                  { value: 'preview', label: 'Preview' },
+                  { value: 'source', label: 'Source' },
+                ]}
+                value={activeMode}
+                variant="segmented"
+              />
             ) : null}
-            {hasArtifactToolbar ? (
-              <>
-                <strong title={fileName}>{formatFileDisplayName(fileName)}</strong>
-                <span className="file-view-format">{toolbar.formatLabel}</span>
-              </>
-            ) : (
-              header
-            )}
-          </div>
-        )}
-        {hasModes ? (
-          <Tabs
-            activateOnFocus={false}
-            className="file-view-tabs"
-            onValueChange={(value) => setMode(value === 'source' ? 'source' : 'preview')}
-            size="sm"
-            tabs={[
-              { value: 'preview', label: 'Preview' },
-              { value: 'source', label: 'Source' },
-            ]}
-            value={activeMode}
-            variant="segmented"
-          />
-        ) : null}
-        {htmlPreview !== undefined && activeMode === 'preview' ? (
-          <fieldset className="file-view-theme-tabs">
-            <legend className="visually-hidden">HTML preview theme</legend>
-            <Tabs
-              activateOnFocus={false}
-              onValueChange={(value) => setHtmlPreviewTheme(value === 'light' ? 'light' : 'dark')}
-              size="sm"
-              tabs={[
-                { value: 'dark', label: 'Dark' },
-                { value: 'light', label: 'Light' },
-              ]}
-              value={htmlPreviewTheme}
-              variant="segmented"
-            />
-          </fieldset>
-        ) : null}
-        {hasArtifactToolbar && toolbar.download !== undefined ? (
-          <div className="file-view-actions">{toolbar.download}</div>
-        ) : null}
-      </section>
+            {htmlPreview !== undefined && activeMode === 'preview' ? (
+              <fieldset className="file-view-theme-tabs">
+                <legend className="visually-hidden">HTML preview theme</legend>
+                <Tabs
+                  activateOnFocus={false}
+                  onValueChange={(value) =>
+                    setHtmlPreviewTheme(value === 'light' ? 'light' : 'dark')
+                  }
+                  size="sm"
+                  tabs={[
+                    { value: 'dark', label: 'Dark' },
+                    { value: 'light', label: 'Light' },
+                  ]}
+                  value={htmlPreviewTheme}
+                  variant="segmented"
+                />
+              </fieldset>
+            ) : null}
+            {hasArtifactToolbar && toolbar.download !== undefined ? (
+              <div className="file-view-actions">{toolbar.download}</div>
+            ) : null}
+          </ViewerToolbarContent>
+        </section>
+      </ViewerToolbarContent>
       {hasContent ? (
         <div className="file-view-content">
           {hasModes ? (

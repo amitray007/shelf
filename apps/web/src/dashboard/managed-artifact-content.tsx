@@ -5,6 +5,7 @@ import { ArtifactFileView } from '../components/artifact-file-view.js';
 import { LazyFolderBrowser as FolderBrowser } from '../components/lazy-views.js';
 import { DiscussionPanel } from '../components/review/discussion-panel.js';
 import type { ReviewSidebarMode } from '../components/review/types.js';
+import { useViewerControls } from '../components/viewer-controls.js';
 import { selectRenderer, usesPreviewUrl } from '../rendering.js';
 import {
   folderEntryDownloadUrl,
@@ -63,7 +64,8 @@ export const ManagedArtifactContent = memo(function ManagedArtifactContent({
     (path: string, signal: AbortSignal) => loadFolderEntryBytes(revision.revisionId, path, signal),
     [revision.revisionId],
   );
-  const [previewFolderSidebarOpen, setPreviewFolderSidebarOpen] = useState(false);
+  const controls = useViewerControls();
+  const [previewFolderSidebarOpen, setPreviewFolderSidebarOpen] = useState(controls !== undefined);
   const togglePreviewFolderSidebar = useCallback(
     () => setPreviewFolderSidebarOpen((open) => !open),
     [],

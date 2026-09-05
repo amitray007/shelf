@@ -830,7 +830,7 @@ a {
   min-width: 0;
   min-height: 54px;
   grid-template-columns: 36px minmax(0, 1fr) 36px;
-  align-items: end;
+  align-items: center;
   gap: 8px;
   padding: 8px;
   border: 1px solid var(--rule-strong);
@@ -889,7 +889,6 @@ a {
   height: 36px;
   align-items: center;
   justify-content: center;
-  align-self: end;
   overflow: hidden;
   padding: 0;
   border: 1px solid var(--rule-strong);
@@ -922,7 +921,6 @@ a {
   height: 36px;
   align-items: center;
   justify-content: center;
-  align-self: end;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -1077,7 +1075,7 @@ a {
 .review-composer-docked textarea {
   min-height: 36px;
   max-height: 140px;
-  padding: 8px 2px 6px;
+  padding: 8px 2px;
   field-sizing: content;
   resize: none;
 }
@@ -1859,7 +1857,7 @@ a {
 }
 
 .artifact-document {
-  padding: clamp(28px, 6vw, 72px) max(20px, calc((100vw - 780px) / 2));
+  padding: 24px 8%;
 }
 
 .artifact-image {
@@ -2123,15 +2121,6 @@ a {
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-}
-
-.folder-browser-content .artifact-document .markdown-body {
-  width: min(100%, 860px);
-  margin: 0 auto;
-}
-
-.folder-browser-content .artifact-document {
-  padding: 28px;
 }
 
 .folder-preview-image {
@@ -2399,7 +2388,7 @@ a {
   }
 
   .artifact-document {
-    padding: 28px 18px 56px;
+    padding: 24px 18px 56px;
   }
 
   .artifact-code {

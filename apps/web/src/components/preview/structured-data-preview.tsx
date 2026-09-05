@@ -2,6 +2,7 @@ import { BracketsCurlyIcon } from '@phosphor-icons/react/BracketsCurly';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/MagnifyingGlass';
 import { type ReactNode, useId, useMemo, useState } from 'react';
 import { parse as parseYaml12 } from 'yaml';
+import { ViewerToolbarContent } from '../viewer-controls.js';
 
 import {
   ParseErrorNotice,
@@ -632,28 +633,30 @@ export function StructuredDataPreview({
         </PreviewPanel>
       ) : parsed.ok ? (
         <PreviewPanel label={`${fileName} data tree`}>
-          <div className="preview-toolbar preview-toolbar-subtle">
-            <div className="structured-data-filter">
-              <MagnifyingGlassIcon aria-hidden="true" size={15} />
-              <label className="structured-data-visually-hidden" htmlFor={searchId}>
-                Filter structured data
-              </label>
-              <input
-                aria-label="Filter structured data"
-                className="structured-data-search"
-                id={searchId}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search keys and values"
-                type="search"
-                value={query}
-              />
+          <ViewerToolbarContent>
+            <div className="preview-toolbar preview-toolbar-subtle">
+              <div className="structured-data-filter">
+                <MagnifyingGlassIcon aria-hidden="true" size={15} />
+                <label className="structured-data-visually-hidden" htmlFor={searchId}>
+                  Filter structured data
+                </label>
+                <input
+                  aria-label="Filter structured data"
+                  className="structured-data-search"
+                  id={searchId}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search keys and values"
+                  type="search"
+                  value={query}
+                />
+              </div>
+              <span className="preview-toolbar-meta">
+                <BracketsCurlyIcon aria-hidden="true" size={14} />
+                {tree?.state.rendered.toLocaleString()} nodes
+                {tree?.state.truncated ? ' · preview limit reached' : ''}
+              </span>
             </div>
-            <span className="preview-toolbar-meta">
-              <BracketsCurlyIcon aria-hidden="true" size={14} />
-              {tree?.state.rendered.toLocaleString()} nodes
-              {tree?.state.truncated ? ' · preview limit reached' : ''}
-            </span>
-          </div>
+          </ViewerToolbarContent>
           <section aria-label="Structured data tree" aria-live="polite" className="structured-tree">
             <div className="structured-tree-root">
               {treeHasResults ? (

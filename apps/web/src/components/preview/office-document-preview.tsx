@@ -9,6 +9,7 @@ import { SpinnerGapIcon } from '@phosphor-icons/react/SpinnerGap';
 import { WarningCircleIcon } from '@phosphor-icons/react/WarningCircle';
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ViewerToolbarContent } from '../viewer-controls.js';
 import { loadDocxPreviewAdapter } from './office-parser-bindings.js';
 import type { PdfSource, PdfViewerAdapter } from './pdf-viewer.js';
 import { PdfViewer } from './pdf-viewer.js';
@@ -434,74 +435,76 @@ export function DocxPreview({
       onKeyDown={onKeyDown}
       tabIndex={0}
     >
-      <header className="office-docx-toolbar">
-        <div className="office-docx-page-controls">
-          <DocxIconButton
-            disabled={loading || pageNumber <= 1}
-            label="Previous DOCX page"
-            onClick={() => goToPage(pageNumber - 1)}
-          >
-            <CaretLeftIcon aria-hidden="true" size={17} />
-          </DocxIconButton>
-          <label className="office-docx-page-input">
-            <span className="office-docx-visually-hidden">Current DOCX page</span>
-            <input
-              aria-label="Current DOCX page"
-              disabled={loading || count === 0}
-              inputMode="numeric"
-              max={count || undefined}
-              min={1}
-              onChange={(event) => {
-                const nextPage = Number(event.currentTarget.value);
-                if (Number.isFinite(nextPage)) goToPage(nextPage);
-              }}
-              type="number"
-              value={count === 0 ? '' : pageNumber}
-            />
-            <span aria-hidden="true">/ {count || '—'}</span>
-          </label>
-          <DocxIconButton
-            disabled={loading || count === 0 || pageNumber >= count}
-            label="Next DOCX page"
-            onClick={() => goToPage(pageNumber + 1)}
-          >
-            <CaretRightIcon aria-hidden="true" size={17} />
-          </DocxIconButton>
-        </div>
+      <ViewerToolbarContent>
+        <header className="office-docx-toolbar">
+          <div className="office-docx-page-controls">
+            <DocxIconButton
+              disabled={loading || pageNumber <= 1}
+              label="Previous DOCX page"
+              onClick={() => goToPage(pageNumber - 1)}
+            >
+              <CaretLeftIcon aria-hidden="true" size={17} />
+            </DocxIconButton>
+            <label className="office-docx-page-input">
+              <span className="office-docx-visually-hidden">Current DOCX page</span>
+              <input
+                aria-label="Current DOCX page"
+                disabled={loading || count === 0}
+                inputMode="numeric"
+                max={count || undefined}
+                min={1}
+                onChange={(event) => {
+                  const nextPage = Number(event.currentTarget.value);
+                  if (Number.isFinite(nextPage)) goToPage(nextPage);
+                }}
+                type="number"
+                value={count === 0 ? '' : pageNumber}
+              />
+              <span aria-hidden="true">/ {count || '—'}</span>
+            </label>
+            <DocxIconButton
+              disabled={loading || count === 0 || pageNumber >= count}
+              label="Next DOCX page"
+              onClick={() => goToPage(pageNumber + 1)}
+            >
+              <CaretRightIcon aria-hidden="true" size={17} />
+            </DocxIconButton>
+          </div>
 
-        <div className="office-docx-zoom-controls">
-          <DocxIconButton
-            disabled={scale <= MIN_ZOOM}
-            label="Zoom out DOCX"
-            onClick={() => {
-              setFitWidth(false);
-              setZoom((value) => clampZoom(value - ZOOM_STEP));
-            }}
-          >
-            <MinusIcon aria-hidden="true" size={16} />
-          </DocxIconButton>
-          <output aria-label="DOCX zoom" className="office-docx-zoom-label">
-            {Math.round(scale * 100)}%
-          </output>
-          <DocxIconButton
-            disabled={scale >= MAX_ZOOM}
-            label="Zoom in DOCX"
-            onClick={() => {
-              setFitWidth(false);
-              setZoom((value) => clampZoom(value + ZOOM_STEP));
-            }}
-          >
-            <PlusIcon aria-hidden="true" size={16} />
-          </DocxIconButton>
-          <DocxIconButton
-            disabled={loading || count === 0}
-            label="Fit DOCX page to width"
-            onClick={() => setFitWidth(true)}
-          >
-            <ArrowsInIcon aria-hidden="true" size={16} />
-          </DocxIconButton>
-        </div>
-      </header>
+          <div className="office-docx-zoom-controls">
+            <DocxIconButton
+              disabled={scale <= MIN_ZOOM}
+              label="Zoom out DOCX"
+              onClick={() => {
+                setFitWidth(false);
+                setZoom((value) => clampZoom(value - ZOOM_STEP));
+              }}
+            >
+              <MinusIcon aria-hidden="true" size={16} />
+            </DocxIconButton>
+            <output aria-label="DOCX zoom" className="office-docx-zoom-label">
+              {Math.round(scale * 100)}%
+            </output>
+            <DocxIconButton
+              disabled={scale >= MAX_ZOOM}
+              label="Zoom in DOCX"
+              onClick={() => {
+                setFitWidth(false);
+                setZoom((value) => clampZoom(value + ZOOM_STEP));
+              }}
+            >
+              <PlusIcon aria-hidden="true" size={16} />
+            </DocxIconButton>
+            <DocxIconButton
+              disabled={loading || count === 0}
+              label="Fit DOCX page to width"
+              onClick={() => setFitWidth(true)}
+            >
+              <ArrowsInIcon aria-hidden="true" size={16} />
+            </DocxIconButton>
+          </div>
+        </header>
+      </ViewerToolbarContent>
 
       {status !== undefined && (
         <div className="office-docx-status" aria-live="polite" role="status">

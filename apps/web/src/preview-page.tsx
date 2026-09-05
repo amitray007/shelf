@@ -2,7 +2,7 @@ import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
 import { WarningCircleIcon } from '@phosphor-icons/react/WarningCircle';
 import { useEffect } from 'react';
 import { Link, useLoaderData, useNavigation, useRevalidator, useSearchParams } from 'react-router';
-
+import { ViewerControls } from './components/viewer-controls.js';
 import {
   ViewerRefreshButton,
   ViewerRevisionLoadingState,
@@ -46,21 +46,11 @@ export function PreviewPage() {
   }, [artifact.name]);
 
   return (
-    <div className="viewer artifact-private-preview">
-      <header className="rail viewer-rail">
-        <div className="rail-title-group">
-          <span className="wordmark">shelf</span>
-          <span className="rail-separator" aria-hidden="true">
-            /
-          </span>
-          <span className="rail-muted">Private preview</span>
-          <span className="rail-separator rail-secondary-separator" aria-hidden="true">
-            /
-          </span>
-          <strong className="artifact-title" title={artifact.name}>
-            {artifact.name}
-          </strong>
-        </div>
+    <ViewerControls
+      privatePreview
+      title={artifact.name}
+      className="artifact-private-preview"
+      actions={
         <div className="rail-context">
           <ViewerRevisionNavigation
             currentRevisionId={revision.revisionId}
@@ -82,7 +72,8 @@ export function PreviewPage() {
             <span>Back to artifact</span>
           </Link>
         </div>
-      </header>
+      }
+    >
       <main aria-busy={revisionLoading} className="viewer-main">
         {revisionLoading ? (
           <ViewerRevisionLoadingState />
@@ -94,7 +85,7 @@ export function PreviewPage() {
           />
         )}
       </main>
-    </div>
+    </ViewerControls>
   );
 }
 

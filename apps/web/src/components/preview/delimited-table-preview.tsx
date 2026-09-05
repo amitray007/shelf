@@ -1,6 +1,7 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable table previews must be keyboard reachable.
 
 import { useEffect, useId, useRef, useState } from 'react';
+import { ViewerToolbarContent } from '../viewer-controls.js';
 
 import {
   ParseErrorNotice,
@@ -365,23 +366,25 @@ export function DelimitedTablePreview({
         </PreviewPanel>
       ) : parsed.ok ? (
         <PreviewPanel label={`${fileName} table`}>
-          <div className="preview-toolbar">
-            <div className="preview-toolbar-start delimited-table-search-wrap">
-              <label htmlFor={searchId}>Filter rows</label>
-              <input
-                aria-label="Filter table rows"
-                className="preview-search delimited-table-search"
-                id={searchId}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Filter rows"
-                type="search"
-                value={query}
-              />
+          <ViewerToolbarContent>
+            <div className="preview-toolbar">
+              <div className="preview-toolbar-start delimited-table-search-wrap">
+                <label htmlFor={searchId}>Filter rows</label>
+                <input
+                  aria-label="Filter table rows"
+                  className="preview-search delimited-table-search"
+                  id={searchId}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Filter rows"
+                  type="search"
+                  value={query}
+                />
+              </div>
+              <span className="preview-toolbar-meta">
+                {matchingRows.length.toLocaleString()} of {parsed.rows.length.toLocaleString()} rows
+              </span>
             </div>
-            <span className="preview-toolbar-meta">
-              {matchingRows.length.toLocaleString()} of {parsed.rows.length.toLocaleString()} rows
-            </span>
-          </div>
+          </ViewerToolbarContent>
           {parsed.columnCount === 0 ? (
             <p className="delimited-table-empty">This table has no rows.</p>
           ) : (

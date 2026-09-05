@@ -7,6 +7,7 @@ import { SpinnerGapIcon } from '@phosphor-icons/react/SpinnerGap';
 import { WarningCircleIcon } from '@phosphor-icons/react/WarningCircle';
 import type { CSSProperties, UIEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ViewerToolbarContent } from '../viewer-controls.js';
 
 import type { OfficeDocumentMetadata, OfficeDocumentSource } from './office-document-preview.js';
 import { loadWorkbookPreviewAdapter } from './office-parser-bindings.js';
@@ -437,20 +438,21 @@ export function WorkbookPreview({
       className={previewClassName}
       data-preview-kind="workbook"
     >
-      {showFileIdentity || model !== null ? (
-        <header className="workbook-preview-header">
-          <div className="workbook-preview-heading">
-            <span className="workbook-preview-kind">Workbook</span>
-            {showFileIdentity ? (
-              <span className="workbook-preview-title">{metadata.fileName}</span>
-            ) : null}
-          </div>
-          {model !== null && (
-            <span className="workbook-preview-meta">{model.sheets.length} sheets</span>
-          )}
-        </header>
-      ) : null}
-
+      <ViewerToolbarContent>
+        {showFileIdentity || model !== null ? (
+          <header className="workbook-preview-header">
+            <div className="workbook-preview-heading">
+              <span className="workbook-preview-kind">Workbook</span>
+              {showFileIdentity ? (
+                <span className="workbook-preview-title">{metadata.fileName}</span>
+              ) : null}
+            </div>
+            {model !== null && (
+              <span className="workbook-preview-meta">{model.sheets.length} sheets</span>
+            )}
+          </header>
+        ) : null}
+      </ViewerToolbarContent>
       {statusText === '' ? null : (
         <div className="workbook-preview-status" aria-live="polite" role="status">
           {loading && (
@@ -474,53 +476,57 @@ export function WorkbookPreview({
 
       {model !== null && sheet !== undefined && (
         <>
-          <div aria-label="Workbook sheets" className="workbook-preview-tabs" role="tablist">
-            <button
-              aria-label="Previous workbook sheet"
-              className="workbook-preview-tab-arrow"
-              disabled={selectedSheet <= 0}
-              onClick={() => setSelectedSheet((value) => Math.max(0, value - 1))}
-              type="button"
-            >
-              <CaretLeftIcon aria-hidden="true" size={15} />
-            </button>
-            {model.sheets.map((candidate, index) => (
+          <ViewerToolbarContent>
+            <div aria-label="Workbook sheets" className="workbook-preview-tabs" role="tablist">
               <button
-                aria-selected={selectedSheet === index}
-                className="workbook-preview-tab"
-                key={candidate.name}
-                onClick={() => setSelectedSheet(index)}
-                role="tab"
-                tabIndex={selectedSheet === index ? 0 : -1}
+                aria-label="Previous workbook sheet"
+                className="workbook-preview-tab-arrow"
+                disabled={selectedSheet <= 0}
+                onClick={() => setSelectedSheet((value) => Math.max(0, value - 1))}
                 type="button"
               >
-                {candidate.name}
+                <CaretLeftIcon aria-hidden="true" size={15} />
               </button>
-            ))}
-            <button
-              aria-label="Next workbook sheet"
-              className="workbook-preview-tab-arrow"
-              disabled={selectedSheet >= model.sheets.length - 1}
-              onClick={() =>
-                setSelectedSheet((value) => Math.min(model.sheets.length - 1, value + 1))
-              }
-              type="button"
-            >
-              <CaretRightIcon aria-hidden="true" size={15} />
-            </button>
-          </div>
+              {model.sheets.map((candidate, index) => (
+                <button
+                  aria-selected={selectedSheet === index}
+                  className="workbook-preview-tab"
+                  key={candidate.name}
+                  onClick={() => setSelectedSheet(index)}
+                  role="tab"
+                  tabIndex={selectedSheet === index ? 0 : -1}
+                  type="button"
+                >
+                  {candidate.name}
+                </button>
+              ))}
+              <button
+                aria-label="Next workbook sheet"
+                className="workbook-preview-tab-arrow"
+                disabled={selectedSheet >= model.sheets.length - 1}
+                onClick={() =>
+                  setSelectedSheet((value) => Math.min(model.sheets.length - 1, value + 1))
+                }
+                type="button"
+              >
+                <CaretRightIcon aria-hidden="true" size={15} />
+              </button>
+            </div>
+          </ViewerToolbarContent>
           <div
             aria-label={`${sheet.name} workbook sheet`}
             className="workbook-preview-panel"
             role="tabpanel"
           >
-            <div className="workbook-preview-sheet-meta">
-              <span>{sheet.name}</span>
-              <span>
-                {sheet.rowCount.toLocaleString()} rows · {sheet.columnCount.toLocaleString()}{' '}
-                columns
-              </span>
-            </div>
+            <ViewerToolbarContent>
+              <div className="workbook-preview-sheet-meta">
+                <span>{sheet.name}</span>
+                <span>
+                  {sheet.rowCount.toLocaleString()} rows · {sheet.columnCount.toLocaleString()}{' '}
+                  columns
+                </span>
+              </div>
+            </ViewerToolbarContent>
             <WorkbookSheetGrid
               maxRenderedColumns={limits.maxRenderedColumns}
               maxRenderedRows={limits.maxRenderedRows}
@@ -529,9 +535,11 @@ export function WorkbookPreview({
           </div>
         </>
       )}
-      <p className="workbook-preview-help">
-        Values and formulas are displayed as inert text. Editing is disabled.
-      </p>
+      <ViewerToolbarContent>
+        <p className="workbook-preview-help">
+          Values and formulas are displayed as inert text. Editing is disabled.
+        </p>
+      </ViewerToolbarContent>
     </section>
   );
 }
