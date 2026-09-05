@@ -474,7 +474,29 @@ export function SourceView({
   const canCreateThread = review?.canCreateThread === true && createThread !== undefined;
   const inlineDraftOpen = selectedLines !== null;
   const settingsRef = useRef<HTMLDivElement>(null);
+  const sourceContentRef = useRef<HTMLElement>(null);
   const lineCount = useMemo(() => Math.max(1, source.split(/\r?\n/u).length), [source]);
+
+  useEffect(() => {
+    const sourceContent = sourceContentRef.current;
+    if (sourceContent === null) return;
+
+    const prepareScroller = () => {
+      const scroller = Array.from(sourceContent.children).find(
+        (child): child is HTMLElement =>
+          child instanceof HTMLElement && child.localName === 'diffs-container',
+      );
+      if (scroller === undefined) return;
+      scroller.tabIndex = 0;
+      scroller.setAttribute('role', 'region');
+      scroller.setAttribute('aria-label', `${formatFileDisplayName(fileName)} source`);
+    };
+
+    prepareScroller();
+    const observer = new MutationObserver(prepareScroller);
+    observer.observe(sourceContent, { childList: true });
+    return () => observer.disconnect();
+  }, [fileName]);
 
   useEffect(() => {
     try {
@@ -834,7 +856,7 @@ export function SourceView({
         aria-label="Source code"
         className="source-view-content"
         onKeyDown={handleKeyboardNavigation}
-        tabIndex={0}
+        ref={sourceContentRef}
       >
         <PierreCode
           fileName={fileName}

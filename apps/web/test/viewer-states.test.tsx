@@ -790,7 +790,7 @@ describe('viewer content states', () => {
     });
     expect(text).toContain('Loading file…');
     expect(text).not.toContain('<script>unsafe</script>');
-    expect(text.match(/tabindex="0"/gu)).toHaveLength(1);
+    expect(text).not.toMatch(/class="source-view-content"[^>]*tabindex/u);
     expect(
       renderContent({
         fileName: 'config.json',

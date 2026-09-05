@@ -1843,6 +1843,7 @@ a {
   display: block;
   width: 100%;
   height: 100%;
+  overflow: auto;
   background: var(--canvas);
   --diffs-bg: var(--canvas);
   --diffs-bg-context-override: var(--canvas);
@@ -1852,139 +1853,13 @@ a {
   --diffs-fg-number-override: var(--text-muted);
 }
 
+.source-view-content > diffs-container:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 .artifact-document {
   padding: clamp(28px, 6vw, 72px) max(20px, calc((100vw - 780px) / 2));
-}
-
-.markdown-body {
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-  color: #d4d9df;
-  font-size: clamp(15px, 1.2vw, 17px);
-  line-height: 1.7;
-}
-
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3 {
-  margin: 2.1em 0 0.65em;
-  color: var(--text);
-  font-weight: 620;
-  letter-spacing: -0.025em;
-  line-height: 1.25;
-}
-
-.markdown-body h1 {
-  margin-top: 0;
-  font-size: clamp(24px, 4vw, 34px);
-}
-
-.markdown-body h2 {
-  padding-bottom: 0.4em;
-  border-bottom: 1px solid var(--rule);
-  font-size: clamp(20px, 3vw, 26px);
-}
-
-.markdown-body h3 {
-  font-size: 18px;
-}
-
-.markdown-body p,
-.markdown-body ul,
-.markdown-body ol,
-.markdown-body blockquote {
-  margin: 0 0 1.15em;
-}
-
-.markdown-body ul,
-.markdown-body ol {
-  padding-left: 1.45em;
-}
-
-.markdown-body li {
-  margin: 0.25em 0;
-}
-
-.markdown-body blockquote {
-  padding-left: 16px;
-  border-left: 2px solid var(--rule-strong);
-  color: var(--text-subtle);
-}
-
-.markdown-body code {
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  background: var(--surface);
-  color: #dce6ee;
-  font:
-    450 0.86em / 1.5 "Geist Mono Variable",
-    ui-monospace,
-    monospace;
-}
-
-.markdown-body :not(pre) > code {
-  padding: 0.12em 0.35em;
-}
-
-.markdown-body pre {
-  max-width: 100%;
-  overflow: auto;
-  padding: 16px;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--surface);
-}
-
-.markdown-body pre code {
-  border: 0;
-  background: transparent;
-}
-
-.markdown-body hr {
-  margin: 2em 0;
-  border: 0;
-  border-top: 1px solid var(--rule);
-}
-
-.markdown-body a:hover {
-  color: var(--accent-strong);
-}
-
-.markdown-body table {
-  width: 100%;
-  margin: 0 0 1.25em;
-  border-collapse: collapse;
-  font-size: 0.92em;
-}
-
-.markdown-body th,
-.markdown-body td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--rule);
-  text-align: left;
-}
-
-.markdown-body th {
-  color: var(--text);
-  font-weight: 600;
-}
-
-.markdown-body .task-list-item {
-  list-style: none;
-}
-
-.markdown-body .task-list-item input {
-  margin: 0 8px 0 -1.45em;
-  accent-color: var(--accent);
-}
-
-.markdown-image-note {
-  color: var(--text-muted);
-  font:
-    500 12px / 1.5 "Geist Mono Variable",
-    ui-monospace,
-    monospace;
 }
 
 .artifact-image {
@@ -2073,6 +1948,7 @@ a {
 }
 
 .file-view-tabs {
+  min-width: 108px;
   flex: 0 0 auto;
 }
 
@@ -2532,10 +2408,13 @@ a {
 
   .source-view-settings-popover {
     position: fixed;
-    top: calc(var(--bar-size, 44px) + 8px);
+    top: calc(100% + 8px);
     right: 14px;
     left: 14px;
     width: auto;
+    max-height: calc(100dvh - var(--bar-size) - 96px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .source-view-settings-grid {
