@@ -723,6 +723,10 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
   await page.goto(`/s/${markdownShareId}#${shareSecret}`);
   await expect(page).toHaveURL(`/s/${markdownShareId}`);
   await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
+  await expect(
+    page.locator('.markdown-body p').filter({ hasText: 'Date: 2026-09-05' }).locator('br'),
+  ).toHaveCount(1);
+  await expect(page.locator('.markdown-body ul')).toHaveCSS('list-style-type', 'disc');
   expect(requests.some((url) => url.includes(shareSecret))).toBe(false);
   await expect(page.locator('body')).not.toContainText(shareSecret);
   expect(
@@ -734,7 +738,78 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
       shareSecret,
     ),
   ).toBe(false);
+  await page.getByRole('tab', { name: 'Source' }).click();
+  const sourceScroller = page.locator('.source-view-content > diffs-container');
+  await expect(sourceScroller).toHaveCSS('overflow-y', 'auto');
+  await expect(sourceScroller).toHaveAttribute('tabindex', '0');
+  await expect(sourceScroller).toHaveAttribute('role', 'region');
+  const sourceExtent = await sourceScroller.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(sourceExtent.scrollHeight).toBeGreaterThan(sourceExtent.clientHeight);
+  await sourceScroller.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect
+    .poll(() => sourceScroller.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  await sourceScroller.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await sourceScroller.focus();
+  await page.keyboard.press('PageDown');
+  await expect
+    .poll(() => sourceScroller.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  await page.getByRole('tab', { name: 'Preview' }).click();
   await expectNoHorizontalOverflow(page, [page.locator('.artifact-surface')]);
+
+  const originalViewport = page.viewportSize();
+  expect(originalViewport).not.toBeNull();
+  await page.setViewportSize({ height: 568, width: 320 });
+  const fileViewTabs = page.locator('.file-view-tabs');
+  await expect(fileViewTabs.locator('[role="tablist"]')).not.toHaveAttribute(
+    'data-overflowing',
+    '',
+  );
+  await expect(fileViewTabs.getByRole('tab', { name: 'Preview' })).toBeVisible();
+  await expect(fileViewTabs.getByRole('tab', { name: 'Source' })).toBeVisible();
+  const mobileHeadingSizes = await page.locator('.markdown-body').evaluate((element) => ({
+    document: Number.parseFloat(
+      getComputedStyle(element.querySelector('h1') as HTMLElement).fontSize,
+    ),
+    section: Number.parseFloat(
+      getComputedStyle(element.querySelector('h2') as HTMLElement).fontSize,
+    ),
+  }));
+  expect(mobileHeadingSizes.document).toBeGreaterThan(mobileHeadingSizes.section);
+  await expectNoHorizontalOverflow(page, [page.locator('.artifact-surface')]);
+
+  await fileViewTabs.getByRole('tab', { name: 'Source' }).click();
+  await page.getByRole('button', { name: 'Source view settings' }).click();
+  const sourceSettings = page.getByRole('dialog', { name: 'Source view settings' });
+  await expect(sourceSettings).toBeVisible();
+  const settingsExtent = await sourceSettings.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return {
+      bottom: bounds.bottom,
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    };
+  });
+  expect(settingsExtent.bottom).toBeLessThanOrEqual(568);
+  expect(settingsExtent.scrollHeight).toBeGreaterThan(settingsExtent.clientHeight);
+  await sourceSettings.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect
+    .poll(() => sourceSettings.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  await page.keyboard.press('Escape');
+  await expect(sourceSettings).toBeHidden();
+  await fileViewTabs.getByRole('tab', { name: 'Preview' }).click();
+  await page.setViewportSize(originalViewport as { height: number; width: number });
   await expectNoAxeViolations(page);
 
   await page.goBack();

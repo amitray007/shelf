@@ -46,8 +46,29 @@ describe('Markdown rendering', () => {
       />,
     );
 
-    expect(html).toContain('<table>');
+    expect(html).toContain('<table tabindex="0">');
+    expect(html).not.toContain('node="[object Object]"');
     expect(html).toContain('type="checkbox"');
     expect(html).toContain('<del>discarded</del>');
+  });
+
+  it('keeps unordered, ordered, and nested lists as semantic list markup', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownView source={['- First', '  - Nested', '', '1. One', '2. Two'].join('\n')} />,
+    );
+
+    expect(html).toContain('<ul>');
+    expect(html).toMatch(/<li>First\s*<ul>/u);
+    expect(html).toContain('<ol>');
+    expect(html).toContain('<li>One</li>');
+  });
+
+  it('preserves authored line endings inside a paragraph', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownView source={'**Date:** 2026-09-04\n**Scope:** Pricing research'} />,
+    );
+
+    expect(html).toContain('<strong>Date:</strong> 2026-09-04<br/>');
+    expect(html).toContain('<strong>Scope:</strong> Pricing research');
   });
 });

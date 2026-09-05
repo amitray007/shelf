@@ -46,6 +46,31 @@ const filesByRevisionId = new Map(
     ),
   ),
 );
+const markdownFixture = [
+  '# One useful idea',
+  '',
+  '**Date:** 2026-09-05',
+  '**Scope:** Shared Markdown preview',
+  '',
+  'A durable artifact should stay quick to share.',
+  '',
+  '- Keep revisions immutable.',
+  '- Keep review links clear.',
+  '',
+  '## Why it matters',
+  '',
+  '1. Readers can scan the rendered document.',
+  '2. Reviewers can inspect the exact source.',
+  '',
+  '| Mode | Purpose |',
+  '| --- | --- |',
+  '| Preview | Read the document |',
+  '| Source | Inspect the original text |',
+  '',
+  '```text',
+  ...Array.from({ length: 80 }, (_, index) => `Source fixture line ${index + 1}`),
+  '```',
+].join('\n');
 
 const fixtureRoot = resolve(fileURLToPath(new URL('../dist/', import.meta.url)));
 const e2eAssetRoot = resolve(fileURLToPath(new URL('./assets/', import.meta.url)));
@@ -625,7 +650,7 @@ async function api(request, response, url) {
     });
     response.end(
       fileRevision.revisionId === revisionId
-        ? '# One useful idea\n\nA durable artifact should stay quick to share.'
+        ? markdownFixture
         : fileRevision.mediaType === 'application/json'
           ? JSON.stringify({ result: 'qualified', scenarios: 184 })
           : fileRevision.originalFileName,
@@ -848,7 +873,7 @@ async function api(request, response, url) {
       isMarkdown
         ? selectedPrevious
           ? '# Earlier useful idea\n\nA shared revision stays available for review.'
-          : '# One useful idea\n\nA durable artifact should stay quick to share.'
+          : markdownFixture
         : '<!doctype html><html lang="en"><title>One useful idea</title><body><p>A durable artifact should stay quick to share.</p></body></html>',
     );
     return;
