@@ -976,6 +976,28 @@ export class PostgresRevisionRepository
     return row === undefined ? undefined : storedFolderRevision(row);
   }
 
+  async findFolderEntry(request: {
+    installationId: string;
+    revisionId: string;
+    path: string;
+  }): Promise<StoredFolderEntry | undefined> {
+    const row = await this.#database
+      .selectFrom('shelf_revision_entries as entry')
+      .innerJoin('shelf_artifacts as artifact', (join) =>
+        join
+          .onRef('artifact.installation_id', '=', 'entry.installation_id')
+          .onRef('artifact.workspace_id', '=', 'entry.workspace_id')
+          .onRef('artifact.artifact_id', '=', 'entry.artifact_id'),
+      )
+      .selectAll('entry')
+      .where('entry.installation_id', '=', request.installationId)
+      .where('entry.revision_id', '=', request.revisionId)
+      .where('entry.path', '=', request.path)
+      .where('artifact.deleted_at', 'is', null)
+      .executeTakeFirst();
+    return row === undefined ? undefined : storedFolderEntry(row);
+  }
+
   async findComparableRevision(revisionId: string) {
     const row = await this.#database
       .selectFrom('shelf_revisions as revision')

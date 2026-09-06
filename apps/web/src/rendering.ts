@@ -397,3 +397,6 @@ export function selectRenderer(
   if (SOURCE_MEDIA_TYPES.has(normalized)) return { kind: 'text' };
   return { kind: 'download' };
 }
+
+// Keep large images on the streaming preview path instead of copying them into JS memory.
+export const MAX_IMAGE_PREVIEW_BYTES = 16 * 1024 * 1024;

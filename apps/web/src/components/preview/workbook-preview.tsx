@@ -202,20 +202,46 @@ export function WorkbookSheetGrid({
   const rowEnd = Math.min(safeRowCount, rowStart + visibleRowLimit + OVERSCAN * 2);
   const columnEnd = Math.min(safeColumnCount, columnStart + visibleColumnLimit + OVERSCAN * 2);
 
-  const visibleCells = useMemo(
-    () =>
-      sheet.cells.filter((cell) => {
-        const rowSpan = cellSpan(cell.rowSpan);
-        const colSpan = cellSpan(cell.colSpan);
-        return (
-          cell.row < rowEnd &&
-          cell.row + rowSpan > rowStart &&
-          cell.column < columnEnd &&
-          cell.column + colSpan > columnStart
-        );
-      }),
-    [columnEnd, columnStart, rowEnd, rowStart, sheet.cells],
-  );
+  const cellsByRow = useMemo(() => {
+    const rows = new Map<number, WorkbookCell[]>();
+    const spanning: WorkbookCell[] = [];
+    for (const cell of sheet.cells) {
+      const row = rows.get(cell.row);
+      if (row === undefined) rows.set(cell.row, [cell]);
+      else row.push(cell);
+      if (cellSpan(cell.rowSpan) > 1) spanning.push(cell);
+    }
+    return { rows, spanning };
+  }, [sheet.cells]);
+
+  const visibleCells = useMemo(() => {
+    const candidates: WorkbookCell[] = [];
+    const seen = new Set<WorkbookCell>();
+    for (let row = rowStart; row < rowEnd; row += 1) {
+      for (const cell of cellsByRow.rows.get(row) ?? []) {
+        if (!seen.has(cell)) {
+          seen.add(cell);
+          candidates.push(cell);
+        }
+      }
+    }
+    for (const cell of cellsByRow.spanning) {
+      if (cell.row < rowStart && cell.row + cellSpan(cell.rowSpan) > rowStart && !seen.has(cell)) {
+        seen.add(cell);
+        candidates.push(cell);
+      }
+    }
+    return candidates.filter((cell) => {
+      const rowSpan = cellSpan(cell.rowSpan);
+      const colSpan = cellSpan(cell.colSpan);
+      return (
+        cell.row < rowEnd &&
+        cell.row + rowSpan > rowStart &&
+        cell.column < columnEnd &&
+        cell.column + colSpan > columnStart
+      );
+    });
+  }, [cellsByRow, columnEnd, columnStart, rowEnd, rowStart]);
 
   const onScroll = (event: UIEvent<HTMLDivElement>) => {
     setScrollPosition({ left: event.currentTarget.scrollLeft, top: event.currentTarget.scrollTop });

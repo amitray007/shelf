@@ -4,6 +4,7 @@ import {
   type CommentThread,
   type CommentThreadPage,
   type FolderEntry,
+  type FolderTreePage,
   isCommentPost,
   isCommentThread,
   isFolderTreePage,
@@ -24,7 +25,7 @@ import {
 
 const PROTECTED_ACTION = /^\/api\/v1\/public\/shares\/(shr_[A-Za-z0-9_-]{22})\/(content|tree)$/;
 const PUBLIC_ACTION = /^\/api\/v1\/public\/links\/([A-Za-z0-9_-]{12})\/(content|tree)$/;
-const viewerFolderContentCache = new ContentCache({ maxBytes: 16 * 1024 * 1024, maxEntries: 64 });
+const viewerContentCache = new ContentCache({ maxBytes: 16 * 1024 * 1024, maxEntries: 64 });
 
 export type ViewerAuthority =
   | {
@@ -58,6 +59,7 @@ export interface PublicFolderPayload {
   readonly resolution: FolderShareResolution;
   readonly authority: ViewerAuthority;
   readonly entries: readonly FolderEntry[];
+  readonly nextCursor?: string | null;
   readonly rendererOrigin?: string;
 }
 
@@ -156,9 +158,22 @@ async function responseJson(response: Response): Promise<unknown> {
   }
 }
 
-export async function loadPublicClientConfig(
-  signal?: AbortSignal,
-): Promise<{ readonly rendererOrigin?: string }> {
+type PublicClientConfig = { readonly rendererOrigin?: string };
+let publicConfig: { value: PublicClientConfig; expiresAt: number } | undefined;
+
+export function clearViewerCaches(): void {
+  viewerContentCache.clear();
+  publicConfig = undefined;
+}
+
+function viewerAccessScope(authority: ViewerAuthority): string {
+  return authority.accessType === 'protected'
+    ? `protected:${authority.shareId}:${authority.sessionId}`
+    : `public:${authority.publicCode}`;
+}
+
+export async function loadPublicClientConfig(signal?: AbortSignal): Promise<PublicClientConfig> {
+  if (publicConfig !== undefined && publicConfig.expiresAt > Date.now()) return publicConfig.value;
   try {
     const response = await anonymousFetch('/api/v1/public/config', {
       ...anonymousRequest(signal),
@@ -176,7 +191,9 @@ export async function loadPublicClientConfig(
     ) {
       return {};
     }
-    return value.rendererOrigin === null ? {} : { rendererOrigin: value.rendererOrigin };
+    const config = value.rendererOrigin === null ? {} : { rendererOrigin: value.rendererOrigin };
+    publicConfig = { value: config, expiresAt: Date.now() + 60_000 };
+    return config;
   } catch {
     return {};
   }
@@ -310,61 +327,115 @@ export async function resolveViewerShare(
   throw new PublicShareUnavailableError();
 }
 
+// Cached bytes must come from the resolved revision, including target-only Latest links.
+// The server rejects the request if Latest advanced; this does not grant historical access.
+function cachedContentActionUrl(
+  resolution: FileShareResolution | FolderShareResolution,
+  authority: ViewerAuthority,
+  cursor?: string,
+): string {
+  const action = viewerShareActionUrl(resolution, authority, cursor);
+  if (authority.accessType === 'protected') return action;
+  const url = new URL(action, 'https://shelf.invalid');
+  url.searchParams.set('revisionId', resolution.revision.revisionId);
+  return `${url.pathname}${url.search}`;
+}
+
 export async function loadViewerFileBytes(
   resolution: FileShareResolution,
   authority: ViewerAuthority,
   signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
-  const url = viewerShareActionUrl(resolution, authority);
-  const init =
-    authority.accessType === 'protected'
-      ? jsonPost(
-          {
-            token: authority.token,
-            ...(selectedRevisionId(resolution) === undefined
-              ? {}
-              : { revisionId: selectedRevisionId(resolution) }),
-          },
-          signal,
-        )
-      : { ...anonymousRequest(signal), method: 'GET' };
-  const response = await anonymousFetch(url, init);
-  if (!response.ok) throw new PublicShareUnavailableError();
-  return response.arrayBuffer();
+  const url = cachedContentActionUrl(resolution, authority);
+  return viewerContentCache.getOrLoad(
+    {
+      accessScope: viewerAccessScope(authority),
+      revisionId: resolution.revision.revisionId,
+      folderPath: '',
+    },
+    async (cacheSignal) => {
+      const init =
+        authority.accessType === 'protected'
+          ? jsonPost(
+              {
+                token: authority.token,
+                revisionId: resolution.revision.revisionId,
+              },
+              cacheSignal,
+            )
+          : { ...anonymousRequest(cacheSignal), method: 'GET' };
+      const response = await anonymousFetch(url, init);
+      if (!response.ok) throw new PublicShareUnavailableError();
+      return response.arrayBuffer();
+    },
+    signal,
+  );
+}
+
+export async function loadViewerFolderPage(
+  resolution: FolderShareResolution,
+  authority: ViewerAuthority,
+  signal?: AbortSignal,
+  cursor?: string,
+): Promise<FolderTreePage> {
+  const url = cachedContentActionUrl(resolution, authority, cursor);
+  const parsePage = (bytes: ArrayBuffer): FolderTreePage => {
+    const value: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    if (!isFolderTreePage(value) || value.revisionId !== resolution.revision.revisionId) {
+      throw new PublicShareUnavailableError();
+    }
+    return value;
+  };
+  const bytes = await viewerContentCache.getOrLoad(
+    // NUL cannot occur in a folder path, keeping metadata separate from content.
+    {
+      accessScope: viewerAccessScope(authority),
+      revisionId: resolution.revision.revisionId,
+      folderPath: `\0tree:${cursor ?? ''}`,
+    },
+    async (cacheSignal) => {
+      const init =
+        authority.accessType === 'protected'
+          ? jsonPost(
+              {
+                token: authority.token,
+                revisionId: resolution.revision.revisionId,
+              },
+              cacheSignal,
+            )
+          : { ...anonymousRequest(cacheSignal), method: 'GET' };
+      const value = await responseJson(await anonymousFetch(url, init));
+      const data = new TextEncoder().encode(JSON.stringify(value)).buffer;
+      parsePage(data);
+      return data;
+    },
+    signal,
+  );
+  return parsePage(bytes);
 }
 
 export async function loadViewerFolderEntries(
   resolution: FolderShareResolution,
   authority: ViewerAuthority,
   signal?: AbortSignal,
+  progress?: {
+    readonly entries: readonly FolderEntry[];
+    readonly cursor: string;
+    readonly onEntries: (entries: readonly FolderEntry[]) => void;
+  },
 ): Promise<readonly FolderEntry[]> {
-  const entries: FolderEntry[] = [];
+  const entries: FolderEntry[] = [...(progress?.entries ?? [])];
   const visitedCursors = new Set<string>();
-  let cursor: string | undefined;
+  let cursor: string | undefined = progress?.cursor;
   do {
-    const url = viewerShareActionUrl(resolution, authority, cursor);
-    const init =
-      authority.accessType === 'protected'
-        ? jsonPost(
-            {
-              token: authority.token,
-              ...(selectedRevisionId(resolution) === undefined
-                ? {}
-                : { revisionId: selectedRevisionId(resolution) }),
-            },
-            signal,
-          )
-        : { ...anonymousRequest(signal), method: 'GET' };
-    const value = await responseJson(await anonymousFetch(url, init));
-    if (!isFolderTreePage(value) || value.revisionId !== resolution.revision.revisionId) {
-      throw new PublicShareUnavailableError();
-    }
+    if (cursor !== undefined) visitedCursors.add(cursor);
+    const value = await loadViewerFolderPage(resolution, authority, signal, cursor);
     entries.push(...value.items);
     cursor = value.nextCursor ?? undefined;
     if (entries.length > 2_000 || (cursor !== undefined && visitedCursors.has(cursor))) {
       throw new PublicShareUnavailableError();
     }
-    if (cursor !== undefined) visitedCursors.add(cursor);
+    progress?.onEntries([...entries]);
   } while (cursor !== undefined);
   return entries;
 }
@@ -375,19 +446,17 @@ export async function loadViewerFolderEntryBytes(
   path: string,
   signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
-  viewerShareActionUrl(resolution, authority);
-  // Session identity partitions protected bytes without retaining or keying on the
-  // bearer token. Public codes are already the stable scope of a public link.
-  const accessScope =
-    authority.accessType === 'protected'
-      ? `protected:${authority.shareId}:${authority.sessionId}`
-      : `public:${authority.publicCode}`;
-  return viewerFolderContentCache.getOrLoad(
-    { accessScope, revisionId: resolution.revision.revisionId, folderPath: path },
+  cachedContentActionUrl(resolution, authority);
+  return viewerContentCache.getOrLoad(
+    {
+      accessScope: viewerAccessScope(authority),
+      revisionId: resolution.revision.revisionId,
+      folderPath: path,
+    },
     async (cacheSignal) => {
       const query = new URLSearchParams({ path });
-      const revisionId = selectedRevisionId(resolution);
-      if (authority.accessType === 'public' && revisionId !== undefined) {
+      const revisionId = resolution.revision.revisionId;
+      if (authority.accessType === 'public') {
         query.set('revisionId', revisionId);
       }
       const url =
@@ -399,7 +468,7 @@ export async function loadViewerFolderEntryBytes(
           ? jsonPost(
               {
                 token: authority.token,
-                ...(revisionId === undefined ? {} : { revisionId }),
+                revisionId,
               },
               cacheSignal,
             )

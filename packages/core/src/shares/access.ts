@@ -270,17 +270,16 @@ export function createShareAccessService(dependencies: {
       ) {
         throw new ShareNotFoundError();
       }
-      let page: Awaited<ReturnType<FolderRevisionRepository['listFolderEntries']>>;
+      let entry: Awaited<ReturnType<FolderRevisionRepository['findFolderEntry']>>;
       try {
-        page = await dependencies.folders.listFolderEntries({
+        entry = await dependencies.folders.findFolderEntry({
           installationId: revision.installationId,
           revisionId: revision.revisionId,
-          limit: FOLDER_LIMITS.maxEntries,
+          path: request.path,
         });
       } catch (error) {
         throw boundaryFailure('SERVICE_UNAVAILABLE', 'Shared folder tree lookup failed.', error);
       }
-      const entry = page.items.find((candidate) => candidate.path === request.path);
       if (entry === undefined || entry.kind !== 'file') throw new ShareNotFoundError();
       const signal = request.signal;
       return {

@@ -95,6 +95,11 @@ export interface FolderRevisionRepository {
   ): Promise<FolderIdempotencyRecord | undefined>;
   commitFolderPublish(input: CommitFolderPublishInput): Promise<CommitFolderPublishOutcome>;
   findFolderRevision(revisionId: string): Promise<StoredFolderRevision | undefined>;
+  findFolderEntry(request: {
+    installationId: string;
+    revisionId: string;
+    path: string;
+  }): Promise<StoredFolderEntry | undefined>;
   listFolderEntries(request: {
     installationId: string;
     revisionId: string;
