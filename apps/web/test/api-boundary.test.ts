@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  clearViewerCaches,
   createViewerCommentReply,
   createViewerCommentThread,
   establishProtectedSession,
+  loadPublicClientConfig,
   loadViewerComments,
+  loadViewerFileBytes,
   loadViewerFolderEntries,
+  loadViewerFolderEntryBytes,
   PublicShareUnavailableError,
   resolveViewerShare,
   updateViewerCommentPost,
@@ -77,10 +81,132 @@ function folderPage(items: readonly Record<string, unknown>[], nextCursor: strin
 }
 
 afterEach(() => {
+  clearViewerCaches();
   vi.unstubAllGlobals();
 });
 
 describe('viewer content boundary', () => {
+  it('reuses file and folder bytes only within the same share session and revision', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response('image bytes'));
+    vi.stubGlobal('fetch', fetch);
+    const authority = {
+      accessType: 'protected' as const,
+      shareId: SHARE_ID,
+      sessionId: SESSION_ID,
+      token: TOKEN,
+    };
+    const folder = folderResolution();
+    const file = {
+      ...folder,
+      artifact: { ...folder.artifact, kind: 'file' as const },
+      revision: {
+        ...folder.revision,
+        kind: 'file' as const,
+        mediaType: 'image/png',
+        originalFileName: 'photo.png',
+      },
+      action: { type: 'content' as const, path: `/api/v1/public/shares/${SHARE_ID}/content` },
+    };
+    await loadViewerFileBytes(file, authority);
+    await loadViewerFileBytes(file, authority);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toMatchObject({
+      revisionId: REVISION_ID,
+    });
+    await loadViewerFolderEntryBytes(folder, authority, 'photo.png');
+    await loadViewerFolderEntryBytes(folder, authority, 'photo.png');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetch.mock.calls[1]?.[1]?.body))).toMatchObject({
+      revisionId: REVISION_ID,
+    });
+    await loadViewerFolderEntryBytes(
+      folder,
+      { ...authority, sessionId: 'another-session' },
+      'photo.png',
+    );
+    await loadViewerFolderEntryBytes(
+      { ...folder, revision: { ...folder.revision, revisionId: `rev_${'x'.repeat(22)}` } },
+      authority,
+      'photo.png',
+    );
+    expect(fetch).toHaveBeenCalledTimes(4);
+    await loadViewerFileBytes(
+      {
+        ...file,
+        accessType: 'public',
+        publicCode: PUBLIC_CODE,
+        action: { type: 'content', path: `/api/v1/public/links/${PUBLIC_CODE}/content` },
+      },
+      { accessType: 'public', publicCode: PUBLIC_CODE },
+    );
+    expect(fetch.mock.calls[4]?.[0]).toBe(
+      `/api/v1/public/links/${PUBLIC_CODE}/content?revisionId=${REVISION_ID}`,
+    );
+  });
+
+  it('opens the folder after its first page and reuses pages on a revision revisit', async () => {
+    const resolution = folderResolution();
+    const authority = {
+      accessType: 'protected' as const,
+      shareId: SHARE_ID,
+      sessionId: SESSION_ID,
+      token: TOKEN,
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json(resolution))
+      .mockResolvedValueOnce(
+        Response.json(folderPage([{ path: 'docs', kind: 'directory' }], 'next-page')),
+      )
+      .mockResolvedValueOnce(Response.json(folderPage([{ path: 'more', kind: 'directory' }], null)))
+      .mockResolvedValueOnce(Response.json(resolution));
+    vi.stubGlobal('fetch', fetch);
+    const reference = { accessType: 'protected' as const, shareId: SHARE_ID };
+    const payload = await loadViewerPayload(reference, authority, undefined, undefined);
+    expect(payload).toMatchObject({
+      kind: 'folder',
+      nextCursor: 'next-page',
+      entries: [{ path: 'docs', kind: 'directory' }],
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    if (payload.kind !== 'folder') throw new Error('Expected a folder');
+    const onEntries = vi.fn();
+    await loadViewerFolderEntries(resolution, authority, undefined, {
+      entries: payload.entries,
+      cursor: 'next-page',
+      onEntries,
+    });
+    expect(onEntries).toHaveBeenCalledWith([
+      { path: 'docs', kind: 'directory' },
+      { path: 'more', kind: 'directory' },
+    ]);
+    await loadViewerPayload(reference, authority, undefined, undefined);
+    await loadViewerFolderEntries(resolution, authority);
+    expect(fetch).toHaveBeenCalledTimes(4); // Authorization is refreshed; immutable tree pages are reused.
+  });
+
+  it('caches successful public config briefly without caching failures', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(
+        Response.json({ apiVersion: 'v1', rendererOrigin: 'https://renderer.shelf.test' }),
+      )
+      .mockResolvedValueOnce(Response.json({ apiVersion: 'v1', rendererOrigin: null }));
+    vi.stubGlobal('fetch', fetch);
+    await expect(loadPublicClientConfig()).resolves.toEqual({});
+    const config = await loadPublicClientConfig();
+    await expect(loadPublicClientConfig()).resolves.toEqual(config);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000);
+    try {
+      await expect(loadPublicClientConfig()).resolves.toEqual({});
+    } finally {
+      now.mockRestore();
+    }
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
   it('builds preview URLs without bearer tokens or capability secrets', () => {
     const protectedAuthority = {
       accessType: 'protected' as const,

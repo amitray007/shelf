@@ -3,10 +3,11 @@
 import type { FileTreeDirectoryHandle } from '@pierre/trees';
 import { FileTree, useFileTree } from '@pierre/trees/react';
 import type { CommentAnchor, CommentThread, FolderEntry } from '@shelf/contracts';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ViewerAuthority } from '../api.js';
 import {
+  MAX_IMAGE_PREVIEW_BYTES,
   requiresClientBytes,
   selectRenderer,
   supportsSourceView,
@@ -54,6 +55,8 @@ export interface FolderBrowserReview {
 interface FolderBrowserProps {
   readonly authority?: ViewerAuthority | undefined;
   readonly entries: readonly FolderEntry[];
+  readonly treeStatus?: ReactNode;
+  readonly treeComplete?: boolean;
   readonly loadFile: (path: string, signal: AbortSignal) => Promise<ArrayBuffer>;
   readonly loadPreviewUrl?: ((path: string) => string) | undefined;
   readonly downloadFile?: ((path: string) => void) | undefined;
@@ -83,11 +86,11 @@ function readExpandedTreePaths(paths: readonly string[]): readonly string[] | nu
   }
 }
 
-function readSelectedFilePath(filePaths: ReadonlySet<string>): string | undefined {
+function readSelectedFilePath(filePaths: ReadonlySet<string> | undefined): string | undefined {
   if (typeof window === 'undefined') return undefined;
   try {
     const value = window.sessionStorage.getItem(viewerSessionStorageKey('folder-selected-file'));
-    return value !== null && filePaths.has(value) ? value : undefined;
+    return value !== null && (filePaths === undefined || filePaths.has(value)) ? value : undefined;
   } catch {
     return undefined;
   }
@@ -134,6 +137,8 @@ export function isProgrammaticFolderSelection(
 export function FolderBrowser({
   authority,
   entries,
+  treeStatus,
+  treeComplete = true,
   loadFile,
   loadPreviewUrl,
   downloadFile,
@@ -175,8 +180,13 @@ export function FolderBrowser({
   const programmaticSelectionPathRef = useRef<string | undefined>(undefined);
   const treeMountedRef = useRef(false);
   const [selectedPath, setSelectedPath] = useState(
-    () => readSelectedFilePath(filePaths) ?? defaultPath,
+    () => readSelectedFilePath(treeComplete ? filePaths : undefined) ?? defaultPath,
   );
+  useEffect(() => {
+    if (selectedPath !== undefined) return;
+    const next = readSelectedFilePath(filePaths) ?? defaultPath;
+    if (next !== undefined) setSelectedPath(next);
+  }, [defaultPath, filePaths, selectedPath]);
   const selected = selectedPath === undefined ? undefined : fileEntriesByPath.get(selectedPath);
   const [loadedFile, setLoadedFile] = useState<{
     readonly path?: string | undefined;
@@ -215,7 +225,9 @@ export function FolderBrowser({
     icons: { colored: false, set: 'complete' },
     initialExpansion: restoredExpandedPaths === null ? 'open' : 'closed',
     ...(restoredExpandedPaths === null ? {} : { initialExpandedPaths: restoredExpandedPaths }),
-    ...(selectedPath === undefined ? {} : { initialSelectedPaths: [selectedPath] }),
+    ...(selectedPath === undefined || !filePaths.has(selectedPath)
+      ? {}
+      : { initialSelectedPaths: [selectedPath] }),
     paths,
     search: true,
     searchBlurBehavior: 'close',
@@ -259,7 +271,13 @@ export function FolderBrowser({
       availablePaths.has(path),
     );
     appliedPathsRef.current = paths;
-    model.resetPaths(paths, { initialExpandedPaths: expandedPaths });
+    programmaticSelectionPathRef.current = selectedPath;
+    model.resetPaths(paths, {
+      initialExpandedPaths: expandedPaths,
+      ...(selectedPath === undefined || !filePaths.has(selectedPath)
+        ? {}
+        : { initialSelectedPaths: [selectedPath] }),
+    });
     try {
       window.sessionStorage.setItem(
         viewerSessionStorageKey('folder-tree'),
@@ -268,7 +286,7 @@ export function FolderBrowser({
     } catch {
       // Session storage can be unavailable in privacy-restricted browser contexts.
     }
-  }, [model, paths]);
+  }, [model, paths, selectedPath, filePaths]);
 
   useEffect(() => {
     if (selectedPath === undefined) return;
@@ -354,9 +372,9 @@ export function FolderBrowser({
   }, [model, paths]);
 
   useEffect(() => {
-    if (selectedPath === undefined || filePaths.has(selectedPath)) return;
+    if (!treeComplete || selectedPath === undefined || filePaths.has(selectedPath)) return;
     setSelectedPath(defaultPath);
-  }, [filePaths, defaultPath, selectedPath]);
+  }, [filePaths, defaultPath, selectedPath, treeComplete]);
 
   useEffect(() => {
     if (!shouldApplyFolderFocusRequest(focusRequestId, consumedFocusRequestIdRef.current)) return;
@@ -382,7 +400,9 @@ export function FolderBrowser({
       return () => controller.abort();
     }
     const remote =
-      loadPreviewUrl !== undefined && usesPreviewUrl(renderer)
+      loadPreviewUrl !== undefined &&
+      usesPreviewUrl(renderer) &&
+      (renderer.kind !== 'image' || selected.byteCount > MAX_IMAGE_PREVIEW_BYTES)
         ? loadPreviewUrl(selected.path)
         : undefined;
     if (remote !== undefined) {
@@ -624,6 +644,11 @@ export function FolderBrowser({
                 model={model}
               />
             )}
+            {treeStatus && sidebarOpen && review?.mode !== 'discussion' ? (
+              <div className="folder-tree-status" role="status">
+                {treeStatus}
+              </div>
+            ) : null}
           </aside>
         }
       />

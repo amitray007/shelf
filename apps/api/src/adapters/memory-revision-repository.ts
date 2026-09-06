@@ -209,6 +209,24 @@ export class MemoryRevisionRepository
     return revision !== undefined && this.#isActive(revision.artifactId) ? revision : undefined;
   }
 
+  async findFolderEntry(request: {
+    installationId: string;
+    revisionId: string;
+    path: string;
+  }): Promise<StoredFolderEntry | undefined> {
+    const revision = this.#folderRevisions.get(request.revisionId);
+    if (
+      revision === undefined ||
+      revision.installationId !== request.installationId ||
+      !this.#isActive(revision.artifactId)
+    ) {
+      return undefined;
+    }
+    return this.#folderEntries
+      .get(request.revisionId)
+      ?.find((entry) => entry.path === request.path);
+  }
+
   async listFolderEntries(request: {
     installationId: string;
     revisionId: string;

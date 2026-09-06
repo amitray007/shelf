@@ -117,13 +117,15 @@ export function ArtifactFileView({
   const renderer = selectRenderer(file.mediaType, capabilities?.isolatedHtml?.origin, file.name);
   const bytes = content.status === 'ready' ? content.bytes : undefined;
   const previewUrl = content.status === 'ready' ? content.previewUrl : undefined;
-  const source =
+  const sourceEligible =
     bytes !== undefined &&
     renderer.kind !== 'docx' &&
     renderer.kind !== 'workbook' &&
-    (requiresClientBytes(renderer) || supportsSourceView(file.mediaType, file.name))
-      ? decodeFileSource(bytes)
-      : null;
+    (requiresClientBytes(renderer) || supportsSourceView(file.mediaType, file.name));
+  const source = useMemo(
+    () => (sourceEligible && bytes !== undefined ? decodeFileSource(bytes) : null),
+    [bytes, sourceEligible],
+  );
 
   let preview: ReactNode | undefined;
   let htmlPreview: ((theme: HtmlPreviewTheme) => ReactNode) | undefined;

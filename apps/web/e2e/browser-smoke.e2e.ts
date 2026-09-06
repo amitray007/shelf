@@ -1017,10 +1017,12 @@ test('rich protected shares render structured and image previews without leaking
   await expect(svgControls.getByText('preview.svg', { exact: true })).toBeVisible();
   await expect(page.getByRole('img', { name: 'preview.svg' })).toBeVisible();
 
-  const previewUrls = requests.filter((url) => url.includes('/content/preview'));
-  expect(previewUrls.length).toBeGreaterThan(0);
-  expect(previewUrls.every((url) => !url.includes(shareSecret))).toBe(true);
-  expect(previewUrls.every((url) => new URL(url).search === '' && !url.includes('#'))).toBe(true);
+  // Images reuse bounded byte content rather than a separate uncached preview URL.
+  await expect(page.getByRole('img', { name: 'preview.svg' })).toHaveAttribute('src', /^blob:/);
+  const imageRequests = requests.filter((url) => url.includes(`/shares/${svgShareId}/content`));
+  expect(imageRequests).toHaveLength(1);
+  expect(imageRequests.every((url) => !url.includes(shareSecret))).toBe(true);
+  expect(imageRequests.every((url) => new URL(url).search === '' && !url.includes('#'))).toBe(true);
   expect(requests.some((url) => url.includes(shareSecret))).toBe(false);
 
   const scope = await page.evaluate(

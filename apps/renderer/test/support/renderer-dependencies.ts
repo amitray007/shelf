@@ -148,6 +148,9 @@ export function rendererDependencies(
     async findFolderRevision() {
       return undefined;
     },
+    async findFolderEntry() {
+      return undefined;
+    },
     async listFolderEntries() {
       return { items: [] };
     },

@@ -904,7 +904,13 @@ async function api(request, response, url) {
   if (request.method === 'POST' && protectedContentMatch !== null) {
     const value = JSON.parse(await body(request));
     const fixture = richFixturesByShareId.get(protectedContentMatch[1]);
-    if (fixture === undefined || value.token !== viewerToken || Object.keys(value).length !== 1) {
+    if (
+      fixture === undefined ||
+      value.token !== viewerToken ||
+      Object.keys(value).some((key) => key !== 'token' && key !== 'revisionId') ||
+      (value.revisionId !== undefined &&
+        value.revisionId !== fixture.resolution.revision.revisionId)
+    ) {
       json(response, 404, {});
       return;
     }

@@ -197,6 +197,8 @@ export function PdfViewer({
   const loadingTaskRef = useRef<PdfLoadingTask | null>(null);
   const renderTaskRef = useRef<PdfRenderTask | null>(null);
   const renderVersionRef = useRef(0);
+  const lastRequestKeyRef = useRef<string | undefined>(undefined);
+  const resizeFrameRef = useRef<number | undefined>(undefined);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [fitWidth, setFitWidth] = useState(initialFitWidth);
@@ -220,6 +222,7 @@ export function PdfViewer({
   useEffect(() => {
     let disposed = false;
     void reloadToken;
+    lastRequestKeyRef.current = undefined;
     const previousDocument = documentRef.current;
     documentRef.current = null;
     if (previousDocument?.destroy !== undefined) void previousDocument.destroy();
@@ -261,6 +264,8 @@ export function PdfViewer({
 
     return () => {
       disposed = true;
+      renderVersionRef.current += 1;
+      lastRequestKeyRef.current = undefined;
       renderTaskRef.current?.cancel?.();
       renderTaskRef.current = null;
       if (loadingTaskRef.current === loadingTask) {
@@ -276,6 +281,12 @@ export function PdfViewer({
     const pageShell = pageShellRef.current;
     if (document === null || canvas === null || pageShell === null || pageNumber < 1) return;
 
+    const availableWidth = Math.max(pageShell.clientWidth - 32, 240);
+    const pixelRatio = typeof window === 'undefined' ? 1 : Math.max(window.devicePixelRatio, 1);
+    const requestKey = `${pageNumber}:${fitWidth}:${zoom}:${availableWidth}:${pixelRatio}`;
+    if (requestKey === lastRequestKeyRef.current) return;
+    lastRequestKeyRef.current = requestKey;
+
     const renderVersion = renderVersionRef.current + 1;
     renderVersionRef.current = renderVersion;
     renderTaskRef.current?.cancel?.();
@@ -285,7 +296,6 @@ export function PdfViewer({
       const page = await document.getPage(pageNumber);
       if (renderVersion !== renderVersionRef.current) return;
       const baseViewport = page.getViewport({ scale: 1 });
-      const availableWidth = Math.max(pageShell.clientWidth - 32, 240);
       const nextZoom = fitWidth
         ? clampZoom(Math.min(MAX_FIT_WIDTH_ZOOM, availableWidth / Math.max(baseViewport.width, 1)))
         : clampZoom(zoom);
@@ -293,7 +303,6 @@ export function PdfViewer({
       const context = canvas.getContext('2d');
       if (context === null) throw new Error('The browser could not create a PDF canvas.');
 
-      const pixelRatio = typeof window === 'undefined' ? 1 : Math.max(window.devicePixelRatio, 1);
       canvas.width = Math.ceil(viewport.width * pixelRatio);
       canvas.height = Math.ceil(viewport.height * pixelRatio);
       canvas.style.width = `${Math.ceil(viewport.width)}px`;
@@ -306,6 +315,8 @@ export function PdfViewer({
       await renderTask.promise;
       if (renderVersion !== renderVersionRef.current) return;
     } catch (error: unknown) {
+      if (renderVersion !== renderVersionRef.current) return;
+      lastRequestKeyRef.current = undefined;
       if (!isCancelledRender(error)) {
         setErrorMessage(
           error instanceof Error ? error.message : 'The PDF page could not be rendered.',
@@ -319,22 +330,42 @@ export function PdfViewer({
   useEffect(() => {
     if (loading || errorMessage !== undefined || pageCount === 0) return;
     void renderPage();
-    return () => renderTaskRef.current?.cancel?.();
+    return () => {
+      renderVersionRef.current += 1;
+      lastRequestKeyRef.current = undefined;
+      renderTaskRef.current?.cancel?.();
+    };
   }, [errorMessage, loading, pageCount, renderPage]);
 
   useEffect(() => {
     const shell = pageShellRef.current;
     if (shell === null) return;
     const onResize = () => {
-      if (fitWidth) void renderPage();
+      if (!fitWidth || resizeFrameRef.current !== undefined) return;
+      resizeFrameRef.current = window.requestAnimationFrame(() => {
+        resizeFrameRef.current = undefined;
+        void renderPage();
+      });
     };
     if (typeof ResizeObserver === 'function') {
       const observer = new ResizeObserver(onResize);
       observer.observe(shell);
-      return () => observer.disconnect();
+      return () => {
+        observer.disconnect();
+        if (resizeFrameRef.current !== undefined) {
+          window.cancelAnimationFrame(resizeFrameRef.current);
+          resizeFrameRef.current = undefined;
+        }
+      };
     }
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (resizeFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = undefined;
+      }
+    };
   }, [fitWidth, renderPage]);
 
   const goToPage = (nextPage: number) => {

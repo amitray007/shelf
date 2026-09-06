@@ -1,6 +1,6 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable table previews must be keyboard reachable.
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ViewerToolbarContent } from '../viewer-controls.js';
 
 import {
@@ -314,25 +314,33 @@ export function DelimitedTablePreview({
   const [query, setQuery] = useState('');
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
   const searchId = useId();
-  const parsed = parseDelimitedSource(source, {
-    delimiter,
-    fileName,
-    ...(maxCellLength === undefined ? {} : { maxCellLength }),
-    ...(maxColumns === undefined ? {} : { maxColumns }),
-    ...(maxRows === undefined ? {} : { maxRows }),
-    ...(maxSourceLength === undefined ? {} : { maxSourceLength }),
-    mediaType,
-  });
+  const parsed = useMemo(
+    () =>
+      parseDelimitedSource(source, {
+        delimiter,
+        fileName,
+        ...(maxCellLength === undefined ? {} : { maxCellLength }),
+        ...(maxColumns === undefined ? {} : { maxColumns }),
+        ...(maxRows === undefined ? {} : { maxRows }),
+        ...(maxSourceLength === undefined ? {} : { maxSourceLength }),
+        mediaType,
+      }),
+    [delimiter, fileName, maxCellLength, maxColumns, maxRows, maxSourceLength, mediaType, source],
+  );
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const matchingRows = parsed.ok
-    ? parsed.rows
-        .map((row, index) => ({ index, row }))
-        .filter(
-          ({ row }) =>
-            normalizedQuery.length === 0 ||
-            row.some((cell) => cell.toLocaleLowerCase().includes(normalizedQuery)),
-        )
-    : [];
+  const matchingRows = useMemo(
+    () =>
+      parsed.ok
+        ? parsed.rows
+            .map((row, index) => ({ index, row }))
+            .filter(
+              ({ row }) =>
+                normalizedQuery.length === 0 ||
+                row.some((cell) => cell.toLocaleLowerCase().includes(normalizedQuery)),
+            )
+        : [],
+    [normalizedQuery, parsed],
+  );
   const visibleRows = matchingRows.slice(0, Math.max(1, maxVisibleRows));
   const hasMoreVisibleRows = matchingRows.length > visibleRows.length;
 

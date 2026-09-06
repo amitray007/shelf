@@ -4,6 +4,8 @@ import {
   createShareAccessService,
   type FolderRevisionRepository,
   type ShareRepository,
+  type StoredFolderEntry,
+  type StoredFolderRevision,
 } from '../src/index.js';
 
 const ids = {
@@ -147,6 +149,9 @@ describe('public share access', () => {
         async findFolderRevision() {
           return undefined;
         },
+        async findFolderEntry() {
+          return undefined;
+        },
         async listFolderEntries() {
           return { items: [] };
         },
@@ -209,6 +214,9 @@ describe('public share access', () => {
         async findFolderRevision() {
           return undefined;
         },
+        async findFolderEntry() {
+          return undefined;
+        },
         async listFolderEntries() {
           return { items: [] };
         },
@@ -230,6 +238,166 @@ describe('public share access', () => {
         limit: 20,
       }),
     ).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
+  });
+
+  it('uses one exact scoped entry lookup for a shared folder file', async () => {
+    const folderRevision: StoredFolderRevision = {
+      apiVersion: 'v1',
+      kind: 'folder',
+      installationId: 'install-main',
+      workspaceId: 'workspace-main',
+      artifactId: ids.artifact,
+      revisionId: ids.revision,
+      manifest: {
+        contentId: 'manifest-content',
+        contentHash: `sha256:${'b'.repeat(64)}`,
+        byteCount: 1,
+      },
+      rootName: 'Project',
+      totalByteCount: 3,
+      fileCount: 1,
+      provenance: {
+        classification: 'direct-publish',
+        observed: { actorId: 'private-actor', operation: 'file.publish' },
+      },
+      publisherMetadata: {},
+    };
+    const fileEntry: StoredFolderEntry = {
+      path: 'docs/readme.md',
+      kind: 'file',
+      mediaType: 'text/markdown',
+      content: { contentId: 'file-content', contentHash: `sha256:${'c'.repeat(64)}`, byteCount: 3 },
+    };
+    const repository = shares({
+      async resolveShareTarget() {
+        return {
+          share: {
+            apiVersion: 'v1',
+            installationId: 'install-main',
+            workspaceId: 'workspace-main',
+            shareId: ids.share,
+            artifactId: ids.artifact,
+            visibility: 'unlisted',
+            accessType: 'protected',
+            publicCode: null,
+            target: { mode: 'latest' },
+            createdByActorId: 'private-actor',
+            createdAt: '2026-08-17T12:00:00.000Z',
+            expiresAt: null,
+            maxSessions: null,
+            sessionsUsed: 0,
+            revokedAt: null,
+            revokedByActorId: null,
+          },
+          artifact: {
+            installationId: 'install-main',
+            workspaceId: 'workspace-main',
+            artifactId: ids.artifact,
+            kind: 'folder',
+            name: 'Project',
+            createdAt: '2026-08-17T12:00:00.000Z',
+            updatedAt: '2026-08-17T12:00:00.000Z',
+            retentionMode: 'automatic',
+            autoTrashAt: null,
+            latestRevision: {
+              kind: 'folder',
+              revisionId: ids.revision,
+              revisionNumber: 1,
+              rootName: 'Project',
+              byteCount: 3,
+              fileCount: 1,
+              contentHash: folderRevision.manifest.contentHash,
+              createdAt: '2026-08-17T12:00:00.000Z',
+              provenance: folderRevision.provenance,
+              publisherMetadata: {},
+            },
+          },
+          revision: {
+            installationId: 'install-main',
+            workspaceId: 'workspace-main',
+            artifactId: ids.artifact,
+            revision: {
+              kind: 'folder',
+              revisionId: ids.revision,
+              revisionNumber: 1,
+              rootName: 'Project',
+              byteCount: 3,
+              fileCount: 1,
+              contentHash: folderRevision.manifest.contentHash,
+              createdAt: '2026-08-17T12:00:00.000Z',
+              provenance: folderRevision.provenance,
+              publisherMetadata: {},
+            },
+          },
+        };
+      },
+    });
+    const findFolderEntry = vi.fn(
+      async (request: { installationId: string; revisionId: string; path: string }) =>
+        request.installationId === 'install-main' &&
+        request.revisionId === ids.revision &&
+        request.path === fileEntry.path
+          ? fileEntry
+          : undefined,
+    );
+    const listFolderEntries = vi.fn(async () => {
+      throw new Error('full tree lookup should not be used');
+    });
+    const access = createShareAccessService({
+      shares: repository,
+      revisions: {
+        async findRevision() {
+          return undefined;
+        },
+      },
+      folders: {
+        async findFolderIdempotency() {
+          return undefined;
+        },
+        async commitFolderPublish(input) {
+          return { status: 'committed', result: input.result };
+        },
+        async findFolderRevision() {
+          return folderRevision;
+        },
+        findFolderEntry,
+        listFolderEntries,
+      },
+      contentReader: {
+        async read() {
+          return (async function* bytes() {
+            yield new Uint8Array([1, 2, 3]);
+          })();
+        },
+      },
+    });
+
+    await expect(
+      access.readTreeFile({
+        authority: {
+          type: 'protected-session',
+          shareId: ids.share,
+          sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+        path: fileEntry.path,
+      }),
+    ).resolves.toMatchObject({ path: fileEntry.path, contentHash: fileEntry.content.contentHash });
+    await expect(
+      access.readTreeFile({
+        authority: {
+          type: 'protected-session',
+          shareId: ids.share,
+          sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+        path: 'missing.txt',
+      }),
+    ).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
+    expect(findFolderEntry).toHaveBeenCalledWith({
+      installationId: 'install-main',
+      revisionId: ids.revision,
+      path: 'missing.txt',
+    });
+    expect(listFolderEntries).not.toHaveBeenCalled();
   });
 
   it('reads the same content through a secretless Public selector', async () => {
@@ -288,6 +456,9 @@ describe('public share access', () => {
           return { status: 'committed', result: input.result };
         },
         async findFolderRevision() {
+          return undefined;
+        },
+        async findFolderEntry() {
           return undefined;
         },
         async listFolderEntries() {

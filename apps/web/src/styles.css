@@ -1862,6 +1862,9 @@ a {
 
 .artifact-image {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
   place-items: center;
   padding: clamp(12px, 3vw, 36px);
   background: var(--canvas);
@@ -1869,6 +1872,8 @@ a {
 
 .artifact-image img {
   display: block;
+  min-width: 0;
+  min-height: 0;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -2615,4 +2620,11 @@ input:-webkit-autofill:focus {
   caret-color: var(--color-kumo-default, var(--text));
   transition: background-color 9999999s ease-out 9999999s;
   -webkit-text-fill-color: var(--color-kumo-default, var(--text));
+}
+
+.folder-tree-status {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
 }

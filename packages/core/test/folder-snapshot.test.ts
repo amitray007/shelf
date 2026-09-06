@@ -145,6 +145,9 @@ describe('folder snapshot module', () => {
         async findFolderRevision() {
           return revision;
         },
+        async findFolderEntry() {
+          return undefined;
+        },
         async listFolderEntries(request) {
           const after = request.afterPath;
           const items = entries.filter((entry) => after === undefined || entry.path > after);

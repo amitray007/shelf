@@ -200,6 +200,20 @@ describePostgres('PostgresRevisionRepository', () => {
     await expect(repository.findFolderRevision(input.result.revisionId)).resolves.toEqual(
       input.result,
     );
+    await expect(
+      repository.findFolderEntry({
+        installationId: input.result.installationId,
+        revisionId: input.result.revisionId,
+        path: 'docs/README.md',
+      }),
+    ).resolves.toEqual(input.entries[1]);
+    await expect(
+      repository.findFolderEntry({
+        installationId: input.result.installationId,
+        revisionId: input.result.revisionId,
+        path: 'missing.txt',
+      }),
+    ).resolves.toBeUndefined();
     await expect(repository.findComparableRevision(input.result.revisionId)).resolves.toEqual(
       input.result,
     );
