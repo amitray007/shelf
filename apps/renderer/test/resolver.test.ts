@@ -158,20 +158,25 @@ describe('core HTML resolver', () => {
       provenance: revision.provenance,
       publisherMetadata: {},
     });
-    dependencies.folders.listFolderEntries = async () => ({
-      items: [
-        {
-          kind: 'file',
-          path,
-          mediaType: 'text/html',
-          content: {
-            contentId: 'folder-html',
-            contentHash: `sha256:${'c'.repeat(64)}`,
-            byteCount: content.byteLength,
-          },
+    dependencies.folders.findFolderEntry = async (input) => {
+      if (
+        input.installationId !== 'install-main' ||
+        input.revisionId !== rendererIds.revision ||
+        input.path !== path
+      ) {
+        return undefined;
+      }
+      return {
+        kind: 'file',
+        path,
+        mediaType: 'text/html',
+        content: {
+          contentId: 'folder-html',
+          contentHash: `sha256:${'c'.repeat(64)}`,
+          byteCount: content.byteLength,
         },
-      ],
-    });
+      };
+    };
 
     await expect(
       createCoreHtmlResolver({
