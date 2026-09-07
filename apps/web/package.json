@@ -19,7 +19,6 @@
     "@pierre/trees": "1.0.0-beta.6",
     "@shelf/contracts": "workspace:*",
     "docx-preview": "0.4.0",
-    "github-markdown-css": "5.9.0",
     "pdfjs-dist": "6.2.108",
     "react": "19.2.8",
     "react-dom": "19.2.8",

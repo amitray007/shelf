@@ -1,11 +1,14 @@
 .markdown-body {
   width: 100%;
+  max-width: 848px;
   margin: 0 auto;
   background: transparent;
-  color: #d4d9df;
+  color: var(--text-subtle);
   font-family: inherit;
-  font-size: 1rem;
-  line-height: 1.75;
+  font-size: 14px;
+  line-height: 1.625;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .markdown-body h1,
@@ -16,31 +19,67 @@
 .markdown-body h6 {
   color: var(--text);
   letter-spacing: -0.025em;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .markdown-body h1 {
-  margin-bottom: 32px;
-  font-size: 30px;
-  line-height: 1.15;
-}
-
-.markdown-body h2 {
-  margin-top: 48px;
+  margin: 32px 0 16px;
   padding-bottom: 12px;
-  border-bottom-color: var(--rule);
+  border-bottom: 1px solid var(--rule);
   font-size: 24px;
 }
 
-.markdown-body h3 {
-  margin-top: 32px;
+.markdown-body > h1:first-child {
+  margin-top: 0;
+}
+
+.markdown-body h2 {
+  margin: 32px 0 12px;
   font-size: 20px;
+}
+
+.markdown-body h3 {
+  margin: 24px 0 12px;
+  font-size: 18px;
+}
+
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 24px 0 8px;
+  font-size: 14px;
+}
+
+.markdown-body h6 {
+  color: var(--text-muted);
+}
+
+.markdown-body p,
+.markdown-body blockquote,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body dl,
+.markdown-body details,
+.markdown-table-scroll,
+.markdown-code-block {
+  margin: 0 0 12px;
+}
+
+.markdown-body > :last-child {
+  margin-bottom: 0;
 }
 
 .markdown-body strong {
   color: var(--text);
+  font-weight: 600;
 }
 
-/* Kumo resets list markers. Restore the browser defaults GitHub's stylesheet expects. */
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 24px;
+}
+
 .markdown-body ul {
   list-style: disc outside;
 }
@@ -57,13 +96,46 @@
   list-style-type: square;
 }
 
+.markdown-body ol ol {
+  list-style-type: lower-alpha;
+}
+
+.markdown-body ol ol ol {
+  list-style-type: lower-roman;
+}
+
+.markdown-body li + li {
+  margin-top: 4px;
+}
+
+.markdown-body li > ul,
+.markdown-body li > ol {
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
 .markdown-body li::marker {
   color: var(--text-muted);
-  font-weight: 650;
+  font-weight: 600;
+}
+
+.markdown-body .contains-task-list {
+  padding-left: 20px;
+  list-style: none;
+}
+
+.markdown-body .task-list-item input {
+  width: 14px;
+  height: 14px;
+  margin: 0 8px 2px -20px;
+  accent-color: var(--action);
+  vertical-align: middle;
 }
 
 .markdown-body a {
   color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
   overflow-wrap: anywhere;
 }
 
@@ -71,14 +143,134 @@
   color: var(--accent-strong);
 }
 
+.markdown-body blockquote {
+  padding-left: 12px;
+  border-left: 2px solid var(--rule-strong);
+  color: var(--text-muted);
+}
+
+.markdown-body blockquote > :last-child {
+  margin-bottom: 0;
+}
+
 .markdown-body pre,
-.markdown-body table {
+.markdown-table-scroll {
   scrollbar-color: var(--rule-strong) transparent;
   scrollbar-width: thin;
 }
 
-.markdown-body table {
-  font-size: 14px;
+.markdown-body code {
+  padding: 2px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: "Geist Mono Variable", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.markdown-code-block {
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.markdown-code-label {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--text-muted);
+  font:
+    500 12px / 1.25 "Geist Mono Variable",
+    ui-monospace,
+    monospace;
+}
+
+.markdown-body .markdown-code-block pre {
+  max-width: 100%;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  background: transparent;
+  color: var(--text);
+  font:
+    400 var(--font-machine) / 1.5 "Geist Mono Variable",
+    ui-monospace,
+    monospace;
+}
+
+.markdown-body .markdown-code-block pre code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.markdown-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.markdown-table-scroll table {
+  width: 100%;
+  min-width: max-content;
+  border-collapse: collapse;
+  font-size: 12px;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.markdown-table-scroll th,
+.markdown-table-scroll td {
+  max-width: 384px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-table-scroll th {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.markdown-table-scroll tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown-body hr {
+  height: 1px;
+  margin: 32px 0;
+  border: 0;
+  background: var(--rule);
+}
+
+.markdown-body del {
+  color: var(--text-muted);
+}
+
+.markdown-body details {
+  padding: 8px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.markdown-body summary {
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.markdown-body details > :last-child {
+  margin-bottom: 0;
 }
 
 .markdown-image-note {
@@ -90,18 +282,15 @@
 }
 
 @media (max-width: 640px) {
-  .markdown-body h1 {
-    margin-bottom: 24px;
-    font-size: 24px;
+  .viewer[data-controls-visible="false"] .markdown-body > h1:first-child {
+    padding-right: 48px;
   }
 
   .markdown-body h2 {
-    margin-top: 32px;
-    font-size: 20px;
+    margin-top: 24px;
   }
 
   .markdown-body h3 {
-    margin-top: 24px;
-    font-size: 18px;
+    margin-top: 16px;
   }
 }

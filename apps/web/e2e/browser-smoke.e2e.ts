@@ -741,6 +741,19 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
     page.locator('.markdown-body p').filter({ hasText: 'Date: 2026-09-05' }).locator('br'),
   ).toHaveCount(0);
   await expect(page.locator('.markdown-body ul')).toHaveCSS('list-style-type', 'disc');
+  const markdownMetrics = await page.locator('.markdown-body').evaluate((element) => {
+    const styles = getComputedStyle(element);
+    return {
+      fontSize: styles.fontSize,
+      lineHeight: styles.lineHeight,
+      width: element.getBoundingClientRect().width,
+    };
+  });
+  expect(markdownMetrics).toMatchObject({ fontSize: '14px', lineHeight: '22.75px' });
+  expect(markdownMetrics.width).toBeLessThanOrEqual(848);
+  const markdownTable = page.getByRole('region', { name: 'Scrollable table' });
+  await expect(markdownTable).toHaveAttribute('tabindex', '0');
+  await expect(markdownTable).toHaveCSS('overflow-x', 'auto');
   expect(requests.some((url) => url.includes(shareSecret))).toBe(false);
   await expect(page.locator('body')).not.toContainText(shareSecret);
   expect(
