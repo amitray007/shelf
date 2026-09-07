@@ -1,9 +1,8 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable code blocks and tables must be keyboard reachable.
-import type { ComponentPropsWithoutRef } from 'react';
+import { type ComponentPropsWithoutRef, isValidElement, type ReactNode } from 'react';
 import ReactMarkdown, { type ExtraProps, type UrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import 'github-markdown-css/github-markdown-dark.css';
 import './markdown-view.css';
 
 function safeLink(value: string): string {
@@ -41,17 +40,41 @@ function ImageDescription({ alt }: ComponentPropsWithoutRef<'img'> & ExtraProps)
 }
 
 function ScrollableCodeBlock({
+  children,
   node: _node,
   ...props
 }: ComponentPropsWithoutRef<'pre'> & ExtraProps) {
-  return <pre tabIndex={0} {...props} />;
+  const language = codeBlockLanguage(children);
+  return (
+    <div className="markdown-code-block">
+      {language === null ? null : (
+        <div aria-hidden="true" className="markdown-code-label">
+          {language}
+        </div>
+      )}
+      <pre tabIndex={0} {...props}>
+        {children}
+      </pre>
+    </div>
+  );
 }
 
 function ScrollableTable({
+  children,
   node: _node,
   ...props
 }: ComponentPropsWithoutRef<'table'> & ExtraProps) {
-  return <table tabIndex={0} {...props} />;
+  return (
+    <section aria-label="Scrollable table" className="markdown-table-scroll" tabIndex={0}>
+      <table {...props}>{children}</table>
+    </section>
+  );
+}
+
+function codeBlockLanguage(children: ReactNode): string | null {
+  if (!isValidElement<{ className?: string }>(children)) return null;
+  const match = /(?:^|\s)language-([^\s]+)/u.exec(children.props.className ?? '');
+  return match?.[1] ?? null;
 }
 
 export function MarkdownView({ source }: { readonly source: string }) {

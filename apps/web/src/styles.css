@@ -1857,7 +1857,7 @@ a {
 }
 
 .artifact-document {
-  padding: 24px 8%;
+  padding: 20px 24px 64px;
 }
 
 .artifact-image {
@@ -2393,7 +2393,7 @@ a {
   }
 
   .artifact-document {
-    padding: 24px 18px 56px;
+    padding: 20px 24px 64px;
   }
 
   .artifact-code {

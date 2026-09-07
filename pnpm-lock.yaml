@@ -122,9 +122,6 @@ importers:
       docx-preview:
         specifier: 0.4.0
         version: 0.4.0
-      github-markdown-css:
-        specifier: 5.9.0
-        version: 5.9.0
       pdfjs-dist:
         specifier: 6.2.108
         version: 6.2.108
@@ -1774,10 +1771,6 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
-
-  github-markdown-css@5.9.0:
-    resolution: {integrity: sha512-tmT5sY+zvg2302XLYEfH2mtkViIM1SWf2nvYoF5N1ZsO0V6B2qZTiw3GOzw4vpjLygK/KG35qRlPFweHqfzz5w==}
-    engines: {node: '>=10'}
 
   glob@13.0.6:
     resolution: {integrity: sha512-Wjlyrolmm8uDpm/ogGyXZXb1Z+Ca2B8NbJwqBVg0axK9GbBeoS7yGV6vjXnYdGm6X53iehEuxxbyiKp8QmN4Vw==}
@@ -4041,8 +4034,6 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
-
-  github-markdown-css@5.9.0: {}
 
   glob@13.0.6:
     dependencies:

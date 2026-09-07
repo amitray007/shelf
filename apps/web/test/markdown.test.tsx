@@ -46,10 +46,23 @@ describe('Markdown rendering', () => {
       />,
     );
 
-    expect(html).toContain('<table tabindex="0">');
+    expect(html).toContain(
+      '<section aria-label="Scrollable table" class="markdown-table-scroll" tabindex="0">',
+    );
+    expect(html).toContain('<table>');
     expect(html).not.toContain('node="[object Object]"');
     expect(html).toContain('type="checkbox"');
     expect(html).toContain('<del>discarded</del>');
+  });
+
+  it('labels fenced code blocks with their Markdown language', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownView source={['```ts', 'const ready = true;', '```'].join('\n')} />,
+    );
+
+    expect(html).toContain('class="markdown-code-block"');
+    expect(html).toContain('class="markdown-code-label">ts</div>');
+    expect(html).toContain('<pre tabindex="0">');
   });
 
   it('keeps unordered, ordered, and nested lists as semantic list markup', () => {
