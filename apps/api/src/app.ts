@@ -163,6 +163,7 @@ export interface CreateShelfAppOptions {
   humanAuth?: HumanAuth;
   health?: ReadinessState;
   rendererPublicOrigin?: string;
+  allowedFrameOrigins?: readonly string[];
   webRoot?: string;
   dashboardAccess?: DashboardAccessService;
 }
@@ -314,6 +315,9 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
       ...(options.rendererPublicOrigin === undefined
         ? {}
         : { rendererOrigin: options.rendererPublicOrigin }),
+      ...(options.allowedFrameOrigins === undefined
+        ? {}
+        : { allowedFrameOrigins: options.allowedFrameOrigins }),
     });
   }
   await app.ready();

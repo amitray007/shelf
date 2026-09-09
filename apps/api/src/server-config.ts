@@ -38,8 +38,34 @@ export interface ShelfServerConfig {
     clearInterval?: typeof clearInterval;
   };
   rendererPublicOrigin?: string;
+  allowedFrameOrigins?: string[];
   webRoot?: string;
   persistence: ShelfPersistenceConfig;
+}
+
+/**
+ * Origins allowed to frame Shelf, given as a space or comma separated list.
+ *
+ * Framing is refused by default, so an operator embedding Shelf in a dashboard
+ * has to name every origin. Each one reuses the renderer origin rules, which
+ * reject credentials, paths, and plaintext outside loopback.
+ */
+function parseAllowedFrameOrigins(value: string | undefined): string[] | undefined {
+  if (value === undefined) return undefined;
+  const entries = value
+    .split(/[\s,]+/u)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  if (entries.length === 0) return undefined;
+  return entries.map((entry) => {
+    try {
+      return validatedAppOrigin(entry);
+    } catch {
+      throw new Error(
+        'SHELF_ALLOWED_FRAME_ORIGINS must list HTTPS origins, or HTTP loopback origins, without a path.',
+      );
+    }
+  });
 }
 
 function isLoopback(hostname: string): boolean {
@@ -166,6 +192,7 @@ export async function loadShelfServerConfig(
   ) {
     throw new Error('SHELF_RENDERER_PUBLIC_ORIGIN must use a different hostname from Shelf.');
   }
+  const allowedFrameOrigins = parseAllowedFrameOrigins(environment.SHELF_ALLOWED_FRAME_ORIGINS);
 
   return {
     host,
@@ -187,6 +214,7 @@ export async function loadShelfServerConfig(
       key: await loadPrivacyKey(environment),
     },
     ...(rendererPublicOrigin === undefined ? {} : { rendererPublicOrigin }),
+    ...(allowedFrameOrigins === undefined ? {} : { allowedFrameOrigins }),
     ...(webRoot === undefined ? {} : { webRoot }),
     persistence: shelfPersistenceConfigFromEnv(environment),
   };

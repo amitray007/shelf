@@ -7,10 +7,23 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 export interface WebAppOptions {
   readonly root: string;
   readonly rendererOrigin?: string;
+  /**
+   * Origins permitted to frame the document, for deployments that embed Shelf
+   * in a dashboard. Empty keeps the default refusal.
+   */
+  readonly allowedFrameOrigins?: readonly string[];
 }
 
-function applyDocumentHeaders(reply: FastifyReply, rendererOrigin: string | undefined): void {
+function applyDocumentHeaders(
+  reply: FastifyReply,
+  rendererOrigin: string | undefined,
+  allowedFrameOrigins: readonly string[] | undefined,
+): void {
   const rendererSource = rendererOrigin ?? "'none'";
+  const frameAncestors =
+    allowedFrameOrigins !== undefined && allowedFrameOrigins.length > 0
+      ? allowedFrameOrigins.join(' ')
+      : "'none'";
   void reply.header('Cache-Control', 'no-store, no-transform');
   void reply.header(
     'Content-Security-Policy',
@@ -21,7 +34,7 @@ function applyDocumentHeaders(reply: FastifyReply, rendererOrigin: string | unde
       "font-src 'self'",
       `form-action 'self' ${rendererSource}`,
       `frame-src ${rendererSource}`,
-      "frame-ancestors 'none'",
+      `frame-ancestors ${frameAncestors}`,
       "img-src 'self' https://api.dicebear.com data: blob:",
       "media-src 'self'",
       "object-src 'none'",
@@ -78,7 +91,7 @@ export async function registerWebApp(app: FastifyInstance, options: WebAppOption
 
   for (const path of ['/', '/s/:shareId', '/signin', '/app', '/app/*', '/preview/:artifactId']) {
     app.get(path, { schema: { hide: true } }, async (_request, reply) => {
-      applyDocumentHeaders(reply, options.rendererOrigin);
+      applyDocumentHeaders(reply, options.rendererOrigin, options.allowedFrameOrigins);
       return reply.sendFile('index.html', root, {
         cacheControl: false,
         immutable: false,

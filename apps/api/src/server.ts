@@ -203,6 +203,9 @@ export async function createShelfServer(config: ShelfServerConfig): Promise<Shel
       ...(config.rendererPublicOrigin === undefined
         ? {}
         : { rendererPublicOrigin: config.rendererPublicOrigin }),
+      ...(config.allowedFrameOrigins === undefined
+        ? {}
+        : { allowedFrameOrigins: config.allowedFrameOrigins }),
       ...(config.webRoot === undefined ? {} : { webRoot: config.webRoot }),
     });
     app = shelfApp;

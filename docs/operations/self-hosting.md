@@ -52,6 +52,11 @@ The three application secrets must remain independent; rotating the share-signin
 existing protected share links. Compose mounts the three application secrets as files inside only
 the services that need them. `.env` is ignored by Git.
 
+Shelf refuses to be framed by default. To embed it in a dashboard, set
+`SHELF_ALLOWED_FRAME_ORIGINS` to the origins allowed to frame it, separated by spaces or commas.
+Each must be an HTTPS origin, or an HTTP loopback origin for local development, with no path. Every
+other origin stays refused, so name only origins you control.
+
 The example selects Local File storage. To use R2, set `SHELF_STORAGE_DRIVER=r2` and provide
 `SHELF_R2_ACCOUNT_ID`, `SHELF_R2_BUCKET`, `SHELF_R2_ACCESS_KEY_ID`, and
 `SHELF_R2_SECRET_ACCESS_KEY`. `SHELF_STORAGE_PREFIX` defaults to `shelf`, and
