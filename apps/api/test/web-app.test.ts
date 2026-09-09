@@ -56,6 +56,7 @@ describe('production web application boundary', () => {
     expect(document.headers['content-security-policy']).toContain(
       "img-src 'self' https://api.dicebear.com data: blob:",
     );
+    expect(document.headers['content-security-policy']).toContain("frame-ancestors 'none'");
     expect(dashboard.statusCode).toBe(200);
     expect(dashboard.headers['cache-control']).toBe('no-store, no-transform');
     expect(asset.statusCode).toBe(200);
@@ -67,5 +68,50 @@ describe('production web application boundary', () => {
     expect(favicon.body).toContain('<title>Shelf</title>');
     expect(unknownApi.statusCode).toBe(404);
     expect(unknownApi.headers['content-type']).toContain('application/json');
+  });
+
+  it('names the configured origins allowed to frame the document', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'shelf-web-root-'));
+    roots.push(root);
+    await mkdir(join(root, 'assets'));
+    await writeFile(join(root, 'index.html'), '<!doctype html><title>shelf</title>');
+    await writeFile(
+      join(root, 'favicon.svg'),
+      '<svg xmlns="http://www.w3.org/2000/svg"><title>Shelf</title></svg>',
+    );
+    const app = Fastify();
+    apps.push(app);
+    await registerWebApp(app, {
+      root,
+      allowedFrameOrigins: ['https://dashboard.example', 'https://other.example'],
+    });
+    await app.ready();
+
+    const document = await app.inject({ method: 'GET', url: '/s/shr_test' });
+
+    expect(document.statusCode).toBe(200);
+    expect(document.headers['content-security-policy']).toContain(
+      'frame-ancestors https://dashboard.example https://other.example',
+    );
+    expect(document.headers['content-security-policy']).not.toContain("frame-ancestors 'none'");
+  });
+
+  it('keeps refusing framing when the configured origin list is empty', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'shelf-web-root-'));
+    roots.push(root);
+    await mkdir(join(root, 'assets'));
+    await writeFile(join(root, 'index.html'), '<!doctype html><title>shelf</title>');
+    await writeFile(
+      join(root, 'favicon.svg'),
+      '<svg xmlns="http://www.w3.org/2000/svg"><title>Shelf</title></svg>',
+    );
+    const app = Fastify();
+    apps.push(app);
+    await registerWebApp(app, { root, allowedFrameOrigins: [] });
+    await app.ready();
+
+    const document = await app.inject({ method: 'GET', url: '/s/shr_test' });
+
+    expect(document.headers['content-security-policy']).toContain("frame-ancestors 'none'");
   });
 });

@@ -47,6 +47,30 @@ describe('loadShelfServerConfig', () => {
     });
   });
 
+  it('refuses framing when no frame origins are configured', async () => {
+    const config = await loadShelfServerConfig(environment());
+    expect(config.allowedFrameOrigins).toBeUndefined();
+  });
+
+  it.each([
+    ['a single origin', 'https://dashboard.example', ['https://dashboard.example']],
+    [
+      'a space separated list',
+      'https://a.example https://b.example',
+      ['https://a.example', 'https://b.example'],
+    ],
+    [
+      'a comma separated list',
+      'https://a.example, https://b.example',
+      ['https://a.example', 'https://b.example'],
+    ],
+    ['an HTTP loopback origin', 'http://localhost:4000', ['http://localhost:4000']],
+    ['a blank value', '   ', undefined],
+  ])('loads %s of allowed frame origins', async (_label, value, expected) => {
+    const config = await loadShelfServerConfig(environment({ SHELF_ALLOWED_FRAME_ORIGINS: value }));
+    expect(config.allowedFrameOrigins).toEqual(expected);
+  });
+
   it('loads a bounded authenticated file upload limit override', async () => {
     await expect(
       loadShelfServerConfig(environment({ SHELF_MAX_FILE_BYTES: '536870912' })),
@@ -181,6 +205,13 @@ describe('loadShelfServerConfig', () => {
       { SHELF_RENDERER_PUBLIC_ORIGIN: 'https://shelf.example.test:3001' },
     ],
     ['empty web root', { SHELF_WEB_ROOT: '' }],
+    ['frame origin path', { SHELF_ALLOWED_FRAME_ORIGINS: 'https://dashboard.example/embed' }],
+    ['public plain HTTP frame origin', { SHELF_ALLOWED_FRAME_ORIGINS: 'http://dashboard.example' }],
+    ['frame origin credentials', { SHELF_ALLOWED_FRAME_ORIGINS: 'https://user:pass@a.example' }],
+    [
+      'one invalid frame origin among valid ones',
+      { SHELF_ALLOWED_FRAME_ORIGINS: 'https://a.example http://b.example' },
+    ],
     ['zero file limit', { SHELF_MAX_FILE_BYTES: '0' }],
     ['negative file limit', { SHELF_MAX_FILE_BYTES: '-1' }],
     ['noninteger file limit', { SHELF_MAX_FILE_BYTES: '12.5' }],
