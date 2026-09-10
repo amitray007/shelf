@@ -26,6 +26,20 @@ export interface CreateHumanAuthOptions {
   connectionString: string;
   baseUrl: string;
   secret: string;
+  /**
+   * Whether Shelf is embedded in another origin's page.
+   *
+   * A framed Shelf is a third-party context, and browsers withhold a
+   * `SameSite=Lax` cookie there — the sign-in succeeds, the cookie is
+   * discarded, and the next request arrives unauthenticated. `SameSite=None`
+   * is the only setting that survives, and it requires `Secure`.
+   *
+   * Off by default: it costs the browser's own CSRF protection, so only a
+   * deployment that needs framing should pay for it. Better Auth still checks
+   * `Origin` against `trustedOrigins` on every state-changing request, which
+   * does not depend on `SameSite` and remains the real defence.
+   */
+  framed?: boolean;
 }
 
 function trustedOriginsFor(baseUrl: string): string[] {
@@ -54,6 +68,12 @@ export function createHumanAuth(options: CreateHumanAuthOptions): HumanAuth {
     secret: options.secret,
     session: { cookieCache: { enabled: false } },
     trustedOrigins: trustedOriginsFor(options.baseUrl),
+    // `Secure` is required with `SameSite=None`, and browsers drop the cookie
+    // without it. Shelf already refuses to serve plaintext outside loopback, so
+    // a framed deployment is always HTTPS.
+    ...(options.framed === true
+      ? { advanced: { defaultCookieAttributes: { sameSite: 'none' as const, secure: true } } }
+      : {}),
   };
   const auth = betterAuth({
     ...shared,

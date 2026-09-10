@@ -57,6 +57,17 @@ Shelf refuses to be framed by default. To embed it in a dashboard, set
 Each must be an HTTPS origin, or an HTTP loopback origin for local development, with no path. Every
 other origin stays refused, so name only origins you control.
 
+Setting it also changes how the session cookie is sent. A framed Shelf is a third-party context,
+and browsers withhold a `SameSite=Lax` cookie there, so signing in appears to succeed and the next
+request arrives unauthenticated. Shelf therefore issues the session cookie as `SameSite=None;
+Secure` whenever a frame origin is configured, and keeps the stricter `Lax` when none is.
+
+`SameSite=None` gives up the browser's own cross-site request protection. Shelf still rejects any
+state-changing request whose `Origin` is not the deployment's own, which does not depend on
+`SameSite`, but leave `SHELF_ALLOWED_FRAME_ORIGINS` empty unless you are embedding Shelf. Safari
+blocks third-party cookies regardless of this setting, so a framed Shelf will not hold a session
+there.
+
 The example selects Local File storage. To use R2, set `SHELF_STORAGE_DRIVER=r2` and provide
 `SHELF_R2_ACCOUNT_ID`, `SHELF_R2_BUCKET`, `SHELF_R2_ACCESS_KEY_ID`, and
 `SHELF_R2_SECRET_ACCESS_KEY`. `SHELF_STORAGE_PREFIX` defaults to `shelf`, and
