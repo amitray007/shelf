@@ -269,10 +269,13 @@ describePostgres('session cookies for a framed deployment', () => {
       const response = await shelf.signIn();
       expect(response.status).toBe(200);
 
-      // Lax is the setting that loses the session in a frame; None is the only
-      // one browsers honour there, and it is invalid without Secure.
+      // Two attributes for two different failures. None is what lets the
+      // browser send an already-stored cookie from inside the frame;
+      // Partitioned is what lets it store one at all, in browsers that
+      // otherwise discard third-party cookies on arrival. Both need Secure.
       const cookie = response.headers.get('set-cookie') ?? '';
       expect(cookie).toContain('SameSite=None');
+      expect(cookie).toContain('Partitioned');
       expect(cookie).toContain('Secure');
       expect(cookie).not.toContain('SameSite=Lax');
       expect(cookie).toContain('HttpOnly');

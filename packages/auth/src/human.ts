@@ -34,6 +34,14 @@ export interface CreateHumanAuthOptions {
    * discarded, and the next request arrives unauthenticated. `SameSite=None`
    * is the only setting that survives, and it requires `Secure`.
    *
+   * `SameSite=None` is permission to send a third-party cookie, not permission
+   * to store one. A browser that blocks third-party cookies — Safari, and
+   * Chromium with tracking protection on — drops it before it is ever written,
+   * which looks identical: sign-in returns 200 and nothing is saved.
+   * `Partitioned` is what those browsers do allow. It gives the frame its own
+   * cookie jar, keyed by the embedding site, so the cookie cannot be used to
+   * follow anyone between sites and is kept on that basis.
+   *
    * Off by default: it costs the browser's own CSRF protection, so only a
    * deployment that needs framing should pay for it. Better Auth still checks
    * `Origin` against `trustedOrigins` on every state-changing request, which
@@ -68,11 +76,19 @@ export function createHumanAuth(options: CreateHumanAuthOptions): HumanAuth {
     secret: options.secret,
     session: { cookieCache: { enabled: false } },
     trustedOrigins: trustedOriginsFor(options.baseUrl),
-    // `Secure` is required with `SameSite=None`, and browsers drop the cookie
-    // without it. Shelf already refuses to serve plaintext outside loopback, so
-    // a framed deployment is always HTTPS.
+    // `Secure` is required by both `SameSite=None` and `Partitioned`, and
+    // browsers drop the cookie without it. Shelf already refuses to serve
+    // plaintext outside loopback, so a framed deployment is always HTTPS.
     ...(options.framed === true
-      ? { advanced: { defaultCookieAttributes: { sameSite: 'none' as const, secure: true } } }
+      ? {
+          advanced: {
+            defaultCookieAttributes: {
+              sameSite: 'none' as const,
+              secure: true,
+              partitioned: true,
+            },
+          },
+        }
       : {}),
   };
   const auth = betterAuth({
