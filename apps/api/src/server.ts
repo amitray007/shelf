@@ -172,6 +172,11 @@ export async function createShelfServer(config: ShelfServerConfig): Promise<Shel
       connectionString: config.persistence.postgres.connectionString,
       baseUrl: config.auth.baseUrl,
       secret: config.auth.secret,
+      // Naming a frame origin is what says this deployment is embedded, and an
+      // embedded Shelf needs a cookie that survives a third-party context.
+      // Deriving it here keeps the two from drifting apart: a deployment cannot
+      // be framed but still hand out a cookie the browser will refuse to send.
+      framed: (config.allowedFrameOrigins ?? []).length > 0,
     });
     humanAuth = shelfHumanAuth;
     const credentials = createAccessCredentialService({ repository: persistence.authRepository });
