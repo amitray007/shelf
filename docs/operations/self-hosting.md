@@ -57,16 +57,25 @@ Shelf refuses to be framed by default. To embed it in a dashboard, set
 Each must be an HTTPS origin, or an HTTP loopback origin for local development, with no path. Every
 other origin stays refused, so name only origins you control.
 
-Setting it also changes how the session cookie is sent. A framed Shelf is a third-party context,
+Setting it also changes how the session cookie is issued. A framed Shelf is a third-party context,
 and browsers withhold a `SameSite=Lax` cookie there, so signing in appears to succeed and the next
 request arrives unauthenticated. Shelf therefore issues the session cookie as `SameSite=None;
-Secure` whenever a frame origin is configured, and keeps the stricter `Lax` when none is.
+Secure; Partitioned` whenever a frame origin is configured, and keeps the stricter `Lax` when none
+is.
+
+Both attributes are needed, and they solve different halves of the problem. `SameSite=None` lets
+the browser send an already-stored cookie from inside the frame. `Partitioned` lets it store one at
+all: browsers that block third-party cookies — Safari, and Chromium-based browsers with tracking
+protection enabled — otherwise discard the cookie on arrival, which looks the same from the outside
+as a successful sign-in that never took effect. A partitioned cookie is kept in a separate jar
+keyed by the embedding site, so it cannot follow anyone between sites.
 
 `SameSite=None` gives up the browser's own cross-site request protection. Shelf still rejects any
 state-changing request whose `Origin` is not the deployment's own, which does not depend on
-`SameSite`, but leave `SHELF_ALLOWED_FRAME_ORIGINS` empty unless you are embedding Shelf. Safari
-blocks third-party cookies regardless of this setting, so a framed Shelf will not hold a session
-there.
+`SameSite`, but leave `SHELF_ALLOWED_FRAME_ORIGINS` empty unless you are embedding Shelf.
+
+Because the cookie is partitioned, a session established inside the frame is separate from one
+established by visiting Shelf directly. Signing in to one does not sign in to the other.
 
 The example selects Local File storage. To use R2, set `SHELF_STORAGE_DRIVER=r2` and provide
 `SHELF_R2_ACCOUNT_ID`, `SHELF_R2_BUCKET`, `SHELF_R2_ACCESS_KEY_ID`, and
