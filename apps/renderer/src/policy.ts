@@ -64,7 +64,7 @@ export function bootstrapContentSecurityPolicy(appOrigin: string): string {
 export function artifactContentSecurityPolicy(appOrigin: string): string {
   return [
     ...commonPolicy(appOrigin),
-    "script-src 'unsafe-inline'",
+    "script-src 'unsafe-inline' data:",
     "style-src 'unsafe-inline'",
     'img-src data: blob:',
     'font-src data:',

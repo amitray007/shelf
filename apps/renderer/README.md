@@ -27,10 +27,10 @@ bounded same-revision raster image and browser media bytes and assigns them thro
   blanks every later iframe load. Renderer data-plane work also has a finite request timeout.
 
 The final artifact response applies the restrictive CSP directly: no fetch/connect, external
-subresources, forms, nested frames, workers, object content, or base URL; only inline scripts and
-styles plus embedded data/blob media are allowed. Relative image and media paths and exact Public
-preview URLs for the active share can resolve only to safe browser media in the same immutable
-folder revision. The renderer embeds those bytes under the configured expanded-document limit.
+subresources, forms, nested frames, workers, object content, or base URL; only inline and `data:`
+scripts, inline styles, and embedded data/blob media are allowed. Relative image and media paths,
+plus exact Public preview URLs for the active share, resolve only to safe browser media in the same
+immutable folder revision. The renderer embeds those bytes under the configured expanded-document limit.
 Every response is `no-store`, `no-transform`, `no-referrer`, `nosniff`, and denies browser
 permissions. `no-transform` also prevents a CDN from injecting scripts into the isolated document.
 

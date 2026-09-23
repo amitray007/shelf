@@ -1300,6 +1300,28 @@ test('HTML preview starts dark and can be checked in light mode', async ({ page 
   await expectNoHorizontalOverflow(page, [controls]);
 });
 
+test('isolated HTML runs a self-contained data script before its inline bootstrap', async ({
+  page,
+}) => {
+  const runtime = Buffer.from('globalThis.shelfFixtureRuntime = true;', 'utf8').toString('base64');
+  await page.route(`${rendererOrigin}/render`, async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text())
+      .replace(
+        '<h1>Rendered idea</h1>',
+        `<script src="data:text/javascript;base64,${runtime}"></script><script>document.body.dataset.runtime = globalThis.shelfFixtureRuntime === true ? 'ready' : 'missing'</script>`,
+      )
+      .replace("location.href = 'https://navigation-canary.invalid/leak';", '');
+    await route.fulfill({ response, body });
+  });
+
+  await page.goto(`/s/${htmlShareId}#${shareSecret}`);
+  await expect(page.locator('.renderer-stage')).toHaveAttribute('data-status', 'ready');
+  await expect(
+    page.frameLocator('iframe[title="idea.html isolated preview"]').locator('body'),
+  ).toHaveAttribute('data-runtime', 'ready');
+});
+
 test('the active renderer cannot escape its opaque sandbox', async ({
   page,
   context,
