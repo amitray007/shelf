@@ -99,6 +99,44 @@ describe('core HTML resolver', () => {
     ).resolves.toEqual({ status: 'available', html: '<!doctype html><h1>Artifact</h1>' });
   });
 
+  it('reuses validated HTML bytes while checking Public share access on every open', async () => {
+    const dependencies = rendererDependencies({
+      share: rendererStoredShare({
+        accessType: 'public',
+        publicCode: rendererIds.publicCode,
+      }),
+    });
+    let reads = 0;
+    let revoked = false;
+    const originalRead = dependencies.contentReader.read.bind(dependencies.contentReader);
+    dependencies.contentReader.read = async (...args) => {
+      reads += 1;
+      return originalRead(...args);
+    };
+    const originalResolve = dependencies.shares.resolveShareTarget.bind(dependencies.shares);
+    dependencies.shares.resolveShareTarget = async (shareId) => {
+      const result = await originalResolve(shareId);
+      return revoked && result !== undefined
+        ? { ...result, share: { ...result.share, revokedAt: '2026-08-17T12:15:00.000Z' } }
+        : result;
+    };
+    const htmlResolver = createCoreHtmlResolver({
+      appOrigin: 'https://shelf.example',
+      ...dependencies,
+      viewerSessionTokenCodec: { verify: () => undefined },
+      clock: () => new Date('2026-08-17T12:30:00.000Z'),
+    });
+    const request = { accessType: 'public' as const, publicCode: rendererIds.publicCode };
+
+    await expect(htmlResolver.resolveHtml(request)).resolves.toMatchObject({ status: 'available' });
+    await expect(htmlResolver.resolveHtml(request)).resolves.toMatchObject({ status: 'available' });
+    expect(reads).toBe(1);
+
+    revoked = true;
+    await expect(htmlResolver.resolveHtml(request)).resolves.toEqual({ status: 'unavailable' });
+    expect(reads).toBe(1);
+  });
+
   it('opens an exact HTML entry from a shared folder', async () => {
     const path = 'site/index.html';
     const content = new TextEncoder().encode(html);

@@ -2,7 +2,7 @@
 
 import { Button } from '@cloudflare/kumo/components/button';
 import { DownloadSimpleIcon } from '@phosphor-icons/react/DownloadSimple';
-import { type ReactNode, useEffect, useMemo } from 'react';
+import { lazy, type ReactNode, Suspense, useEffect, useMemo } from 'react';
 
 import {
   type PassiveRenderer,
@@ -24,13 +24,15 @@ import { LazyMarkdownView as MarkdownView } from './lazy-views.js';
 import { DelimitedTablePreview } from './preview/delimited-table-preview.js';
 import { AudioPreview, VideoPreview } from './preview/media-preview.js';
 import { DocxPreview } from './preview/office-document-preview.js';
-import { pdfJsAdapter } from './preview/pdf-js.js';
-import { PdfViewer } from './preview/pdf-viewer.js';
 import { StructuredDataPreview } from './preview/structured-data-preview.js';
 import { WorkbookPreview } from './preview/workbook-preview.js';
 import type { HtmlPreviewTheme } from './renderer-frame.js';
 
 type HtmlRenderer = Extract<PassiveRenderer, { kind: 'html' }>;
+
+const PdfPreview = lazy(async () => ({
+  default: (await import('./preview/pdf-preview.js')).PdfPreview,
+}));
 
 export interface ArtifactFileDescriptor {
   readonly id: string;
@@ -68,6 +70,7 @@ export interface ArtifactFileViewProps {
   readonly capabilities?: ArtifactFileCapabilities | undefined;
   readonly content: ArtifactFileContent;
   readonly file: ArtifactFileDescriptor;
+  readonly revealReady?: boolean | undefined;
   readonly review?: FileReviewProps | undefined;
   readonly sidebar?: ArtifactFileSidebar | undefined;
 }
@@ -111,6 +114,7 @@ export function ArtifactFileView({
   capabilities,
   content,
   file,
+  revealReady,
   review,
   sidebar,
 }: ArtifactFileViewProps) {
@@ -196,7 +200,9 @@ export function ArtifactFileView({
   } else if (renderer.kind === 'pdf' && previewUrl !== undefined) {
     preview = (
       <div className="artifact-surface artifact-pdf">
-        <PdfViewer adapter={pdfJsAdapter} src={previewUrl} title="PDF preview" />
+        <Suspense fallback={<FileLoadingState />}>
+          <PdfPreview src={previewUrl} />
+        </Suspense>
       </div>
     );
   } else if (renderer.kind === 'audio' && previewUrl !== undefined) {
@@ -240,6 +246,9 @@ export function ArtifactFileView({
 
   return (
     <FileView
+      contentClassName={
+        revealReady && content.status === 'ready' ? 'viewer-preview-enter' : undefined
+      }
       defaultMode={prefersSourceView(file.mediaType, file.name) ? 'source' : 'preview'}
       fileName={file.name}
       {...(htmlPreview === undefined ? {} : { htmlPreview })}

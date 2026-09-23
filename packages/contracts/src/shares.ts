@@ -498,6 +498,7 @@ export const ProtectedSessionAuthoritySchema = Type.Object(
     token: ViewerSessionTokenSchema,
     issuedAt: IsoInstantSchema,
     expiresAt: IsoInstantSchema,
+    resolution: Type.Optional(PublicShareResolutionSchema),
   },
   { additionalProperties: false, $id: 'ProtectedSessionAuthority' },
 );

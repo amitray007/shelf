@@ -346,28 +346,119 @@ function isDefaultConflict(error: unknown): boolean {
 
 async function resolveTarget(
   database: DatabaseExecutor,
-  share: StoredShare,
+  selector: { shareId: string } | { publicCode: string },
 ): Promise<ResolvedStoredShare | undefined> {
-  const artifact = await findArtifact(database, share.artifactId);
-  if (
-    artifact === undefined ||
-    artifact.installationId !== share.installationId ||
-    artifact.workspaceId !== share.workspaceId
-  ) {
-    return undefined;
+  let query = database
+    .selectFrom('shelf_shares as share')
+    .innerJoin('shelf_artifacts as artifact', (join) =>
+      join
+        .onRef('artifact.installation_id', '=', 'share.installation_id')
+        .onRef('artifact.workspace_id', '=', 'share.workspace_id')
+        .onRef('artifact.artifact_id', '=', 'share.artifact_id'),
+    )
+    .innerJoin('shelf_revisions as latest_revision', (join) =>
+      join
+        .onRef('latest_revision.installation_id', '=', 'artifact.installation_id')
+        .onRef('latest_revision.workspace_id', '=', 'artifact.workspace_id')
+        .onRef('latest_revision.artifact_id', '=', 'artifact.artifact_id')
+        .onRef('latest_revision.revision_id', '=', 'artifact.latest_revision_id'),
+    )
+    .leftJoin('shelf_revisions as pinned_revision', (join) =>
+      join
+        .onRef('pinned_revision.installation_id', '=', 'share.installation_id')
+        .onRef('pinned_revision.workspace_id', '=', 'share.workspace_id')
+        .onRef('pinned_revision.artifact_id', '=', 'share.artifact_id')
+        .onRef('pinned_revision.revision_id', '=', 'share.target_revision_id'),
+    )
+    .select([
+      sql<ShareTable>`to_jsonb(share)`.as('share'),
+      sql<ArtifactWithLatestRow>`jsonb_build_object(
+        'artifact_name', artifact.name,
+        'artifact_kind', artifact.kind,
+        'artifact_created_at', artifact.created_at,
+        'artifact_updated_at', artifact.updated_at,
+        'artifact_retention_mode', artifact.retention_mode,
+        'artifact_auto_trash_at', artifact.auto_trash_at
+      ) || to_jsonb(latest_revision)`.as('artifact'),
+      sql<RevisionRow | null>`to_jsonb(pinned_revision)`.as('pinned_revision'),
+      'share.created_at as share_created_at',
+      'share.expires_at as share_expires_at',
+      'share.revoked_at as share_revoked_at',
+      'share.sessions_used as share_sessions_used',
+      'share.history_from_revision_number as share_history_from_revision_number',
+      'artifact.created_at as artifact_created_at',
+      'artifact.updated_at as artifact_updated_at',
+      'artifact.auto_trash_at as artifact_auto_trash_at',
+      'latest_revision.revision_number as latest_revision_number',
+      'latest_revision.byte_count as latest_revision_byte_count',
+      'latest_revision.total_byte_count as latest_revision_total_byte_count',
+      'latest_revision.created_at as latest_revision_created_at',
+      'pinned_revision.revision_number as pinned_revision_number',
+      'pinned_revision.byte_count as pinned_revision_byte_count',
+      'pinned_revision.total_byte_count as pinned_revision_total_byte_count',
+      'pinned_revision.created_at as pinned_revision_created_at',
+    ])
+    .where('artifact.deleted_at', 'is', null);
+
+  query =
+    'shareId' in selector
+      ? query.where('share.share_id', '=', selector.shareId)
+      : query
+          .where('share.access_type', '=', 'public')
+          .where('share.public_code', '=', selector.publicCode);
+  const row = await query.executeTakeFirst();
+  if (row === undefined) return undefined;
+
+  const share = storedShare({
+    ...row.share,
+    created_at: row.share_created_at,
+    expires_at: row.share_expires_at,
+    revoked_at: row.share_revoked_at,
+    sessions_used: row.share_sessions_used,
+    history_from_revision_number: row.share_history_from_revision_number,
+  });
+  const artifactRow = {
+    ...row.artifact,
+    created_at: row.latest_revision_created_at,
+    revision_number: row.latest_revision_number,
+    byte_count: row.latest_revision_byte_count,
+    total_byte_count: row.latest_revision_total_byte_count,
+    artifact_created_at: row.artifact_created_at,
+    artifact_updated_at: row.artifact_updated_at,
+    artifact_auto_trash_at: row.artifact_auto_trash_at,
+  };
+  let selectedRevision: RevisionRow;
+  if (share.target.mode === 'pinned') {
+    if (
+      row.pinned_revision === null ||
+      row.pinned_revision_created_at === null ||
+      row.pinned_revision_number === null ||
+      row.pinned_revision_byte_count === null ||
+      row.pinned_revision_total_byte_count === null
+    ) {
+      return undefined;
+    }
+    selectedRevision = {
+      ...row.pinned_revision,
+      created_at: row.pinned_revision_created_at,
+      revision_number: row.pinned_revision_number,
+      byte_count: row.pinned_revision_byte_count,
+      total_byte_count: row.pinned_revision_total_byte_count,
+    };
+  } else {
+    selectedRevision = artifactRow;
   }
-  const revisionId =
-    share.target.mode === 'pinned' ? share.target.revisionId : artifact.latestRevision.revisionId;
-  const revision = await findRevision(database, revisionId);
-  if (
-    revision === undefined ||
-    revision.installationId !== share.installationId ||
-    revision.workspaceId !== share.workspaceId ||
-    revision.artifactId !== share.artifactId
-  ) {
-    return undefined;
-  }
-  return { share, artifact, revision };
+  const artifact = storedArtifact(artifactRow);
+  return {
+    share,
+    artifact,
+    revision: {
+      installationId: selectedRevision.installation_id,
+      workspaceId: selectedRevision.workspace_id,
+      artifactId: selectedRevision.artifact_id,
+      revision: storedRevision(selectedRevision),
+    },
+  };
 }
 
 export class PostgresShareRepository implements ShareRepository {
@@ -653,30 +744,11 @@ export class PostgresShareRepository implements ShareRepository {
   }
 
   resolveShareTarget(shareId: string): Promise<ResolvedStoredShare | undefined> {
-    return this.#database
-      .transaction()
-      .setIsolationLevel('repeatable read')
-      .execute(async (transaction) => {
-        const share = await findShare(transaction, shareId);
-        if (share === undefined) return undefined;
-        return resolveTarget(transaction, share);
-      });
+    return resolveTarget(this.#database, { shareId });
   }
 
   resolvePublicShareTarget(publicCode: string): Promise<ResolvedStoredShare | undefined> {
-    return this.#database
-      .transaction()
-      .setIsolationLevel('repeatable read')
-      .execute(async (transaction) => {
-        const row = await transaction
-          .selectFrom('shelf_shares')
-          .selectAll()
-          .where('access_type', '=', 'public')
-          .where('public_code', '=', publicCode)
-          .executeTakeFirst();
-        if (row === undefined) return undefined;
-        return resolveTarget(transaction, storedShare(row));
-      });
+    return resolveTarget(this.#database, { publicCode });
   }
 
   async establishProtectedSession(request: {

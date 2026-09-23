@@ -25,7 +25,8 @@ import {
 
 const PROTECTED_ACTION = /^\/api\/v1\/public\/shares\/(shr_[A-Za-z0-9_-]{22})\/(content|tree)$/;
 const PUBLIC_ACTION = /^\/api\/v1\/public\/links\/([A-Za-z0-9_-]{12})\/(content|tree)$/;
-const viewerContentCache = new ContentCache({ maxBytes: 16 * 1024 * 1024, maxEntries: 64 });
+export const MAX_VIEWER_CACHED_BYTES = 16 * 1024 * 1024;
+const viewerContentCache = new ContentCache({ maxBytes: MAX_VIEWER_CACHED_BYTES, maxEntries: 64 });
 
 export type ViewerAuthority =
   | {
@@ -49,7 +50,7 @@ export interface PublicFilePayload {
   readonly kind: 'file';
   readonly resolution: FileShareResolution;
   readonly authority: ViewerAuthority;
-  readonly bytes: ArrayBuffer | null;
+  readonly needsBytes: boolean;
   readonly previewUrl?: string;
   readonly rendererOrigin?: string;
 }
@@ -58,8 +59,6 @@ export interface PublicFolderPayload {
   readonly kind: 'folder';
   readonly resolution: FolderShareResolution;
   readonly authority: ViewerAuthority;
-  readonly entries: readonly FolderEntry[];
-  readonly nextCursor?: string | null;
   readonly rendererOrigin?: string;
 }
 
@@ -214,7 +213,9 @@ export async function establishProtectedSession(
   if (
     !isProtectedSessionAuthority(value) ||
     value.shareId !== shareId ||
-    value.sessionId !== sessionId
+    value.sessionId !== sessionId ||
+    (value.resolution !== undefined &&
+      (value.resolution.accessType !== 'protected' || value.resolution.shareId !== shareId))
   ) {
     throw new PublicShareUnavailableError();
   }

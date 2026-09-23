@@ -13,6 +13,8 @@ import { inlineFolderAssetSources } from './folder-assets.js';
 
 export const DEFAULT_MAX_HTML_BYTES = 10 * 1024 * 1024;
 export const RENDERED_HTML_EXPANSION_FACTOR = 3;
+const MAX_CACHED_HTML_BYTES = 1024 * 1024;
+const MAX_HTML_CACHE_BYTES = 32 * 1024 * 1024;
 
 export interface ViewerSessionTokenVerifier {
   verify(
@@ -69,6 +71,34 @@ export function createCoreHtmlResolver(dependencies: {
     contentReader: dependencies.contentReader,
     ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
   });
+  // Share authority is resolved on every request. Only validated immutable bytes are cached.
+  const htmlCache = new Map<string, { html: string; byteCount: number }>();
+  let cachedBytes = 0;
+
+  function cachedHtml(hash: string, byteCount: number): string | undefined {
+    const cached = htmlCache.get(hash);
+    if (cached === undefined || cached.byteCount !== byteCount) return undefined;
+    htmlCache.delete(hash);
+    htmlCache.set(hash, cached);
+    return cached.html;
+  }
+
+  function cacheHtml(hash: string, byteCount: number, html: string): void {
+    if (byteCount > MAX_CACHED_HTML_BYTES) return;
+    const previous = htmlCache.get(hash);
+    if (previous !== undefined) {
+      cachedBytes -= previous.byteCount;
+      htmlCache.delete(hash);
+    }
+    htmlCache.set(hash, { html, byteCount });
+    cachedBytes += byteCount;
+    while (cachedBytes > MAX_HTML_CACHE_BYTES) {
+      const oldest = htmlCache.keys().next().value;
+      if (oldest === undefined) break;
+      cachedBytes -= htmlCache.get(oldest)?.byteCount ?? 0;
+      htmlCache.delete(oldest);
+    }
+  }
 
   return {
     async resolveHtml(request) {
@@ -104,9 +134,15 @@ export function createCoreHtmlResolver(dependencies: {
         if (normalizedMediaType(file.mediaType) !== 'text/html' || file.byteCount > maximumBytes) {
           return { status: 'unavailable' };
         }
-        const html = await readExactUtf8(await file.read(), file.byteCount, maximumBytes);
+        const cacheKey = request.path === undefined ? file.contentHash : undefined;
+        const html =
+          (cacheKey === undefined ? undefined : cachedHtml(cacheKey, file.byteCount)) ??
+          (await readExactUtf8(await file.read(), file.byteCount, maximumBytes));
         if (html === undefined) return { status: 'unavailable' };
-        if (request.path === undefined) return { status: 'available', html };
+        if (request.path === undefined) {
+          if (cacheKey !== undefined) cacheHtml(cacheKey, file.byteCount, html);
+          return { status: 'available', html };
+        }
         const renderedHtml = await inlineFolderAssetSources({
           html,
           htmlPath: request.path,

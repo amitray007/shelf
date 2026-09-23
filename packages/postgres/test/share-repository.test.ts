@@ -407,8 +407,19 @@ describePostgres('PostgresShareRepository', () => {
         ),
       ).resolves.toMatchObject({ status: 'committed' });
 
-      await expect(repository.resolvePublicShareTarget('PublicCode12')).resolves.toMatchObject({
+      const publicTarget = await repository.resolvePublicShareTarget('PublicCode12');
+      expect(publicTarget).toMatchObject({
         share: { shareId: publicId, accessType: 'public' },
+        artifact: { latestRevision: { revisionId: ids.secondRevision } },
+        revision: { revision: { revisionId: ids.secondRevision } },
+      });
+      expect(publicTarget?.share).toMatchObject({
+        createdAt: '2026-08-17T12:00:00.000Z',
+        sessionsUsed: 0,
+      });
+      expect(publicTarget?.revision.revision).toMatchObject({
+        revisionNumber: 2,
+        byteCount: 11,
       });
       await expect(
         repository.resolvePublicShareTarget(protectedId.slice(-12)),

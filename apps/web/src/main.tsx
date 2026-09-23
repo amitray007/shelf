@@ -24,9 +24,10 @@ document.documentElement.dataset.mode = 'dark';
 const router = createBrowserRouter([
   {
     path: '/s/:shareRef',
+    loader: async (args) => (await import('./viewer-loader.js')).viewerLoader(args),
     lazy: async () => {
       const viewer = await import('./viewer-page.js');
-      return { Component: viewer.ViewerPage, loader: viewer.viewerLoader };
+      return { Component: viewer.ViewerPage };
     },
     ErrorBoundary: UnavailableView,
     HydrateFallback: LoadingView,

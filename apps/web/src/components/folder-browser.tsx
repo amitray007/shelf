@@ -60,6 +60,7 @@ interface FolderBrowserProps {
   readonly loadFile: (path: string, signal: AbortSignal) => Promise<ArrayBuffer>;
   readonly loadPreviewUrl?: ((path: string) => string) | undefined;
   readonly downloadFile?: ((path: string) => void) | undefined;
+  readonly revealInitialFile?: boolean | undefined;
   readonly rendererOrigin?: string | undefined;
   readonly resolution?: FolderShareResolution | undefined;
   readonly review?: FolderBrowserReview | undefined;
@@ -142,6 +143,7 @@ export function FolderBrowser({
   loadFile,
   loadPreviewUrl,
   downloadFile,
+  revealInitialFile = false,
   navigation,
   rendererOrigin,
   resolution,
@@ -182,6 +184,7 @@ export function FolderBrowser({
   const [selectedPath, setSelectedPath] = useState(
     () => readSelectedFilePath(treeComplete ? filePaths : undefined) ?? defaultPath,
   );
+  const [selectedByUser, setSelectedByUser] = useState(false);
   useEffect(() => {
     if (selectedPath !== undefined) return;
     const next = readSelectedFilePath(filePaths) ?? defaultPath;
@@ -215,6 +218,7 @@ export function FolderBrowser({
     if (isProgrammaticFolderSelection(nextFile, programmaticSelectionPathRef.current)) {
       programmaticSelectionPathRef.current = undefined;
     } else if (treeMountedRef.current) {
+      setSelectedByUser(true);
       onSelectFileRef.current?.(nextFile);
     }
     setSelectedPath(nextFile);
@@ -466,7 +470,11 @@ export function FolderBrowser({
                     <section aria-label="Folder files" className="viewer-folder-listing">
                       <h1>Files</h1>
                       {entries.length === 0 ? (
-                        <p>This folder is empty.</p>
+                        <p>
+                          {treeComplete
+                            ? 'This folder is empty.'
+                            : (treeStatus ?? 'Loading files…')}
+                        </p>
                       ) : (
                         <ul>
                           {entries.map((entry) => (
@@ -476,6 +484,7 @@ export function FolderBrowser({
                               ) : (
                                 <button
                                   onClick={() => {
+                                    setSelectedByUser(true);
                                     setSelectedPath(entry.path);
                                     review?.onSelectFile?.(entry.path);
                                   }}
@@ -519,6 +528,7 @@ export function FolderBrowser({
                         }),
                   }}
                   content={fileContent}
+                  revealReady={revealInitialFile && !selectedByUser}
                   file={{
                     id: folderFileViewKey(selected.path, fileContent.status === 'loading'),
                     mediaType: selected.mediaType,

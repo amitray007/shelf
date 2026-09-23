@@ -875,7 +875,7 @@ describe('viewer content states', () => {
     expect(html).not.toContain('>media/preview.webm</strong>');
   });
 
-  it('integrates structured, delimited, PDF, audio, and video renderers', () => {
+  it('integrates structured, delimited, lazy PDF, audio, and video renderers', () => {
     const json = renderContent({
       fileName: 'data.json',
       mediaType: 'application/json',
@@ -894,7 +894,7 @@ describe('viewer content states', () => {
       previewUrl: '/api/v1/revisions/rev_pdf/preview',
       text: undefined,
     });
-    expect(pdf).toContain('PDF preview');
+    expect(pdf).toContain('Loading file…');
     const audio = renderContent({
       fileName: 'recording.mp3',
       mediaType: 'audio/mpeg',

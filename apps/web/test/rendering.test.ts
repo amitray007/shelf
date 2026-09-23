@@ -26,9 +26,9 @@ vi.mock('../src/components/preview/delimited-table-preview.js', () => {
   prefetchedModules.push('delimited-table-preview');
   return { DelimitedTablePreview: () => null };
 });
-vi.mock('../src/components/preview/pdf-viewer.js', () => {
-  prefetchedModules.push('pdf-viewer');
-  return { PdfViewer: () => null };
+vi.mock('../src/components/preview/pdf-preview.js', () => {
+  prefetchedModules.push('pdf-preview');
+  return { PdfPreview: () => null };
 });
 vi.mock('../src/components/preview/media-preview.js', () => {
   prefetchedModules.push('media-preview');
@@ -212,7 +212,7 @@ describe('renderer module prefetching', () => {
     expect(await prefetch({ kind: 'file', mediaType: 'application/json' })).toContain(
       'structured-data-preview',
     );
-    expect(await prefetch({ kind: 'file', mediaType: 'application/pdf' })).toContain('pdf-viewer');
+    expect(await prefetch({ kind: 'file', mediaType: 'application/pdf' })).toContain('pdf-preview');
     expect(await prefetch({ kind: 'file', mediaType: 'video/mp4' })).toContain('media-preview');
   });
 

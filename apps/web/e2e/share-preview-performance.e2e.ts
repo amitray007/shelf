@@ -1,6 +1,6 @@
 import { deflateSync } from 'node:zlib';
 import { expect, type Page, test } from '@playwright/test';
-import { folderShareId, folderTreePage, shareSecret } from './fixtures.js';
+import { folderShareId, folderTreePage, markdownShareId, shareSecret } from './fixtures.js';
 
 // Small compressed fixtures with large intrinsic dimensions expose image layout overflow.
 function png(width: number, height: number): Buffer {
@@ -47,6 +47,117 @@ const entries = Object.entries(images).map(([path, bytes]) => ({
   contentHash: `sha256:${'a'.repeat(64)}`,
 }));
 
+test('a shared file opens before slow bytes and unrelated config finish', async ({ page }) => {
+  let releaseContent!: () => void;
+  let releaseConfig!: () => void;
+  const contentGate = new Promise<void>((resolve) => {
+    releaseContent = resolve;
+  });
+  const configGate = new Promise<void>((resolve) => {
+    releaseConfig = resolve;
+  });
+  await page.route('**/api/v1/public/config', async (route) => {
+    await configGate;
+    await route.continue();
+  });
+  await page.route(`**/api/v1/public/shares/${markdownShareId}/content`, async (route) => {
+    await contentGate;
+    await route.continue();
+  });
+
+  try {
+    await page.goto(`/s/${markdownShareId}#${shareSecret}`);
+    await expect(page.getByRole('button', { name: 'Show controls' })).toBeVisible();
+    await expect(page.getByText('Loading file…')).toBeVisible();
+    releaseContent();
+    await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
+      'One useful idea',
+    );
+    await expect(page.locator('.file-view-content')).toHaveCSS(
+      'animation-name',
+      'viewer-preview-enter',
+    );
+  } finally {
+    releaseContent();
+    releaseConfig();
+  }
+});
+
+test('the shared preview reveal stops when reduced motion is requested', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(`/s/${markdownShareId}#${shareSecret}`);
+  await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
+    'One useful idea',
+  );
+  await expect(page.locator('.file-view-content')).toHaveCSS('animation-name', 'none');
+});
+
+test('protected session and content start while the viewer UI chunk is still loading', async ({
+  page,
+}) => {
+  let resolveRequests = 0;
+  let configRequests = 0;
+  page.on('request', (request) => {
+    if (request.url().includes(`/api/v1/public/shares/${markdownShareId}/resolve`)) {
+      resolveRequests += 1;
+    }
+    if (request.url().endsWith('/api/v1/public/config')) configRequests += 1;
+  });
+  let releaseViewer!: () => void;
+  const viewerGate = new Promise<void>((resolve) => {
+    releaseViewer = resolve;
+  });
+  await page.route(/\/assets\/viewer-page-[^/]+\.js$/, async (route) => {
+    await viewerGate;
+    await route.continue();
+  });
+  const establishing = page.waitForRequest((request) =>
+    request.url().includes(`/api/v1/public/shares/${markdownShareId}/sessions`),
+  );
+  const loadingContent = page.waitForRequest((request) =>
+    request.url().includes(`/api/v1/public/shares/${markdownShareId}/content`),
+  );
+
+  try {
+    await page.goto(`/s/${markdownShareId}#${shareSecret}`, { waitUntil: 'domcontentloaded' });
+    await establishing;
+    await loadingContent;
+  } finally {
+    releaseViewer();
+  }
+  await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
+    'One useful idea',
+  );
+  expect(resolveRequests).toBe(0);
+  expect(configRequests).toBe(0);
+});
+
+test('a shared folder opens before its first tree page finishes', async ({ page }) => {
+  let releaseTree!: () => void;
+  const treeGate = new Promise<void>((resolve) => {
+    releaseTree = resolve;
+  });
+  await page.route(`**/api/v1/public/shares/${folderShareId}/tree`, async (route) => {
+    await treeGate;
+    await route.continue();
+  });
+
+  try {
+    await page.goto(`/s/${folderShareId}#${shareSecret}`);
+    await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
+    await expect(page.getByText('Loading files…').first()).toBeVisible();
+    await expect(page.getByText('This folder is empty.')).toHaveCount(0);
+    releaseTree();
+    await expect(page.getByRole('treeitem', { name: 'README.md', exact: true })).toBeVisible();
+    await expect(page.locator('.file-view-content')).toHaveCSS(
+      'animation-name',
+      'viewer-preview-enter',
+    );
+  } finally {
+    releaseTree();
+  }
+});
+
 async function selectImage(page: Page, name: string) {
   await page.getByRole('button', { name: /^(Show|Hide) controls$/ }).waitFor();
   const show = page.getByRole('button', { name: 'Show controls', exact: true });
@@ -86,6 +197,7 @@ test('folder images reuse bytes and fit the available viewport with controls ope
   await page.goto(`/s/${folderShareId}#${shareSecret}`);
   for (const name of ['portrait.png', 'landscape.png', 'portrait.png']) {
     const image = await selectImage(page, name);
+    await expect(page.locator('.file-view-content')).toHaveCSS('animation-name', 'none');
     const fit = async () =>
       image.evaluate((element) => {
         const image = element as HTMLImageElement;

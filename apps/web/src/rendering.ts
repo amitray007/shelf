@@ -296,7 +296,7 @@ export function prefetchRendererModules(revision: {
   if (renderer.kind === 'markdown') void import('./components/markdown-view.js');
   if (renderer.kind === 'table') void import('./components/preview/delimited-table-preview.js');
   if (renderer.kind === 'json') void import('./components/preview/structured-data-preview.js');
-  if (renderer.kind === 'pdf') void import('./components/preview/pdf-viewer.js');
+  if (renderer.kind === 'pdf') void import('./components/preview/pdf-preview.js');
   if (renderer.kind === 'audio' || renderer.kind === 'video') {
     void import('./components/preview/media-preview.js');
   }
@@ -319,10 +319,7 @@ export function selectRenderer(
   const extension = fileExtension(fileName);
   const fallback = isGenericMediaType(normalized) ? extensionKind(fileName) : undefined;
 
-  if (
-    normalized === 'text/html' ||
-    (fallback === 'text' && (extension === '.html' || extension === '.htm'))
-  ) {
+  if (isHtmlPreview(mediaType, fileName)) {
     const endpoint = rendererEndpoint(rendererOrigin);
     return endpoint === null ? { kind: 'download' } : { kind: 'html', ...endpoint };
   }
@@ -396,6 +393,16 @@ export function selectRenderer(
     return { kind: 'text' };
   if (SOURCE_MEDIA_TYPES.has(normalized)) return { kind: 'text' };
   return { kind: 'download' };
+}
+
+export function isHtmlPreview(mediaType: string | undefined, fileName?: string): boolean {
+  const normalized = normalizeMediaType(mediaType);
+  const extension = fileExtension(fileName);
+  const fallback = isGenericMediaType(normalized) ? extensionKind(fileName) : undefined;
+  return (
+    normalized === 'text/html' ||
+    (fallback === 'text' && (extension === '.html' || extension === '.htm'))
+  );
 }
 
 // Keep large images on the streaming preview path instead of copying them into JS memory.
