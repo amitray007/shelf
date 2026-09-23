@@ -241,6 +241,59 @@ describe('viewer content boundary', () => {
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 
+  it('starts public renderer config before a cold HTML share resolves', async () => {
+    const resolution = {
+      apiVersion: 'v1',
+      shareId: SHARE_ID,
+      accessType: 'public',
+      publicCode: PUBLIC_CODE,
+      target: { mode: 'latest' },
+      expiresAt: null,
+      artifact: { artifactId: `art_${'b'.repeat(22)}`, kind: 'file', name: 'page.html' },
+      revision: {
+        revisionId: REVISION_ID,
+        revisionNumber: 1,
+        createdAt: '2026-08-19T00:00:00.000Z',
+        kind: 'file',
+        originalFileName: 'page.html',
+        mediaType: 'text/html',
+        byteCount: 10,
+      },
+      action: { type: 'content', path: `/api/v1/public/links/${PUBLIC_CODE}/content` },
+    };
+    let releaseResolution!: () => void;
+    const pendingResolution = new Promise<Response>((resolve) => {
+      releaseResolution = () => resolve(Response.json(resolution));
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>((url) => {
+      if (url === '/api/v1/public/config') {
+        return Promise.resolve(
+          Response.json({ apiVersion: 'v1', rendererOrigin: 'https://renderer.shelf.test' }),
+        );
+      }
+      if (url === `/api/v1/public/links/${PUBLIC_CODE}/resolve`) return pendingResolution;
+      throw new Error(`Unexpected request: ${String(url)}`);
+    });
+    vi.stubGlobal('fetch', fetch);
+
+    const loading = viewerLoader({
+      params: { shareRef: PUBLIC_CODE },
+      request: new Request(`https://shelf.test/s/${PUBLIC_CODE}`),
+    } as never);
+    try {
+      expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+        '/api/v1/public/config',
+        `/api/v1/public/links/${PUBLIC_CODE}/resolve`,
+      ]);
+    } finally {
+      releaseResolution();
+    }
+    await expect(loading).resolves.toMatchObject({
+      kind: 'file',
+      rendererOrigin: 'https://renderer.shelf.test',
+    });
+  });
+
   it('builds preview URLs without bearer tokens or capability secrets', () => {
     const protectedAuthority = {
       accessType: 'protected' as const,

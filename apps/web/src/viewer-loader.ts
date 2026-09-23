@@ -117,7 +117,11 @@ export async function viewerLoader({
     }
   }
 
-  const config = () => loadPublicClientConfig(request.signal);
+  // Public shares need resolution to identify HTML, so overlap config with that request.
+  const config =
+    reference.accessType === 'public'
+      ? loadPublicClientConfig(request.signal)
+      : () => loadPublicClientConfig(request.signal);
   const revisionId = new URL(request.url).searchParams.get('revision') ?? undefined;
   return loadViewerPayload(
     reference,
