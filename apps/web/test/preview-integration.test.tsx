@@ -63,7 +63,7 @@ describe('web preview integration', () => {
     ['text/markdown', 'markdown', '# hello', undefined, 'Preview'],
     ['application/json', 'json', '{"ready":true}', undefined, 'structured-data-preview'],
     ['text/csv', 'table', 'name\nShelf', undefined, 'delimited-table-preview'],
-    ['application/pdf', 'pdf', undefined, '/api/v1/revisions/pdf/preview', 'PDF preview'],
+    ['application/pdf', 'pdf', undefined, '/api/v1/revisions/pdf/preview', 'Loading file…'],
     ['audio/mpeg', 'audio', undefined, '/api/v1/revisions/audio/preview', '<audio'],
     ['video/mp4', 'video', undefined, '/api/v1/revisions/video/preview', '<video'],
   ] as const)(
