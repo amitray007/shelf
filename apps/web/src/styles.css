@@ -1987,6 +1987,28 @@ a {
   flex: 1;
 }
 
+.viewer-preview-enter {
+  animation: viewer-preview-enter 140ms var(--ease-out) both;
+}
+
+@keyframes viewer-preview-enter {
+  from {
+    opacity: 0.75;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-preview-enter {
+    animation: none;
+  }
+}
+
 .file-loading-state {
   display: grid;
   min-width: 0;
@@ -2331,6 +2353,26 @@ a {
 .renderer-stage[data-status="loading"] .renderer-frame,
 .renderer-stage[data-status="unavailable"] .renderer-frame {
   visibility: hidden;
+}
+
+.renderer-stage[data-status="ready"] .renderer-frame {
+  animation: renderer-reveal 180ms ease-out both;
+}
+
+@keyframes renderer-reveal {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .renderer-stage[data-status="ready"] .renderer-frame {
+    animation: none;
+  }
 }
 
 .renderer-status {

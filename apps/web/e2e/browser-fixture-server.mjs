@@ -734,6 +734,14 @@ async function api(request, response, url) {
       token: viewerToken,
       issuedAt: '2026-08-19T00:00:00.000Z',
       expiresAt: '2026-08-20T00:00:00.000Z',
+      resolution:
+        sessionMatch[1] === markdownShareId
+          ? markdownResolution
+          : sessionMatch[1] === htmlShareId
+            ? htmlResolution
+            : sessionMatch[1] === folderShareId
+              ? folderResolution
+              : richFixturesByShareId.get(sessionMatch[1]).resolution,
     };
     response.writeHead(200, {
       'cache-control': 'no-store',

@@ -929,6 +929,7 @@ export function FileView({
   focusLine,
   focusRequestId,
   preview,
+  contentClassName,
   review,
   sidebarControlsId,
   sidebarLabel,
@@ -945,6 +946,7 @@ export function FileView({
   readonly focusLine?: number | undefined;
   readonly focusRequestId?: number | undefined;
   readonly preview?: React.ReactNode;
+  readonly contentClassName?: string | undefined;
   readonly review?: FileReviewProps | undefined;
   readonly sidebarControlsId?: string | undefined;
   readonly sidebarLabel?: string | undefined;
@@ -1094,7 +1096,7 @@ export function FileView({
         </section>
       </ViewerToolbarContent>
       {hasContent ? (
-        <div className="file-view-content">
+        <div className={`file-view-content${contentClassName ? ` ${contentClassName}` : ''}`}>
           {hasModes ? (
             activeMode === 'source' ? (
               <SourceView

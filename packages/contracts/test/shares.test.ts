@@ -248,6 +248,28 @@ describe('share contracts', () => {
 
     expect(Check(ProtectedSessionAuthoritySchema, authority)).toBe(true);
     expect(isProtectedSessionAuthority(authority)).toBe(true);
+    const resolution = {
+      apiVersion: 'v1',
+      shareId,
+      accessType: 'protected',
+      target: { mode: 'latest' },
+      expiresAt: null,
+      artifact: { artifactId, kind: 'file', name: 'notes.md' },
+      revision: {
+        revisionId,
+        revisionNumber: 1,
+        createdAt: '2026-08-18T12:00:00.000Z',
+        kind: 'file',
+        originalFileName: 'notes.md',
+        mediaType: 'text/markdown',
+        byteCount: 12,
+      },
+      action: { type: 'content', path: `/api/v1/public/shares/${shareId}/content` },
+    };
+    expect(isProtectedSessionAuthority({ ...authority, resolution })).toBe(true);
+    expect(
+      isProtectedSessionAuthority({ ...authority, resolution: { ...resolution, token: 'x' } }),
+    ).toBe(false);
     expect(isProtectedSessionAuthority({ ...authority, url: `/s/${shareId}#secret` })).toBe(false);
     expect(isProtectedSessionAuthority({ ...authority, sessionId: 'not-a-uuid' })).toBe(false);
     expect(

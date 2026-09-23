@@ -1,6 +1,5 @@
-import type { CommentAnchor } from '@shelf/contracts';
+import type { CommentAnchor, FolderEntry } from '@shelf/contracts';
 import { useCallback, useEffect, useState } from 'react';
-import type { LoaderFunctionArgs } from 'react-router';
 import {
   useLoaderData,
   useLocation,
@@ -9,30 +8,19 @@ import {
   useRevalidator,
 } from 'react-router';
 import {
-  establishProtectedSession,
-  loadPublicClientConfig,
   loadViewerFileBytes,
   loadViewerFolderEntries,
   loadViewerFolderEntryBytes,
   loadViewerFolderPage,
   type PublicSharePayload,
-  PublicShareUnavailableError,
   resolveViewerShare,
   type ViewerAuthority,
   viewerShareActionUrl,
   viewerShareDownloadUrl,
   viewerSharePreviewUrl,
 } from './api.js';
-import {
-  capabilityStorageKey,
-  captureShareCapability,
-  readOrCreateProtectedSessionId,
-  readProtectedViewerToken,
-  saveProtectedSessionAuthority,
-  shareReferenceFromViewerPath,
-  type ViewerShareReference,
-} from './capability.js';
-import { ArtifactFileView } from './components/artifact-file-view.js';
+import type { ViewerShareReference } from './capability.js';
+import { type ArtifactFileContent, ArtifactFileView } from './components/artifact-file-view.js';
 import type { FolderBrowserReview } from './components/folder-browser.js';
 import { LazyFolderBrowser as FolderBrowser } from './components/lazy-views.js';
 import { RendererFrame } from './components/renderer-frame.js';
@@ -44,17 +32,8 @@ import { ViewerControls } from './components/viewer-controls.js';
 import { ViewerRail, ViewerRevisionLoadingState } from './components/viewer-shell.js';
 import { ViewerSidebarSplit } from './components/viewer-sidebar-split.js';
 import {
-  MAX_IMAGE_PREVIEW_BYTES,
-  prefetchRendererModules,
-  requiresClientBytes,
-  selectRenderer,
-  usesPreviewUrl,
-} from './rendering.js';
-import {
   type FileShareResolution,
   type FolderShareResolution,
-  isFileShareResolution,
-  isFolderShareResolution,
   type ShareRevisionPointer,
   shareLatestRevision,
   shareRevisionAccess,
@@ -76,116 +55,6 @@ export function readViewerSidebarOpen(
   return resolution.artifact.kind === 'folder';
 }
 
-export async function viewerLoader({
-  params,
-  request,
-}: LoaderFunctionArgs): Promise<PublicSharePayload> {
-  const reference = shareReferenceFromViewerPath(`/s/${params.shareRef ?? ''}`);
-  if (reference === null) throw new PublicShareUnavailableError();
-
-  let authority: ViewerAuthority;
-  if (reference.accessType === 'public') {
-    authority = { accessType: 'public', publicCode: reference.publicCode };
-  } else {
-    const sessionId = readOrCreateProtectedSessionId(reference.shareId, window.sessionStorage);
-    if (sessionId === null) throw new PublicShareUnavailableError();
-    const token = readProtectedViewerToken(reference.shareId, window.sessionStorage);
-    const secret =
-      token === null
-        ? captureShareCapability({
-            shareId: reference.shareId,
-            location: window.location,
-            history: window.history,
-            sessionStorage: window.sessionStorage,
-          })
-        : null;
-    if (token === null && secret === null) throw new PublicShareUnavailableError();
-    try {
-      const established = await establishProtectedSession(
-        reference.shareId,
-        sessionId,
-        token === null ? { secret: secret as string } : { token },
-        request.signal,
-      );
-      saveProtectedSessionAuthority(window.sessionStorage, established);
-      authority = {
-        accessType: 'protected',
-        shareId: established.shareId,
-        sessionId: established.sessionId,
-        token: established.token,
-      };
-    } catch (error) {
-      if (
-        token === null &&
-        error instanceof PublicShareUnavailableError &&
-        error.failure === 'terminal'
-      ) {
-        try {
-          window.sessionStorage.removeItem(capabilityStorageKey(reference.shareId));
-        } catch {
-          // Terminal failures use the same unavailable projection even without writable storage.
-        }
-      }
-      throw error;
-    }
-  }
-
-  const config = loadPublicClientConfig(request.signal);
-  const revisionId = new URL(request.url).searchParams.get('revision') ?? undefined;
-  return loadViewerPayload(reference, authority, request.signal, config, revisionId);
-}
-
-export async function loadViewerPayload(
-  reference: ViewerShareReference,
-  authority: ViewerAuthority,
-  signal: AbortSignal | undefined,
-  rendererConfig: string | undefined | Promise<{ readonly rendererOrigin?: string }>,
-  revisionId?: string,
-): Promise<PublicSharePayload> {
-  const resolution = await resolveViewerShare(reference, authority, signal, revisionId);
-  const config =
-    typeof rendererConfig === 'string' ? { rendererOrigin: rendererConfig } : await rendererConfig;
-  const rendererOrigin = config?.rendererOrigin;
-  if (isFolderShareResolution(resolution)) {
-    prefetchRendererModules({ kind: 'folder' });
-    const page = await loadViewerFolderPage(resolution, authority, signal);
-    return {
-      kind: 'folder',
-      resolution,
-      authority,
-      entries: page.items,
-      nextCursor: page.nextCursor,
-      ...(rendererOrigin === undefined ? {} : { rendererOrigin }),
-    };
-  }
-  if (!isFileShareResolution(resolution)) throw new PublicShareUnavailableError();
-  prefetchRendererModules({
-    kind: 'file',
-    mediaType: resolution.revision.mediaType,
-    originalFileName: resolution.revision.originalFileName,
-  });
-  const renderer = selectRenderer(
-    resolution.revision.mediaType,
-    rendererOrigin,
-    resolution.revision.originalFileName,
-  );
-  const needsBytes =
-    requiresClientBytes(renderer) ||
-    (renderer.kind === 'image' && resolution.revision.byteCount <= MAX_IMAGE_PREVIEW_BYTES);
-  const previewUrl =
-    !needsBytes && usesPreviewUrl(renderer)
-      ? viewerSharePreviewUrl(resolution, authority)
-      : undefined;
-  return {
-    kind: 'file',
-    resolution,
-    authority,
-    bytes: needsBytes ? await loadViewerFileBytes(resolution, authority, signal) : null,
-    ...(previewUrl === undefined ? {} : { previewUrl }),
-    ...(rendererOrigin === undefined ? {} : { rendererOrigin }),
-  };
-}
-
 function FileArtifact({
   payload,
   review,
@@ -197,6 +66,34 @@ function FileArtifact({
   readonly sidebarOpen?: boolean | undefined;
   readonly onOpenSidebar?: (() => void) | undefined;
 }) {
+  const [content, setContent] = useState<ArtifactFileContent>(() =>
+    payload.needsBytes
+      ? { status: 'loading' }
+      : {
+          status: 'ready',
+          ...(payload.previewUrl === undefined ? {} : { previewUrl: payload.previewUrl }),
+        },
+  );
+  useEffect(() => {
+    if (!payload.needsBytes) {
+      setContent({
+        status: 'ready',
+        ...(payload.previewUrl === undefined ? {} : { previewUrl: payload.previewUrl }),
+      });
+      return;
+    }
+    const controller = new AbortController();
+    setContent({ status: 'loading' });
+    void loadViewerFileBytes(payload.resolution, payload.authority, controller.signal).then(
+      (bytes) => {
+        if (!controller.signal.aborted) setContent({ status: 'ready', bytes });
+      },
+      () => {
+        if (!controller.signal.aborted) setContent({ status: 'failed' });
+      },
+    );
+    return () => controller.abort();
+  }, [payload]);
   const download = useCallback(() => {
     try {
       submitViewerDownload(
@@ -230,11 +127,8 @@ function FileArtifact({
               },
             }),
       }}
-      content={{
-        status: 'ready',
-        ...(payload.bytes === null ? {} : { bytes: payload.bytes }),
-        ...(payload.previewUrl === undefined ? {} : { previewUrl: payload.previewUrl }),
-      }}
+      content={content}
+      revealReady
       file={{
         id: payload.resolution.revision.revisionId,
         mediaType: payload.resolution.revision.mediaType,
@@ -302,9 +196,9 @@ function FolderArtifact({
 }) {
   const [tree, setTree] = useState({
     payload,
-    entries: payload.entries,
+    entries: [] as readonly FolderEntry[],
     failed: false,
-    loading: Boolean(payload.nextCursor),
+    loading: true,
   });
   const [retry, setRetry] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Retry explicitly restarts failed pagination.
@@ -312,35 +206,44 @@ function FolderArtifact({
     const controller = new AbortController();
     setTree({
       payload,
-      entries: payload.entries,
+      entries: [],
       failed: false,
-      loading: Boolean(payload.nextCursor),
+      loading: true,
     });
-    if (payload.nextCursor) {
-      void loadViewerFolderEntries(payload.resolution, payload.authority, controller.signal, {
-        entries: payload.entries,
-        cursor: payload.nextCursor,
-        onEntries: (entries) => {
-          if (!controller.signal.aborted)
-            setTree({ payload, entries, failed: false, loading: true });
-        },
-      }).then(
-        (entries) => {
-          if (!controller.signal.aborted)
-            setTree({ payload, entries, failed: false, loading: false });
-        },
-        () => {
-          if (!controller.signal.aborted)
-            setTree((current) => ({ ...current, failed: true, loading: false }));
+    const loadTree = async () => {
+      const first = await loadViewerFolderPage(
+        payload.resolution,
+        payload.authority,
+        controller.signal,
+      );
+      let entries: readonly FolderEntry[] = first.items;
+      const cursor = first.nextCursor;
+      if (controller.signal.aborted) return;
+      setTree({ payload, entries, failed: false, loading: Boolean(cursor) });
+      if (!cursor) return;
+      entries = await loadViewerFolderEntries(
+        payload.resolution,
+        payload.authority,
+        controller.signal,
+        {
+          entries,
+          cursor,
+          onEntries: (nextEntries) => {
+            if (!controller.signal.aborted)
+              setTree({ payload, entries: nextEntries, failed: false, loading: true });
+          },
         },
       );
-    }
+      if (!controller.signal.aborted) setTree({ payload, entries, failed: false, loading: false });
+    };
+    void loadTree().catch(() => {
+      if (!controller.signal.aborted)
+        setTree((current) => ({ ...current, failed: true, loading: false }));
+    });
     return () => controller.abort();
   }, [payload, retry]);
   const currentTree =
-    tree.payload === payload
-      ? tree
-      : { entries: payload.entries, failed: false, loading: Boolean(payload.nextCursor) };
+    tree.payload === payload ? tree : { entries: [], failed: false, loading: true };
   const loadFile = useCallback(
     (path: string, signal: AbortSignal) =>
       loadViewerFolderEntryBytes(payload.resolution, payload.authority, path, signal),
@@ -378,13 +281,18 @@ function FolderArtifact({
             </button>
           </span>
         ) : currentTree.loading ? (
-          'Loading more files…'
+          currentTree.entries.length === 0 ? (
+            'Loading files…'
+          ) : (
+            'Loading more files…'
+          )
         ) : undefined
       }
       key={payload.resolution.revision.revisionId}
       loadFile={loadFile}
       loadPreviewUrl={loadPreviewUrl}
       downloadFile={downloadFile}
+      revealInitialFile
       rendererOrigin={payload.rendererOrigin}
       resolution={payload.resolution}
       {...(review === undefined
@@ -568,6 +476,7 @@ export function ViewerPage() {
             <ViewerSidebarSplit
               content={
                 <FileArtifact
+                  key={payload.resolution.revision.revisionId}
                   payload={payload}
                   onOpenSidebar={() => setDiscussionVisibility(!discussionOpen)}
                   review={{
@@ -617,7 +526,7 @@ export function ViewerPage() {
               }
             />
           ) : (
-            <FileArtifact payload={payload} />
+            <FileArtifact key={payload.resolution.revision.revisionId} payload={payload} />
           )
         ) : (
           <FolderArtifact

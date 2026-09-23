@@ -634,17 +634,23 @@ export async function registerShareRoutes(
     async (request, reply) => {
       const params = request.params as { shareId: string };
       const body = request.body as ProtectedSessionEstablishInput;
+      const signal = requestCancellationSignal(request, reply);
       if ('secret' in body) {
-        return sendAuthority(
-          request,
-          reply,
-          await establish({
-            shareId: params.shareId,
-            sessionId: body.sessionId,
-            secret: body.secret,
-            signal: requestCancellationSignal(request, reply),
-          }),
-        );
+        const authorization = await establish({
+          shareId: params.shareId,
+          sessionId: body.sessionId,
+          secret: body.secret,
+          signal,
+        });
+        const resolved = await resolution({
+          authority: {
+            type: 'protected-session',
+            shareId: authorization.shareId,
+            sessionId: authorization.sessionId,
+          },
+          signal,
+        });
+        return { ...sendAuthority(request, reply, authorization), resolution: resolved };
       }
       const now = clock();
       const claims = dependencies.viewerSessionTokenCodec.verify(body.token, {
@@ -660,19 +666,22 @@ export async function registerShareRoutes(
           shareId: claims.shareId,
           sessionId: claims.sessionId,
         },
-        signal: requestCancellationSignal(request, reply),
+        signal,
       });
       const policyExpiry =
         resolved.expiresAt === null ? Number.POSITIVE_INFINITY : Date.parse(resolved.expiresAt);
       const expiresAt = new Date(
         Math.min(now.getTime() + AUTHORIZATION_LIFETIME_MS, policyExpiry),
       ).toISOString();
-      return sendAuthority(request, reply, {
-        shareId: claims.shareId,
-        sessionId: claims.sessionId,
-        issuedAt: now.toISOString(),
-        expiresAt,
-      });
+      return {
+        ...sendAuthority(request, reply, {
+          shareId: claims.shareId,
+          sessionId: claims.sessionId,
+          issuedAt: now.toISOString(),
+          expiresAt,
+        }),
+        resolution: resolved,
+      };
     },
   );
 

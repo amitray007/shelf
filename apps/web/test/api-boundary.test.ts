@@ -10,6 +10,8 @@ import {
   loadViewerFileBytes,
   loadViewerFolderEntries,
   loadViewerFolderEntryBytes,
+  loadViewerFolderPage,
+  MAX_VIEWER_CACHED_BYTES,
   PublicShareUnavailableError,
   resolveViewerShare,
   updateViewerCommentPost,
@@ -24,7 +26,8 @@ import {
   protectedViewerTokenStorageKey,
 } from '../src/capability.js';
 import type { FolderShareResolution } from '../src/share-types.js';
-import { loadViewerPayload, updateViewerThreadUrl, viewerLoader } from '../src/viewer-page.js';
+import { loadViewerPayload, viewerLoader } from '../src/viewer-loader.js';
+import { updateViewerThreadUrl } from '../src/viewer-page.js';
 
 const SHARE_ID = `shr_${'a'.repeat(22)}`;
 const SECRET = 'S'.repeat(43);
@@ -163,16 +166,18 @@ describe('viewer content boundary', () => {
     vi.stubGlobal('fetch', fetch);
     const reference = { accessType: 'protected' as const, shareId: SHARE_ID };
     const payload = await loadViewerPayload(reference, authority, undefined, undefined);
-    expect(payload).toMatchObject({
-      kind: 'folder',
+    expect(payload).toMatchObject({ kind: 'folder' });
+    expect(payload).not.toHaveProperty('entries');
+    expect(fetch).toHaveBeenCalledTimes(2); // The first page starts before the view mounts.
+    await expect(loadViewerFolderPage(resolution, authority)).resolves.toMatchObject({
       nextCursor: 'next-page',
-      entries: [{ path: 'docs', kind: 'directory' }],
+      items: [{ path: 'docs', kind: 'directory' }],
     });
     expect(fetch).toHaveBeenCalledTimes(2);
     if (payload.kind !== 'folder') throw new Error('Expected a folder');
     const onEntries = vi.fn();
     await loadViewerFolderEntries(resolution, authority, undefined, {
-      entries: payload.entries,
+      entries: [{ path: 'docs', kind: 'directory' }],
       cursor: 'next-page',
       onEntries,
     });
@@ -183,6 +188,35 @@ describe('viewer content boundary', () => {
     await loadViewerPayload(reference, authority, undefined, undefined);
     await loadViewerFolderEntries(resolution, authority);
     expect(fetch).toHaveBeenCalledTimes(4); // Authorization is refreshed; immutable tree pages are reused.
+  });
+
+  it('returns folder details while the prefetched first page is still loading', async () => {
+    const resolution = folderResolution();
+    let releaseTree!: (response: Response) => void;
+    const tree = new Promise<Response>((resolve) => {
+      releaseTree = resolve;
+    });
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json(resolution))
+      .mockReturnValueOnce(tree);
+    vi.stubGlobal('fetch', fetch);
+    await expect(
+      loadViewerPayload(
+        { accessType: 'protected', shareId: SHARE_ID },
+        { accessType: 'protected', shareId: SHARE_ID, sessionId: SESSION_ID, token: TOKEN },
+        undefined,
+        undefined,
+      ),
+    ).resolves.toMatchObject({ kind: 'folder' });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    releaseTree(Response.json(folderPage([], null)));
+    await loadViewerFolderPage(resolution, {
+      accessType: 'protected',
+      shareId: SHARE_ID,
+      sessionId: SESSION_ID,
+      token: TOKEN,
+    });
   });
 
   it('caches successful public config briefly without caching failures', async () => {
@@ -205,6 +239,59 @@ describe('viewer content boundary', () => {
       now.mockRestore();
     }
     expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('starts public renderer config before a cold HTML share resolves', async () => {
+    const resolution = {
+      apiVersion: 'v1',
+      shareId: SHARE_ID,
+      accessType: 'public',
+      publicCode: PUBLIC_CODE,
+      target: { mode: 'latest' },
+      expiresAt: null,
+      artifact: { artifactId: `art_${'b'.repeat(22)}`, kind: 'file', name: 'page.html' },
+      revision: {
+        revisionId: REVISION_ID,
+        revisionNumber: 1,
+        createdAt: '2026-08-19T00:00:00.000Z',
+        kind: 'file',
+        originalFileName: 'page.html',
+        mediaType: 'text/html',
+        byteCount: 10,
+      },
+      action: { type: 'content', path: `/api/v1/public/links/${PUBLIC_CODE}/content` },
+    };
+    let releaseResolution!: () => void;
+    const pendingResolution = new Promise<Response>((resolve) => {
+      releaseResolution = () => resolve(Response.json(resolution));
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>((url) => {
+      if (url === '/api/v1/public/config') {
+        return Promise.resolve(
+          Response.json({ apiVersion: 'v1', rendererOrigin: 'https://renderer.shelf.test' }),
+        );
+      }
+      if (url === `/api/v1/public/links/${PUBLIC_CODE}/resolve`) return pendingResolution;
+      throw new Error(`Unexpected request: ${String(url)}`);
+    });
+    vi.stubGlobal('fetch', fetch);
+
+    const loading = viewerLoader({
+      params: { shareRef: PUBLIC_CODE },
+      request: new Request(`https://shelf.test/s/${PUBLIC_CODE}`),
+    } as never);
+    try {
+      expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+        '/api/v1/public/config',
+        `/api/v1/public/links/${PUBLIC_CODE}/resolve`,
+      ]);
+    } finally {
+      releaseResolution();
+    }
+    await expect(loading).resolves.toMatchObject({
+      kind: 'file',
+      rendererOrigin: 'https://renderer.shelf.test',
+    });
   });
 
   it('builds preview URLs without bearer tokens or capability secrets', () => {
@@ -498,7 +585,7 @@ describe('viewer content boundary', () => {
       'https://renderer.shelf.example/',
     );
 
-    expect(payload).toMatchObject({ kind: 'file', bytes: null });
+    expect(payload).toMatchObject({ kind: 'file', needsBytes: false });
     expect(fetch).toHaveBeenCalledOnce();
     expect(fetch.mock.calls[0]?.[0]).toBe(`/api/v1/public/shares/${SHARE_ID}/resolve`);
   });
@@ -526,17 +613,25 @@ describe('viewer content boundary', () => {
       );
     vi.stubGlobal('fetch', fetch);
 
+    const authority = {
+      accessType: 'protected' as const,
+      shareId: SHARE_ID,
+      sessionId: SESSION_ID,
+      token: TOKEN,
+    };
     await expect(
       loadViewerPayload(
         { accessType: 'protected', shareId: SHARE_ID },
-        { accessType: 'protected', shareId: SHARE_ID, sessionId: SESSION_ID, token: TOKEN },
+        authority,
         undefined,
         'https://renderer.shelf.example/',
       ),
     ).resolves.toMatchObject({
       kind: 'folder',
       rendererOrigin: 'https://renderer.shelf.example/',
-      entries: [expect.objectContaining({ path: 'site/index.html', mediaType: 'text/html' })],
+    });
+    await expect(loadViewerFolderPage(resolution, authority)).resolves.toMatchObject({
+      items: [expect.objectContaining({ path: 'site/index.html', mediaType: 'text/html' })],
     });
   });
 
@@ -578,9 +673,85 @@ describe('viewer content boundary', () => {
       ),
     ).resolves.toMatchObject({
       kind: 'file',
-      bytes: null,
+      needsBytes: false,
       previewUrl: `/api/v1/public/shares/${SHARE_ID}/content/preview`,
     });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('returns file details before content and unrelated renderer config are ready', async () => {
+    const resolution = {
+      apiVersion: 'v1',
+      shareId: SHARE_ID,
+      accessType: 'protected',
+      target: { mode: 'latest' },
+      expiresAt: null,
+      artifact: { artifactId: `art_${'b'.repeat(22)}`, kind: 'file', name: 'notes.md' },
+      revision: {
+        revisionId: REVISION_ID,
+        revisionNumber: 1,
+        createdAt: '2026-08-19T00:00:00.000Z',
+        kind: 'file',
+        originalFileName: 'notes.md',
+        mediaType: 'text/markdown',
+        byteCount: 500,
+      },
+      action: { type: 'content', path: `/api/v1/public/shares/${SHARE_ID}/content` },
+    };
+    let releaseContent!: (response: Response) => void;
+    const content = new Promise<Response>((resolve) => {
+      releaseContent = resolve;
+    });
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json(resolution))
+      .mockReturnValueOnce(content);
+    vi.stubGlobal('fetch', fetch);
+    const rendererConfig = new Promise<{ rendererOrigin?: string }>(() => undefined);
+
+    const payload = await loadViewerPayload(
+      { accessType: 'protected', shareId: SHARE_ID },
+      { accessType: 'protected', shareId: SHARE_ID, sessionId: SESSION_ID, token: TOKEN },
+      undefined,
+      rendererConfig,
+    );
+    expect(payload).toMatchObject({ kind: 'file', needsBytes: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    if (payload.kind !== 'file') throw new Error('Expected a file');
+    releaseContent(new Response('notes'));
+    await loadViewerFileBytes(payload.resolution, payload.authority);
+    expect(fetch).toHaveBeenCalledTimes(2); // The file view joins the early request.
+  });
+
+  it('does not speculatively load a file larger than the byte cache', async () => {
+    const resolution = {
+      apiVersion: 'v1',
+      shareId: SHARE_ID,
+      accessType: 'protected',
+      target: { mode: 'latest' },
+      expiresAt: null,
+      artifact: { artifactId: `art_${'b'.repeat(22)}`, kind: 'file', name: 'large.md' },
+      revision: {
+        revisionId: REVISION_ID,
+        revisionNumber: 1,
+        createdAt: '2026-08-19T00:00:00.000Z',
+        kind: 'file',
+        originalFileName: 'large.md',
+        mediaType: 'text/markdown',
+        byteCount: MAX_VIEWER_CACHED_BYTES + 1,
+      },
+      action: { type: 'content', path: `/api/v1/public/shares/${SHARE_ID}/content` },
+    };
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(Response.json(resolution));
+    vi.stubGlobal('fetch', fetch);
+    await expect(
+      loadViewerPayload(
+        { accessType: 'protected', shareId: SHARE_ID },
+        { accessType: 'protected', shareId: SHARE_ID, sessionId: SESSION_ID, token: TOKEN },
+        undefined,
+        undefined,
+      ),
+    ).resolves.toMatchObject({ kind: 'file', needsBytes: true });
     expect(fetch).toHaveBeenCalledOnce();
   });
 
@@ -742,13 +913,12 @@ describe('viewer content boundary', () => {
       token: TOKEN,
       issuedAt: '2026-08-19T00:00:00.000Z',
       expiresAt: '2026-08-20T00:00:00.000Z',
+      resolution,
     };
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(Response.json(established))
-      .mockResolvedValueOnce(Response.json({ apiVersion: 'v1', rendererOrigin: null }))
-      .mockResolvedValueOnce(Response.json(resolution))
-      .mockResolvedValueOnce(new Response('<p>Source</p>'));
+      .mockResolvedValueOnce(Response.json({ apiVersion: 'v1', rendererOrigin: null }));
     vi.stubGlobal('fetch', fetch);
 
     await viewerLoader({
@@ -763,6 +933,10 @@ describe('viewer content boundary', () => {
     });
     expect(storage.getItem(capabilityStorageKey(SHARE_ID))).toBeNull();
     expect(storage.getItem(protectedViewerTokenStorageKey(SHARE_ID))).toBe(TOKEN);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      `/api/v1/public/shares/${SHARE_ID}/sessions`,
+      '/api/v1/public/config',
+    ]);
   });
 
   it('renews the same stored session on refresh without replaying the capability', async () => {
@@ -803,9 +977,8 @@ describe('viewer content boundary', () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(Response.json(renewed))
-      .mockResolvedValueOnce(Response.json({ apiVersion: 'v1', rendererOrigin: null }))
       .mockResolvedValueOnce(Response.json(resolution))
-      .mockResolvedValueOnce(new Response('<p>Source</p>'));
+      .mockResolvedValueOnce(Response.json({ apiVersion: 'v1', rendererOrigin: null }));
     vi.stubGlobal('fetch', fetch);
 
     await viewerLoader({

@@ -564,6 +564,14 @@ describe('share HTTP boundary', () => {
     });
     const established = await establishSession(app, shareId, secret);
     const reused = await establishSession(app, shareId, secret);
+    const renewed = await app.inject({
+      method: 'POST',
+      url: `/api/v1/public/shares/${shareId}/sessions`,
+      payload: {
+        sessionId: established.json().sessionId,
+        token: established.json().token,
+      },
+    });
     const blocked = await establishSession(
       app,
       shareId,
@@ -583,8 +591,20 @@ describe('share HTTP boundary', () => {
         .items.find((item: { shareId: string }) => item.shareId === shareId),
     ).toMatchObject({ sessionsUsed: 0 });
     expect(established.statusCode, established.body).toBe(200);
+    expect(established.json()).toMatchObject({
+      resolution: {
+        shareId,
+        accessType: 'protected',
+        artifact: { artifactId: published.json().artifactId, kind: 'file' },
+        action: { type: 'content' },
+      },
+    });
     expect(created.json()).toMatchObject({ accessType: 'protected', maxSessions: 1 });
     expect(reused.statusCode, reused.body).toBe(200);
+    expect(renewed.statusCode, renewed.body).toBe(200);
+    expect(renewed.json()).toMatchObject({
+      resolution: { shareId, accessType: 'protected', artifact: { kind: 'file' } },
+    });
     expect(reused.json()).toMatchObject({
       shareId,
       sessionId: established.json().sessionId,
@@ -1030,6 +1050,18 @@ describe('share HTTP boundary', () => {
     const shareId = created.json().shareId as string;
     const secret = (created.json().url as string).split('#')[1] as string;
     const established = await establishSession(app, shareId, secret);
+    expect(established.statusCode, established.body).toBe(200);
+    expect(established.json()).toMatchObject({
+      resolution: {
+        shareId,
+        accessType: 'protected',
+        artifact: { kind: 'folder' },
+        action: { type: 'tree' },
+      },
+    });
+    expect(JSON.stringify(established.json().resolution)).not.toMatch(
+      /contentId|provider|storage/i,
+    );
     const token = established.json().token as string;
     const setCookie = established.headers['set-cookie'];
     const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(';')[0] as string;
