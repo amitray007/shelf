@@ -282,10 +282,6 @@
 }
 
 @media (max-width: 640px) {
-  .viewer[data-controls-visible="false"] .markdown-body > h1:first-child {
-    padding-right: 48px;
-  }
-
   .markdown-body h2 {
     margin-top: 24px;
   }

@@ -8,7 +8,7 @@
   flex: 0 0 48px;
   align-items: center;
   gap: 8px;
-  padding: 0 152px 0 12px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--rule);
   background: var(--canvas);
   z-index: 10;
@@ -88,8 +88,8 @@
 
 .viewer-controls-toggle {
   position: absolute;
-  top: 8px;
-  right: 12px;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
   z-index: 11;
 }
 
@@ -190,7 +190,7 @@
 .viewer-folder-listing {
   height: 100%;
   overflow: auto;
-  padding: 48px 24px 24px;
+  padding: 24px;
 }
 
 .viewer-folder-listing h1 {
@@ -229,10 +229,6 @@
 }
 
 @media (max-width: 640px) {
-  .viewer-toolbar {
-    padding-right: 56px;
-  }
-
   .viewer-controls-toggle span,
   .viewer-more > summary span {
     display: none;
@@ -248,10 +244,6 @@
     .viewer-sidebar-split-open
     > [data-testid="viewer-sidebar"] {
     top: 0;
-  }
-
-  .viewer-controlled[data-controls-visible="false"] .folder-browser .review-sidebar-toolbar {
-    padding-right: 56px;
   }
 }
 
