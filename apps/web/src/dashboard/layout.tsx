@@ -19,6 +19,7 @@ import {
   useRouteError,
 } from 'react-router';
 
+import { ShelfBrand } from '../components/shelf-brand.js';
 import { signOut } from './api.js';
 import { DeleteWorkspaceDialog } from './delete-workspace-dialog.js';
 import { CreateWorkspaceDialog } from './workspace-dialog.js';
@@ -103,8 +104,8 @@ export function DashboardLayout() {
         <div className="dashboard-location">
           <div className="dashboard-primary">
             <nav className="dashboard-context" aria-label="Workspace">
-              <Link className="wordmark dashboard-wordmark" to={artifactsPath}>
-                shelf
+              <Link className="dashboard-wordmark" to={artifactsPath}>
+                <ShelfBrand />
               </Link>
               <span className="location-separator" aria-hidden="true">
                 /
@@ -236,7 +237,7 @@ export function DashboardLoading() {
   return (
     <div aria-busy="true" className="dashboard-loading">
       <div className="dashboard-loading-bar">
-        <span className="wordmark">shelf</span>
+        <ShelfBrand />
         <span aria-hidden="true" className="dashboard-skeleton-pill" />
         <span aria-hidden="true" className="dashboard-skeleton-pill dashboard-skeleton-pill-end" />
       </div>

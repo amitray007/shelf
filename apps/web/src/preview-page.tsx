@@ -2,6 +2,7 @@ import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
 import { WarningCircleIcon } from '@phosphor-icons/react/WarningCircle';
 import { useEffect } from 'react';
 import { Link, useLoaderData, useNavigation, useRevalidator, useSearchParams } from 'react-router';
+import { ShelfBrand } from './components/shelf-brand.js';
 import { ViewerControls } from './components/viewer-controls.js';
 import {
   ViewerRefreshButton,
@@ -93,7 +94,7 @@ export function PreviewErrorBoundary() {
   return (
     <div className="viewer viewer-unavailable">
       <div className="rail">
-        <span className="wordmark">shelf</span>
+        <ShelfBrand />
         <span className="rail-separator" aria-hidden="true">
           /
         </span>

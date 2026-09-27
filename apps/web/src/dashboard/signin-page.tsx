@@ -3,6 +3,7 @@ import { Button } from '@cloudflare/kumo/components/button';
 import { Input } from '@cloudflare/kumo/components/input';
 import { SensitiveInput } from '@cloudflare/kumo/components/sensitive-input';
 import { Form, useActionData, useNavigation } from 'react-router';
+import { ShelfBrand } from '../components/shelf-brand.js';
 
 import './access.css';
 
@@ -14,7 +15,7 @@ export function SignInPage() {
   return (
     <main className="signin-page">
       <section className="signin-panel" aria-labelledby="signin-title">
-        <span className="wordmark">shelf</span>
+        <ShelfBrand />
         <div className="signin-copy">
           <h1 id="signin-title">Sign in</h1>
           <p>Use your installation owner account.</p>

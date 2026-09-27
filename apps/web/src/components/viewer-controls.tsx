@@ -12,6 +12,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { ShelfBrand } from './shelf-brand.js';
 import './viewer-controls.css';
 
 const PRIVATE_CONTROLS_KEY = 'shelf:private-preview-controls';
@@ -110,7 +111,7 @@ export function ViewerControls({
     <ViewerControlsContext value={value}>
       <div className={`viewer viewer-controlled ${className}`} data-controls-visible={visible}>
         <header className="viewer-toolbar" hidden={!visible} id={toolbarId}>
-          <span className="wordmark viewer-wordmark">shelf</span>
+          <ShelfBrand className="viewer-wordmark" />
           <div className="viewer-file-slot" ref={setFileSlot} />
           <strong className="viewer-toolbar-fallback" title={title}>
             {title}

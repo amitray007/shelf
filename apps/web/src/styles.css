@@ -1238,10 +1238,23 @@ a {
 }
 
 .wordmark {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
   color: var(--text);
   font-size: 16px;
   font-weight: 650;
   letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+
+.shelf-brand-mark {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  background: currentColor;
+  mask: url("./assets/shelf-bracket.svg") center / contain no-repeat;
 }
 
 .rail-separator {

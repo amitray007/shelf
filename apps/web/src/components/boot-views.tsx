@@ -1,11 +1,12 @@
 // Entry-bundle fallbacks. This module must stay dependency-free (no Kumo, no
 // icon packages, no artifact components) so the initial script stays small.
+import { ShelfBrand } from './shelf-brand.js';
 
 export function LoadingView() {
   return (
     <div className="viewer viewer-pending" aria-busy="true">
       <div className="rail rail-placeholder">
-        <span className="wordmark">shelf</span>
+        <ShelfBrand />
       </div>
       <div className="state-center">
         <span aria-hidden="true" className="loading-mark" />
@@ -19,7 +20,7 @@ export function UnavailableView() {
   return (
     <div className="viewer viewer-unavailable">
       <div className="rail">
-        <span className="wordmark">shelf</span>
+        <ShelfBrand />
         <span className="rail-separator" aria-hidden="true">
           /
         </span>

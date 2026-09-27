@@ -1,4 +1,4 @@
-# Shelf
+# <img src="apps/web/public/favicon.svg" width="32" height="32" alt="" /> Shelf
 
 Shelf is an open-source, self-hostable service for publishing versioned artifacts.
 
