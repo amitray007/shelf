@@ -1,0 +1,246 @@
+{
+  "$schema": "https://schema.native-sdk.dev/app/v1.json",
+  "id": "in.pyxo.shelf.desktop",
+  "name": "shelf-desktop",
+  "display_name": "Shelf",
+  "description": "Experimental beta for development experiments only. Do not use for daily work or production.",
+  "version": "0.1.0-beta.1",
+  "icons": ["assets/icon.png"],
+  "platforms": ["macos"],
+  "permissions": ["view", "command"],
+  "capabilities": ["native_views", "gpu_surfaces"],
+  "shell": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Shelf",
+        "width": 1200,
+        "height": 800,
+        "titlebar": "hidden_inset",
+        "views": [
+          {
+            "label": "canvas",
+            "kind": "gpu_surface",
+            "fill": true,
+            "gpu_backend": "metal"
+          }
+        ]
+      }
+    ]
+  },
+  "security": {
+    "navigation": {
+      "allowed_origins": ["https://native-sdk.dev", "https://sh.pyxo.in"],
+      "external_links": {
+        "action": "deny"
+      }
+    }
+  },
+  "web_engine": "system",
+  "cef": {
+    "dir": "third_party/cef/macos",
+    "auto_install": false
+  },
+  "shortcuts": [
+    {
+      "id": "app.command",
+      "key": "k",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.command-alias1",
+      "key": "t",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.command-alias2",
+      "key": "l",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.close",
+      "key": "w",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.reload",
+      "key": "r",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.sidebar",
+      "key": "\\",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.back",
+      "key": "[",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.forward",
+      "key": "]",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.reopen",
+      "key": "t",
+      "modifiers": ["command", "shift"]
+    },
+    {
+      "id": "app.move",
+      "key": "m",
+      "modifiers": ["command", "shift"]
+    },
+    {
+      "id": "app.new-section",
+      "key": "n",
+      "modifiers": ["command", "shift"]
+    },
+    {
+      "id": "app.next",
+      "key": "Tab",
+      "modifiers": ["control"]
+    },
+    {
+      "id": "app.previous",
+      "key": "Tab",
+      "modifiers": ["control", "shift"]
+    },
+    {
+      "id": "app.next-alias13",
+      "key": "]",
+      "modifiers": ["command", "shift"]
+    },
+    {
+      "id": "app.previous-alias14",
+      "key": "[",
+      "modifiers": ["command", "shift"]
+    },
+    {
+      "id": "app.next-alias15",
+      "key": "ArrowRight",
+      "modifiers": ["command", "option"]
+    },
+    {
+      "id": "app.previous-alias16",
+      "key": "ArrowLeft",
+      "modifiers": ["command", "option"]
+    },
+    {
+      "id": "app.tab-1",
+      "key": "1",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.tab-2",
+      "key": "2",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.tab-3",
+      "key": "3",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.tab-4",
+      "key": "4",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.tab-5",
+      "key": "5",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.tab-6",
+      "key": "6",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.tab-7",
+      "key": "7",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.tab-8",
+      "key": "8",
+      "modifiers": ["command"]
+    },
+    {
+      "id": "app.tab-9",
+      "key": "9",
+      "modifiers": ["command"]
+    }
+  ],
+  "url_schemes": [
+    {
+      "scheme": "shelf",
+      "role": "viewer"
+    }
+  ],
+  "menus": [
+    {
+      "title": "File",
+      "items": [
+        {
+          "label": "Open Link\u2026",
+          "command": "app.command",
+          "key": "l",
+          "modifiers": ["command"]
+        },
+        {
+          "label": "New Section\u2026",
+          "command": "app.new-section",
+          "key": "n",
+          "modifiers": ["command", "shift"]
+        },
+        {
+          "separator": true
+        },
+        {
+          "label": "Close Link",
+          "command": "app.close",
+          "key": "w",
+          "modifiers": ["command"]
+        },
+        {
+          "label": "Reopen Closed",
+          "command": "app.reopen",
+          "key": "t",
+          "modifiers": ["command", "shift"]
+        }
+      ]
+    },
+    {
+      "title": "View",
+      "items": [
+        {
+          "label": "Commands\u2026",
+          "command": "app.command",
+          "key": "k",
+          "modifiers": ["command"]
+        },
+        {
+          "label": "Toggle Sidebar",
+          "command": "app.sidebar",
+          "key": "\\",
+          "modifiers": ["command"]
+        },
+        {
+          "label": "Home",
+          "command": "app.home"
+        },
+        {
+          "separator": true
+        },
+        {
+          "label": "Reload",
+          "command": "app.reload",
+          "key": "r",
+          "modifiers": ["command"]
+        }
+      ]
+    }
+  ]
+}

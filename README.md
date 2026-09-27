@@ -6,6 +6,12 @@ You publish a file or a complete folder from the CLI. Shelf stores it as an immu
 
 Shelf puts the CLI first, and the CLI is safe for agents to operate. The web dashboard is a companion. Use it to browse artifacts, view content, moderate discussions, and manage access.
 
+## Experimental desktop app
+
+> **Experimental beta - development experiments only. Do not use the desktop app for daily work or production.** It is unfinished and unsupported; behavior and saved session formats may change. This warning applies to the desktop experiment, not the Shelf web app or CLI.
+
+The source is in `apps/desktop/`. The complete design mockups are stored in `docs/mockups/shelf-desktop/`, including the approved `sidebar.html`. See `apps/desktop/README.md` for development instructions.
+
 ## Features
 
 - **Immutable revisions.** Every publish creates a new revision. History is permanent, and each revision records where it came from.

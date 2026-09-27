@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.native-sdk.dev/app/v1.json",
+  "id": "dev.shelf.viewer-feasibility",
+  "name": "shelf-native-feasibility",
+  "display_name": "Shelf Viewer Feasibility",
+  "description": "Temporary native sidebar and embedded WebKit feasibility check.",
+  "version": "0.1.0",
+  "icons": ["assets/icon.png"],
+  "platforms": ["macos"],
+  "permissions": ["view", "command"],
+  "capabilities": ["native_views", "gpu_surfaces"],
+  "shell": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Shelf Viewer - Feasibility",
+        "width": 1100,
+        "height": 760,
+        "views": [
+          {
+            "label": "canvas",
+            "kind": "gpu_surface",
+            "fill": true,
+            "gpu_backend": "metal"
+          },
+          {
+            "label": "viewer",
+            "kind": "webview",
+            "parent": "canvas",
+            "url": "https://native-sdk.dev/",
+            "x": 240,
+            "y": 0,
+            "width": 860,
+            "height": 760
+          }
+        ]
+      }
+    ]
+  },
+  "security": {
+    "navigation": {
+      "allowed_origins": ["https://native-sdk.dev", "https://sh.pyxo.in"],
+      "external_links": {
+        "action": "deny"
+      }
+    }
+  },
+  "web_engine": "system",
+  "cef": {
+    "dir": "third_party/cef/macos",
+    "auto_install": false
+  }
+}
