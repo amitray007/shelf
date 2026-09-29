@@ -79,15 +79,17 @@ export async function registerWebApp(app: FastifyInstance, options: WebAppOption
     preCompressed: true,
   });
 
-  app.get('/favicon.svg', { schema: { hide: true } }, async (_request, reply) => {
-    void reply.header('Cache-Control', 'public, max-age=86400');
-    void reply.header('X-Content-Type-Options', 'nosniff');
-    return reply.sendFile('favicon.svg', root, {
-      cacheControl: false,
-      immutable: false,
-      maxAge: 0,
+  for (const favicon of ['favicon.svg', 'favicon.ico']) {
+    app.get(`/${favicon}`, { schema: { hide: true } }, async (_request, reply) => {
+      void reply.header('Cache-Control', 'public, max-age=86400');
+      void reply.header('X-Content-Type-Options', 'nosniff');
+      return reply.sendFile(favicon, root, {
+        cacheControl: false,
+        immutable: false,
+        maxAge: 0,
+      });
     });
-  });
+  }
 
   for (const path of ['/', '/s/:shareId', '/signin', '/app', '/app/*', '/preview/:artifactId']) {
     app.get(path, { schema: { hide: true } }, async (_request, reply) => {

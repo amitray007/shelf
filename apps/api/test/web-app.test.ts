@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -17,6 +17,7 @@ afterEach(async () => {
 
 describe('production web application boundary', () => {
   it('serves share routes and immutable assets with a renderer-bounded document policy', async () => {
+    const faviconIco = await readFile(new URL('../../web/public/favicon.ico', import.meta.url));
     const root = await mkdtemp(join(tmpdir(), 'shelf-web-root-'));
     roots.push(root);
     await mkdir(join(root, 'assets'));
@@ -25,6 +26,7 @@ describe('production web application boundary', () => {
       join(root, 'favicon.svg'),
       '<svg xmlns="http://www.w3.org/2000/svg"><title>Shelf</title></svg>',
     );
+    await writeFile(join(root, 'favicon.ico'), faviconIco);
     await writeFile(join(root, 'assets', 'app.js'), 'export {};');
     const app = Fastify();
     apps.push(app);
@@ -41,6 +43,11 @@ describe('production web application boundary', () => {
     });
     const asset = await app.inject({ method: 'GET', url: '/assets/app.js' });
     const favicon = await app.inject({ method: 'GET', url: '/favicon.svg' });
+    const faviconIcoResponse = await app.inject({ method: 'GET', url: '/favicon.ico' });
+    const faviconIcoWithVersion = await app.inject({
+      method: 'GET',
+      url: '/favicon.ico?v=bracket-2',
+    });
     const unknownApi = await app.inject({ method: 'GET', url: '/api/v1/unknown' });
 
     expect(document.statusCode).toBe(200);
@@ -66,6 +73,13 @@ describe('production web application boundary', () => {
     expect(favicon.headers['cache-control']).toBe('public, max-age=86400');
     expect(favicon.headers['x-content-type-options']).toBe('nosniff');
     expect(favicon.body).toContain('<title>Shelf</title>');
+    for (const icon of [faviconIcoResponse, faviconIcoWithVersion]) {
+      expect(icon.statusCode).toBe(200);
+      expect(icon.headers['content-type']).toContain('image/vnd.microsoft.icon');
+      expect(icon.headers['cache-control']).toBe('public, max-age=86400');
+      expect(icon.headers['x-content-type-options']).toBe('nosniff');
+      expect(icon.rawPayload).toEqual(faviconIco);
+    }
     expect(unknownApi.statusCode).toBe(404);
     expect(unknownApi.headers['content-type']).toContain('application/json');
   });
