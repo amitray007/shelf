@@ -72,6 +72,14 @@ class FakeText extends FakeNode {
 class FakeStyle {
   private readonly values = new Map<string, string>();
 
+  get cssText(): string {
+    return Array.from(this.values, ([property, value]) => `${property}: ${value}`).join('; ');
+  }
+
+  getPropertyValue(property: string): string {
+    return this.values.get(property) ?? '';
+  }
+
   setProperty(property: string, value: string): void {
     this.values.set(property, value);
   }
@@ -239,28 +247,39 @@ describe('office adapter factories', () => {
     );
   });
 
-  it('advances fallback DOCX flow past variable-height blocks', async () => {
+  it('maps normal DOCX flow as semantic blocks with headings and line breaks', async () => {
     const document = new FakeDocument();
     const module: DocxPreviewModule = {
-      renderAsync: vi.fn(async (_source, body) => {
-        const page = document.createElement('section');
-        page.setAttribute('class', 'docx');
-        page.setAttribute('style', 'width: 816px; height: 1056px');
-        const before = document.createElement('p');
-        appendText(document, before, 'Before table');
-        page.appendChild(before);
-        const table = document.createElement('table');
-        for (const value of ['one', 'two', 'three']) {
-          const row = document.createElement('tr');
-          const cell = document.createElement('td');
-          appendText(document, cell, value);
-          row.appendChild(cell);
-          table.appendChild(row);
-        }
-        page.appendChild(table);
-        const after = document.createElement('p');
-        appendText(document, after, 'After table');
-        page.appendChild(after);
+      renderAsync: vi.fn(async (_source, body, _styles, options) => {
+        const hook = options?.h as ((value: unknown) => FakeElement) | undefined;
+        if (hook === undefined)
+          throw new Error('The DOCX adapter did not provide its detached hook.');
+        const page = hook({
+          tagName: 'section',
+          className: 'docx',
+          style: { minHeight: '792pt', width: '8.5in' },
+          children: [
+            {
+              tagName: 'p',
+              className: 'docx_heading1',
+              children: ['Release notes'],
+            },
+            {
+              tagName: 'p',
+              className: 'docx_title',
+              children: ['September'],
+            },
+            {
+              tagName: 'p',
+              children: [
+                { tagName: 'span', style: { fontWeight: '700' }, children: ['First'] },
+                { tagName: 'br', children: [] },
+                { tagName: 'br', children: [] },
+                'Second',
+              ],
+            },
+          ],
+        });
         (body as unknown as FakeElement).appendChild(page);
       }),
     };
@@ -269,11 +288,52 @@ describe('office adapter factories', () => {
     });
 
     const result = await adapter.load(new ArrayBuffer(4), { fileName: 'flow.docx' });
-    const blocks = result.pages[0]?.blocks ?? [];
-    const table = blocks[1];
-    const after = blocks[2];
-    expect(table?.kind).toBe('table');
-    expect(after?.y).toBeGreaterThanOrEqual((table?.y ?? 0) + (table?.height ?? 0));
+    const page = result.pages[0];
+    const blocks = page?.blocks ?? [];
+    expect(page).toMatchObject({ height: 1056, layout: 'flow', width: 816 });
+    expect(blocks[0]).toMatchObject({
+      kind: 'heading',
+      level: 1,
+      runs: [{ text: 'Release notes' }],
+    });
+    expect(blocks[1]).toMatchObject({ kind: 'heading', level: 1, runs: [{ text: 'September' }] });
+    const paragraph = blocks[2];
+    if (paragraph?.kind !== 'paragraph')
+      throw new Error('The DOCX fixture did not return a paragraph.');
+    expect(paragraph.runs[0]).toMatchObject({ bold: true, text: 'First' });
+    expect(paragraph.runs.map((run) => run.text).join('')).toBe('First\n\nSecond');
+  });
+
+  it('keeps adjacent DOCX cell paragraphs on separate lines', async () => {
+    const document = new FakeDocument();
+    const module: DocxPreviewModule = {
+      renderAsync: vi.fn(async (_source, body) => {
+        const page = document.createElement('section');
+        page.setAttribute('class', 'docx');
+        const table = document.createElement('table');
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        for (const text of ['Section', 'Line one', 'Line two', 'Trailing cell text']) {
+          const paragraph = document.createElement('p');
+          appendText(document, paragraph, text);
+          cell.appendChild(paragraph);
+        }
+        row.appendChild(cell);
+        table.appendChild(row);
+        page.appendChild(table);
+        (body as unknown as FakeElement).appendChild(page);
+      }),
+    };
+    const adapter = createDocxPreviewAdapter(module, {
+      documentFactory: () => document as unknown as Document,
+    });
+
+    const result = await adapter.load(new ArrayBuffer(4), { fileName: 'cell-paragraphs.docx' });
+    const table = result.pages[0]?.blocks[0];
+    if (table?.kind !== 'table') throw new Error('The DOCX fixture did not return a table.');
+    expect(table.rows[0]?.[0]?.runs.map((run) => run.text).join('')).toBe(
+      'Section\nLine one\nLine two\nTrailing cell text',
+    );
   });
 
   it('rejects oversized and cancelled DOCX loads before parser work', async () => {

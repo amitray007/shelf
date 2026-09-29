@@ -66,6 +66,8 @@ export type DocxBlock = DocxTextBlock | DocxTableBlock;
 
 export interface DocxPage {
   readonly id: string;
+  /** Parsed Word content flows naturally; positioned adapters may supply measured boxes. */
+  readonly layout?: 'flow' | 'positioned' | undefined;
   readonly width: number;
   readonly height: number;
   readonly blocks: readonly DocxBlock[];
@@ -193,8 +195,8 @@ function renderTableCell(cell: DocxTableCell): ReactNode {
   );
 }
 
-function renderDocxBlock(block: DocxBlock, scale: number, index: number): ReactNode {
-  const position = scaledPosition(block, scale);
+function renderDocxBlock(block: DocxBlock, scale: number, index: number, flow: boolean): ReactNode {
+  const position = flow ? undefined : scaledPosition(block, scale);
   if (block.kind === 'table') {
     return (
       <div
@@ -253,21 +255,30 @@ function renderDocxBlock(block: DocxBlock, scale: number, index: number): ReactN
 export function DocxPageCanvas({
   page,
   scale = 1,
+  fitWidth = false,
 }: {
   readonly page: DocxPage;
   readonly scale?: number | undefined;
+  readonly fitWidth?: boolean | undefined;
 }) {
   const safeScale = clampZoom(scale);
+  const flow = page.layout === 'flow';
   return (
     <div
-      className="office-docx-page"
+      className={flow ? 'office-docx-page office-docx-page-flow' : 'office-docx-page'}
       data-safe-output="text-model"
       style={{
-        height: finiteDimension(page.height, 1056) * safeScale,
+        ...(flow
+          ? {
+              minHeight: finiteDimension(page.height, 1056) * safeScale,
+              fontSize: 14 * safeScale,
+              maxWidth: fitWidth ? '100%' : undefined,
+            }
+          : { height: finiteDimension(page.height, 1056) * safeScale }),
         width: finiteDimension(page.width, 816) * safeScale,
       }}
     >
-      {page.blocks.map((block, index) => renderDocxBlock(block, safeScale, index))}
+      {page.blocks.map((block, index) => renderDocxBlock(block, safeScale, index, flow))}
     </div>
   );
 }
@@ -324,6 +335,7 @@ export function DocxPreview({
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [reloadToken, setReloadToken] = useState(0);
+  const { byteCount, fileName, mediaType } = metadata;
 
   useEffect(() => {
     let disposed = false;
@@ -336,7 +348,13 @@ export function DocxPreview({
     const adapterPromise =
       adapter === undefined ? loadDocxPreviewAdapter() : Promise.resolve(adapter);
     void adapterPromise
-      .then((resolvedAdapter) => resolvedAdapter.load(src, metadata, { signal: controller.signal }))
+      .then((resolvedAdapter) =>
+        resolvedAdapter.load(
+          src,
+          { byteCount, fileName, mediaType },
+          { signal: controller.signal },
+        ),
+      )
       .then((nextDocument) => {
         if (disposed) return;
         if (nextDocument.pages.length === 0) {
@@ -357,7 +375,7 @@ export function DocxPreview({
       disposed = true;
       controller.abort();
     };
-  }, [adapter, metadata, reloadToken, src]);
+  }, [adapter, byteCount, fileName, mediaType, reloadToken, src]);
 
   const page = document?.pages[pageNumber - 1];
   const pageWidth = finiteDimension(page?.width ?? 816, 816);
@@ -365,7 +383,9 @@ export function DocxPreview({
   const updateFitScale = useCallback(() => {
     const shell = pageShellRef.current;
     if (shell === null || page === undefined) return;
-    setFitScale(clampZoom((shell.clientWidth - 32) / pageWidth));
+    const widthScale = (shell.clientWidth - 32) / pageWidth;
+    // Flow pages wrap at narrow widths instead of shrinking text below its reading size.
+    setFitScale(clampZoom(page.layout === 'flow' ? Math.max(1, widthScale) : widthScale));
   }, [page, pageWidth]);
 
   useEffect(() => {
@@ -533,11 +553,8 @@ export function DocxPreview({
       )}
 
       <section aria-label={`${title} pages`} className="office-docx-page-shell" ref={pageShellRef}>
-        {page !== undefined && <DocxPageCanvas page={page} scale={scale} />}
+        {page !== undefined && <DocxPageCanvas fitWidth={fitWidth} page={page} scale={scale} />}
       </section>
-      <p className="office-docx-help">
-        Use Page Up and Page Down to change pages. Use + and − to zoom.
-      </p>
     </section>
   );
 }

@@ -196,7 +196,7 @@
   min-height: 280px;
   flex: 1;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 16px;
   background: var(--canvas);
   overflow: auto;
@@ -210,6 +210,7 @@
   box-shadow: 0 5px 24px rgb(0 0 0 / 35%);
   color: #191919;
   transform-origin: top left;
+  margin-inline: auto;
 }
 
 .office-docx-block {
@@ -263,13 +264,44 @@
   overflow-wrap: anywhere;
 }
 
-.office-docx-help {
-  margin: 0;
-  padding: 8px 12px 11px;
-  border-top: 1px solid var(--rule);
-  color: var(--text-muted);
-  font-size: 11px;
-  text-align: center;
+/* The parser provides document flow, not measured paragraph coordinates. Let the
+   browser size wrapped text and tables before placing the following block. */
+.office-docx-page-flow {
+  box-sizing: border-box;
+  padding: min(3.4em, 6vw);
+}
+
+.office-docx-page-flow > .office-docx-block {
+  position: static;
+  overflow: visible;
+  margin: 0 0 0.8em;
+  padding: 0;
+  font-size: inherit;
+  line-height: 1.55;
+  min-height: 1em;
+}
+
+.office-docx-page-flow > .office-docx-heading {
+  margin-top: 1.2em;
+  font-size: 1.3em;
+  line-height: 1.25;
+}
+
+.office-docx-page-flow > .office-docx-heading[data-heading-level="1"] {
+  font-size: 1.7em;
+}
+
+.office-docx-page-flow > .office-docx-block:first-child {
+  margin-top: 0;
+}
+
+.office-docx-page-flow .office-docx-table-block table {
+  height: auto;
+  font-size: 0.9em;
+}
+
+.office-docx-page-flow .office-docx-table-block td {
+  padding: 0.4em 0.5em;
 }
 
 .office-docx-visually-hidden {

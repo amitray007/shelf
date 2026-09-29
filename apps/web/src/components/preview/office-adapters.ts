@@ -274,15 +274,25 @@ function attr(element: Element, name: string): string {
 }
 
 function styleText(element: Element): string {
-  return attr(element, 'style');
+  return `${attr(element, 'style')};${(element as HTMLElement).style?.cssText ?? ''}`;
 }
 
 function styleNumber(element: Element, property: string, fallback: number): number {
-  const expression = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([0-9]+(?:\\.[0-9]+)?)px`, 'iu');
   const inlineStyle = (element as HTMLElement).style?.getPropertyValue?.(property) ?? '';
+  const expression = new RegExp(
+    `(?:^|;)\\s*${property}\\s*:\\s*([0-9]+(?:\\.[0-9]+)?)\\s*(px|pt|in)`,
+    'iu',
+  );
   const match = `${styleText(element)};${inlineStyle}`.match(expression);
   const value = Number(match?.[1]);
-  return Number.isFinite(value) && value >= 0 ? value : fallback;
+  const unit = match?.[2]?.toLowerCase();
+  const multiplier = unit === 'pt' ? 96 / 72 : unit === 'in' ? 96 : 1;
+  const pixels = value * multiplier;
+  return Number.isFinite(pixels) && pixels >= 0 ? pixels : fallback;
+}
+
+function cssPropertyName(property: string): string {
+  return property.replace(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`);
 }
 
 function safeInteger(value: number | undefined, fallback: number): number {
@@ -393,8 +403,9 @@ function createDetachedHook(ownerDocument: Document): DocxPreviewHook {
     if (typeof spec.style === 'string') element.setAttribute('style', spec.style);
     if (typeof spec.style === 'object' && spec.style !== null) {
       for (const [property, propertyValue] of Object.entries(spec.style)) {
-        if (!dangerousProperty(property) && typeof propertyValue === 'string') {
-          (element as HTMLElement).style.setProperty(property, propertyValue);
+        const cssProperty = cssPropertyName(property);
+        if (!dangerousProperty(cssProperty) && typeof propertyValue === 'string') {
+          (element as HTMLElement).style.setProperty(cssProperty, propertyValue);
         }
       }
     }
@@ -512,6 +523,14 @@ function runsFromElement(
   markTruncated: () => void,
 ): readonly DocxInlineRun[] {
   const runs: DocxInlineRun[] = [];
+  const appendLineBreak = (marks: RunMarks, paragraphBoundary = false) => {
+    if (paragraphBoundary && runs.at(-1)?.text.endsWith('\n')) return;
+    if (runs.length >= limits.maxRunsPerBlock) {
+      markTruncated();
+      return;
+    }
+    if (appendRun(runs, '\n', marks, limits.maxCharactersPerRun) === 0) markTruncated();
+  };
   const visit = (node: Node, parentMarks: RunMarks) => {
     if (runs.length >= limits.maxRunsPerBlock) {
       markTruncated();
@@ -524,11 +543,25 @@ function runsFromElement(
       return;
     }
     if (!isElement(node) || IGNORED_TAGS.has(elementTag(node))) return;
+    if (elementTag(node) === 'br') {
+      appendLineBreak(parentMarks);
+      return;
+    }
     const marks = marksFor(node, parentMarks);
     for (const child of Array.from(node.childNodes)) visit(child, marks);
   };
-  for (const child of Array.from(element.childNodes)) {
+  const children = Array.from(element.childNodes);
+  for (const [index, child] of children.entries()) {
     visit(child, { bold: false, code: false, italic: false, underline: false });
+    const nextChild = children[index + 1];
+    if (
+      isElement(child) &&
+      elementTag(child) === 'p' &&
+      isElement(nextChild) &&
+      elementTag(nextChild) === 'p'
+    ) {
+      appendLineBreak({ bold: false, code: false, italic: false, underline: false }, true);
+    }
   }
   return runs;
 }
@@ -571,10 +604,18 @@ function textBlockFromElement(
   markTruncated: () => void,
 ): DocxTextBlock {
   const tag = elementTag(element);
-  const kind =
-    tag.startsWith('h') && tag.length === 2 ? 'heading' : tag === 'li' ? 'list-item' : 'paragraph';
+  const classNames = attr(element, 'class').split(/\s+/u);
+  const headingClass = classNames.find((className) => /(?:^|_)heading-?([1-6])$/iu.test(className));
+  const headingLevel = headingClass?.match(/(?:^|_)heading-?([1-6])$/iu)?.[1];
+  const isHeading =
+    (tag.startsWith('h') && tag.length === 2) ||
+    headingLevel !== undefined ||
+    classNames.some((className) => /(?:^|_)title$/iu.test(className));
+  const kind = isHeading ? 'heading' : tag === 'li' ? 'list-item' : 'paragraph';
   const level =
-    kind === 'heading' ? Math.min(6, Math.max(1, safeInteger(Number(tag.slice(1)), 1))) : undefined;
+    kind === 'heading'
+      ? Math.min(6, Math.max(1, safeInteger(Number(headingLevel ?? tag.slice(1)), 1)))
+      : undefined;
   const block: DocxTextBlock = {
     align: /text-align\s*:\s*(left|center|right|justify)/iu
       .exec(styleText(element))?.[1]
@@ -673,6 +714,7 @@ function mapDocxDocument(body: HTMLElement, limits: DocxAdapterLimits): DocxDocu
       blocks,
       height,
       id: attr(pageElement, 'id') || attr(pageElement, 'data-page') || `page-${pageIndex + 1}`,
+      layout: 'flow',
       width,
     });
   });
