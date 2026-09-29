@@ -82,6 +82,22 @@ describe('DOCX adapter and preview contracts', () => {
     expect(html).not.toContain('<iframe');
   });
 
+  it('lets parsed flow content determine its height while keeping positioned adapters intact', () => {
+    const flowHtml = renderToStaticMarkup(
+      <DocxPageCanvas fitWidth page={{ ...page, layout: 'flow' }} scale={1.5} />,
+    );
+    expect(flowHtml).toContain('office-docx-page-flow');
+    expect(flowHtml).toContain('min-height:1584px');
+    expect(flowHtml).toContain('max-width:100%');
+    expect(flowHtml).not.toContain('left:');
+    expect(flowHtml).not.toContain('top:');
+    expect(flowHtml).not.toContain('height:51px');
+
+    const positionedHtml = renderToStaticMarkup(<DocxPageCanvas page={page} scale={1.5} />);
+    expect(positionedHtml).toContain('height:51px');
+    expect(positionedHtml).toContain('left:72px');
+  });
+
   it('routes layout-heavy office formats through the existing PDF viewer', () => {
     const html = renderToStaticMarkup(
       <OfficePdfPreview

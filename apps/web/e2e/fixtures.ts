@@ -28,6 +28,7 @@ export const htmlShareId = `shr_${'d'.repeat(22)}`;
 export const yamlShareId = `shr_${'y'.repeat(22)}`;
 export const csvShareId = `shr_${'x'.repeat(22)}`;
 export const xlsxShareId = `shr_${'k'.repeat(22)}`;
+export const docxShareId = `shr_${'o'.repeat(22)}`;
 export const svgShareId = `shr_${'v'.repeat(22)}`;
 export const pdfShareId = `shr_${'z'.repeat(22)}`;
 export const audioShareId = `shr_${'w'.repeat(22)}`;
@@ -733,6 +734,22 @@ export const richPreviewFixtures = [
       mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       shareId: xlsxShareId,
       byteCount: 3899,
+    }),
+  },
+  {
+    accessType: 'protected' as const,
+    fileName: 'preview.docx',
+    mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    shareId: docxShareId,
+    assetFile: 'preview.docx.b64',
+    encoding: 'base64' as const,
+    byteCount: 8729,
+    resolution: richResolution({
+      accessType: 'protected',
+      fileName: 'preview.docx',
+      mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      shareId: docxShareId,
+      byteCount: 8729,
     }),
   },
   {
