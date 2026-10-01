@@ -1278,6 +1278,23 @@ test('reduced motion and the 200 percent layout equivalent preserve utility', as
 });
 
 test('HTML preview starts dark and can be checked in light mode', async ({ page }) => {
+  // Browser-wide media emulation overrides the iframe's own color-scheme.
+  await page.emulateMedia({ colorScheme: null });
+  // Some authored pages rebuild their charts by reloading on a theme change.
+  await page.route(`${rendererOrigin}/render`, async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text())
+      .replace(
+        '<h1>Rendered idea</h1>',
+        `<h1>Rendered idea</h1><script>
+        const scheme = matchMedia('(prefers-color-scheme: dark)');
+        document.body.dataset.themeAtBoot = scheme.matches ? 'dark' : 'light';
+        scheme.addEventListener('change', () => location.reload());
+      </script>`,
+      )
+      .replace("location.href = 'https://navigation-canary.invalid/leak';", '');
+    await route.fulfill({ response, body });
+  });
   await page.goto(`/s/${htmlShareId}#${shareSecret}`);
   await revealViewerControls(page);
 
@@ -1307,15 +1324,21 @@ test('HTML preview starts dark and can be checked in light mode', async ({ page 
   await expect
     .poll(() => frame.evaluate((element) => getComputedStyle(element).colorScheme))
     .toBe('dark');
+  await expect(page.locator('.renderer-stage')).toHaveAttribute('data-status', 'ready');
+  const content = page.frameLocator('iframe[title="idea.html isolated preview"]').locator('body');
+  await expect(content).toHaveAttribute('data-theme-at-boot', 'dark');
 
-  await themeControls.getByRole('tab', { name: 'Light' }).click();
-  await expect(themeControls.getByRole('tab', { name: 'Light' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  await expect
-    .poll(() => frame.evaluate((element) => getComputedStyle(element).colorScheme))
-    .toBe('light');
+  for (const theme of ['Light', 'Dark', 'Light']) {
+    await themeControls.getByRole('tab', { name: theme }).click();
+    await expect(themeControls.getByRole('tab', { name: theme })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.locator('.renderer-stage')).toHaveAttribute('data-status', 'ready');
+    await expect(content).toHaveAttribute('data-theme-at-boot', theme.toLowerCase());
+    await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
+    await expect(frame).toHaveAttribute('credentialless', '');
+  }
   await expectNoHorizontalOverflow(page, [controls]);
 });
 

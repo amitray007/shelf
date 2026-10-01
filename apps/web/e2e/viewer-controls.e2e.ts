@@ -50,7 +50,7 @@ for (const [kind, shareId] of [
     if (kind === 'folder') {
       await page.getByRole('button', { name: 'Open files sidebar' }).click();
       await expectFluidWidth();
-      await page.getByRole('button', { name: 'Collapse files sidebar' }).click();
+      await page.getByRole('button', { name: 'Close files sidebar', exact: true }).click();
       await expectFluidWidth();
     }
   });
@@ -162,6 +162,7 @@ test('opening details preserves the HTML frame and discussion draft', async ({ p
   });
 
   await page.getByRole('button', { name: 'Open discussion' }).click();
+  await expect(page.locator('.viewer-sidebar-launcher-group')).toBeHidden();
   const draft = page.getByRole('textbox', { name: 'Start a discussion…' });
   await draft.fill('Keep this unsent review draft.');
   const frameBox = await frame.boundingBox();
@@ -277,10 +278,23 @@ test('folder discussion stays open and preserves a reply while details changes',
   await page.getByRole('button', { name: 'Open artifact details' }).click();
   await expect(reply).toBeVisible();
   await expect(reply).toHaveValue('Keep reviewing while details is open.');
-  await page.getByRole('button', { name: 'Collapse discussion' }).click();
+  await expect(page.locator('.viewer-sidebar-launcher-group')).toBeHidden();
+  await page.getByRole('button', { name: 'Close discussion', exact: true }).click();
   await expect(reply).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Open files sidebar' })).toBeVisible();
   await page.getByRole('button', { name: 'Open discussion' }).click();
   await expect(reply).toHaveValue('Keep reviewing while details is open.');
+  await page.getByRole('tab', { name: 'Show file tree' }).click();
+  await expect(page.locator('.viewer-sidebar-launcher-group')).toBeHidden();
+  await page.getByRole('tab', { name: 'Show discussion', exact: true }).click();
+  await expect(page.locator('.viewer-sidebar-launcher-group')).toBeHidden();
+  await page.getByRole('button', { name: 'Close discussion', exact: true }).click();
+  await page.getByRole('button', { name: 'Open files sidebar' }).click();
+  await expect(page.getByRole('tab', { name: 'Show file tree' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.locator('.viewer-sidebar-launcher-group')).toBeHidden();
 });
 
 test('PDF controls remain usable at narrow width inside View & actions', async ({ page }) => {

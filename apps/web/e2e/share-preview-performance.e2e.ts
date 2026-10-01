@@ -283,9 +283,7 @@ test('a failed initial folder request exposes Retry without opening the sidebar'
 });
 
 async function selectImage(page: Page, name: string) {
-  await expect(
-    page.getByRole('button', { name: /^(Open|Collapse) files sidebar$/u }),
-  ).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
   await openArtifactDetails(page);
   const toggle = page.getByRole('button', { name: 'Open files sidebar', exact: true });
   if (await toggle.isVisible()) await toggle.click();

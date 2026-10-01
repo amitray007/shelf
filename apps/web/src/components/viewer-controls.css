@@ -45,6 +45,9 @@
   display: flex;
   padding: 0 4px;
 }
+.viewer-sidebar-launcher-group[hidden] {
+  display: none;
+}
 .viewer-sidebar-launcher-group button {
   display: inline-flex;
   min-height: 48px;
@@ -350,7 +353,7 @@
   top: 0;
 }
 .viewer-controlled .viewer-sidebar-preserved {
-  padding-bottom: 80px;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 body:has(.viewer-controlled) [data-base-ui-portal]:has(.viewer-revision-option) {
   position: relative;
@@ -361,6 +364,10 @@ body:has(.viewer-controlled) [role="listbox"]:has(> .viewer-revision-option) {
   max-height: min(320px, calc(100dvh - 96px)) !important;
 }
 @media (max-width: 640px) {
+  .viewer-controlled .viewer-sidebar-preserved {
+    /* Leave room for the Details launcher beside the full-width mobile sidebar. */
+    padding-bottom: max(80px, calc(env(safe-area-inset-bottom) + 64px));
+  }
   .viewer-details-window {
     right: 8px;
     width: calc(100% - 16px);

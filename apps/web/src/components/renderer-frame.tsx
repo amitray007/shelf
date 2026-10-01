@@ -11,19 +11,21 @@ import {
 type HtmlRenderer = Extract<PassiveRenderer, { kind: 'html' }>;
 export type HtmlPreviewTheme = 'dark' | 'light';
 
-export function RendererFrame({
-  renderer,
-  resolution,
-  authority,
-  path,
-  theme,
-}: {
+interface RendererFrameProps {
   readonly renderer: HtmlRenderer;
   readonly resolution: FileShareResolution | FolderShareResolution;
   readonly authority: ViewerAuthority;
   readonly path?: string | undefined;
   readonly theme: HtmlPreviewTheme;
-}) {
+}
+
+export function RendererFrame(props: RendererFrameProps) {
+  // Set the scheme before authored scripts run. Updating a live frame can trigger
+  // a page's theme-change reload handler, which the navigation guard must block.
+  return <RendererDocument key={props.theme} {...props} />;
+}
+
+function RendererDocument({ renderer, resolution, authority, path, theme }: RendererFrameProps) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const nonceRef = useRef<string>(window.crypto.randomUUID());
   const frameNameRef = useRef<string>(`shelf-renderer-${window.crypto.randomUUID()}`);

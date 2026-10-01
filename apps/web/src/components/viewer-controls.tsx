@@ -377,7 +377,7 @@ export function ViewerSidebarLauncher({
   }, [open]);
   return (
     <ViewerToolbarContent slot="navigation">
-      <div className="viewer-sidebar-launcher-group" ref={ref}>
+      <div className="viewer-sidebar-launcher-group" hidden={open} ref={ref}>
         {[
           {
             enabled: files,
