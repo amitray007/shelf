@@ -735,8 +735,20 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
   await page.goto('/__fixture/history-anchor');
   await page.goto(`/s/${markdownShareId}#${shareSecret}`);
   await expect(page).toHaveURL(`/s/${markdownShareId}`);
-  await revealViewerControls(page);
   await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
+  const frontMatter = page.locator('.markdown-front-matter');
+  const frontMatterSummary = frontMatter.locator('summary');
+  await expect(frontMatterSummary).toHaveText('Document details');
+  await expect(frontMatter).not.toHaveAttribute('open');
+  await expect(frontMatter.getByText('Markdown fixture metadata', { exact: true })).toBeHidden();
+  await frontMatterSummary.click();
+  await expect(frontMatter.getByText('Markdown fixture metadata', { exact: true })).toBeVisible();
+  await expect(frontMatter.locator('dt')).toHaveText(['title', 'status', 'submodules']);
+  await frontMatterSummary.focus();
+  await page.keyboard.press('Enter');
+  await expect(frontMatter).not.toHaveAttribute('open');
+  await revealViewerControls(page);
+  await expect(page.locator('.markdown-body hr')).toHaveCount(0);
   await expect(
     page.locator('.markdown-body p').filter({ hasText: 'Date: 2026-09-05' }).locator('br'),
   ).toHaveCount(0);
@@ -767,6 +779,7 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
   ).toBe(false);
   await page.getByRole('tab', { name: 'Source' }).click();
   const sourceScroller = page.locator('.source-view-content > diffs-container');
+  await expect(sourceScroller).toContainText('title: Markdown fixture metadata');
   await expect(sourceScroller).toHaveCSS('overflow-y', 'auto');
   await expect(sourceScroller).toHaveAttribute('tabindex', '0');
   await expect(sourceScroller).toHaveAttribute('role', 'region');
