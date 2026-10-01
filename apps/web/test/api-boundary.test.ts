@@ -22,6 +22,7 @@ import {
 } from '../src/api.js';
 import {
   capabilityStorageKey,
+  IncompleteShareLinkError,
   protectedSessionIdStorageKey,
   protectedViewerTokenStorageKey,
 } from '../src/capability.js';
@@ -938,6 +939,29 @@ describe('viewer content boundary', () => {
       '/api/v1/public/config',
     ]);
   });
+
+  it.each(['', '#short'])(
+    'identifies an incomplete protected link (%s) without a lookup',
+    async (hash) => {
+      const storage = memoryStorage();
+      storage.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+      vi.stubGlobal('window', {
+        location: { hash, pathname: `/s/${SHARE_ID}`, search: '' },
+        history: { state: null, replaceState: vi.fn() },
+        sessionStorage: storage,
+      });
+      const fetch = vi.fn<typeof globalThis.fetch>();
+      vi.stubGlobal('fetch', fetch);
+
+      await expect(
+        viewerLoader({
+          params: { shareRef: SHARE_ID },
+          request: new Request(`https://shelf.test/s/${SHARE_ID}`),
+        } as never),
+      ).rejects.toBeInstanceOf(IncompleteShareLinkError);
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
 
   it('renews the same stored session on refresh without replaying the capability', async () => {
     const storage = memoryStorage();

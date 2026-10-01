@@ -861,7 +861,7 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
   const freshTab = await page.context().newPage();
   await freshTab.goto(`/s/${markdownShareId}`);
   await expect(
-    freshTab.getByRole('heading', { level: 1, name: 'This artifact is unavailable' }),
+    freshTab.getByRole('heading', { level: 1, name: 'This protected link is incomplete' }),
   ).toBeVisible();
   await freshTab.close();
   diagnostics.assertClean();

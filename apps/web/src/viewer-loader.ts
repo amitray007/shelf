@@ -15,6 +15,7 @@ import {
 import {
   capabilityStorageKey,
   captureShareCapability,
+  IncompleteShareLinkError,
   readOrCreateProtectedSessionId,
   readProtectedViewerToken,
   saveProtectedSessionAuthority,
@@ -79,7 +80,7 @@ export async function viewerLoader({
             sessionStorage: window.sessionStorage,
           })
         : null;
-    if (token === null && secret === null) throw new PublicShareUnavailableError();
+    if (token === null && secret === null) throw new IncompleteShareLinkError();
     try {
       const established = await establishProtectedSession(
         reference.shareId,

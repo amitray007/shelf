@@ -1,9 +1,13 @@
 import '@fontsource-variable/geist/wght.css';
 import '@fontsource-variable/geist-mono/wght.css';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, Navigate, RouterProvider } from 'react-router';
+import { createBrowserRouter, Navigate, RouterProvider, useRouteError } from 'react-router';
 
-import { captureShareCapability, shareReferenceFromViewerPath } from './capability.js';
+import {
+  captureShareCapability,
+  IncompleteShareLinkError,
+  shareReferenceFromViewerPath,
+} from './capability.js';
 import { LoadingView, UnavailableView } from './components/boot-views.js';
 import './components/viewer-controls.css';
 import './components/viewer-loading.css';
@@ -23,6 +27,11 @@ function captureCurrentCapability(): string | null {
 captureCurrentCapability();
 document.documentElement.dataset.mode = 'dark';
 
+function ViewerErrorBoundary() {
+  const error = useRouteError();
+  return <UnavailableView incompleteLink={error instanceof IncompleteShareLinkError} />;
+}
+
 const router = createBrowserRouter([
   {
     path: '/s/:shareRef',
@@ -31,7 +40,7 @@ const router = createBrowserRouter([
       const viewer = await import('./viewer-page.js');
       return { Component: viewer.ViewerPage };
     },
-    ErrorBoundary: UnavailableView,
+    ErrorBoundary: ViewerErrorBoundary,
     HydrateFallback: LoadingView,
   },
   {

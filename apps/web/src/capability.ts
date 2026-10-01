@@ -5,6 +5,13 @@ const PUBLIC_CODE_PATTERN = /^[A-Za-z0-9_-]{12}$/;
 const CAPABILITY_PATTERN = /^[A-Za-z0-9_-]{32,128}$/;
 const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
+export class IncompleteShareLinkError extends Error {
+  constructor() {
+    super('This protected link is incomplete.');
+    this.name = 'IncompleteShareLinkError';
+  }
+}
+
 export type ViewerShareReference =
   | { readonly accessType: 'protected'; readonly shareId: string }
   | { readonly accessType: 'public'; readonly publicCode: string };
