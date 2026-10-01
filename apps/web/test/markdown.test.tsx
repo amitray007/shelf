@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import {
+  extractMarkdownFrontMatter,
+  MarkdownFrontMatter,
+} from '../src/components/markdown-front-matter.js';
 import { MarkdownView } from '../src/components/markdown-view.js';
 
 describe('Markdown rendering', () => {
@@ -214,5 +218,32 @@ describe('Markdown rendering', () => {
 
     expect(html.match(/<br\/>/g)).toHaveLength(2);
     expect(html).toContain('<p>Next paragraph</p>');
+  });
+});
+
+describe('viewer document properties', () => {
+  it.each(['\n', '\r\n'])(
+    'reads a leading block independently of the selected view with %j newlines',
+    (newline) => {
+      const source = ['\uFEFF---', 'title: A file', 'status: ready', '---', '', '# Body'].join(
+        newline,
+      );
+      expect(extractMarkdownFrontMatter(source)).toEqual({
+        source: ['title: A file', 'status: ready'].join(newline),
+        format: 'yaml',
+      });
+      expect(extractMarkdownFrontMatter('# Body\n---\nstatus: ready\n---')).toBeNull();
+      expect(extractMarkdownFrontMatter('---\nstatus: unfinished')).toBeNull();
+    },
+  );
+  it('renders panel properties as labelled rows with escaped values', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownFrontMatter panel format="yaml" source={'status: "<script>alert(1)</script>"'} />,
+    );
+    expect(html).toContain('Document properties');
+    expect(html).toContain('<dt title="status">Status</dt>');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('<details');
   });
 });

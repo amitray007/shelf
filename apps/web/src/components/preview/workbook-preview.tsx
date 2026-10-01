@@ -561,11 +561,6 @@ export function WorkbookPreview({
           </div>
         </>
       )}
-      <ViewerToolbarContent>
-        <p className="workbook-preview-help">
-          Values and formulas are displayed as inert text. Editing is disabled.
-        </p>
-      </ViewerToolbarContent>
     </section>
   );
 }

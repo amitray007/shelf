@@ -124,14 +124,12 @@ async function expectActionWithinViewport(
 }
 
 async function revealViewerControls(page: Page): Promise<void> {
-  const toggle = page.getByRole('button', { name: /(?:Show|Hide) controls/u });
-  await expect(toggle).toBeVisible();
-  if ((await toggle.getAttribute('aria-label')) === 'Show controls') await toggle.click();
-  const more = page.locator('.viewer-more');
-  if ((await more.count()) === 0) return;
-  if (!(await more.evaluate((element) => (element as HTMLDetailsElement).open))) {
-    await more.locator('summary').click();
-  }
+  const launcher = page.getByRole('button', { name: 'Open artifact details' });
+  const panel = page.getByRole('dialog', { name: 'Artifact details' });
+  await expect(launcher).toBeVisible();
+  if (!(await panel.isVisible())) await launcher.click();
+  const actions = panel.getByRole('tab', { name: 'View & actions', exact: true });
+  if ((await actions.getAttribute('aria-selected')) !== 'true') await actions.click();
 }
 
 const densityViewports = [
@@ -387,10 +385,10 @@ test('private file preview reuses the canonical file surface', async ({ page }) 
     'title',
     longArtifactName,
   );
-  const viewerMore = page.locator('.viewer-more-panel');
-  await expect(viewerMore.getByRole('tab', { name: 'Preview' })).toBeVisible();
-  await expect(viewerMore.getByRole('tab', { name: 'Source' })).toBeVisible();
-  await expect(viewerMore.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
+  const panel = page.getByRole('dialog', { name: 'Artifact details' });
+  await expect(panel.getByRole('tab', { name: 'Preview' })).toBeVisible();
+  await expect(panel.getByRole('tab', { name: 'Source' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
     'One useful idea',
   );
@@ -437,7 +435,7 @@ test('private file preview reuses the canonical file surface', async ({ page }) 
   diagnostics.assertClean();
 });
 
-test('private folder previews expose revision navigation with the sidebar open', async ({
+test('private folder previews expose revision navigation with its sidebar closed', async ({
   page,
 }) => {
   const diagnostics = trackPageErrors(page);
@@ -445,14 +443,14 @@ test('private folder previews expose revision navigation with the sidebar open',
   await page.goto(`/preview/${folderArtifactId}`);
   await revealViewerControls(page);
   await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Collapse folder .* sidebar/u })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open files sidebar' })).toBeVisible();
   const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
   await revisionSelector.click();
   await expect(page.getByRole('option')).toHaveText(['Latest Revision', '7th Revision']);
   await page.getByRole('option', { name: '7th Revision' }).click();
   await expect(page).toHaveURL(new RegExp(`revision=${previousFolderRevisionId}$`, 'u'));
   await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Collapse folder files sidebar' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open files sidebar' })).toBeVisible();
   await expectNoHorizontalOverflow(page, [page.getByRole('region', { name: 'Folder browser' })]);
   diagnostics.assertClean();
 });
@@ -590,7 +588,7 @@ test('the authenticated utility stays artifact-first, accessible, and responsive
   await expect(page.getByRole('heading', { level: 1, name: 'Trash' })).toBeVisible();
   const trashTable = page.getByRole('table', { name: 'Trash' });
   await expect(trashTable).toContainText(shortArtifactId);
-  await expect(trashTable).toContainText(/days/u);
+  await expect(trashTable).toContainText(/days|Pending now/u);
   await trashTable.getByRole('button', { name: 'Recover' }).click();
   await expect(page.getByText('Artifact recovered', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Copy recovery link' })).toBeVisible();
@@ -736,18 +734,19 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
   await page.goto(`/s/${markdownShareId}#${shareSecret}`);
   await expect(page).toHaveURL(`/s/${markdownShareId}`);
   await expect(page.getByRole('heading', { level: 1, name: 'One useful idea' })).toBeVisible();
-  const frontMatter = page.locator('.markdown-front-matter');
-  const frontMatterSummary = frontMatter.locator('summary');
-  await expect(frontMatterSummary).toHaveText('Document details');
-  await expect(frontMatter).not.toHaveAttribute('open');
-  await expect(frontMatter.getByText('Markdown fixture metadata', { exact: true })).toBeHidden();
-  await frontMatterSummary.click();
-  await expect(frontMatter.getByText('Markdown fixture metadata', { exact: true })).toBeVisible();
-  await expect(frontMatter.locator('dt')).toHaveText(['title', 'status', 'submodules']);
-  await frontMatterSummary.focus();
-  await page.keyboard.press('Enter');
-  await expect(frontMatter).not.toHaveAttribute('open');
   await revealViewerControls(page);
+  const detailsPanel = page.getByRole('dialog', { name: 'Artifact details' });
+  await detailsPanel.getByRole('tab', { name: 'Details', exact: true }).click();
+  const documentProperties = detailsPanel.getByRole('heading', {
+    name: 'Document properties',
+    exact: true,
+  });
+  await expect(documentProperties).toBeVisible();
+  const properties = documentProperties.locator('..').locator('.viewer-metadata-list');
+  await expect(properties.locator('dt')).toHaveText(['Title', 'Status', 'Submodules']);
+  await expect(properties.getByText('Markdown fixture metadata', { exact: true })).toBeVisible();
+  await expect(page.locator('.markdown-front-matter')).toHaveCount(0);
+  await detailsPanel.getByRole('tab', { name: 'View & actions', exact: true }).click();
   await expect(page.locator('.markdown-body hr')).toHaveCount(0);
   await expect(
     page.locator('.markdown-body p').filter({ hasText: 'Date: 2026-09-05' }).locator('br'),
@@ -830,22 +829,18 @@ test('the public viewer scrubs its capability and reloads from tab-local state',
   await page.getByRole('button', { name: 'Source view settings' }).click();
   const sourceSettings = page.getByRole('dialog', { name: 'Source view settings' });
   await expect(sourceSettings).toBeVisible();
-  const settingsExtent = await sourceSettings.evaluate((element) => {
-    const bounds = element.getBoundingClientRect();
-    return {
-      bottom: bounds.bottom,
-      clientHeight: element.clientHeight,
-      scrollHeight: element.scrollHeight,
-    };
-  });
+  const actionsBody = page.getByRole('tabpanel', { name: 'View & actions', exact: true });
+  const settingsExtent = await actionsBody.evaluate((element) => ({
+    bottom: element.getBoundingClientRect().bottom,
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
   expect(settingsExtent.bottom).toBeLessThanOrEqual(568);
   expect(settingsExtent.scrollHeight).toBeGreaterThan(settingsExtent.clientHeight);
-  await sourceSettings.evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-  });
-  await expect
-    .poll(() => sourceSettings.evaluate((element) => element.scrollTop))
-    .toBeGreaterThan(0);
+  const lastSetting = sourceSettings.locator('select').last();
+  await lastSetting.scrollIntoViewIfNeeded();
+  await expect(lastSetting).toBeInViewport();
+  await expect.poll(() => actionsBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await page.keyboard.press('Escape');
   await expect(sourceSettings).toBeHidden();
   await fileViewTabs.getByRole('tab', { name: 'Preview' }).click();
@@ -911,13 +906,13 @@ test('a shared-history viewer moves between revisions and returns to Latest', as
       return {
         previousToSelector: selectorRect.left - previousRect.right,
         selectorToNext: nextRect.left - selectorRect.right,
-        nextToRefresh: refreshRect.left - nextRect.right,
+        nextToRefresh: refreshRect.top - nextRect.bottom,
       };
     });
   expect(revisionControlGeometry).not.toBeNull();
   expect(Math.abs(revisionControlGeometry?.previousToSelector ?? Number.POSITIVE_INFINITY)).toBe(1);
   expect(Math.abs(revisionControlGeometry?.selectorToNext ?? Number.POSITIVE_INFINITY)).toBe(1);
-  expect(revisionControlGeometry?.nextToRefresh).toBeLessThanOrEqual(8);
+  expect(revisionControlGeometry?.nextToRefresh).toBeGreaterThanOrEqual(8);
   await revisionSelector.click();
   const revisionOptions = page.getByRole('option');
   await expect(revisionOptions).toHaveCount(12);
@@ -966,14 +961,16 @@ test('a shared-history viewer moves between revisions and returns to Latest', as
   diagnostics.assertClean();
 });
 
-test('a protected folder share moves between revisions with its sidebar open', async ({ page }) => {
+test('a protected folder share moves between revisions with its sidebar closed', async ({
+  page,
+}) => {
   const diagnostics = trackPageErrors(page);
 
   await page.goto(`/s/${folderShareId}#${shareSecret}`);
   await expect(page).toHaveURL(`/s/${folderShareId}`);
   await revealViewerControls(page);
   await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Collapse folder .* sidebar/u })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open files sidebar' })).toBeVisible();
   const revisionSelector = page.getByRole('combobox', { name: 'Select revision' });
   await revisionSelector.click();
   await expect(page.getByRole('option')).toHaveText(['Latest Revision', '7th Revision']);
@@ -999,29 +996,33 @@ test('rich protected shares render structured and image previews without leaking
   await expect(page).toHaveURL(`/s/${yamlShareId}`);
   await revealViewerControls(page);
   const yamlControls = page.getByRole('region', { name: 'preview.yaml view controls' });
-  const yamlMore = page.locator('.viewer-more-panel');
+  const yamlPanel = page.getByRole('dialog', { name: 'Artifact details' });
   await expect(yamlControls.getByText('preview.yaml', { exact: true })).toBeVisible();
-  await expect(page.getByRole('tablist')).toHaveCount(1);
-  await expect(yamlMore.getByRole('tab', { name: 'Preview' })).toBeVisible();
-  await expect(yamlMore.getByRole('tab', { name: 'Source' })).toBeVisible();
+  await expect(yamlPanel.getByRole('tablist')).toHaveCount(2);
+  await expect(yamlPanel.getByRole('tab', { name: 'Preview' })).toBeVisible();
+  await expect(yamlPanel.getByRole('tab', { name: 'Source' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Preview' })).toHaveCount(1);
   await expect(page.getByRole('tab', { name: 'Source' })).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Download', exact: true })).toHaveCount(1);
-  await yamlMore.getByRole('tab', { name: 'Source' }).click();
+  await yamlPanel.getByRole('tab', { name: 'Source' }).click();
   await expect(page.locator('body')).toContainText('name: Shelf preview');
-  await yamlMore.getByRole('tab', { name: 'Preview' }).click();
-  await expect(page.getByRole('tabpanel')).toContainText('Shelf preview');
+  await yamlPanel.getByRole('tab', { name: 'Preview' }).click();
+  await expect(page.getByRole('region', { name: 'Structured data tree' })).toContainText(
+    'Shelf preview',
+  );
 
   await page.goto(`/s/${csvShareId}#${shareSecret}`);
   await revealViewerControls(page);
   const csvControls = page.getByRole('region', { name: 'preview.csv view controls' });
-  const csvMore = page.locator('.viewer-more-panel');
+  const csvPanel = page.getByRole('dialog', { name: 'Artifact details' });
   await expect(csvControls.getByText('preview.csv', { exact: true })).toBeVisible();
-  await expect(page.getByRole('tablist')).toHaveCount(1);
-  await expect(csvMore.getByRole('tab', { name: 'Preview' })).toHaveCount(1);
-  await expect(csvMore.getByRole('tab', { name: 'Source' })).toHaveCount(1);
-  await expect(csvMore.getByRole('button', { name: 'Download', exact: true })).toHaveCount(1);
-  await expect(page.getByRole('tabpanel')).toContainText('Deterministic fixture');
+  await expect(csvPanel.getByRole('tablist')).toHaveCount(2);
+  await expect(csvPanel.getByRole('tab', { name: 'Preview' })).toHaveCount(1);
+  await expect(csvPanel.getByRole('tab', { name: 'Source' })).toHaveCount(1);
+  await expect(csvPanel.getByRole('button', { name: 'Download', exact: true })).toHaveCount(1);
+  await expect(
+    page.getByRole('region', { name: 'preview.csv horizontally scrollable table' }),
+  ).toContainText('Deterministic fixture');
   const csvScroll = page.getByRole('region', {
     name: 'preview.csv horizontally scrollable table',
   });
@@ -1034,7 +1035,7 @@ test('rich protected shares render structured and image previews without leaking
     element.scrollLeft = element.scrollWidth;
   });
   await expect.poll(() => csvScroll.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
-  await page.locator('.viewer-more-panel').getByRole('tab', { name: 'Source' }).click();
+  await csvPanel.getByRole('tab', { name: 'Source' }).click();
   await expect(page.locator('body')).toContainText('id,label,score');
 
   await page.goto(`/s/${svgShareId}#${shareSecret}`);
@@ -1072,7 +1073,7 @@ test('a singular workbook fills its pane without creating fake sheet overflow', 
 
   const controls = page.getByRole('region', { name: 'preview-sheet.xlsx view controls' });
   await expect(controls.getByText('preview-sheet.xlsx', { exact: true })).toBeVisible();
-  await expect(controls.locator('.file-view-format')).toBeHidden();
+  await expect(controls.locator('.file-view-format')).toHaveText('XLSX');
 
   const workbook = page.getByRole('region', { name: 'preview-sheet.xlsx', exact: true });
   const grid = page.getByRole('grid', { name: 'Overview workbook grid' });
@@ -1101,7 +1102,7 @@ test('a singular workbook fills its pane without creating fake sheet overflow', 
   await page.getByRole('tab', { name: 'Checks' }).click();
   const wideGrid = page.getByRole('grid', { name: 'Checks workbook grid' });
   await expect(wideGrid).toBeVisible();
-  await page.getByRole('button', { name: 'Hide controls' }).click();
+  await page.getByRole('button', { name: 'Close artifact details' }).click();
   await expect(page.locator('.workbook-preview-tabs')).toBeHidden();
   await expect(wideGrid).toBeVisible();
   await revealViewerControls(page);
@@ -1205,7 +1206,7 @@ test('rich protected and public media shares expose inline preview controls and 
   await expect(page.getByRole('region', { name: 'PDF preview' })).toBeVisible();
   await expect(page.locator('canvas[role="img"]')).toBeVisible();
   const download = page
-    .locator('.viewer-more-panel')
+    .getByRole('dialog', { name: 'Artifact details' })
     .getByRole('button', { name: 'Download', exact: true });
   await expect(download).toBeVisible();
   expect(downloadStarted).toBe(false);
@@ -1230,7 +1231,12 @@ test('rich public PDF preview remains usable at narrow mobile width', async ({ p
   await expect(pdf).toBeVisible();
   await expect(page.getByRole('button', { name: 'Next PDF page' })).toBeVisible();
   await expectNoHorizontalOverflow(page, [pdf, page.locator('.artifact-surface')]);
-  await expectActionWithinViewport(page, 'Download', 'button', page.locator('.viewer-more-panel'));
+  await expectActionWithinViewport(
+    page,
+    'Download',
+    'button',
+    page.getByRole('dialog', { name: 'Artifact details' }),
+  );
 });
 
 test('reduced motion and the 200 percent layout equivalent preserve utility', async ({
@@ -1277,11 +1283,11 @@ test('HTML preview starts dark and can be checked in light mode', async ({ page 
 
   const controls = page.getByRole('region', { name: 'idea.html view controls' });
   const themeControls = page
-    .locator('.viewer-more-panel')
+    .getByRole('dialog', { name: 'Artifact details' })
     .getByRole('group', { name: 'HTML preview theme' });
   const frame = page.locator('iframe[title="idea.html isolated preview"]');
 
-  await expect(page.getByRole('button', { name: 'Open file discussions sidebar' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open discussion' })).toBeVisible();
   await expect
     .poll(() =>
       page.locator('.file-view').evaluate((fileView) => {

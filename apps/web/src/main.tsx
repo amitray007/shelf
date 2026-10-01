@@ -5,6 +5,8 @@ import { createBrowserRouter, Navigate, RouterProvider } from 'react-router';
 
 import { captureShareCapability, shareReferenceFromViewerPath } from './capability.js';
 import { LoadingView, UnavailableView } from './components/boot-views.js';
+import './components/viewer-controls.css';
+import './components/viewer-loading.css';
 import './styles.css';
 
 function captureCurrentCapability(): string | null {
@@ -51,6 +53,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/preview/:artifactId',
+    HydrateFallback: LoadingView,
     lazy: async () => {
       const [page, routes] = await Promise.all([
         import('./preview-page.js'),
@@ -59,7 +62,6 @@ const router = createBrowserRouter([
       return {
         Component: page.PreviewPage,
         ErrorBoundary: page.PreviewErrorBoundary,
-        HydrateFallback: LoadingView,
         loader: routes.artifactPreviewLoader,
       };
     },

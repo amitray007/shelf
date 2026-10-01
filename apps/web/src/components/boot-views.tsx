@@ -1,17 +1,23 @@
 // Entry-bundle fallbacks. This module must stay dependency-free (no Kumo, no
 // icon packages, no artifact components) so the initial script stays small.
-import { ShelfBrand } from './shelf-brand.js';
+
+export function ArtifactLoadingState({ label = 'Loading artifact…' }: { readonly label?: string }) {
+  return (
+    <div aria-live="polite" className="state-center artifact-loading-state" role="status">
+      <span aria-hidden="true" className="loading-mark" />
+      <p>{label}</p>
+    </div>
+  );
+}
 
 export function LoadingView() {
   return (
     <div className="viewer viewer-pending" aria-busy="true">
-      <div className="rail rail-placeholder">
-        <ShelfBrand />
-      </div>
-      <div className="state-center">
-        <span aria-hidden="true" className="loading-mark" />
-        <p>Opening artifact…</p>
-      </div>
+      <ArtifactLoadingState label="Opening artifact…" />
+      <button aria-label="Open artifact details" className="viewer-launcher" disabled type="button">
+        <span aria-hidden="true" className="shelf-brand-mark" />
+        <span>Details</span>
+      </button>
     </div>
   );
 }
@@ -19,13 +25,6 @@ export function LoadingView() {
 export function UnavailableView() {
   return (
     <div className="viewer viewer-unavailable">
-      <div className="rail">
-        <ShelfBrand />
-        <span className="rail-separator" aria-hidden="true">
-          /
-        </span>
-        <span className="rail-muted">Shared artifact</span>
-      </div>
       <main className="state-center">
         <svg
           aria-hidden="true"

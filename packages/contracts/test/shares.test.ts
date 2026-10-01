@@ -322,6 +322,31 @@ describe('share contracts', () => {
     expect(
       isPublicShareResolution({
         ...resolution,
+        revision: { ...resolution.revision, title: 'Release notes' },
+      }),
+    ).toBe(true);
+    expect(
+      isPublicShareResolution({
+        ...resolution,
+        revision: {
+          ...resolution.revision,
+          publisherMetadata: {
+            title: 'Release notes',
+            description: 'A concise overview.',
+            'custom-field': 'published',
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPublicShareResolution({
+        ...resolution,
+        revision: { ...resolution.revision, title: '' },
+      }),
+    ).toBe(false);
+    expect(
+      isPublicShareResolution({
+        ...resolution,
         workspaceId: 'workspace-main',
         actorId: 'actor-publisher',
         publisherMetadata: { source: 'private' },
@@ -358,6 +383,21 @@ describe('share contracts', () => {
     expect(
       isPublicShareResolution({
         ...resolution,
+        revision: { ...resolution.revision, title: 'Prototype preview' },
+      }),
+    ).toBe(true);
+    expect(
+      isPublicShareResolution({
+        ...resolution,
+        revision: {
+          ...resolution.revision,
+          publisherMetadata: { description: 'A published folder.', category: 'prototype' },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPublicShareResolution({
+        ...resolution,
         action: { ...resolution.action, providerUrl: 'https://storage.example/private' },
       }),
     ).toBe(false);
@@ -389,6 +429,12 @@ describe('share contracts', () => {
 
     expect(Check(PublicShareResolutionSchema, resolution)).toBe(true);
     expect(isPublicShareResolution(resolution)).toBe(true);
+    expect(
+      isPublicShareResolution({
+        ...resolution,
+        revision: { ...resolution.revision, publisherMetadata: { category: 'release' } },
+      }),
+    ).toBe(true);
     expect(
       isPublicShareResolution({
         ...resolution,

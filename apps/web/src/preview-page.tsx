@@ -2,7 +2,6 @@ import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
 import { WarningCircleIcon } from '@phosphor-icons/react/WarningCircle';
 import { useEffect } from 'react';
 import { Link, useLoaderData, useNavigation, useRevalidator, useSearchParams } from 'react-router';
-import { ShelfBrand } from './components/shelf-brand.js';
 import { ViewerControls } from './components/viewer-controls.js';
 import {
   ViewerRefreshButton,
@@ -16,6 +15,7 @@ import './dashboard/artifact.css';
 export function PreviewPage() {
   const payload = useLoaderData() as ArtifactPreviewPayload;
   const { artifact, revision, revisions } = payload;
+  const artifactTitle = revision.publisherMetadata.title?.trim() || artifact.name;
   const navigation = useNavigation();
   const revalidator = useRevalidator();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -40,16 +40,18 @@ export function PreviewPage() {
   };
 
   useEffect(() => {
-    document.title = `${artifact.name} · Preview · shelf`;
+    document.title = `${artifactTitle} · Preview · shelf`;
     return () => {
       document.title = 'shelf';
     };
-  }, [artifact.name]);
+  }, [artifactTitle]);
 
   return (
     <ViewerControls
       privatePreview
-      title={artifact.name}
+      title={artifactTitle}
+      metadata={revision.publisherMetadata}
+      revision={revision}
       className="artifact-private-preview"
       actions={
         <div className="rail-context">
@@ -76,15 +78,12 @@ export function PreviewPage() {
       }
     >
       <main aria-busy={revisionLoading} className="viewer-main">
-        {revisionLoading ? (
-          <ViewerRevisionLoadingState />
-        ) : (
-          <ManagedArtifactContent
-            bytes={payload.bytes}
-            entries={payload.entries}
-            revision={revision}
-          />
-        )}
+        {revisionLoading ? <ViewerRevisionLoadingState /> : null}
+        <ManagedArtifactContent
+          bytes={payload.bytes}
+          entries={payload.entries}
+          revision={revision}
+        />
       </main>
     </ViewerControls>
   );
@@ -93,13 +92,6 @@ export function PreviewPage() {
 export function PreviewErrorBoundary() {
   return (
     <div className="viewer viewer-unavailable">
-      <div className="rail">
-        <ShelfBrand />
-        <span className="rail-separator" aria-hidden="true">
-          /
-        </span>
-        <span className="rail-muted">Private preview</span>
-      </div>
       <main className="state-center">
         <WarningCircleIcon aria-hidden="true" className="unavailable-mark" size={28} />
         <h1>Preview unavailable</h1>

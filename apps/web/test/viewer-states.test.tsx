@@ -236,12 +236,12 @@ describe('viewer content states', () => {
       revision: { ...FOLDER_RESOLUTION.revision, revisionId: `rev_${'g'.repeat(22)}` },
     };
     expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(false);
-    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(false);
 
     storage.setItem(reviewPanelStorageKey(FILE_RESOLUTION), 'malformed');
     storage.setItem(reviewPanelStorageKey(folderResolution), 'malformed');
     expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(false);
-    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(false);
 
     storage.setItem(reviewPanelStorageKey(FILE_RESOLUTION), 'open');
     storage.setItem(reviewPanelStorageKey(folderResolution), 'closed');
@@ -947,7 +947,8 @@ describe('viewer content states', () => {
       <FileView header={<span>35 B</span>} preview={<FileLoadingState />} />,
     );
     expect(html).toContain('Loading file…');
-    expect(html).toContain('file-loading-skeleton');
+    expect(html).toContain('artifact-loading-state');
+    expect(html).not.toContain('file-loading-skeleton');
   });
 
   it('exposes practical source controls without comment affordances outside review', () => {

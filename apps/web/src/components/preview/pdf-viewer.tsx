@@ -522,9 +522,6 @@ export function PdfViewer({
           role="img"
         />
       </div>
-      <p className="pdf-viewer-help">
-        Use Page Up and Page Down to change pages. Use + and − to zoom.
-      </p>
       <div
         aria-hidden="true"
         className="pdf-viewer-measure"

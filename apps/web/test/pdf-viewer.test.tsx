@@ -60,6 +60,6 @@ describe('PDF viewer semantics', () => {
     expect(html).toContain('aria-label="Current PDF page"');
     expect(html).toContain('canvas');
     expect(html).not.toContain('<iframe');
-    expect(html).toContain('Use Page Up and Page Down');
+    expect(html).not.toContain('pdf-viewer-help');
   });
 });

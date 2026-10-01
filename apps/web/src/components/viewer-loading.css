@@ -1,0 +1,10 @@
+.artifact-loading-state {
+  min-height: 0;
+  flex: 1;
+}
+
+.artifact-document:has(> .artifact-loading-state),
+.viewer-controlled .artifact-document:has(> .artifact-loading-state) {
+  display: flex;
+  padding: 0;
+}
