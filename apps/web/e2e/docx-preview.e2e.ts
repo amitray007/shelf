@@ -2,12 +2,6 @@ import { expect, type Page, test } from '@playwright/test';
 
 import { docxShareId, shareSecret, xlsxShareId } from './fixtures.js';
 
-async function revealControls(page: Page): Promise<void> {
-  const toggle = page.getByRole('button', { name: /^(Show|Hide) controls$/u });
-  await expect(toggle).toBeVisible();
-  if ((await toggle.getAttribute('aria-label')) === 'Show controls') await toggle.click();
-}
-
 async function expectSafeDocxLayout(page: Page): Promise<void> {
   const preview = page.getByRole('region', { name: 'preview.docx', exact: true });
   const pageCanvas = preview.locator('.office-docx-page');
@@ -109,9 +103,11 @@ test('DOCX preview keeps wrapped document content visible across layout changes'
     ),
   ).toBe(true);
 
-  await revealControls(page);
-  await page.getByRole('button', { name: 'Hide controls', exact: true }).click();
-  await page.getByRole('button', { name: 'Show controls', exact: true }).click();
+  const documentBounds = await preview.boundingBox();
+  await page.getByRole('button', { name: 'Open artifact details', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Artifact details' })).toBeVisible();
+  expect(await preview.boundingBox()).toEqual(documentBounds);
+  await page.getByRole('button', { name: 'Close artifact details', exact: true }).click();
   expect(
     await page.evaluate(
       () =>

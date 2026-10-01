@@ -1,7 +1,12 @@
 import { type Static, Type } from 'typebox';
 import { Check } from 'typebox/value';
 
-import { OpaqueArtifactIdSchema, OpaqueRevisionIdSchema } from './publish.js';
+import {
+  OpaqueArtifactIdSchema,
+  OpaqueRevisionIdSchema,
+  PUBLISHER_METADATA_LIMITS,
+  PublisherMetadataSchema,
+} from './publish.js';
 
 export const COMMENT_POLICIES = ['off', 'private', 'shared'] as const;
 export const CommentPolicySchema = Type.Union(
@@ -400,6 +405,10 @@ const FileArtifactSchema = Type.Object(
 const FileRevisionSchema = Type.Object(
   {
     ...PublicRevisionFields,
+    title: Type.Optional(
+      Type.String({ minLength: 1, maxLength: PUBLISHER_METADATA_LIMITS.maxValueLength }),
+    ),
+    publisherMetadata: Type.Optional(PublisherMetadataSchema),
     kind: Type.Literal('file'),
     originalFileName: Type.String({ minLength: 1, maxLength: 255 }),
     mediaType: Type.String({ minLength: 1, maxLength: 255 }),
@@ -414,6 +423,10 @@ const FolderArtifactSchema = Type.Object(
 const FolderRevisionSchema = Type.Object(
   {
     ...PublicRevisionFields,
+    title: Type.Optional(
+      Type.String({ minLength: 1, maxLength: PUBLISHER_METADATA_LIMITS.maxValueLength }),
+    ),
+    publisherMetadata: Type.Optional(PublisherMetadataSchema),
     kind: Type.Literal('folder'),
     rootName: Type.String({ minLength: 1, maxLength: 255 }),
     byteCount: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),

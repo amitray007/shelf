@@ -5190,6 +5190,20 @@
                         "type": "string",
                         "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
                       },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "publisherMetadata": {
+                        "type": "object",
+                        "maxProperties": 32,
+                        "description": "Untrusted publisher-supplied string metadata.",
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 2048
+                        }
+                      },
                       "kind": {
                         "type": "string",
                         "enum": ["file"]
@@ -5487,6 +5501,20 @@
                         "type": "string",
                         "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
                       },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "publisherMetadata": {
+                        "type": "object",
+                        "maxProperties": 32,
+                        "description": "Untrusted publisher-supplied string metadata.",
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 2048
+                        }
+                      },
                       "kind": {
                         "type": "string",
                         "enum": ["file"]
@@ -5782,6 +5810,20 @@
                       "createdAt": {
                         "type": "string",
                         "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "publisherMetadata": {
+                        "type": "object",
+                        "maxProperties": 32,
+                        "description": "Untrusted publisher-supplied string metadata.",
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 2048
+                        }
                       },
                       "kind": {
                         "type": "string",
@@ -6079,6 +6121,20 @@
                       "createdAt": {
                         "type": "string",
                         "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "publisherMetadata": {
+                        "type": "object",
+                        "maxProperties": 32,
+                        "description": "Untrusted publisher-supplied string metadata.",
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 2048
+                        }
                       },
                       "kind": {
                         "type": "string",
@@ -6450,6 +6506,20 @@
                             "type": "string",
                             "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
                           },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "publisherMetadata": {
+                            "type": "object",
+                            "maxProperties": 32,
+                            "description": "Untrusted publisher-supplied string metadata.",
+                            "additionalProperties": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
+                          },
                           "kind": {
                             "type": "string",
                             "enum": ["file"]
@@ -6747,6 +6817,20 @@
                             "type": "string",
                             "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
                           },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "publisherMetadata": {
+                            "type": "object",
+                            "maxProperties": 32,
+                            "description": "Untrusted publisher-supplied string metadata.",
+                            "additionalProperties": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
+                          },
                           "kind": {
                             "type": "string",
                             "enum": ["file"]
@@ -7042,6 +7126,20 @@
                           "createdAt": {
                             "type": "string",
                             "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                          },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "publisherMetadata": {
+                            "type": "object",
+                            "maxProperties": 32,
+                            "description": "Untrusted publisher-supplied string metadata.",
+                            "additionalProperties": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
                           },
                           "kind": {
                             "type": "string",
@@ -7339,6 +7437,20 @@
                           "createdAt": {
                             "type": "string",
                             "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                          },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "publisherMetadata": {
+                            "type": "object",
+                            "maxProperties": 32,
+                            "description": "Untrusted publisher-supplied string metadata.",
+                            "additionalProperties": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
                           },
                           "kind": {
                             "type": "string",

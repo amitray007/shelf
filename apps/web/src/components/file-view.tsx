@@ -22,6 +22,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { ArtifactLoadingState } from './boot-views.js';
 import { formatFileDisplayName } from './format.js';
 import type { HtmlPreviewTheme } from './renderer-frame.js';
 import { ReviewComposer } from './review/discussion-panel.js';
@@ -907,18 +908,7 @@ export function SourceView({
 }
 
 export function FileLoadingState() {
-  return (
-    <div aria-live="polite" className="file-loading-state" role="status">
-      <span aria-hidden="true" className="file-loading-spinner" />
-      <span>Loading file…</span>
-      <div aria-hidden="true" className="file-loading-skeleton">
-        <span />
-        <span />
-        <span />
-        <span />
-      </div>
-    </div>
-  );
+  return <ArtifactLoadingState label="Loading file…" />;
 }
 
 export function FileView({
@@ -1030,7 +1020,7 @@ export function FileView({
         >
           {header === undefined && !showSidebarToggle && !hasArtifactToolbar ? null : (
             <div className="file-view-meta">
-              {showSidebarToggle ? (
+              {showSidebarToggle && viewerControls === undefined ? (
                 <button
                   aria-controls={sidebarControlsId}
                   aria-expanded={sidebarOpen}
@@ -1056,7 +1046,7 @@ export function FileView({
               )}
             </div>
           )}
-          <ViewerToolbarContent>
+          <ViewerToolbarContent slot="view">
             {hasModes ? (
               <Tabs
                 activateOnFocus={false}
@@ -1073,7 +1063,9 @@ export function FileView({
             ) : null}
             {htmlPreview !== undefined && activeMode === 'preview' ? (
               <fieldset className="file-view-theme-tabs">
-                <legend className="visually-hidden">HTML preview theme</legend>
+                <legend className={viewerControls ? 'viewer-control-label' : 'visually-hidden'}>
+                  HTML preview theme
+                </legend>
                 <Tabs
                   activateOnFocus={false}
                   onValueChange={(value) =>
@@ -1089,6 +1081,8 @@ export function FileView({
                 />
               </fieldset>
             ) : null}
+          </ViewerToolbarContent>
+          <ViewerToolbarContent slot="download">
             {hasArtifactToolbar && toolbar.download !== undefined ? (
               <div className="file-view-actions">{toolbar.download}</div>
             ) : null}

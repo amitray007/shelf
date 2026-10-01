@@ -21,12 +21,14 @@ import {
 } from './file-view.js';
 import { formatFileType } from './format.js';
 import { LazyMarkdownView as MarkdownView } from './lazy-views.js';
+import { extractMarkdownFrontMatter, MarkdownFrontMatter } from './markdown-front-matter.js';
 import { DelimitedTablePreview } from './preview/delimited-table-preview.js';
 import { AudioPreview, VideoPreview } from './preview/media-preview.js';
 import { DocxPreview } from './preview/office-document-preview.js';
 import { StructuredDataPreview } from './preview/structured-data-preview.js';
 import { WorkbookPreview } from './preview/workbook-preview.js';
 import type { HtmlPreviewTheme } from './renderer-frame.js';
+import { useViewerControls, ViewerToolbarContent } from './viewer-controls.js';
 
 type HtmlRenderer = Extract<PassiveRenderer, { kind: 'html' }>;
 
@@ -70,7 +72,6 @@ export interface ArtifactFileViewProps {
   readonly capabilities?: ArtifactFileCapabilities | undefined;
   readonly content: ArtifactFileContent;
   readonly file: ArtifactFileDescriptor;
-  readonly revealReady?: boolean | undefined;
   readonly review?: FileReviewProps | undefined;
   readonly sidebar?: ArtifactFileSidebar | undefined;
 }
@@ -114,10 +115,10 @@ export function ArtifactFileView({
   capabilities,
   content,
   file,
-  revealReady,
   review,
   sidebar,
 }: ArtifactFileViewProps) {
+  const controls = useViewerControls();
   const renderer = selectRenderer(file.mediaType, capabilities?.isolatedHtml?.origin, file.name);
   const bytes = content.status === 'ready' ? content.bytes : undefined;
   const previewUrl = content.status === 'ready' ? content.previewUrl : undefined;
@@ -131,6 +132,11 @@ export function ArtifactFileView({
     [bytes, sourceEligible],
   );
 
+  const frontMatter = useMemo(
+    () =>
+      renderer.kind === 'markdown' && source !== null ? extractMarkdownFrontMatter(source) : null,
+    [renderer.kind, source],
+  );
   let preview: ReactNode | undefined;
   let htmlPreview: ((theme: HtmlPreviewTheme) => ReactNode) | undefined;
   if (content.status === 'loading') {
@@ -236,7 +242,7 @@ export function ArtifactFileView({
           size="sm"
           title={`Download ${file.name}`}
           type="button"
-          variant="primary"
+          variant={controls ? 'secondary' : 'primary'}
         >
           <span className="file-view-download-label">Download</span>
         </Button>
@@ -245,26 +251,46 @@ export function ArtifactFileView({
   };
 
   return (
-    <FileView
-      contentClassName={
-        revealReady && content.status === 'ready' ? 'viewer-preview-enter' : undefined
-      }
-      defaultMode={prefersSourceView(file.mediaType, file.name) ? 'source' : 'preview'}
-      fileName={file.name}
-      {...(htmlPreview === undefined ? {} : { htmlPreview })}
-      key={file.id}
-      preview={preview}
-      review={review}
-      {...(sidebar === undefined
-        ? {}
-        : {
-            onOpenSidebar: sidebar.onToggle,
-            sidebarControlsId: sidebar.controlsId,
-            sidebarLabel: sidebar.label,
-            sidebarOpen: sidebar.open,
-          })}
-      {...(source === null ? {} : { source })}
-      toolbar={toolbar}
-    />
+    <>
+      {controls ? (
+        <>
+          <ViewerToolbarContent slot="technical">
+            <dl className="viewer-metadata-list">
+              <div>
+                <dt>Name</dt>
+                <dd>{file.name}</dd>
+              </div>
+              <div>
+                <dt>Media type</dt>
+                <dd>{file.mediaType}</dd>
+              </div>
+            </dl>
+          </ViewerToolbarContent>
+          {frontMatter ? (
+            <ViewerToolbarContent slot="document">
+              <MarkdownFrontMatter {...frontMatter} panel />
+            </ViewerToolbarContent>
+          ) : null}
+        </>
+      ) : null}
+      <FileView
+        defaultMode={prefersSourceView(file.mediaType, file.name) ? 'source' : 'preview'}
+        fileName={file.name}
+        {...(htmlPreview === undefined ? {} : { htmlPreview })}
+        key={file.id}
+        preview={preview}
+        review={review}
+        {...(sidebar === undefined
+          ? {}
+          : {
+              onOpenSidebar: sidebar.onToggle,
+              sidebarControlsId: sidebar.controlsId,
+              sidebarLabel: sidebar.label,
+              sidebarOpen: sidebar.open,
+            })}
+        {...(source === null ? {} : { source })}
+        toolbar={toolbar}
+      />
+    </>
   );
 }

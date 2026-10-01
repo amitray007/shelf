@@ -166,15 +166,6 @@
   box-shadow: 0 5px 24px rgb(0 0 0 / 35%);
 }
 
-.pdf-viewer-help {
-  margin: 0;
-  padding: 8px 12px 11px;
-  border-top: 1px solid var(--rule);
-  color: var(--text-muted);
-  font-size: 11px;
-  text-align: center;
-}
-
 .pdf-viewer-visually-hidden {
   position: absolute;
   width: 1px;
@@ -204,10 +195,6 @@
 
   .pdf-viewer-page-shell {
     padding: 10px;
-  }
-
-  .pdf-viewer-help {
-    display: none;
   }
 }
 

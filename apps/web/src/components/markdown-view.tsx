@@ -4,6 +4,7 @@ import ReactMarkdown, { type ExtraProps, type UrlTransform } from 'react-markdow
 import remarkFrontmatter from 'remark-frontmatter';
 import remarkGfm from 'remark-gfm';
 import { MarkdownFrontMatter } from './markdown-front-matter.js';
+import { useViewerControls } from './viewer-controls.js';
 
 import './markdown-view.css';
 
@@ -94,9 +95,10 @@ const frontMatterHandlers = {
 };
 
 function MarkdownBlock({ children, node, ...props }: ComponentPropsWithoutRef<'div'> & ExtraProps) {
+  const controls = useViewerControls();
   const format = node?.properties.dataFrontmatter;
   if ((format === 'yaml' || format === 'toml') && typeof children === 'string') {
-    return <MarkdownFrontMatter source={children} format={format} />;
+    return controls ? null : <MarkdownFrontMatter source={children} format={format} />;
   }
   return <div {...props}>{children}</div>;
 }

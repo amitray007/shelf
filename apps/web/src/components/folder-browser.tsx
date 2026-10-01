@@ -15,12 +15,13 @@ import {
 } from '../rendering.js';
 import type { FolderShareResolution } from '../share-types.js';
 import { type ArtifactFileContent, ArtifactFileView } from './artifact-file-view.js';
+import { ArtifactLoadingState } from './boot-views.js';
 import { FileView, viewerSessionStorageKey } from './file-view.js';
 import { RendererFrame } from './renderer-frame.js';
 import { DiscussionPanel } from './review/discussion-panel.js';
 import { ReviewSidebarToolbar } from './review/sidebar-toolbar.js';
 import type { ReviewSidebarMode, ReviewThreadFilter } from './review/types.js';
-import { useViewerControls } from './viewer-controls.js';
+import { useViewerControls, ViewerSidebarLauncher } from './viewer-controls.js';
 import { ViewerSidebarSplit } from './viewer-sidebar-split.js';
 
 export interface FolderBrowserReview {
@@ -56,11 +57,11 @@ interface FolderBrowserProps {
   readonly authority?: ViewerAuthority | undefined;
   readonly entries: readonly FolderEntry[];
   readonly treeStatus?: ReactNode;
+  readonly treeLoading?: boolean | undefined;
   readonly treeComplete?: boolean;
   readonly loadFile: (path: string, signal: AbortSignal) => Promise<ArrayBuffer>;
   readonly loadPreviewUrl?: ((path: string) => string) | undefined;
   readonly downloadFile?: ((path: string) => void) | undefined;
-  readonly revealInitialFile?: boolean | undefined;
   readonly rendererOrigin?: string | undefined;
   readonly resolution?: FolderShareResolution | undefined;
   readonly review?: FolderBrowserReview | undefined;
@@ -140,10 +141,10 @@ export function FolderBrowser({
   entries,
   treeStatus,
   treeComplete = true,
+  treeLoading = !treeComplete,
   loadFile,
   loadPreviewUrl,
   downloadFile,
-  revealInitialFile = false,
   navigation,
   rendererOrigin,
   resolution,
@@ -184,7 +185,6 @@ export function FolderBrowser({
   const [selectedPath, setSelectedPath] = useState(
     () => readSelectedFilePath(treeComplete ? filePaths : undefined) ?? defaultPath,
   );
-  const [selectedByUser, setSelectedByUser] = useState(false);
   useEffect(() => {
     if (selectedPath !== undefined) return;
     const next = readSelectedFilePath(filePaths) ?? defaultPath;
@@ -218,7 +218,6 @@ export function FolderBrowser({
     if (isProgrammaticFolderSelection(nextFile, programmaticSelectionPathRef.current)) {
       programmaticSelectionPathRef.current = undefined;
     } else if (treeMountedRef.current) {
-      setSelectedByUser(true);
       onSelectFileRef.current?.(nextFile);
     }
     setSelectedPath(nextFile);
@@ -450,8 +449,18 @@ export function FolderBrowser({
 
   return (
     <section aria-label="Folder browser" className="folder-browser">
+      {controls && toggleSidebar ? (
+        <ViewerSidebarLauncher
+          controlsId={sidebarControlsId}
+          files
+          discussion={review !== undefined}
+          mode={review?.mode ?? 'tree'}
+          open={sidebarOpen}
+          onToggle={toggleSidebar}
+          onModeChange={review?.onModeChange}
+        />
+      ) : null}
       <ViewerSidebarSplit
-        hideWithControls={false}
         className={
           review ? 'folder-browser-sidebar-split-review' : 'folder-browser-sidebar-split-tree'
         }
@@ -467,37 +476,40 @@ export function FolderBrowser({
                   sidebarOpen={sidebarOpen}
                   sidebarLabel="folder files sidebar"
                   preview={
-                    <section aria-label="Folder files" className="viewer-folder-listing">
-                      <h1>Files</h1>
-                      {entries.length === 0 ? (
-                        <p>
-                          {treeComplete
-                            ? 'This folder is empty.'
-                            : (treeStatus ?? 'Loading files…')}
-                        </p>
-                      ) : (
-                        <ul>
-                          {entries.map((entry) => (
-                            <li key={entry.path}>
-                              {entry.kind === 'directory' ? (
-                                <span className="viewer-folder-directory">{entry.path}/</span>
-                              ) : (
-                                <button
-                                  onClick={() => {
-                                    setSelectedByUser(true);
-                                    setSelectedPath(entry.path);
-                                    review?.onSelectFile?.(entry.path);
-                                  }}
-                                  type="button"
-                                >
-                                  {entry.path}
-                                </button>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </section>
+                    entries.length === 0 && treeLoading ? (
+                      <ArtifactLoadingState label="Loading files…" />
+                    ) : (
+                      <section aria-label="Folder files" className="viewer-folder-listing">
+                        <h1>Files</h1>
+                        {entries.length === 0 ? (
+                          <p>
+                            {treeComplete
+                              ? 'This folder is empty.'
+                              : (treeStatus ?? 'Loading files…')}
+                          </p>
+                        ) : (
+                          <ul>
+                            {entries.map((entry) => (
+                              <li key={entry.path}>
+                                {entry.kind === 'directory' ? (
+                                  <span className="viewer-folder-directory">{entry.path}/</span>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedPath(entry.path);
+                                      review?.onSelectFile?.(entry.path);
+                                    }}
+                                    type="button"
+                                  >
+                                    {entry.path}
+                                  </button>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </section>
+                    )
                   }
                 />
               ) : (
@@ -528,7 +540,6 @@ export function FolderBrowser({
                         }),
                   }}
                   content={fileContent}
-                  revealReady={revealInitialFile && !selectedByUser}
                   file={{
                     id: folderFileViewKey(selected.path, fileContent.status === 'loading'),
                     mediaType: selected.mediaType,

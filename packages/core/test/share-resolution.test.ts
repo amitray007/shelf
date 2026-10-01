@@ -370,7 +370,15 @@ describe('anonymous share resolution', () => {
   });
 
   it('returns a sanitized file projection with only a public content action', async () => {
-    const revision = fileRevision(ids.secondRevision, 2);
+    const baseRevision = fileRevision(ids.secondRevision, 2);
+    const revision = {
+      ...baseRevision,
+      publisherMetadata: {
+        title: '  Release notes  ',
+        description: 'A concise overview.',
+        category: 'release',
+      },
+    };
     const resolve = createShareResolutionService({
       shares: repository({
         async resolveShareTarget() {
@@ -414,6 +422,12 @@ describe('anonymous share resolution', () => {
       target: { mode: 'latest' },
       artifact: { artifactId: ids.artifact, kind: 'file', name: 'Launch notes' },
       revision: {
+        title: 'Release notes',
+        publisherMetadata: {
+          title: '  Release notes  ',
+          description: 'A concise overview.',
+          category: 'release',
+        },
         kind: 'file',
         revisionId: ids.secondRevision,
         revisionNumber: 2,
@@ -434,7 +448,7 @@ describe('anonymous share resolution', () => {
       expiresAt: null,
     });
     expect(JSON.stringify(result)).not.toMatch(
-      /workspace|installation|actor|publisher|provenance|contentHash|contentId|storage/i,
+      /workspace|installation|actor|provenance|contentHash|contentId|credential|storage/i,
     );
   });
 
@@ -452,7 +466,11 @@ describe('anonymous share resolution', () => {
         classification: 'direct-publish' as const,
         observed: { actorId: 'actor-private', operation: 'file.publish' as const },
       },
-      publisherMetadata: { privateSource: 'agent-run' },
+      publisherMetadata: {
+        title: '  Prototype preview  ',
+        description: 'A published folder.',
+        category: 'prototype',
+      },
     };
     const stored = share(ids.pinnedShare, {
       target: { mode: 'pinned', revisionId: ids.firstRevision },
@@ -483,15 +501,15 @@ describe('anonymous share resolution', () => {
       }),
     });
 
-    await expect(
-      resolve({
-        authority: {
-          type: 'protected-session',
-          shareId: ids.pinnedShare,
-          sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        },
-      }),
-    ).resolves.toEqual({
+    const result = await resolve({
+      authority: {
+        type: 'protected-session',
+        shareId: ids.pinnedShare,
+        sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+    });
+
+    expect(result).toEqual({
       apiVersion: 'v1',
       shareId: ids.pinnedShare,
       accessType: 'protected',
@@ -500,6 +518,12 @@ describe('anonymous share resolution', () => {
       target: { mode: 'pinned', revisionId: ids.firstRevision },
       artifact: { artifactId: ids.artifact, kind: 'folder', name: 'Prototype' },
       revision: {
+        title: 'Prototype preview',
+        publisherMetadata: {
+          title: '  Prototype preview  ',
+          description: 'A published folder.',
+          category: 'prototype',
+        },
         kind: 'folder',
         revisionId: ids.firstRevision,
         revisionNumber: 1,
@@ -519,6 +543,9 @@ describe('anonymous share resolution', () => {
       },
       expiresAt: null,
     });
+    expect(JSON.stringify(result)).not.toMatch(
+      /workspace|installation|actor|provenance|contentHash|contentId|credential|storage/i,
+    );
   });
 
   it('resolves a secretless Public selector and uses selector action paths', async () => {
@@ -555,14 +582,75 @@ describe('anonymous share resolution', () => {
       clock: () => new Date('2026-08-18T12:00:00.000Z'),
     });
 
-    await expect(
-      resolve({ authority: { type: 'public', publicCode: 'PublicCode12' } }),
-    ).resolves.toMatchObject({
+    const result = await resolve({ authority: { type: 'public', publicCode: 'PublicCode12' } });
+    expect(result).toMatchObject({
+      revision: { publisherMetadata: { privateSource: 'agent-run' } },
       accessType: 'public',
       publicCode: 'PublicCode12',
       expiresAt: null,
       action: { path: '/api/v1/public/links/PublicCode12/content' },
     });
+    expect(JSON.stringify(result)).not.toMatch(
+      /workspace|installation|actor|provenance|contentHash|contentId|credential|storage/i,
+    );
+  });
+
+  it('projects folder publisher metadata through a Public selector', async () => {
+    const revision = {
+      kind: 'folder' as const,
+      revisionId: ids.firstRevision,
+      revisionNumber: 1,
+      rootName: 'prototype',
+      contentHash: `sha256:${'a'.repeat(64)}`,
+      byteCount: 2048,
+      fileCount: 7,
+      createdAt: '2026-08-17T12:01:00.000Z',
+      provenance: {
+        classification: 'direct-publish' as const,
+        observed: { actorId: 'actor-private', operation: 'file.publish' as const },
+      },
+      publisherMetadata: { description: 'A public folder.', category: 'prototype' },
+    };
+    const stored = share(ids.latestShare, { accessType: 'public', publicCode: 'PublicCode12' });
+    const resolve = createShareResolutionService({
+      shares: repository({
+        async resolvePublicShareTarget() {
+          return {
+            share: stored,
+            artifact: {
+              installationId: stored.installationId,
+              workspaceId: stored.workspaceId,
+              artifactId: stored.artifactId,
+              kind: 'folder',
+              name: 'Prototype',
+              createdAt: stored.createdAt,
+              updatedAt: revision.createdAt,
+              latestRevision: revision,
+            },
+            revision: {
+              installationId: stored.installationId,
+              workspaceId: stored.workspaceId,
+              artifactId: stored.artifactId,
+              revision,
+            },
+          };
+        },
+      }),
+    });
+
+    const result = await resolve({ authority: { type: 'public', publicCode: 'PublicCode12' } });
+    expect(result).toMatchObject({
+      accessType: 'public',
+      publicCode: 'PublicCode12',
+      revision: {
+        kind: 'folder',
+        publisherMetadata: { description: 'A public folder.', category: 'prototype' },
+      },
+      action: { path: '/api/v1/public/links/PublicCode12/tree' },
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      /workspace|installation|actor|provenance|contentHash|contentId|credential|storage/i,
+    );
   });
 
   it('allows the final established session after the limit while blocking a new establishment', async () => {

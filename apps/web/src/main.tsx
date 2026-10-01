@@ -1,10 +1,16 @@
 import '@fontsource-variable/geist/wght.css';
 import '@fontsource-variable/geist-mono/wght.css';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, Navigate, RouterProvider } from 'react-router';
+import { createBrowserRouter, Navigate, RouterProvider, useRouteError } from 'react-router';
 
-import { captureShareCapability, shareReferenceFromViewerPath } from './capability.js';
+import {
+  captureShareCapability,
+  IncompleteShareLinkError,
+  shareReferenceFromViewerPath,
+} from './capability.js';
 import { LoadingView, UnavailableView } from './components/boot-views.js';
+import './components/viewer-controls.css';
+import './components/viewer-loading.css';
 import './styles.css';
 
 function captureCurrentCapability(): string | null {
@@ -21,6 +27,11 @@ function captureCurrentCapability(): string | null {
 captureCurrentCapability();
 document.documentElement.dataset.mode = 'dark';
 
+function ViewerErrorBoundary() {
+  const error = useRouteError();
+  return <UnavailableView incompleteLink={error instanceof IncompleteShareLinkError} />;
+}
+
 const router = createBrowserRouter([
   {
     path: '/s/:shareRef',
@@ -29,7 +40,7 @@ const router = createBrowserRouter([
       const viewer = await import('./viewer-page.js');
       return { Component: viewer.ViewerPage };
     },
-    ErrorBoundary: UnavailableView,
+    ErrorBoundary: ViewerErrorBoundary,
     HydrateFallback: LoadingView,
   },
   {
@@ -51,6 +62,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/preview/:artifactId',
+    HydrateFallback: LoadingView,
     lazy: async () => {
       const [page, routes] = await Promise.all([
         import('./preview-page.js'),
@@ -59,7 +71,6 @@ const router = createBrowserRouter([
       return {
         Component: page.PreviewPage,
         ErrorBoundary: page.PreviewErrorBoundary,
-        HydrateFallback: LoadingView,
         loader: routes.artifactPreviewLoader,
       };
     },

@@ -47,7 +47,57 @@ const entries = Object.entries(images).map(([path, bytes]) => ({
   contentHash: `sha256:${'a'.repeat(64)}`,
 }));
 
-test('a shared file opens before slow bytes and unrelated config finish', async ({ page }) => {
+async function installLayoutShiftObserver(page: Page) {
+  await page.addInitScript(() => {
+    const entries: { readonly value: number }[] = [];
+    Reflect.set(window, '__shelfLayoutShifts', entries);
+    try {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const shift = entry as PerformanceEntry & {
+            readonly hadRecentInput?: boolean;
+            readonly value?: number;
+          };
+          if (!shift.hadRecentInput && shift.value !== undefined)
+            entries.push({ value: shift.value });
+        }
+      }).observe({ buffered: true, type: 'layout-shift' });
+    } catch {
+      Reflect.set(window, '__shelfLayoutShifts', null);
+    }
+  });
+}
+
+async function resetLayoutShiftEntries(page: Page) {
+  await page.evaluate(() => {
+    const entries = Reflect.get(window, '__shelfLayoutShifts');
+    if (Array.isArray(entries)) entries.length = 0;
+  });
+}
+
+async function layoutShiftEntries(page: Page) {
+  return page.evaluate(() => Reflect.get(window, '__shelfLayoutShifts')) as Promise<
+    { readonly value: number }[] | null
+  >;
+}
+
+async function openArtifactDetails(page: Page) {
+  await page.getByRole('button', { name: 'Open artifact details', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Close artifact details', exact: true }),
+  ).toBeVisible();
+}
+
+async function closeArtifactDetails(page: Page) {
+  await page.getByRole('button', { name: 'Close artifact details', exact: true }).click();
+}
+
+test('a shared file opens before slow bytes and unrelated config finish', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'The Layout Shift API is only asserted in Chromium.');
+  await installLayoutShiftObserver(page);
   let releaseContent!: () => void;
   let releaseConfig!: () => void;
   const contentGate = new Promise<void>((resolve) => {
@@ -67,24 +117,54 @@ test('a shared file opens before slow bytes and unrelated config finish', async 
 
   try {
     await page.goto(`/s/${markdownShareId}#${shareSecret}`);
-    await expect(page.getByRole('button', { name: 'Show controls' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open artifact details' })).toBeVisible();
     await expect(page.getByText('Loading file…')).toBeVisible();
+    await resetLayoutShiftEntries(page);
     releaseContent();
     await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
       'One useful idea',
     );
-    await expect(page.locator('.file-view-content')).toHaveCSS(
-      'animation-name',
-      'viewer-preview-enter',
-    );
+    await expect(page.locator('.file-view-content')).toHaveCSS('animation-name', 'none');
+    expect(await layoutShiftEntries(page)).toEqual([]);
   } finally {
     releaseContent();
     releaseConfig();
   }
 });
 
-test('the shared preview reveal stops when reduced motion is requested', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+test('the Markdown renderer keeps the loading indicator centered while its chunk loads', async ({
+  page,
+}) => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(/\/assets\/markdown-view-[^/]+\.js$/, async (route) => {
+    await gate;
+    await route.continue();
+  });
+  try {
+    await page.goto(`/s/${markdownShareId}#${shareSecret}`);
+    const document = page.getByRole('region', { name: 'Artifact document preview' });
+    const loader = document.getByRole('status');
+    await expect(loader).toBeVisible();
+    const canvas = await document.boundingBox();
+    const indicator = await loader.boundingBox();
+    expect(canvas).not.toBeNull();
+    expect(indicator).not.toBeNull();
+    if (!canvas || !indicator) throw new Error('Loading geometry is missing');
+    expect(
+      Math.abs(indicator.y + indicator.height / 2 - (canvas.y + canvas.height / 2)),
+    ).toBeLessThanOrEqual(1);
+    release();
+    await expect(page.getByRole('heading', { name: 'One useful idea', exact: true })).toBeVisible();
+    expect(await document.boundingBox()).toEqual(canvas);
+  } finally {
+    release();
+  }
+});
+
+test('the shared preview does not translate into place', async ({ page }) => {
   await page.goto(`/s/${markdownShareId}#${shareSecret}`);
   await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
     'One useful idea',
@@ -92,7 +172,7 @@ test('the shared preview reveal stops when reduced motion is requested', async (
   await expect(page.locator('.file-view-content')).toHaveCSS('animation-name', 'none');
 });
 
-test('protected session and content start while the viewer UI chunk is still loading', async ({
+test('the loading shell keeps the viewer canvas stable while the viewer UI chunk is delayed', async ({
   page,
 }) => {
   let resolveRequests = 0;
@@ -120,6 +200,21 @@ test('protected session and content start while the viewer UI chunk is still loa
 
   try {
     await page.goto(`/s/${markdownShareId}#${shareSecret}`, { waitUntil: 'domcontentloaded' });
+    const pendingCanvas = await page.locator('.viewer-pending').boundingBox();
+    const launcher = await page
+      .getByRole('button', { name: 'Open artifact details', exact: true })
+      .boundingBox();
+    expect(pendingCanvas).not.toBeNull();
+    expect(launcher).not.toBeNull();
+    expect(await page.locator('.rail, .viewer-toolbar').count()).toBe(0);
+    if (pendingCanvas === null || launcher === null) throw new Error('Loading shell is missing');
+    expect(pendingCanvas.x).toBe(0);
+    expect(pendingCanvas.y).toBe(0);
+    expect(pendingCanvas.height).toBe(page.viewportSize()?.height);
+    expect(launcher.x + launcher.width).toBeLessThanOrEqual(pendingCanvas.width);
+    expect(launcher.y + launcher.height).toBeLessThanOrEqual(pendingCanvas.height);
+    expect(launcher.x).toBeGreaterThan(pendingCanvas.width / 2);
+    expect(launcher.y).toBeGreaterThan(pendingCanvas.height / 2);
     await establishing;
     await loadingContent;
   } finally {
@@ -128,11 +223,19 @@ test('protected session and content start while the viewer UI chunk is still loa
   await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
     'One useful idea',
   );
+  const contentCanvas = await page.locator('.viewer-main').boundingBox();
+  expect(contentCanvas).not.toBeNull();
+  if (contentCanvas === null) throw new Error('Viewer content is missing');
+  expect(contentCanvas.x).toBe(0);
+  expect(contentCanvas.y).toBe(0);
+  expect(contentCanvas.width).toBe(page.viewportSize()?.width);
   expect(resolveRequests).toBe(0);
   expect(configRequests).toBe(0);
 });
 
-test('a shared folder opens before its first tree page finishes', async ({ page }) => {
+test('a shared folder opens before its first tree page finishes', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'The Layout Shift API is only asserted in Chromium.');
+  await installLayoutShiftObserver(page);
   let releaseTree!: () => void;
   const treeGate = new Promise<void>((resolve) => {
     releaseTree = resolve;
@@ -147,23 +250,46 @@ test('a shared folder opens before its first tree page finishes', async ({ page 
     await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
     await expect(page.getByText('Loading files…').first()).toBeVisible();
     await expect(page.getByText('This folder is empty.')).toHaveCount(0);
+    await resetLayoutShiftEntries(page);
     releaseTree();
-    await expect(page.getByRole('treeitem', { name: 'README.md', exact: true })).toBeVisible();
-    await expect(page.locator('.file-view-content')).toHaveCSS(
-      'animation-name',
-      'viewer-preview-enter',
+    await expect(page.getByRole('region', { name: 'Artifact document preview' })).toBeVisible();
+    await expect(page.locator('.file-view-content')).toHaveCSS('animation-name', 'none');
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
     );
+    expect(await layoutShiftEntries(page)).toEqual([]);
   } finally {
     releaseTree();
   }
 });
 
+test('a failed initial folder request exposes Retry without opening the sidebar', async ({
+  page,
+}) => {
+  let fail = true;
+  await page.route(`**/api/v1/public/shares/${folderShareId}/tree`, async (route) => {
+    if (fail) {
+      await route.abort('failed');
+    } else {
+      await route.continue();
+    }
+  });
+  await page.goto(`/s/${folderShareId}#${shareSecret}`);
+  const listing = page.getByRole('region', { name: 'Folder files' });
+  await expect(listing).toContainText('Some files could not be loaded.');
+  fail = false;
+  await listing.getByRole('button', { name: 'Retry' }).click();
+  await expect(page.getByRole('region', { name: 'Artifact document preview' })).toBeVisible();
+});
+
 async function selectImage(page: Page, name: string) {
-  await page.getByRole('button', { name: /^(Show|Hide) controls$/ }).waitFor();
-  const show = page.getByRole('button', { name: 'Show controls', exact: true });
-  if (await show.isVisible()) await show.click();
-  const toggle = page.getByRole('button', { name: /^(Open|Expand) folder files sidebar$/ });
+  await expect(
+    page.getByRole('button', { name: /^(Open|Collapse) files sidebar$/u }),
+  ).toBeVisible();
+  await openArtifactDetails(page);
+  const toggle = page.getByRole('button', { name: 'Open files sidebar', exact: true });
   if (await toggle.isVisible()) await toggle.click();
+  await closeArtifactDetails(page);
   await page.getByRole('treeitem', { name, exact: true }).click();
   if ((page.viewportSize()?.width ?? 1440) <= 640) {
     const collapse = page.getByRole('button', {
@@ -180,7 +306,7 @@ async function selectImage(page: Page, name: string) {
   return image;
 }
 
-test('folder images reuse bytes and fit the available viewport with controls open or closed', async ({
+test('folder images reuse bytes and fit the available viewport with details open or closed', async ({
   page,
 }) => {
   const requests = new Map<string, number>();
@@ -227,9 +353,8 @@ test('folder images reuse bytes and fit the available viewport with controls ope
       expect(metrics.centeredX).toBeLessThanOrEqual(1);
       expect(metrics.centeredY).toBeLessThanOrEqual(1);
       expect(metrics.ratio).toBeCloseTo(metrics.originalRatio, 2);
-      await page
-        .getByRole('button', { name: state === 0 ? 'Hide controls' : 'Show controls', exact: true })
-        .click();
+      if (state === 0) await openArtifactDetails(page);
+      else await closeArtifactDetails(page);
     }
   }
   expect(requests.get('portrait.png')).toBe(1);
@@ -257,8 +382,10 @@ test('a slow folder page does not block opening or selecting the first files', a
   try {
     await selectImage(page, 'portrait.png');
     release();
-    const expand = page.getByRole('button', { name: /^(Open|Expand) folder files sidebar$/ });
+    await openArtifactDetails(page);
+    const expand = page.getByRole('button', { name: 'Open files sidebar', exact: true });
     if (await expand.isVisible()) await expand.click();
+    await closeArtifactDetails(page);
     await expect(page.getByRole('treeitem', { name: 'landscape.png', exact: true })).toBeVisible();
     await expect(page.getByRole('img', { name: 'portrait.png', exact: true })).toHaveAttribute(
       'src',

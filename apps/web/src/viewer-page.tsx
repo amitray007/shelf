@@ -28,7 +28,7 @@ import { DiscussionPanel } from './components/review/discussion-panel.js';
 import { readReviewValue, writeReviewValue } from './components/review/persistence.js';
 import type { ReviewSidebarMode } from './components/review/types.js';
 import { reviewPanelStorageKey, useViewerReview } from './components/review/use-review.js';
-import { ViewerControls } from './components/viewer-controls.js';
+import { ViewerControls, ViewerSidebarLauncher } from './components/viewer-controls.js';
 import { ViewerRail, ViewerRevisionLoadingState } from './components/viewer-shell.js';
 import { ViewerSidebarSplit } from './components/viewer-sidebar-split.js';
 import {
@@ -52,7 +52,7 @@ export function readViewerSidebarOpen(
   const persisted = readReviewValue(reviewPanelStorageKey(resolution));
   if (persisted === 'open') return true;
   if (persisted === 'closed') return false;
-  return resolution.artifact.kind === 'folder';
+  return false;
 }
 
 function FileArtifact({
@@ -128,7 +128,6 @@ function FileArtifact({
             }),
       }}
       content={content}
-      revealReady
       file={{
         id: payload.resolution.revision.revisionId,
         mediaType: payload.resolution.revision.mediaType,
@@ -272,6 +271,7 @@ function FolderArtifact({
       authority={payload.authority}
       entries={currentTree.entries}
       treeComplete={!currentTree.loading && !currentTree.failed}
+      treeLoading={currentTree.loading}
       treeStatus={
         currentTree.failed ? (
           <span>
@@ -292,7 +292,6 @@ function FolderArtifact({
       loadFile={loadFile}
       loadPreviewUrl={loadPreviewUrl}
       downloadFile={downloadFile}
-      revealInitialFile
       rendererOrigin={payload.rendererOrigin}
       resolution={payload.resolution}
       {...(review === undefined
@@ -310,6 +309,10 @@ function FolderArtifact({
 
 export function ViewerPage() {
   const payload = useLoaderData() as PublicSharePayload;
+  const artifactTitle =
+    payload.resolution.revision.publisherMetadata?.title?.trim() ||
+    payload.resolution.revision.title?.trim() ||
+    payload.resolution.artifact.name;
   const location = useLocation();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -391,10 +394,13 @@ export function ViewerPage() {
     handleRevisionMismatch,
   );
   const [discussionOpen, setDiscussionOpen] = useState(() => {
-    return readViewerSidebarOpen(payload.resolution);
+    return review.enabled && new URLSearchParams(location.search).has('thread')
+      ? true
+      : readViewerSidebarOpen(payload.resolution);
   });
   const [folderMode, setFolderMode] = useState<ReviewSidebarMode>(() => {
-    return readReviewValue(`${reviewPanelStorageKey(payload.resolution)}:mode`) === 'discussion'
+    return (review.enabled && new URLSearchParams(location.search).has('thread')) ||
+      readReviewValue(`${reviewPanelStorageKey(payload.resolution)}:mode`) === 'discussion'
       ? 'discussion'
       : 'tree';
   });
@@ -446,17 +452,18 @@ export function ViewerPage() {
   };
 
   useEffect(() => {
-    document.title = `${payload.resolution.artifact.name} · shelf`;
+    document.title = `${artifactTitle} · shelf`;
     return () => {
       document.title = 'shelf';
     };
-  }, [payload.resolution.artifact.name]);
+  }, [artifactTitle]);
 
   return (
     <ViewerControls
       key={payload.resolution.shareId}
-      title={payload.resolution.artifact.name}
-      reveal={review.enabled && new URLSearchParams(location.search).has('thread')}
+      title={artifactTitle}
+      metadata={payload.resolution.revision.publisherMetadata}
+      revision={payload.resolution.revision}
       actions={
         <ViewerRail
           authority={payload.authority}
@@ -468,10 +475,17 @@ export function ViewerPage() {
         />
       }
     >
+      {payload.kind === 'file' && review.enabled ? (
+        <ViewerSidebarLauncher
+          controlsId="viewer-discussion-sidebar"
+          discussion
+          open={discussionOpen}
+          onToggle={() => setDiscussionVisibility(!discussionOpen)}
+        />
+      ) : null}
       <main aria-busy={revisionLoading} className="viewer-main">
-        {revisionLoading ? (
-          <ViewerRevisionLoadingState />
-        ) : payload.kind === 'file' ? (
+        {revisionLoading ? <ViewerRevisionLoadingState /> : null}
+        {payload.kind === 'file' ? (
           review.enabled ? (
             <ViewerSidebarSplit
               content={
@@ -510,6 +524,7 @@ export function ViewerPage() {
                       ? { revisionId: payload.resolution.revision.revisionId, kind: 'file' }
                       : undefined
                   }
+                  onClose={() => setDiscussionVisibility(false)}
                   onLoadOlder={review.loadOlder}
                   onCreateThread={review.createThread}
                   onDeletePost={review.deletePost}

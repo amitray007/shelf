@@ -69,6 +69,12 @@ function publicResolution(
 ): PublicShareResolution {
   const { share, artifact, revision: scopedRevision } = value;
   const revision: StoredArtifactRevision = scopedRevision.revision;
+  const title = revision.publisherMetadata.title?.trim();
+  const publisherMetadata = revision.publisherMetadata;
+  const publishedMetadata =
+    Object.keys(publisherMetadata).length === 0
+      ? {}
+      : { publisherMetadata: { ...publisherMetadata } };
   const target =
     share.target.mode === 'pinned'
       ? { mode: 'pinned' as const, revisionId: share.target.revisionId }
@@ -108,6 +114,8 @@ function publicResolution(
       ...(share.accessType === 'public' ? { publicCode: access.publicCode } : {}),
       artifact: { ...common.artifact, kind: 'folder' },
       revision: {
+        ...publishedMetadata,
+        ...(title ? { title } : {}),
         kind: 'folder',
         revisionId: revision.revisionId,
         revisionNumber: revision.revisionNumber,
@@ -124,6 +132,8 @@ function publicResolution(
     ...(share.accessType === 'public' ? { publicCode: access.publicCode } : {}),
     artifact: { ...common.artifact, kind: 'file' },
     revision: {
+      ...publishedMetadata,
+      ...(title ? { title } : {}),
       kind: 'file',
       revisionId: revision.revisionId,
       revisionNumber: revision.revisionNumber,
