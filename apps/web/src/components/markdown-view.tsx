@@ -1,7 +1,9 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: Scrollable code blocks and tables must be keyboard reachable.
 import { type ComponentPropsWithoutRef, isValidElement, type ReactNode } from 'react';
 import ReactMarkdown, { type ExtraProps, type UrlTransform } from 'react-markdown';
+import remarkFrontmatter from 'remark-frontmatter';
 import remarkGfm from 'remark-gfm';
+import { MarkdownFrontMatter } from './markdown-front-matter.js';
 
 import './markdown-view.css';
 
@@ -77,17 +79,41 @@ function codeBlockLanguage(children: ReactNode): string | null {
   return match?.[1] ?? null;
 }
 
+function frontMatterNode(format: string, value: string) {
+  return {
+    type: 'element' as const,
+    tagName: 'div',
+    properties: { dataFrontmatter: format },
+    children: [{ type: 'text' as const, value }],
+  };
+}
+
+const frontMatterHandlers = {
+  yaml: (_state: unknown, node: { value: string }) => frontMatterNode('yaml', node.value),
+  toml: (_state: unknown, node: { value: string }) => frontMatterNode('toml', node.value),
+};
+
+function MarkdownBlock({ children, node, ...props }: ComponentPropsWithoutRef<'div'> & ExtraProps) {
+  const format = node?.properties.dataFrontmatter;
+  if ((format === 'yaml' || format === 'toml') && typeof children === 'string') {
+    return <MarkdownFrontMatter source={children} format={format} />;
+  }
+  return <div {...props}>{children}</div>;
+}
+
 export function MarkdownView({ source }: { readonly source: string }) {
   return (
     <div className="markdown-body">
       <ReactMarkdown
         components={{
           a: SafeAnchor,
+          div: MarkdownBlock,
           img: ImageDescription,
           pre: ScrollableCodeBlock,
           table: ScrollableTable,
         }}
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, [remarkFrontmatter, ['yaml', 'toml']]]}
+        remarkRehypeOptions={{ handlers: frontMatterHandlers }}
         skipHtml={true}
         urlTransform={linkTransform}
       >

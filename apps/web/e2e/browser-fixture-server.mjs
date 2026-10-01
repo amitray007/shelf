@@ -56,6 +56,13 @@ const filesByRevisionId = new Map(
   ),
 );
 const markdownFixture = [
+  '---',
+  'title: Markdown fixture metadata',
+  'status: proposed',
+  'submodules:',
+  '  - backend',
+  '---',
+  '',
   '# One useful idea',
   '',
   '**Date:** 2026-09-05',
