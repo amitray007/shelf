@@ -105,7 +105,7 @@ describe('workbook adapter and grid contracts', () => {
 
     expect(html).toContain('data-preview-kind="workbook"');
     expect(html).toContain('Loading workbook');
-    expect(html).toContain('Values and formulas are displayed as inert text');
+    expect(html).not.toContain('workbook-preview-help');
     expect(html).not.toContain('token');
     expect(html).not.toContain('capability');
   });
