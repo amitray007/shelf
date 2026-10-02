@@ -173,7 +173,7 @@ export function FolderBrowser({
   const landingPath = ['index.html', 'index.htm', 'README.md', 'readme.md'].find((path) =>
     filePaths.has(path),
   );
-  const defaultPath = controls === undefined ? firstFile?.path : landingPath;
+  const defaultPath = controls === undefined ? firstFile?.path : (landingPath ?? firstFile?.path);
   const filePathsRef = useRef(filePaths);
   filePathsRef.current = filePaths;
   const focusRequestId = review?.focusRequestId;

@@ -52,7 +52,11 @@ export function readViewerSidebarOpen(
   const persisted = readReviewValue(reviewPanelStorageKey(resolution));
   if (persisted === 'open') return true;
   if (persisted === 'closed') return false;
-  return false;
+  return (
+    resolution.artifact.kind === 'folder' &&
+    typeof window !== 'undefined' &&
+    window.innerWidth > 640
+  );
 }
 
 function FileArtifact({

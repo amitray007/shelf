@@ -1,3 +1,4 @@
+import { inlineFolderAssetSources } from '../dist/folder-assets.js';
 import { createRendererServer } from '../dist/server.js';
 
 const shareId = `shr_${'d'.repeat(22)}`;
@@ -45,6 +46,39 @@ const server = await createRendererServer({
   port: 43874,
   resolver: {
     async resolveHtml(request) {
+      if (
+        request.path === 'mockup.html' &&
+        ((request.accessType === 'public' && request.publicCode === 'CssFolder123') ||
+          (request.accessType === 'protected' &&
+            request.shareId === `shr_${'f'.repeat(22)}` &&
+            request.viewerToken === viewerToken))
+      ) {
+        const css = Buffer.from(
+          ':root { color-scheme: light dark; --ink: light-dark(#2456d6, #7ea2ff); } body { color: var(--ink); background: light-dark(#fbfbfa, #0e0e0f); font: 15px system-ui; } .layout { display: grid; grid-template-columns: 100px 200px; gap: 16px; }',
+        );
+        return {
+          status: 'available',
+          html: await inlineFolderAssetSources({
+            html: '<!doctype html><html><head><link rel="stylesheet" href="theme.css"><link rel="stylesheet" href="https://styles-canary.invalid/leak.css"><style>h1 { font-size: 24px; }</style></head><body><h1>Styled folder mockup</h1><div class="layout"><span>Account</span><span>Quota</span></div></body></html>',
+            htmlPath: request.path,
+            appOrigin: 'http://127.0.0.1:43873',
+            maximumOutputBytes: 8192,
+            async readAsset(path) {
+              return path === 'theme.css'
+                ? {
+                    mediaType: 'text/css',
+                    byteCount: css.length,
+                    async read() {
+                      return (async function* () {
+                        yield css;
+                      })();
+                    },
+                  }
+                : undefined;
+            },
+          }),
+        };
+      }
       return request.accessType === 'protected' &&
         request.shareId === shareId &&
         request.viewerToken === viewerToken

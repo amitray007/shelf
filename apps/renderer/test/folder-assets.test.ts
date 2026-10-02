@@ -20,6 +20,74 @@ function imageAsset() {
 }
 
 describe('folder HTML asset embedding', () => {
+  it('embeds local stylesheets once while preserving cascade, media, and authored CSS bytes', async () => {
+    const css = 'body { color: #2456d6; } /* </style><script>not markup</script> */';
+    const bytes = new TextEncoder().encode(css);
+    const read = vi.fn(async () =>
+      (async function* () {
+        yield bytes;
+      })(),
+    );
+    const readAsset = vi.fn(async () => ({
+      mediaType: 'text/css; charset=utf-8',
+      byteCount: bytes.length,
+      read,
+    }));
+    const html = await inlineFolderAssetSources({
+      html: '<!doctype html><link rel="stylesheet" href="../theme.css"><style>body { margin: 0; }</style><link rel="alternate stylesheet" title="Print" media="print" href="../theme.css">',
+      htmlPath: 'pages/mockup.html',
+      appOrigin,
+      maximumOutputBytes: 8192,
+      readAsset,
+    });
+
+    expect(readAsset).toHaveBeenCalledExactlyOnceWith('theme.css');
+    expect(read).toHaveBeenCalledOnce();
+    expect(html.match(/data-shelf-embedded-href="0"/gu)).toHaveLength(2);
+    expect(html).toContain(Buffer.from(bytes).toString('base64'));
+    expect(html).not.toContain('<script>not markup</script>');
+    expect(html).toContain('rel="alternate stylesheet" title="Print" media="print"');
+    expect(html.indexOf('rel="stylesheet"')).toBeLessThan(html.indexOf('<style>body'));
+    expect(html.indexOf('<style>body')).toBeLessThan(html.indexOf('rel="alternate stylesheet"'));
+  });
+
+  it('leaves external, missing, and non-CSS stylesheet references blocked', async () => {
+    const readAsset = vi.fn(async (path: string) =>
+      path === 'missing.css' ? undefined : imageAsset(),
+    );
+    const source =
+      '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist"><link rel="stylesheet" href="missing.css"><link rel="stylesheet" href="image.png"><link rel="preload" href="unused.css">';
+    const html = await inlineFolderAssetSources({
+      html: source,
+      htmlPath: 'index.html',
+      appOrigin,
+      maximumOutputBytes: 8192,
+      readAsset,
+    });
+    expect(html).toBe(source);
+    expect(readAsset.mock.calls.map(([path]) => path)).toEqual(['missing.css', 'image.png']);
+  });
+
+  it('does not read stylesheets beyond the output budget or embed truncated bytes', async () => {
+    const read = vi.fn(async () =>
+      (async function* () {
+        yield new Uint8Array([1]);
+      })(),
+    );
+    const asset = { mediaType: 'text/css', byteCount: 100, read };
+    const source = '<link rel="stylesheet" href="theme.css">';
+    const options = {
+      html: source,
+      htmlPath: 'index.html',
+      appOrigin,
+      readAsset: async () => asset,
+    };
+    expect(await inlineFolderAssetSources({ ...options, maximumOutputBytes: 50 })).toBe(source);
+    expect(read).not.toHaveBeenCalled();
+    expect(await inlineFolderAssetSources({ ...options, maximumOutputBytes: 8192 })).toBe(source);
+    expect(read).toHaveBeenCalledOnce();
+  });
+
   it('embeds repeated exact Public image URLs from the same revision with one content read', async () => {
     const source = `${appOrigin}/api/v1/public/links/${publicCode}/tree/content/preview?path=images%2Flogo.png`;
     const readAsset = vi.fn(async () => imageAsset());
