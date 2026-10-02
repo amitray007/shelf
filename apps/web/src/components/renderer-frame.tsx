@@ -177,6 +177,7 @@ function RendererDocument({ renderer, resolution, authority, path, theme }: Rend
       )}
       <iframe
         allow=""
+        aria-hidden={status !== 'ready'}
         className="renderer-frame"
         data-preview-theme={theme}
         name={frameNameRef.current}
@@ -187,6 +188,7 @@ function RendererDocument({ renderer, resolution, authority, path, theme }: Rend
         sandbox="allow-scripts"
         src="about:blank"
         style={{ colorScheme: theme }}
+        tabIndex={status === 'ready' ? undefined : -1}
         title={`${path ?? resolution.artifact.name} isolated preview`}
       />
     </div>

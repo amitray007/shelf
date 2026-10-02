@@ -2288,7 +2288,8 @@ a {
 
 .renderer-stage[data-status="loading"] .renderer-frame,
 .renderer-stage[data-status="unavailable"] .renderer-frame {
-  visibility: hidden;
+  /* Loading with visibility:hidden leaves WebKit's iframe scroller disabled. */
+  opacity: 0;
 }
 
 .renderer-stage[data-status="ready"] .renderer-frame {
