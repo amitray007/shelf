@@ -141,6 +141,9 @@ describe('isolated HTML renderer', () => {
     expect(response.headers['content-security-policy']).toContain(
       "script-src 'unsafe-inline' data:",
     );
+    expect(response.headers['content-security-policy']).toContain(
+      "style-src 'unsafe-inline' blob:",
+    );
     expect(response.headers['permissions-policy']).not.toContain('ambient-light-sensor');
     expect(response.headers['content-security-policy']).not.toContain('navigate-to');
     expect(response.headers['content-security-policy']).toContain("form-action 'none'");

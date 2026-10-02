@@ -5,6 +5,7 @@ import {
   commentThreads,
   folderShareId,
   htmlShareId,
+  longFolderPath,
   markdownShareId,
   pdfShareId,
   publicPdfCode,
@@ -48,9 +49,11 @@ for (const [kind, shareId] of [
     };
     await expectFluidWidth();
     if (kind === 'folder') {
-      await page.getByRole('button', { name: 'Open files sidebar' }).click();
-      await expectFluidWidth();
+      const open = page.getByRole('button', { name: 'Open files sidebar' });
+      if (await open.isVisible()) await open.click();
       await page.getByRole('button', { name: 'Close files sidebar', exact: true }).click();
+      await expectFluidWidth();
+      await page.getByRole('button', { name: 'Open files sidebar' }).click();
       await expectFluidWidth();
     }
   });
@@ -219,9 +222,7 @@ test('private preview starts with its floating details panel closed after reload
   await expect(page.getByRole('dialog', { name: 'Artifact details' })).toBeHidden();
 });
 
-test('a folder without a landing file opens its listing with a separate files launcher', async ({
-  page,
-}) => {
+test('a folder without a landing file opens its first file', async ({ page }) => {
   await page.route(`**/api/v1/public/shares/${folderShareId}/tree`, async (route) => {
     const response = await route.fetch();
     const payload = await response.json();
@@ -233,33 +234,42 @@ test('a folder without a landing file opens its listing with a separate files la
   });
 
   await page.goto(`/s/${folderShareId}#${shareSecret}`);
-  await expect(page.getByRole('region', { name: 'Folder files' })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 1, name: 'Files' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'release-output/checksums.txt' })).toBeVisible();
-
-  const closeFiles = page.getByRole('button', { name: 'Close files sidebar', exact: true });
-  if (await closeFiles.isVisible()) await closeFiles.click();
-
-  await page.getByRole('button', { name: 'release-output/checksums.txt' }).click();
   await expect(page.getByRole('region', { name: 'Folder files' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Open files sidebar' })).toBeVisible();
+  await expect(page.locator('.file-view-meta strong')).toHaveText(longFolderPath);
 });
 
-test('folder navigation starts closed and is independent from details', async ({ page }) => {
+test('folder navigation opens on desktop and restores an explicit close', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`/s/${folderShareId}#${shareSecret}`);
   const sidebar = page.getByTestId('viewer-sidebar');
-  await expect(sidebar.locator('.viewer-sidebar-preserved')).toBeHidden();
-  await page.getByRole('button', { name: 'Open files sidebar' }).click();
   await expect(sidebar.locator('.viewer-sidebar-preserved')).toBeVisible();
   await page.getByRole('button', { name: 'Close files sidebar', exact: true }).click();
   await expect(sidebar.locator('.viewer-sidebar-preserved')).toBeHidden();
+  await page.reload();
+  await expect(sidebar.locator('.viewer-sidebar-preserved')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Open files sidebar' })).toBeVisible();
   await page.getByRole('button', { name: 'Open artifact details' }).click();
   await expect(sidebar.locator('.viewer-sidebar-preserved')).toBeHidden();
+});
+
+test('an empty folder keeps its preview and Files launcher on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route(`**/api/v1/public/shares/${folderShareId}/tree`, async (route) => {
+    const response = await route.fetch();
+    const payload = await response.json();
+    await route.fulfill({ response, json: { ...payload, items: [] } });
+  });
+
+  await page.goto(`/s/${folderShareId}#${shareSecret}`);
+  await expect(page.getByRole('region', { name: 'Folder files' })).toBeVisible();
+  await expect(page.getByText('This folder is empty.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open files sidebar' })).toBeVisible();
 });
 
 test('folder discussion stays open and preserves a reply while details changes', async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.route(`**/api/v1/public/shares/${folderShareId}/resolve`, async (route) => {
     const response = await route.fetch();
     await route.fulfill({
@@ -271,7 +281,10 @@ test('folder discussion stays open and preserves a reply while details changes',
     await route.fulfill({ json: { items: commentThreads, nextCursor: null } });
   });
   await page.goto(`/s/${folderShareId}#${shareSecret}`);
-  await page.getByRole('button', { name: 'Open discussion' }).click();
+  const discussionTab = page.getByRole('tab', { name: 'Show discussion', exact: true });
+  await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
+  if (await discussionTab.isVisible()) await discussionTab.click();
+  else await page.getByRole('button', { name: 'Open discussion' }).click();
   await page.getByRole('button', { name: 'Discussion started by Ada' }).click();
   const reply = page.getByRole('textbox', { name: 'Reply to this discussion…' });
   await reply.fill('Keep reviewing while details is open.');

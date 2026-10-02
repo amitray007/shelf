@@ -65,7 +65,7 @@ export function artifactContentSecurityPolicy(appOrigin: string): string {
   return [
     ...commonPolicy(appOrigin),
     "script-src 'unsafe-inline' data:",
-    "style-src 'unsafe-inline'",
+    "style-src 'unsafe-inline' blob:",
     'img-src data: blob:',
     'font-src data:',
     'media-src data: blob:',

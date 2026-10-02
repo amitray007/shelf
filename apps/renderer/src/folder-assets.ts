@@ -34,9 +34,11 @@ const VIDEO_MEDIA_TYPES = new Set([
   'video/x-m4v',
 ]);
 const TRACK_MEDIA_TYPES = new Set(['text/vtt']);
-const ASSET_SOURCE_GATE = /<(?:audio|img|source|track|video)\b/iu;
+const STYLESHEET_MEDIA_TYPES = new Set(['text/css']);
+const ASSET_SOURCE_GATE = /<(?:audio|img|link|source|track|video)\b/iu;
 const ABSOLUTE_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/u;
 const EMBEDDED_ATTRIBUTES = {
+  href: 'data-shelf-embedded-href',
   poster: 'data-shelf-embedded-poster',
   src: 'data-shelf-embedded-src',
 } as const;
@@ -126,6 +128,15 @@ function assetReferences(
     if ('tagName' in node) {
       if (node.tagName === 'img') {
         addReference(node, 'src', RASTER_MEDIA_TYPES);
+      } else if (
+        node.tagName === 'link' &&
+        node.attrs
+          .find((attribute) => attribute.name === 'rel')
+          ?.value.toLowerCase()
+          .split(/\s+/u)
+          .includes('stylesheet')
+      ) {
+        addReference(node, 'href', STYLESHEET_MEDIA_TYPES);
       } else if (node.tagName === 'video') {
         addReference(node, 'poster', RASTER_MEDIA_TYPES);
         addReference(node, 'src', VIDEO_MEDIA_TYPES);

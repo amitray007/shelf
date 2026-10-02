@@ -967,6 +967,9 @@ test('a protected folder share moves between revisions with its sidebar closed',
   const diagnostics = trackPageErrors(page);
 
   await page.goto(`/s/${folderShareId}#${shareSecret}`);
+  await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
+  const closeFiles = page.getByRole('button', { name: 'Close files sidebar', exact: true });
+  if (await closeFiles.isVisible()) await closeFiles.click();
   await expect(page).toHaveURL(`/s/${folderShareId}`);
   await revealViewerControls(page);
   await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();

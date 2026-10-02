@@ -229,19 +229,25 @@ describe('viewer content states', () => {
 
   it('resolves public sidebar defaults and explicit state per share revision', () => {
     const storage = reviewTestStorage();
-    vi.stubGlobal('window', { localStorage: storage });
+    vi.stubGlobal('window', { localStorage: storage, innerWidth: 1280 });
     const folderResolution = {
       ...FOLDER_RESOLUTION,
       shareId: `shr_${'f'.repeat(22)}`,
       revision: { ...FOLDER_RESOLUTION.revision, revisionId: `rev_${'g'.repeat(22)}` },
     };
     expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(false);
-    expect(readViewerSidebarOpen(folderResolution)).toBe(false);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
 
     storage.setItem(reviewPanelStorageKey(FILE_RESOLUTION), 'malformed');
     storage.setItem(reviewPanelStorageKey(folderResolution), 'malformed');
     expect(readViewerSidebarOpen(FILE_RESOLUTION)).toBe(false);
+    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
+
+    vi.stubGlobal('window', { localStorage: storage, innerWidth: 390 });
     expect(readViewerSidebarOpen(folderResolution)).toBe(false);
+    storage.setItem(reviewPanelStorageKey(folderResolution), 'open');
+    expect(readViewerSidebarOpen(folderResolution)).toBe(true);
+    vi.stubGlobal('window', { localStorage: storage, innerWidth: 1280 });
 
     storage.setItem(reviewPanelStorageKey(FILE_RESOLUTION), 'open');
     storage.setItem(reviewPanelStorageKey(folderResolution), 'closed');
