@@ -1068,11 +1068,23 @@ a {
   background: var(--canvas);
 }
 
+/* Avoid WebKit retaining an inflated intrinsic grid height after the sidebar reopens. */
 .review-composer-docked {
+  display: flex;
+  flex-direction: column;
   margin: 0;
 }
 
+.review-composer-docked .review-composer-input {
+  display: flex;
+}
+
+.review-composer-docked .review-composer-input > :not(textarea) {
+  flex-shrink: 0;
+}
+
 .review-composer-docked textarea {
+  flex: 1;
   min-height: 36px;
   max-height: 140px;
   padding: 8px 2px;
