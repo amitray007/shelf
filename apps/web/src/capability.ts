@@ -70,27 +70,33 @@ export function protectedViewerTokenStorageKey(shareId: string): string {
   return `shelf:protected-viewer-token:${shareId}`;
 }
 
+// The session ID and viewer token persist per browser, so a reopened tab keeps its access. The
+// link secret itself stays tab-scoped and is discarded once the server issues a token.
+export function protectedSessionStorage(): Storage {
+  return window.localStorage;
+}
+
 export function readOrCreateProtectedSessionId(
   shareId: string,
-  sessionStorage: Storage,
+  storage: Storage,
   randomUUID: () => string = () => crypto.randomUUID(),
 ): string | null {
   if (!isShareId(shareId)) return null;
   try {
-    const existing = sessionStorage.getItem(protectedSessionIdStorageKey(shareId));
+    const existing = storage.getItem(protectedSessionIdStorageKey(shareId));
     if (existing !== null && isProtectedSessionId(existing)) return existing;
     const created = randomUUID();
     if (!isProtectedSessionId(created)) return null;
-    sessionStorage.setItem(protectedSessionIdStorageKey(shareId), created);
+    storage.setItem(protectedSessionIdStorageKey(shareId), created);
     return created;
   } catch {
     return null;
   }
 }
 
-export function readProtectedViewerToken(shareId: string, sessionStorage: Storage): string | null {
+export function readProtectedViewerToken(shareId: string, storage: Storage): string | null {
   try {
-    const token = sessionStorage.getItem(protectedViewerTokenStorageKey(shareId));
+    const token = storage.getItem(protectedViewerTokenStorageKey(shareId));
     return token !== null && token.length >= 24 && token.length <= 4096 ? token : null;
   } catch {
     return null;
@@ -98,15 +104,31 @@ export function readProtectedViewerToken(shareId: string, sessionStorage: Storag
 }
 
 export function saveProtectedSessionAuthority(
-  sessionStorage: Storage,
+  storage: Storage,
   authority: ProtectedSessionAuthority,
 ): void {
   try {
-    sessionStorage.setItem(protectedSessionIdStorageKey(authority.shareId), authority.sessionId);
-    sessionStorage.setItem(protectedViewerTokenStorageKey(authority.shareId), authority.token);
-    sessionStorage.removeItem(capabilityStorageKey(authority.shareId));
+    storage.setItem(protectedSessionIdStorageKey(authority.shareId), authority.sessionId);
+    storage.setItem(protectedViewerTokenStorageKey(authority.shareId), authority.token);
   } catch {
     // A viewer can still use the returned authority for this navigation.
+  }
+}
+
+export function forgetProtectedSessionAuthority(shareId: string, storage: Storage): void {
+  try {
+    storage.removeItem(protectedSessionIdStorageKey(shareId));
+    storage.removeItem(protectedViewerTokenStorageKey(shareId));
+  } catch {
+    // A rejected token still fails this navigation without writable storage.
+  }
+}
+
+export function forgetShareCapability(shareId: string, sessionStorage: Storage): void {
+  try {
+    sessionStorage.removeItem(capabilityStorageKey(shareId));
+  } catch {
+    // The capability is tab-scoped and expires with the tab.
   }
 }
 
@@ -125,13 +147,8 @@ export function captureShareCapability(input: CaptureShareCapabilityInput): stri
     );
 
     if (!isShareCapability(fragment)) {
-      try {
-        input.sessionStorage.removeItem(capabilityStorageKey(input.shareId));
-        input.sessionStorage.removeItem(protectedSessionIdStorageKey(input.shareId));
-        input.sessionStorage.removeItem(protectedViewerTokenStorageKey(input.shareId));
-      } catch {
-        // The malformed incoming capability still supersedes any older tab state.
-      }
+      // A malformed link never persists, but it does not erase this browser's existing access.
+      forgetShareCapability(input.shareId, input.sessionStorage);
       return null;
     }
 

@@ -45,12 +45,23 @@ describe('anonymous viewer architecture', () => {
   it('has no server-layer imports or capability-leaking browser APIs', async () => {
     const sourceRoot = path.resolve(import.meta.dirname, '../src');
     const persistencePath = path.join(sourceRoot, 'components/review/persistence.ts');
-    const source = await sourceText(sourceRoot, new Set([persistencePath]));
+    const capabilityPath = path.join(sourceRoot, 'capability.ts');
+    const source = await sourceText(sourceRoot, new Set([persistencePath, capabilityPath]));
     expect(source).not.toMatch(/@shelf\/(?:api|auth|core|postgres|storage)/);
     expect(source).not.toContain('localStorage');
     expect(source).not.toContain('srcDoc');
     expect(source).not.toContain('srcdoc');
     expect(source).not.toContain('console.');
+  });
+
+  it('keeps Protected link secrets out of durable browser storage', async () => {
+    const capability = await readFile(
+      path.resolve(import.meta.dirname, '../src/capability.ts'),
+      'utf8',
+    );
+    expect(capability.match(/localStorage/g)).toEqual(['localStorage']);
+    expect(capability).toContain('export function protectedSessionStorage(): Storage');
+    expect(capability).toMatch(/input\.sessionStorage\.setItem\(capabilityStorageKey/);
   });
 
   it('keeps review persistence narrowly scoped', async () => {

@@ -36,6 +36,7 @@ const REVISION_ID = `rev_${'c'.repeat(22)}`;
 const PUBLIC_CODE = 'AbCdEf0123_-';
 const TOKEN = `${'v'.repeat(24)}.${'s'.repeat(43)}`;
 const SESSION_ID = '123e4567-e89b-42d3-a456-426614174000';
+const NEW_SESSION_ID = '223e4567-e89b-42d3-a456-426614174000';
 
 function memoryStorage(): Storage {
   const values = new Map<string, string>();
@@ -881,13 +882,15 @@ describe('viewer content boundary', () => {
   });
 
   it('scrubs and establishes an old fragment link, then replaces capability storage with token authority', async () => {
-    const storage = memoryStorage();
-    storage.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+    const durable = memoryStorage();
+    const tab = memoryStorage();
+    durable.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
     const replaceState = vi.fn();
     vi.stubGlobal('window', {
       location: { hash: `#${SECRET}`, pathname: `/s/${SHARE_ID}`, search: '' },
       history: { state: null, replaceState },
-      sessionStorage: storage,
+      localStorage: durable,
+      sessionStorage: tab,
     });
     const resolution = {
       apiVersion: 'v1',
@@ -932,8 +935,8 @@ describe('viewer content boundary', () => {
       sessionId: SESSION_ID,
       secret: SECRET,
     });
-    expect(storage.getItem(capabilityStorageKey(SHARE_ID))).toBeNull();
-    expect(storage.getItem(protectedViewerTokenStorageKey(SHARE_ID))).toBe(TOKEN);
+    expect(tab.getItem(capabilityStorageKey(SHARE_ID))).toBeNull();
+    expect(durable.getItem(protectedViewerTokenStorageKey(SHARE_ID))).toBe(TOKEN);
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([
       `/api/v1/public/shares/${SHARE_ID}/sessions`,
       '/api/v1/public/config',
@@ -943,12 +946,13 @@ describe('viewer content boundary', () => {
   it.each(['', '#short'])(
     'identifies an incomplete protected link (%s) without a lookup',
     async (hash) => {
-      const storage = memoryStorage();
-      storage.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+      const durable = memoryStorage();
+      durable.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
       vi.stubGlobal('window', {
         location: { hash, pathname: `/s/${SHARE_ID}`, search: '' },
         history: { state: null, replaceState: vi.fn() },
-        sessionStorage: storage,
+        localStorage: durable,
+        sessionStorage: memoryStorage(),
       });
       const fetch = vi.fn<typeof globalThis.fetch>();
       vi.stubGlobal('fetch', fetch);
@@ -963,14 +967,16 @@ describe('viewer content boundary', () => {
     },
   );
 
-  it('renews the same stored session on refresh without replaying the capability', async () => {
-    const storage = memoryStorage();
-    storage.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
-    storage.setItem(protectedViewerTokenStorageKey(SHARE_ID), TOKEN);
+  it('renews the browser session in a new tab without replaying the capability', async () => {
+    const durable = memoryStorage();
+    const tab = memoryStorage();
+    durable.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+    durable.setItem(protectedViewerTokenStorageKey(SHARE_ID), TOKEN);
     vi.stubGlobal('window', {
       location: { hash: '', pathname: `/s/${SHARE_ID}`, search: '' },
       history: { state: null, replaceState: vi.fn() },
-      sessionStorage: storage,
+      localStorage: durable,
+      sessionStorage: tab,
     });
     const renewed = {
       apiVersion: 'v1',
@@ -1014,16 +1020,59 @@ describe('viewer content boundary', () => {
       sessionId: SESSION_ID,
       token: TOKEN,
     });
-    expect(storage.getItem(protectedViewerTokenStorageKey(SHARE_ID))).toBe(`${TOKEN}r`);
+    expect(durable.getItem(protectedViewerTokenStorageKey(SHARE_ID))).toBe(`${TOKEN}r`);
   });
 
-  it('retains a captured capability when initial establishment fails at the network boundary', async () => {
-    const storage = memoryStorage();
-    storage.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+  it('replaces a rejected stored token with the link opened in this tab', async () => {
+    const durable = memoryStorage();
+    const tab = memoryStorage();
+    durable.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+    durable.setItem(protectedViewerTokenStorageKey(SHARE_ID), TOKEN);
     vi.stubGlobal('window', {
       location: { hash: `#${SECRET}`, pathname: `/s/${SHARE_ID}`, search: '' },
       history: { state: null, replaceState: vi.fn() },
-      sessionStorage: storage,
+      localStorage: durable,
+      sessionStorage: tab,
+    });
+    vi.stubGlobal('crypto', { randomUUID: () => NEW_SESSION_ID });
+    const established = {
+      apiVersion: 'v1',
+      shareId: SHARE_ID,
+      sessionId: NEW_SESSION_ID,
+      token: `${TOKEN}n`,
+      issuedAt: '2026-08-20T00:00:00.000Z',
+      expiresAt: '2026-08-21T00:00:00.000Z',
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response('', { status: 404 }))
+      .mockResolvedValueOnce(Response.json(established))
+      .mockRejectedValue(new Error('stop after establishment'));
+    vi.stubGlobal('fetch', fetch);
+
+    await viewerLoader({
+      params: { shareRef: SHARE_ID },
+      request: new Request(`https://shelf.test/s/${SHARE_ID}`),
+    } as never).catch(() => undefined);
+
+    expect(JSON.parse(String(fetch.mock.calls[1]?.[1]?.body))).toEqual({
+      sessionId: NEW_SESSION_ID,
+      secret: SECRET,
+    });
+    expect(durable.getItem(protectedSessionIdStorageKey(SHARE_ID))).toBe(NEW_SESSION_ID);
+    expect(durable.getItem(protectedViewerTokenStorageKey(SHARE_ID))).toBe(`${TOKEN}n`);
+    expect(tab.getItem(capabilityStorageKey(SHARE_ID))).toBeNull();
+  });
+
+  it('retains a captured capability when initial establishment fails at the network boundary', async () => {
+    const durable = memoryStorage();
+    const tab = memoryStorage();
+    durable.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+    vi.stubGlobal('window', {
+      location: { hash: `#${SECRET}`, pathname: `/s/${SHARE_ID}`, search: '' },
+      history: { state: null, replaceState: vi.fn() },
+      localStorage: durable,
+      sessionStorage: tab,
     });
     vi.stubGlobal(
       'fetch',
@@ -1036,7 +1085,7 @@ describe('viewer content boundary', () => {
         request: new Request(`https://shelf.test/s/${SHARE_ID}`),
       } as never),
     ).rejects.toMatchObject({ failure: 'transient' });
-    expect(storage.getItem(capabilityStorageKey(SHARE_ID))).toBe(SECRET);
+    expect(tab.getItem(capabilityStorageKey(SHARE_ID))).toBe(SECRET);
   });
 
   it.each([
@@ -1050,12 +1099,14 @@ describe('viewer content boundary', () => {
       },
     ],
   ])('retains a captured capability after %s', async (_label, response) => {
-    const storage = memoryStorage();
-    storage.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+    const durable = memoryStorage();
+    const tab = memoryStorage();
+    durable.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
     vi.stubGlobal('window', {
       location: { hash: `#${SECRET}`, pathname: `/s/${SHARE_ID}`, search: '' },
       history: { state: null, replaceState: vi.fn() },
-      sessionStorage: storage,
+      localStorage: durable,
+      sessionStorage: tab,
     });
     vi.stubGlobal(
       'fetch',
@@ -1068,16 +1119,18 @@ describe('viewer content boundary', () => {
         request: new Request(`https://shelf.test/s/${SHARE_ID}`),
       } as never),
     ).rejects.toMatchObject({ failure: 'transient' });
-    expect(storage.getItem(capabilityStorageKey(SHARE_ID))).toBe(SECRET);
+    expect(tab.getItem(capabilityStorageKey(SHARE_ID))).toBe(SECRET);
   });
 
   it('removes a captured capability after a definitive establishment rejection', async () => {
-    const storage = memoryStorage();
-    storage.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
+    const durable = memoryStorage();
+    const tab = memoryStorage();
+    durable.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
     vi.stubGlobal('window', {
       location: { hash: `#${SECRET}`, pathname: `/s/${SHARE_ID}`, search: '' },
       history: { state: null, replaceState: vi.fn() },
-      sessionStorage: storage,
+      localStorage: durable,
+      sessionStorage: tab,
     });
     vi.stubGlobal(
       'fetch',
@@ -1090,6 +1143,6 @@ describe('viewer content boundary', () => {
         request: new Request(`https://shelf.test/s/${SHARE_ID}`),
       } as never),
     ).rejects.toMatchObject({ failure: 'terminal' });
-    expect(storage.getItem(capabilityStorageKey(SHARE_ID))).toBeNull();
+    expect(tab.getItem(capabilityStorageKey(SHARE_ID))).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   capabilityStorageKey,
   captureShareCapability,
+  forgetProtectedSessionAuthority,
   isPublicCode,
   isShareCapability,
   protectedSessionIdStorageKey,
@@ -70,8 +71,6 @@ describe('share capability capture', () => {
   it('scrubs a malformed fragment and never persists it', () => {
     const storage = memoryStorage();
     storage.setItem(capabilityStorageKey(SHARE_ID), SECRET);
-    storage.setItem(protectedSessionIdStorageKey(SHARE_ID), SESSION_ID);
-    storage.setItem(protectedViewerTokenStorageKey(SHARE_ID), 'viewer.token');
     const replaceState = vi.fn();
 
     expect(
@@ -106,9 +105,8 @@ describe('share capability capture', () => {
     expect(isPublicCode(PUBLIC_CODE)).toBe(true);
   });
 
-  it('creates one tab-scoped session id and replaces capability state with authority', () => {
+  it('creates one browser session id and stores the issued authority', () => {
     const storage = memoryStorage();
-    storage.setItem(capabilityStorageKey(SHARE_ID), SECRET);
     expect(readOrCreateProtectedSessionId(SHARE_ID, storage, () => SESSION_ID)).toBe(SESSION_ID);
     expect(readOrCreateProtectedSessionId(SHARE_ID, storage, () => 'unused')).toBe(SESSION_ID);
 
@@ -123,6 +121,8 @@ describe('share capability capture', () => {
 
     expect(storage.getItem(protectedSessionIdStorageKey(SHARE_ID))).toBe(SESSION_ID);
     expect(storage.getItem(protectedViewerTokenStorageKey(SHARE_ID))).toBe('token.value');
-    expect(storage.getItem(capabilityStorageKey(SHARE_ID))).toBeNull();
+
+    forgetProtectedSessionAuthority(SHARE_ID, storage);
+    expect(storage.length).toBe(0);
   });
 });

@@ -1,3 +1,4 @@
+import type { ProtectedSessionAuthority } from '@shelf/contracts';
 import type { LoaderFunctionArgs } from 'react-router';
 
 import {
@@ -13,9 +14,11 @@ import {
   viewerSharePreviewUrl,
 } from './api.js';
 import {
-  capabilityStorageKey,
   captureShareCapability,
+  forgetProtectedSessionAuthority,
+  forgetShareCapability,
   IncompleteShareLinkError,
+  protectedSessionStorage,
   readOrCreateProtectedSessionId,
   readProtectedViewerToken,
   saveProtectedSessionAuthority,
@@ -56,6 +59,57 @@ function preconnectRenderer(origin: string | undefined): void {
   document.head.append(link);
 }
 
+function isTerminalUnavailable(error: unknown): boolean {
+  return error instanceof PublicShareUnavailableError && error.failure === 'terminal';
+}
+
+// Renew this browser's stored session first. A rejected token falls back to a link secret
+// opened in this tab, so a fresh copy of the link always recovers access.
+async function establishProtectedAuthority(
+  shareId: string,
+  signal: AbortSignal,
+): Promise<ProtectedSessionAuthority> {
+  const durable = protectedSessionStorage();
+  const token = readProtectedViewerToken(shareId, durable);
+  let tokenRejection: unknown;
+  if (token !== null) {
+    const sessionId = readOrCreateProtectedSessionId(shareId, durable);
+    if (sessionId === null) throw new PublicShareUnavailableError();
+    try {
+      const renewed = await establishProtectedSession(shareId, sessionId, { token }, signal);
+      saveProtectedSessionAuthority(durable, renewed);
+      forgetShareCapability(shareId, window.sessionStorage);
+      return renewed;
+    } catch (error) {
+      if (!isTerminalUnavailable(error)) throw error;
+      forgetProtectedSessionAuthority(shareId, durable);
+      tokenRejection = error;
+    }
+  }
+
+  const secret = captureShareCapability({
+    shareId,
+    location: window.location,
+    history: window.history,
+    sessionStorage: window.sessionStorage,
+  });
+  if (secret === null) {
+    if (tokenRejection !== undefined) throw tokenRejection;
+    throw new IncompleteShareLinkError();
+  }
+  const sessionId = readOrCreateProtectedSessionId(shareId, durable);
+  if (sessionId === null) throw new PublicShareUnavailableError();
+  try {
+    const established = await establishProtectedSession(shareId, sessionId, { secret }, signal);
+    saveProtectedSessionAuthority(durable, established);
+    forgetShareCapability(shareId, window.sessionStorage);
+    return established;
+  } catch (error) {
+    if (isTerminalUnavailable(error)) forgetShareCapability(shareId, window.sessionStorage);
+    throw error;
+  }
+}
+
 export async function viewerLoader({
   params,
   request,
@@ -68,53 +122,19 @@ export async function viewerLoader({
   if (reference.accessType === 'public') {
     authority = { accessType: 'public', publicCode: reference.publicCode };
   } else {
-    const sessionId = readOrCreateProtectedSessionId(reference.shareId, window.sessionStorage);
-    if (sessionId === null) throw new PublicShareUnavailableError();
-    const token = readProtectedViewerToken(reference.shareId, window.sessionStorage);
-    const secret =
-      token === null
-        ? captureShareCapability({
-            shareId: reference.shareId,
-            location: window.location,
-            history: window.history,
-            sessionStorage: window.sessionStorage,
-          })
-        : null;
-    if (token === null && secret === null) throw new IncompleteShareLinkError();
-    try {
-      const established = await establishProtectedSession(
-        reference.shareId,
-        sessionId,
-        token === null ? { secret: secret as string } : { token },
-        request.signal,
-      );
-      saveProtectedSessionAuthority(window.sessionStorage, established);
-      authority = {
-        accessType: 'protected',
-        shareId: established.shareId,
-        sessionId: established.sessionId,
-        token: established.token,
-      };
-      if (
-        established.resolution !== undefined &&
-        (isFileShareResolution(established.resolution) ||
-          isFolderShareResolution(established.resolution))
-      ) {
-        initialResolution = established.resolution;
-      }
-    } catch (error) {
-      if (
-        token === null &&
-        error instanceof PublicShareUnavailableError &&
-        error.failure === 'terminal'
-      ) {
-        try {
-          window.sessionStorage.removeItem(capabilityStorageKey(reference.shareId));
-        } catch {
-          // Terminal failures use the same unavailable projection even without writable storage.
-        }
-      }
-      throw error;
+    const established = await establishProtectedAuthority(reference.shareId, request.signal);
+    authority = {
+      accessType: 'protected',
+      shareId: established.shareId,
+      sessionId: established.sessionId,
+      token: established.token,
+    };
+    if (
+      established.resolution !== undefined &&
+      (isFileShareResolution(established.resolution) ||
+        isFolderShareResolution(established.resolution))
+    ) {
+      initialResolution = established.resolution;
     }
   }
 
