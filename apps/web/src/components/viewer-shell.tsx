@@ -120,6 +120,23 @@ export function ViewerRevisionLoadingState() {
   );
 }
 
+export function ViewerUpdateNotification({
+  onRefresh,
+  refreshing,
+}: {
+  readonly onRefresh: () => void;
+  readonly refreshing: boolean;
+}) {
+  return (
+    <div className="viewer-update-notification">
+      <p role="status">A newer version is available</p>
+      <button disabled={refreshing} onClick={onRefresh} type="button">
+        {refreshing ? 'Refreshing…' : 'Refresh'}
+      </button>
+    </div>
+  );
+}
+
 export function ViewerRail({
   authority: _authority,
   resolution,

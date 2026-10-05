@@ -1,5 +1,5 @@
 import type { CommentAnchor, FolderEntry } from '@shelf/contracts';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   useLoaderData,
   useLocation,
@@ -29,7 +29,11 @@ import { readReviewValue, writeReviewValue } from './components/review/persisten
 import type { ReviewSidebarMode } from './components/review/types.js';
 import { reviewPanelStorageKey, useViewerReview } from './components/review/use-review.js';
 import { ViewerControls, ViewerSidebarLauncher } from './components/viewer-controls.js';
-import { ViewerRail, ViewerRevisionLoadingState } from './components/viewer-shell.js';
+import {
+  ViewerRail,
+  ViewerRevisionLoadingState,
+  ViewerUpdateNotification,
+} from './components/viewer-shell.js';
 import { ViewerSidebarSplit } from './components/viewer-sidebar-split.js';
 import {
   type FileShareResolution,
@@ -323,6 +327,7 @@ export function ViewerPage() {
   const { revalidate } = useRevalidator();
   const revisionLoading = navigation.state === 'loading';
   const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const updateCheck = useRef<AbortController | null>(null);
   const [latestAvailable, setLatestAvailable] = useState<ShareRevisionPointer | undefined>(() => {
     const latestRevision = shareLatestRevision(payload.resolution);
     return payload.resolution.revision.revisionId === latestRevision.revisionId
@@ -337,28 +342,39 @@ export function ViewerPage() {
         : latestRevision,
     );
   }, [payload.resolution]);
-  const checkForUpdates = useCallback(async () => {
-    if (checkingUpdates) return;
-    setCheckingUpdates(true);
-    const reference: ViewerShareReference =
-      payload.authority.accessType === 'protected'
-        ? { accessType: 'protected', shareId: payload.authority.shareId }
-        : { accessType: 'public', publicCode: payload.authority.publicCode };
-    try {
-      const current = await resolveViewerShare(reference, payload.authority);
-      const latestRevision = shareLatestRevision(current);
-      setLatestAvailable(
-        latestRevision.revisionId === payload.resolution.revision.revisionId
-          ? undefined
-          : latestRevision,
-      );
-    } catch {
-      // A failed background check must not replace content that is already open.
-    } finally {
-      setCheckingUpdates(false);
-    }
-  }, [checkingUpdates, payload.authority, payload.resolution.revision.revisionId]);
+  const checkForUpdates = useCallback(
+    async (manual = false) => {
+      if (payload.resolution.target.mode === 'pinned' && !manual) return;
+      if (manual) setCheckingUpdates(true);
+      if (updateCheck.current !== null) return;
+      const controller = new AbortController();
+      updateCheck.current = controller;
+      const reference: ViewerShareReference =
+        payload.authority.accessType === 'protected'
+          ? { accessType: 'protected', shareId: payload.authority.shareId }
+          : { accessType: 'public', publicCode: payload.authority.publicCode };
+      try {
+        const current = await resolveViewerShare(reference, payload.authority, controller.signal);
+        if (controller.signal.aborted) return;
+        const latestRevision = shareLatestRevision(current);
+        setLatestAvailable(
+          latestRevision.revisionId === payload.resolution.revision.revisionId
+            ? undefined
+            : latestRevision,
+        );
+      } catch {
+        // A failed background check must not replace content that is already open.
+      } finally {
+        if (updateCheck.current === controller) {
+          updateCheck.current = null;
+          setCheckingUpdates(false);
+        }
+      }
+    },
+    [payload.authority, payload.resolution],
+  );
   useEffect(() => {
+    setCheckingUpdates(false);
     const checkWhenVisible = () => {
       if (document.visibilityState === 'visible') void checkForUpdates();
     };
@@ -367,8 +383,14 @@ export function ViewerPage() {
     return () => {
       window.removeEventListener('focus', checkWhenVisible);
       document.removeEventListener('visibilitychange', checkWhenVisible);
+      updateCheck.current?.abort();
+      updateCheck.current = null;
     };
   }, [checkForUpdates]);
+  const hasNewUpdate =
+    payload.resolution.target.mode === 'latest' &&
+    latestAvailable !== undefined &&
+    latestAvailable.revisionId !== shareLatestRevision(payload.resolution).revisionId;
   const selectRevision = useCallback(
     (revisionId: string | null) => {
       const next = new URLSearchParams(location.search);
@@ -472,13 +494,19 @@ export function ViewerPage() {
         <ViewerRail
           authority={payload.authority}
           checkingUpdates={checkingUpdates}
-          onCheckUpdates={() => void checkForUpdates()}
+          onCheckUpdates={() => void checkForUpdates(true)}
           onRevisionSelect={selectRevision}
           resolution={payload.resolution}
-          {...(latestAvailable === undefined ? {} : { latestAvailable })}
+          {...(latestAvailable === undefined || hasNewUpdate ? {} : { latestAvailable })}
         />
       }
     >
+      {hasNewUpdate ? (
+        <ViewerUpdateNotification
+          refreshing={revisionLoading}
+          onRefresh={() => selectRevision(null)}
+        />
+      ) : null}
       {payload.kind === 'file' && review.enabled ? (
         <ViewerSidebarLauncher
           controlsId="viewer-discussion-sidebar"

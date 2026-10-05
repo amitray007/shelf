@@ -1398,6 +1398,56 @@ a {
   opacity: 0.6;
 }
 
+.viewer-update-notification {
+  position: fixed;
+  z-index: 20;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(80px + env(safe-area-inset-bottom));
+  display: flex;
+  width: min(380px, calc(100vw - 32px));
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  background: var(--elevated);
+  color: var(--text);
+  box-shadow: 0 4px 20px #0003;
+  font-size: var(--font-meta);
+}
+
+.viewer-update-notification p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.viewer-update-notification button {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--line);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.viewer-update-notification button:hover:not(:disabled) {
+  background: var(--rule-strong);
+}
+
+.viewer-update-notification button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.viewer-update-notification button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .viewer-revision-control:disabled {
   cursor: default;
   opacity: 0.35;
