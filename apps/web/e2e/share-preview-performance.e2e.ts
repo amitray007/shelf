@@ -118,7 +118,7 @@ test('a shared file opens before slow bytes and unrelated config finish', async 
   try {
     await page.goto(`/s/${markdownShareId}#${shareSecret}`);
     await expect(page.getByRole('button', { name: 'Open artifact details' })).toBeVisible();
-    await expect(page.getByText('Loading file…')).toBeVisible();
+    await expect(page.getByText('Opening artifact…')).toBeVisible();
     await resetLayoutShiftEntries(page);
     releaseContent();
     await expect(page.getByRole('region', { name: 'Artifact document preview' })).toContainText(
@@ -248,7 +248,7 @@ test('a shared folder opens before its first tree page finishes', async ({ page,
   try {
     await page.goto(`/s/${folderShareId}#${shareSecret}`);
     await expect(page.getByRole('region', { name: 'Folder browser' })).toBeVisible();
-    await expect(page.getByText('Loading files…').first()).toBeVisible();
+    await expect(page.getByText('Opening artifact…').first()).toBeVisible();
     await expect(page.getByText('This folder is empty.')).toHaveCount(0);
     await resetLayoutShiftEntries(page);
     releaseTree();

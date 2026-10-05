@@ -7,6 +7,7 @@ import {
   type FolderShareResolution,
   shareRevisionAccess,
 } from '../share-types.js';
+import { ArtifactLoadingState } from './boot-views.js';
 
 type HtmlRenderer = Extract<PassiveRenderer, { kind: 'html' }>;
 export type HtmlPreviewTheme = 'dark' | 'light';
@@ -169,12 +170,17 @@ function RendererDocument({ renderer, resolution, authority, path, theme }: Rend
 
   return (
     <div className="renderer-stage" data-status={status}>
-      {status !== 'ready' && (
-        <div className="renderer-status" role={status === 'unavailable' ? 'status' : undefined}>
-          <span className="status-mark" aria-hidden="true" />
-          <p>{status === 'loading' ? 'Opening isolated preview…' : 'Preview unavailable'}</p>
+      {status === 'loading' ? (
+        // Match the boot loader so a fresh load reads as one continuous step.
+        <div className="renderer-status">
+          <ArtifactLoadingState label="Opening artifact…" />
         </div>
-      )}
+      ) : status === 'unavailable' ? (
+        <div className="renderer-status" role="status">
+          <span className="status-mark" aria-hidden="true" />
+          <p>Preview unavailable</p>
+        </div>
+      ) : null}
       <iframe
         allow=""
         aria-hidden={status !== 'ready'}

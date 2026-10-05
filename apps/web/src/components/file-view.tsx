@@ -908,7 +908,7 @@ export function SourceView({
 }
 
 export function FileLoadingState() {
-  return <ArtifactLoadingState label="Loading file…" />;
+  return <ArtifactLoadingState label="Opening artifact…" />;
 }
 
 export function FileView({

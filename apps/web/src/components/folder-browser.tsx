@@ -477,7 +477,7 @@ export function FolderBrowser({
                   sidebarLabel="folder files sidebar"
                   preview={
                     entries.length === 0 && treeLoading ? (
-                      <ArtifactLoadingState label="Loading files…" />
+                      <ArtifactLoadingState label="Opening artifact…" />
                     ) : (
                       <section aria-label="Folder files" className="viewer-folder-listing">
                         <h1>Files</h1>

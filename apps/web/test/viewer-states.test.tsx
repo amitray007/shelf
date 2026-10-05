@@ -794,7 +794,7 @@ describe('viewer content states', () => {
       mediaType: 'application/typescript',
       text: '<script>unsafe</script>',
     });
-    expect(text).toContain('Loading file…');
+    expect(text).toContain('Opening artifact…');
     expect(text).not.toContain('<script>unsafe</script>');
     expect(text).not.toMatch(/class="source-view-content"[^>]*tabindex/u);
     expect(
@@ -816,7 +816,7 @@ describe('viewer content states', () => {
     expect(markdown).toContain('Source');
     // The markdown pipeline is lazy-loaded; a static render shows its
     // loading state where the rendered document will appear.
-    expect(markdown).toContain('Loading file…');
+    expect(markdown).toContain('Opening artifact…');
 
     const raster = renderContent({
       fileName: 'preview.png',
@@ -900,7 +900,7 @@ describe('viewer content states', () => {
       previewUrl: '/api/v1/revisions/rev_pdf/preview',
       text: undefined,
     });
-    expect(pdf).toContain('Loading file…');
+    expect(pdf).toContain('Opening artifact…');
     const audio = renderContent({
       fileName: 'recording.mp3',
       mediaType: 'audio/mpeg',
@@ -945,14 +945,14 @@ describe('viewer content states', () => {
     const html = renderToStaticMarkup(
       <FileView header={<span>35 B</span>} source="export const shelfFolderQa = true;" />,
     );
-    expect(html).toContain('Loading file…');
+    expect(html).toContain('Opening artifact…');
   });
 
   it('keeps preview-only loading content visible beneath its rendered header', () => {
     const html = renderToStaticMarkup(
       <FileView header={<span>35 B</span>} preview={<FileLoadingState />} />,
     );
-    expect(html).toContain('Loading file…');
+    expect(html).toContain('Opening artifact…');
     expect(html).toContain('artifact-loading-state');
     expect(html).not.toContain('file-loading-skeleton');
   });
