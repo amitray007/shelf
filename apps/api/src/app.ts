@@ -70,6 +70,7 @@ import { PublishMultipartOpenApiSchema, registerPublishRoute } from './routes/pu
 import { registerRevisionRoutes } from './routes/revisions.js';
 import { registerShareRoutes } from './routes/shares.js';
 import { createHmacShareSecurityCodecs, type ViewerSessionTokenCodec } from './share-capability.js';
+import { SHARE_READER_GUIDE } from './share-reader-guide.js';
 import { registerWebApp } from './web-app.js';
 
 declare module 'fastify' {
@@ -300,7 +301,7 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   await registerFolderRoutes(app, dependencies);
   await registerArtifactRoutes(app, dependencies);
   await registerRevisionRoutes(app, dependencies);
-  await registerShareRoutes(app, dependencies);
+  const shareReader = await registerShareRoutes(app, dependencies);
   await registerCommentRoutes(app, dependencies);
   if (options.dashboardAccess !== undefined) {
     registerDashboardRoutes(app, {
@@ -309,9 +310,26 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
     });
   }
   registerPublicConfigRoute(app, options.rendererPublicOrigin);
+  app.get('/llms.txt', { schema: { hide: true } }, async (_request, reply) => {
+    return reply
+      .header('Cache-Control', 'no-store')
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('X-Robots-Tag', 'noindex, nofollow, noarchive')
+      .header('Referrer-Policy', 'no-referrer')
+      .type('text/plain; charset=utf-8')
+      .send(SHARE_READER_GUIDE);
+  });
+  app.get('/api/v1/openapi.json', { schema: { hide: true } }, async (_request, reply) => {
+    return reply
+      .header('Cache-Control', 'no-store')
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('X-Robots-Tag', 'noindex, nofollow, noarchive')
+      .send(app.swagger());
+  });
   if (options.webRoot !== undefined) {
     await registerWebApp(app, {
       root: options.webRoot,
+      shareReader,
       ...(options.rendererPublicOrigin === undefined
         ? {}
         : { rendererOrigin: options.rendererPublicOrigin }),
