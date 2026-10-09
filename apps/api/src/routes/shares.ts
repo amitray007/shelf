@@ -25,6 +25,7 @@ import type { ShelfAppDependencies } from '../app.js';
 import { authenticate } from '../authenticate.js';
 import { contentDisposition, deliverContent } from '../content-delivery.js';
 import { requestCancellationSignal } from '../request-cancellation.js';
+import type { ShareDocumentReader } from '../share-documents.js';
 import { createAuthenticatedShareLifecycle } from '../share-lifecycle.js';
 
 const PUBLIC_API_PREFIX = '/api/v1/public/';
@@ -324,7 +325,7 @@ function readViewerSessionCookie(
 export async function registerShareRoutes(
   app: FastifyInstance,
   dependencies: ShelfAppDependencies,
-): Promise<void> {
+): Promise<ShareDocumentReader> {
   app.addContentTypeParser(
     'application/x-www-form-urlencoded',
     { parseAs: 'string', bodyLimit: 4_096 },
@@ -1102,4 +1103,5 @@ export async function registerShareRoutes(
       );
     },
   );
+  return { resolve: resolution, access };
 }

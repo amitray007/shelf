@@ -66,6 +66,27 @@ Folder snapshots keep their separate bounds: 10 MiB per file and 100 MiB total p
 - The shared viewer shows Previous, Next, and Latest controls for a shared-history link. It also checks for a newer revision when the tab becomes active, or when the viewer selects **Check updates**.
 - Prepared default links do not keep an artifact active. Any non-default custom link keeps it active until it is revoked, expires, or exhausts its protected-session budget.
 
+## Read shares with an agent
+
+An agent can read an active share through HTTP without a browser or workspace credential.
+Share responses advertise their metadata and read guide in HTTP `Link` headers and HTML links.
+The guide is served at `/llms.txt`. The API schema is served at `/api/v1/openapi.json`.
+
+For a Public link, request the same URL with `Accept: application/json` for metadata,
+`Accept: text/markdown` for Markdown source or a file/folder description, or
+`Accept: application/octet-stream` for the original source. Clients that cannot set headers can
+use `?format=json`, `?format=markdown`, or `?format=source`.
+For a folder, the Markdown response lists files and pages. Download one file with
+`?format=source&path=docs%2Fspec.md`. Source downloads support byte ranges and ETag validation.
+These representations are served by the production API with `SHELF_WEB_ROOT` configured.
+The Vite development server serves its own viewer shell; use the built API server for share URL reads.
+
+A Protected URL returns session instructions without artifact data. The agent extracts the URL
+fragment locally and exchanges it at the existing session API. It then reads metadata and source
+with the returned session token. Reuse the session ID across retries and renewals.
+The HTTP guide describes each request. The CLI continues to use workspace credentials.
+Expiry, revocation, session limits, and revision access apply to every content read.
+
 ## CLI usage
 
 The product CLI is named `shelf`. It talks only to the public `/api/v1` contract. `shelf-admin` is a separate host-local operator tool.

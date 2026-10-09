@@ -1,8 +1,9 @@
-import { lstat } from 'node:fs/promises';
+import { lstat, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import { registerShareDocuments, type ShareDocumentReader } from './share-documents.js';
 
 export interface WebAppOptions {
   readonly root: string;
@@ -12,6 +13,7 @@ export interface WebAppOptions {
    * in a dashboard. Empty keeps the default refusal.
    */
   readonly allowedFrameOrigins?: readonly string[];
+  readonly shareReader?: ShareDocumentReader;
 }
 
 function applyDocumentHeaders(
@@ -91,7 +93,17 @@ export async function registerWebApp(app: FastifyInstance, options: WebAppOption
     });
   }
 
-  for (const path of ['/', '/s/:shareId', '/signin', '/app', '/app/*', '/preview/:artifactId']) {
+  if (options.shareReader !== undefined) {
+    registerShareDocuments(
+      app,
+      options.shareReader,
+      await readFile(join(root, 'index.html'), 'utf8'),
+      (reply) => applyDocumentHeaders(reply, options.rendererOrigin, options.allowedFrameOrigins),
+    );
+  }
+  const paths = ['/', '/signin', '/app', '/app/*', '/preview/:artifactId'];
+  if (options.shareReader === undefined) paths.push('/s/:shareId');
+  for (const path of paths) {
     app.get(path, { schema: { hide: true } }, async (_request, reply) => {
       applyDocumentHeaders(reply, options.rendererOrigin, options.allowedFrameOrigins);
       return reply.sendFile('index.html', root, {
