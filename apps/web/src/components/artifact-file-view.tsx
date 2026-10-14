@@ -23,6 +23,7 @@ import { formatFileType } from './format.js';
 import { LazyMarkdownView as MarkdownView } from './lazy-views.js';
 import { extractMarkdownFrontMatter, MarkdownFrontMatter } from './markdown-front-matter.js';
 import { DelimitedTablePreview } from './preview/delimited-table-preview.js';
+import { ImagePreview } from './preview/image-preview.js';
 import { AudioPreview, VideoPreview } from './preview/media-preview.js';
 import { DocxPreview } from './preview/office-document-preview.js';
 import { StructuredDataPreview } from './preview/structured-data-preview.js';
@@ -100,11 +101,7 @@ function FileImage({
     },
     [previewUrl, source],
   );
-  return (
-    <div className="artifact-surface artifact-image">
-      {source === undefined ? null : <img alt={alt} referrerPolicy="no-referrer" src={source} />}
-    </div>
-  );
+  return source === undefined ? null : <ImagePreview alt={alt} key={source} src={source} />;
 }
 
 function FailedPreview() {
