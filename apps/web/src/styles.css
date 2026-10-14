@@ -1935,25 +1935,6 @@ a {
   padding: 20px 24px 64px;
 }
 
-.artifact-image {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-  overflow: hidden;
-  place-items: center;
-  padding: clamp(12px, 3vw, 36px);
-  background: var(--canvas);
-}
-
-.artifact-image img {
-  display: block;
-  min-width: 0;
-  min-height: 0;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-
 .file-view {
   display: flex;
   min-width: 0;

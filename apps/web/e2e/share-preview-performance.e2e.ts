@@ -287,7 +287,10 @@ async function selectImage(page: Page, name: string) {
   await openArtifactDetails(page);
   const toggle = page.getByRole('button', { name: 'Open files sidebar', exact: true });
   if (await toggle.isVisible()) await toggle.click();
-  await closeArtifactDetails(page);
+  // Opening Files closes Details automatically on narrow screens.
+  if (await page.getByRole('button', { name: 'Close artifact details', exact: true }).isVisible()) {
+    await closeArtifactDetails(page);
+  }
   await page.getByRole('treeitem', { name, exact: true }).click();
   if ((page.viewportSize()?.width ?? 1440) <= 640) {
     const collapse = page.getByRole('button', {
@@ -325,7 +328,7 @@ test('folder images reuse bytes and fit the available viewport with details open
     const fit = async () =>
       image.evaluate((element) => {
         const image = element as HTMLImageElement;
-        const surface = image.parentElement;
+        const surface = image.closest('.artifact-image');
         if (surface === null) throw new Error('Missing image surface');
         const bounds = image.getBoundingClientRect();
         const area = surface.getBoundingClientRect();
@@ -354,6 +357,17 @@ test('folder images reuse bytes and fit the available viewport with details open
       if (state === 0) await openArtifactDetails(page);
       else await closeArtifactDetails(page);
     }
+    await page.getByRole('button', { name: 'Zoom image in', exact: true }).click();
+    await expect(page.getByLabel('Image zoom', { exact: true })).toHaveText('100%');
+    await expect(page.getByRole('button', { name: 'Zoom image out to fit' })).toHaveCSS(
+      'cursor',
+      'zoom-out',
+    );
+    await page.getByRole('button', { name: 'Fit image', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Zoom image in', exact: true })).toHaveCSS(
+      'cursor',
+      'zoom-in',
+    );
   }
   expect(requests.get('portrait.png')).toBe(1);
   expect(requests.get('landscape.png')).toBe(1);
