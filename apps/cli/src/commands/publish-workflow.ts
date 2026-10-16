@@ -18,6 +18,7 @@ import {
   publishFile,
   setShareCommentPolicy,
 } from '../client.js';
+import { checkFolderSite, type FolderSiteWarning } from '../folder-site-check.js';
 import { mediaTypeForPath } from '../media-type.js';
 import {
   type JournalPublishResult,
@@ -55,6 +56,7 @@ export interface PublishWorkflowResult {
     readonly revision: string;
     readonly share: string | null;
   };
+  readonly warnings?: readonly FolderSiteWarning[];
 }
 
 export interface PublishWorkflowExecution {
@@ -135,6 +137,8 @@ export async function executePublishWorkflow(
     explicitIdempotencyKey: options.idempotencyKey ?? null,
     contentFingerprint,
   });
+  const siteWarnings = preparedFolder === undefined ? [] : await checkFolderSite(preparedFolder);
+  const warnings = siteWarnings.length === 0 ? {} : { warnings: siteWarnings };
   const journal = await openPublishOperation(runtime.env, fingerprint);
   const idempotencyKey = options.idempotencyKey ?? journal.record.publishIdempotencyKey;
   let publish: JournalPublishResult;
@@ -253,6 +257,7 @@ export async function executePublishWorkflow(
           publish,
           share: null,
           urls,
+          ...warnings,
           error: error.envelope.error,
         },
         error,
@@ -272,6 +277,7 @@ export async function executePublishWorkflow(
       revision: urls.revision,
       share: share === null ? null : new URL(share.url, origin).href,
     },
+    ...warnings,
   };
   return { output: result, finalize: journal.complete };
 }

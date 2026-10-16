@@ -260,6 +260,58 @@ describe('profile-backed shelf publish', () => {
     );
     const form = fetch.mock.calls[0]?.[1]?.body as FormData;
     expect([...form.keys()]).toEqual(['manifest', 'file']);
+    expect(JSON.parse(stdout[0] ?? '{}')).not.toHaveProperty('warnings');
+  });
+
+  it('adds advisory warnings for a folder with a root-relative reference without failing', async () => {
+    const { config, file } = await fixture();
+    const directory = join(file, '..', 'site');
+    await mkdir(directory);
+    await writeFile(
+      join(directory, 'index.html'),
+      '<script type="module" src="/assets/app.js"></script>',
+    );
+    const env = { SHELF_CONFIG_DIR: config, SHELF_WORK_TOKEN: 'work-secret' };
+    expect(
+      await runCli(
+        [
+          'node',
+          'shelf',
+          'profiles',
+          'set',
+          'work',
+          '--url',
+          'https://work.shelf.example',
+          '--workspace',
+          'personal',
+          '--credential-env',
+          'SHELF_WORK_TOKEN',
+        ],
+        { env, stdout() {}, stderr() {} },
+      ),
+    ).toBe(0);
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const fetch = vi.fn(async () => Response.json(folderPublishResult, { status: 201 }));
+
+    const exitCode = await runCli(
+      ['node', 'shelf', 'publish', directory, '--profile', 'work', '--user-bypass'],
+      { env, stdout: (chunk) => stdout.push(chunk), stderr: (chunk) => stderr.push(chunk), fetch },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+    expect(JSON.parse(stdout[0] ?? '{}')).toMatchObject({
+      status: 'complete',
+      warnings: [
+        {
+          code: 'ROOT_RELATIVE_REFERENCE',
+          path: 'index.html',
+          reference: '/assets/app.js',
+          message: expect.any(String),
+        },
+      ],
+    });
   });
 
   it('returns the requested expiring link after the server prepares publish defaults', async () => {

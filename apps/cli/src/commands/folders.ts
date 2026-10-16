@@ -20,6 +20,7 @@ import {
 } from '../client.js';
 import { resolveRemoteContext, resolveWorkspaceContext, transportFields } from '../context.js';
 import { downloadToPath } from '../download.js';
+import { checkFolderSite, type FolderSiteWarning } from '../folder-site-check.js';
 import { mediaTypeForPath } from '../media-type.js';
 import { usageFailure } from '../output.js';
 import type { CliRuntime } from '../runtime.js';
@@ -264,9 +265,10 @@ export async function executePublishFolder(
   options: PublishFolderCommandOptions,
   runtime: CliRuntime,
   dependencies?: Partial<ShelfClientDependencies>,
-): Promise<FolderPublishResult> {
+): Promise<FolderPublishResult & { readonly warnings?: readonly FolderSiteWarning[] }> {
   const context = await resolveWorkspaceContext(options, runtime);
-  return executePublishFolderWithToken(
+  const prepared = await prepareLocalFolder(options.directory);
+  const result = await executePublishFolderWithToken(
     {
       ...options,
       url: context.installationUrl,
@@ -278,7 +280,10 @@ export async function executePublishFolder(
     runtime,
     context.token,
     dependencies,
+    prepared,
   );
+  const warnings = await checkFolderSite(prepared);
+  return warnings.length === 0 ? result : { ...result, warnings };
 }
 
 export async function executePublishFolderWithToken(
