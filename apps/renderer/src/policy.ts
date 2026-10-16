@@ -71,3 +71,32 @@ export function artifactContentSecurityPolicy(appOrigin: string): string {
     'media-src data: blob:',
   ].join('; ');
 }
+
+/**
+ * Folder HTML may load sibling files, but only from its own revision-scoped folder session path.
+ * External origins, other folder sessions, and renderer routes outside that path stay blocked.
+ */
+export function folderDocumentContentSecurityPolicy(
+  appOrigin: string,
+  sessionSource: string,
+): string {
+  return [
+    "default-src 'none'",
+    `connect-src ${sessionSource}`,
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-src 'none'",
+    "worker-src 'none'",
+    `frame-ancestors ${appOrigin}`,
+    'sandbox allow-scripts',
+    `script-src 'unsafe-inline' data: ${sessionSource}`,
+    `style-src 'unsafe-inline' ${sessionSource}`,
+    `img-src data: blob: ${sessionSource}`,
+    `font-src data: ${sessionSource}`,
+    `media-src data: blob: ${sessionSource}`,
+  ].join('; ');
+}
+
+/** Sibling file bytes never run as a document, even when opened directly. */
+export const FOLDER_FILE_CONTENT_SECURITY_POLICY = "default-src 'none'; sandbox";

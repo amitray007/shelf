@@ -183,6 +183,11 @@ export function createShareResolutionService(dependencies: {
   return async function resolveShare(request: {
     authority: ShareResolutionAuthority;
     revisionId?: string;
+    /**
+     * The revision was current when a trusted caller issued a short-lived session for it, so an
+     * open session may keep reading it after a newer Latest revision is published.
+     */
+    issuedRevision?: boolean;
     signal?: AbortSignal;
   }): Promise<PublicShareResolution> {
     const { authority } = request;
@@ -220,10 +225,13 @@ export function createShareResolutionService(dependencies: {
       request.revisionId !== undefined &&
       request.revisionId !== resolved.revision.revision.revisionId
     ) {
-      const historyFrom = share.historyFromRevisionNumber;
+      const sharedHistoryFrom =
+        (share.revisionAccess ?? 'target-only') === 'shared-history'
+          ? share.historyFromRevisionNumber
+          : undefined;
+      const historyFrom = request.issuedRevision === true ? 1 : sharedHistoryFrom;
       if (
         share.target.mode !== 'latest' ||
-        (share.revisionAccess ?? 'target-only') !== 'shared-history' ||
         historyFrom === undefined ||
         historyFrom === null ||
         !Number.isSafeInteger(historyFrom) ||

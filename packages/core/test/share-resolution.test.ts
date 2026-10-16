@@ -248,6 +248,22 @@ describe('anonymous share resolution', () => {
     await expect(
       resolve({ authority: authority(ids.pinnedShare), revisionId: ids.secondRevision }),
     ).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
+
+    // A renderer session issued for the previous Latest revision keeps reading it.
+    await expect(
+      resolve({
+        authority: authority(ids.latestShare),
+        revisionId: ids.firstRevision,
+        issuedRevision: true,
+      }),
+    ).resolves.toMatchObject({ revision: { revisionId: ids.firstRevision } });
+    await expect(
+      resolve({
+        authority: authority(ids.pinnedShare),
+        revisionId: ids.secondRevision,
+        issuedRevision: true,
+      }),
+    ).rejects.toMatchObject({ code: 'SHARE_NOT_FOUND' });
   });
 
   it('advances a latest target on every request while keeping a pinned target exact', async () => {

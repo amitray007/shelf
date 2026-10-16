@@ -2,15 +2,15 @@
 
 `@shelf/renderer` is a separate-origin Fastify service for one deliberately narrow case:
 `text/html` shared artifacts. It receives a share capability only through a parent-owned form POST
-and never receives Shelf cookies or authentication credentials. For folder artifacts, it embeds
-bounded same-revision raster image and browser media bytes and assigns them through document-local
-`blob:` URLs.
+and never receives Shelf cookies or authentication credentials. For HTML inside a folder artifact,
+it redirects the frame to a revision-scoped folder session so the browser can load sibling files.
 
 ## Browser contract
 
 - `GET /` is an inert availability document. It does not accept a capability.
-- `POST /render` accepts exactly `shareId`, `secret`, and `nonce` as
-  `application/x-www-form-urlencoded` body fields from the iframe's opaque sandbox origin. A
+- `POST /render` accepts `nonce` plus either `shareId` and `viewerToken` or `publicCode`, with an
+  optional folder `path`, `revisionId`, and link `fragment`, as `application/x-www-form-urlencoded` body fields from
+  the iframe's opaque sandbox origin. A
   sandboxed form navigation reports `Origin: null`; missing, cookie-bearing, application-origin,
   and other-origin requests are rejected. The capability is the request authority, and a dedicated
   renderer hostname keeps Shelf session cookies out of the request.
@@ -28,11 +28,43 @@ bounded same-revision raster image and browser media bytes and assigns them thro
 
 The final artifact response applies the restrictive CSP directly: no fetch/connect, external
 subresources, forms, nested frames, workers, object content, or base URL; only inline and `data:`
-scripts, inline styles, and embedded data/blob media are allowed. Relative image and media paths,
-plus exact Public preview URLs for the active share, resolve only to safe browser media in the same
-immutable folder revision. The renderer embeds those bytes under the configured expanded-document limit.
-Every response is `no-store`, `no-transform`, `no-referrer`, `nosniff`, and denies browser
-permissions. `no-transform` also prevents a CDN from injecting scripts into the isolated document.
+scripts, inline styles, and data/blob media are allowed. Every response is `no-store`,
+`no-transform`, `no-referrer`, `nosniff`, and denies browser permissions. `no-transform` also
+prevents a CDN from injecting scripts into the isolated document.
+
+## Folder sessions
+
+A render request with a folder `path` that names an HTML file answers `303 See Other` to
+`/f/<session>/<path>`. The session is an HMAC-signed token, derived from the share-signing key, that
+names the share authority, one exact revision, the parent nonce, and an expiry of at most one hour.
+A Protected session never outlives its viewer session. A Latest share is pinned to the revision
+that was current when the session started, and an open session keeps reading that revision after a
+newer one is published.
+
+- `GET /f/<session>/<path>` with `Sec-Fetch-Dest: iframe`, or with no `Sec-Fetch-Dest` for an HTML
+  file, returns that HTML file as the document. Its
+  CSP allows scripts, styles, images, fonts, media, and `connect-src` only from
+  `https://<Host>/f/<session>/` and `http://<Host>/f/<session>/`. External origins and other
+  sessions stay blocked. A path that ends in `/` serves that directory's `index.html`.
+- Any other destination returns the file bytes with the stored media type, `nosniff`, a
+  `default-src 'none'; sandbox` CSP, `Access-Control-Allow-Origin: *` for module scripts, fonts,
+  and `fetch()` from the opaque sandbox origin, and one optional byte range. Error responses carry
+  the same CORS header, so scripts can read a 404. The body streams outside the handler deadline,
+  which bounds only the lookup. Query strings are ignored, so `app.js?v=2` reads `app.js`.
+- The route rejects top-level document requests, cookies, foreign `Origin` values, invalid or
+  expired sessions, encoded slashes, and paths outside the folder. Every request resolves the
+  share again, so revocation and expiry apply at once.
+- Exact Public preview URLs for the active share on the application origin, which older folder
+  HTML used to reach sibling files, are rewritten to the matching session path.
+
+The injected handshake script handles link clicks. A same-document fragment link updates history
+and scrolls without a navigation, because WebKit fires a frame load for fragment navigation. In a
+folder session, a link to another file in the session posts `shelf:renderer-open-path` with the
+file path and the link's fragment on the private channel. A directory link names its
+`index.html`. The parent viewer selects that file and sends the fragment as the render request's
+`fragment` field, which the session redirect appends to its `Location`. The parent still terminates every later
+frame load. Root-relative references such as `/assets/app.js` resolve outside the session and stay
+blocked.
 
 ## Known browser limit
 

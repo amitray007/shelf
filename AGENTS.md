@@ -150,6 +150,8 @@ The output JSON has `operation: "publish"`, `status: "complete"`, `publish` (art
 
 Folder publishing includes regular files and empty directories, rejects symlinks and special files, and never uploads an absolute host path.
 
+HTML in a folder previews like a page on a static web server. `index.html` can load `css/site.css`, `js/app.js` and its module imports, fonts, images, and `fetch('data.json')` from the same revision. A link to another file in the folder opens that file in the viewer. Use relative paths. Root-relative paths such as `/assets/app.js` and external URLs do not load. For a Vite build, set `base: './'`.
+
 ### Publish a new revision
 
 Pass `--artifact` with the existing artifact ID. Revisions are immutable and append-only.

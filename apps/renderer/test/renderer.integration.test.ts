@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createRendererApp, type RendererApp } from '../src/app.js';
 import { createCoreHtmlResolver } from '../src/resolver.js';
-import { rendererDependencies, rendererStoredShare } from './support/renderer-dependencies.js';
+import {
+  rendererDependencies,
+  rendererFolderDependencies,
+  rendererStoredShare,
+} from './support/renderer-dependencies.js';
 
 const apps: RendererApp[] = [];
 const appOrigin = 'https://shelf.example';
@@ -34,10 +38,14 @@ async function postRender(
     nonce?: string;
     path?: string;
     revisionId?: string;
+    fragment?: string;
   } = {},
 ) {
   const path = values.path === undefined ? {} : { path: values.path };
-  const revisionId = values.revisionId === undefined ? {} : { revisionId: values.revisionId };
+  const revisionId = {
+    ...(values.revisionId === undefined ? {} : { revisionId: values.revisionId }),
+    ...(values.fragment === undefined ? {} : { fragment: values.fragment }),
+  };
   return app.inject({
     method: 'POST',
     url: '/render',
@@ -388,7 +396,6 @@ describe('isolated HTML renderer', () => {
       const app = await createRendererApp({
         appOrigin,
         resolver: createCoreHtmlResolver({
-          appOrigin,
           ...testCase.dependencies,
           viewerSessionTokenCodec: {
             verify: (token) =>
@@ -442,5 +449,273 @@ describe('isolated HTML renderer', () => {
     expect(response.headers['content-security-policy']).toContain("connect-src 'none'");
     expect(response.body).toContain('shelf:renderer-unavailable');
     expect(response.body).not.toMatch(/database|private|secret|stack|error/i);
+  });
+});
+
+describe('folder sessions', () => {
+  const host = 'render.example';
+  const indexHtml =
+    '<!doctype html><html><head><link rel="stylesheet" href="css/site.css"></head><body><a href="about.html">About</a><script type="module" src="js/app.js"></script></body></html>';
+  const files = {
+    'index.html': { mediaType: 'text/html', content: new TextEncoder().encode(indexHtml) },
+    'docs/index.html': {
+      mediaType: 'text/html',
+      content: new TextEncoder().encode('<!doctype html><h1>Docs</h1>'),
+    },
+    'css/site.css': { mediaType: 'text/css', content: new TextEncoder().encode('body{}') },
+    'js/app.js': {
+      mediaType: 'text/javascript',
+      content: new TextEncoder().encode('export const ready = true;'),
+    },
+    'img/a b.png': { mediaType: 'image/png', content: Uint8Array.from([1, 2, 3, 4, 5]) },
+  };
+
+  async function folderApp(share = rendererStoredShare()) {
+    const app = await createRendererApp({
+      appOrigin,
+      clock: () => new Date('2026-08-17T12:30:00.000Z'),
+      resolver: createCoreHtmlResolver({
+        ...rendererFolderDependencies(files, { share }),
+        viewerSessionTokenCodec: {
+          verify: (token) =>
+            token === viewerToken
+              ? {
+                  shareId: 'shr_AAAAAAAAAAAAAAAAAAAAAA',
+                  sessionId: '123e4567-e89b-42d3-a456-426614174000',
+                  issuedAt: '2026-08-17T12:00:00.000Z',
+                  accessExpiresAt: '2026-08-18T12:00:00.000Z',
+                }
+              : undefined,
+        },
+        clock: () => new Date('2026-08-17T12:30:00.000Z'),
+      }),
+    });
+    apps.push(app);
+    return app;
+  }
+
+  async function openSession(app: RendererApp, path = 'index.html', publicCode?: string) {
+    const response = await postRender(app, {
+      path,
+      ...(publicCode === undefined ? {} : { publicCode }),
+    });
+    expect(response.statusCode).toBe(303);
+    const location = String(response.headers.location);
+    expect(location).toMatch(/^\/f\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}\//u);
+    return { location, sessionPath: location.slice(0, location.indexOf('/', 3) + 1) };
+  }
+
+  function get(
+    app: RendererApp,
+    url: string,
+    headers: Record<string, string> = { 'sec-fetch-dest': 'script', origin: 'null' },
+  ) {
+    return app.inject({ method: 'GET', url, headers: { host, ...headers } });
+  }
+
+  it('redirects folder HTML into a hierarchical session URL and scopes its CSP to that path', async () => {
+    const app = await folderApp();
+    const { location, sessionPath } = await openSession(app);
+
+    expect(location).toBe(`${sessionPath}index.html`);
+    const response = await get(app, location, { 'sec-fetch-dest': 'iframe' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toBe('text/html; charset=utf-8');
+    expect(response.headers['cache-control']).toBe('no-store, no-transform');
+    const policy = String(response.headers['content-security-policy']);
+    const source = `https://${host}${sessionPath} http://${host}${sessionPath}`;
+    expect(policy).toContain(`script-src 'unsafe-inline' data: ${source}`);
+    expect(policy).toContain(`style-src 'unsafe-inline' ${source}`);
+    expect(policy).toContain(`connect-src ${source}`);
+    expect(policy).toContain(`font-src data: ${source}`);
+    expect(policy).toContain(`frame-ancestors ${appOrigin}`);
+    expect(policy).toContain('sandbox allow-scripts');
+    expect(policy).not.toContain("'self'");
+    expect(response.body).toContain('shelf:renderer-open-path');
+    expect(response.body).toContain(JSON.stringify(sessionPath));
+    expect(response.body).toContain('n'.repeat(22));
+    expect(response.body.startsWith('<!doctype html><script>')).toBe(true);
+    expect(response.body).toContain(indexHtml.slice('<!doctype html>'.length));
+    expect(response.body).not.toContain(viewerToken);
+  });
+
+  it('serves sibling files with their media type, CORS for the opaque sandbox, and byte ranges', async () => {
+    const app = await folderApp();
+    const { sessionPath } = await openSession(app);
+
+    const script = await get(app, `${sessionPath}js/app.js?v=2`);
+    expect(script.statusCode).toBe(200);
+    expect(script.headers['content-type']).toBe('text/javascript');
+    expect(script.headers['access-control-allow-origin']).toBe('*');
+    expect(script.headers['x-content-type-options']).toBe('nosniff');
+    expect(script.headers['content-security-policy']).toBe("default-src 'none'; sandbox");
+    expect(script.body).toBe('export const ready = true;');
+
+    const image = await get(app, `${sessionPath}img/a%20b.png`, {
+      'sec-fetch-dest': 'image',
+      range: 'bytes=1-2',
+    });
+    expect(image.statusCode).toBe(206);
+    expect(image.headers['content-range']).toBe('bytes 1-2/5');
+    expect([...image.rawPayload]).toEqual([2, 3]);
+
+    const unsatisfiable = await get(app, `${sessionPath}img/a%20b.png`, {
+      'sec-fetch-dest': 'image',
+      range: 'bytes=9-',
+    });
+    expect(unsatisfiable.statusCode).toBe(416);
+    expect(unsatisfiable.headers['content-range']).toBe('bytes */5');
+
+    const fetched = await get(app, `${sessionPath}index.html`, {
+      'sec-fetch-dest': 'empty',
+      origin: 'null',
+    });
+    expect(fetched.statusCode).toBe(200);
+    expect(fetched.headers['content-security-policy']).toBe("default-src 'none'; sandbox");
+    expect(fetched.body).toBe(indexHtml);
+  });
+
+  it('serves a directory link as its index document', async () => {
+    const app = await folderApp();
+    const { sessionPath } = await openSession(app);
+
+    const response = await get(app, `${sessionPath}docs/`, { 'sec-fetch-dest': 'iframe' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('<h1>Docs</h1>');
+  });
+
+  it('rejects top-level opens, cookies, foreign origins, bad tokens, and escaping paths', async () => {
+    const app = await folderApp();
+    const { sessionPath } = await openSession(app);
+    const token = sessionPath.slice(3, -1);
+    const forged = `${token.slice(0, -2)}${token.endsWith('AA') ? 'BB' : 'AA'}`;
+
+    for (const [url, headers] of [
+      [`${sessionPath}index.html`, { 'sec-fetch-dest': 'document' }],
+      [`${sessionPath}js/app.js`, { 'sec-fetch-dest': 'script', cookie: 'session=1' }],
+      [`${sessionPath}js/app.js`, { 'sec-fetch-dest': 'script', origin: 'https://evil.example' }],
+      [`/f/${forged}/js/app.js`, { 'sec-fetch-dest': 'script' }],
+      [`${sessionPath}..%2Fjs/app.js`, { 'sec-fetch-dest': 'script' }],
+      [`${sessionPath}js%2Fapp.js`, { 'sec-fetch-dest': 'script' }],
+      [`${sessionPath}missing.js`, { 'sec-fetch-dest': 'script' }],
+    ] as const) {
+      const response = await get(app, url, headers);
+      expect(response.statusCode, url).toBe(404);
+      expect(response.body, url).toBe('');
+    }
+
+    const nonHtmlDocument = await get(app, `${sessionPath}js/app.js`, {
+      'sec-fetch-dest': 'iframe',
+    });
+    expect(nonHtmlDocument.statusCode).toBe(404);
+    expect(nonHtmlDocument.body).toContain('shelf:renderer-unavailable');
+  });
+
+  it('stops serving a session after the share is revoked', async () => {
+    const share = rendererStoredShare();
+    const app = await folderApp(share);
+    const { sessionPath } = await openSession(app);
+    share.revokedAt = '2026-08-17T12:20:00.000Z';
+
+    const response = await get(app, `${sessionPath}js/app.js`);
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('points exact Public preview URLs from older folder HTML at the session', async () => {
+    const publicCode = 'AbCdEf0123_-';
+    const html = `<!doctype html><img src="${appOrigin}/api/v1/public/links/${publicCode}/tree/content/preview?path=img%2Fa%20b.png">`;
+    files['index.html'].content = new TextEncoder().encode(html);
+    try {
+      const app = await folderApp(
+        rendererStoredShare({ accessType: 'public', publicCode, sessionsUsed: 0 }),
+      );
+      const { sessionPath } = await openSession(app, 'index.html', publicCode);
+
+      const response = await get(app, `${sessionPath}index.html`, { 'sec-fetch-dest': 'iframe' });
+
+      expect(response.body).toContain(`src="${sessionPath}img/a%20b.png"`);
+    } finally {
+      files['index.html'].content = new TextEncoder().encode(indexHtml);
+    }
+  });
+  it('carries a folder link fragment into the session redirect and rejects unsafe fragments', async () => {
+    const app = await folderApp();
+
+    const linked = await postRender(app, { path: 'index.html', fragment: 'team%20notes' });
+    expect(linked.statusCode).toBe(303);
+    expect(String(linked.headers.location)).toMatch(/\/index\.html#team%20notes$/u);
+
+    for (const fragment of ['bad\r\nheader', 'a<b', 'x'.repeat(1025)]) {
+      const rejected = await postRender(app, { path: 'index.html', fragment });
+      expect(rejected.statusCode, fragment).toBe(404);
+      expect(rejected.body).toContain('shelf:renderer-unavailable');
+    }
+    const fileFragment = await postRender(app, { fragment: 'top' });
+    expect(fileFragment.statusCode).toBe(404);
+  });
+
+  it('lets scripts read missing-file statuses and loads HTML without Fetch Metadata', async () => {
+    const app = await folderApp();
+    const { sessionPath } = await openSession(app);
+
+    const missing = await get(app, `${sessionPath}optional.json`, {
+      'sec-fetch-dest': 'empty',
+      origin: 'null',
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.headers['access-control-allow-origin']).toBe('*');
+
+    const document = await get(app, `${sessionPath}index.html`, {});
+    expect(document.statusCode).toBe(200);
+    expect(document.body).toContain('shelf:renderer-ready');
+    expect(String(document.headers['content-security-policy'])).toContain(
+      `connect-src https://${host}${sessionPath}`,
+    );
+    const script = await get(app, `${sessionPath}js/app.js`, {});
+    expect(script.headers['content-type']).toBe('text/javascript');
+  });
+
+  it('streams a slow file past the handler deadline', async () => {
+    const chunks = ['one ', 'two ', 'three'];
+    const app = await createRendererApp({
+      appOrigin,
+      handlerTimeoutMs: 50,
+      resolver: {
+        async resolveHtml() {
+          return {
+            status: 'folder',
+            authority: { type: 'public', publicCode: 'AbCdEf0123_-' },
+            revisionId: 'rev_BBBBBBBBBBBBBBBBBBBBBB',
+            path: 'index.html',
+          };
+        },
+        async readFolderFile() {
+          return {
+            kind: 'file',
+            mediaType: 'video/mp4',
+            byteCount: chunks.join('').length,
+            async read() {
+              return (async function* slowContent() {
+                for (const chunk of chunks) {
+                  await new Promise((resolve) => setTimeout(resolve, 40));
+                  yield Buffer.from(chunk);
+                }
+              })();
+            },
+          };
+        },
+      },
+    });
+    apps.push(app);
+    const { sessionPath } = await openSession(app, 'index.html', 'AbCdEf0123_-');
+
+    const response = await get(app, `${sessionPath}clip.mp4`, { 'sec-fetch-dest': 'video' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-length']).toBe(String(chunks.join('').length));
+    expect(response.body).toBe(chunks.join(''));
   });
 });

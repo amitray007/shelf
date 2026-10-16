@@ -26,6 +26,7 @@ export interface PublicSharedFile {
 }
 
 export interface PublicSharedFolderFile {
+  revisionId: string;
   path: string;
   mediaType: string;
   byteCount: number;
@@ -245,6 +246,7 @@ export function createShareAccessService(dependencies: {
     async readTreeFile(request: {
       authority: ShareResolutionAuthority;
       revisionId?: string;
+      issuedRevision?: boolean;
       path: string;
       signal?: AbortSignal;
     }): Promise<PublicSharedFolderFile> {
@@ -283,6 +285,7 @@ export function createShareAccessService(dependencies: {
       if (entry === undefined || entry.kind !== 'file') throw new ShareNotFoundError();
       const signal = request.signal;
       return {
+        revisionId: revision.revisionId,
         path: entry.path,
         mediaType: entry.mediaType,
         byteCount: entry.content.byteCount,

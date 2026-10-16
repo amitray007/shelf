@@ -102,6 +102,11 @@ from the filesystem:
 shelf publish ./site --title "Design preview" --description "Static preview of the new site" --share
 ```
 
+A folder's HTML can use separate CSS, JavaScript modules, fonts, images, and JSON from the same
+folder, and links between its pages work in the viewer. Use relative paths such as `css/site.css`.
+Root-relative paths such as `/assets/app.js` and external URLs do not load; for a Vite build, set
+`base: './'`.
+
 Add repeatable string metadata with `--metadata key=value`. Provenance keys such as `actorId`,
 `classification`, and `contentHash` are reserved and rejected.
 

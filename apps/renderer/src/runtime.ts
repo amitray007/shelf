@@ -18,6 +18,8 @@ export interface RendererDataPlane {
   folders: FolderRevisionRepository;
   contentReader: ContentReader;
   clock?: ShareClock;
+  /** Shared by every renderer replica so a folder session survives load balancing and restarts. */
+  folderSessionKey?: Uint8Array;
   ready(): Promise<void>;
   close(): Promise<void>;
 }
@@ -34,8 +36,11 @@ export async function createRendererRuntime(
       host: config.host,
       port: config.port,
       appOrigin: config.appOrigin,
+      ...(dataPlane.folderSessionKey === undefined
+        ? {}
+        : { folderSessionKey: dataPlane.folderSessionKey }),
+      ...(dataPlane.clock === undefined ? {} : { clock: dataPlane.clock }),
       resolver: createCoreHtmlResolver({
-        appOrigin: config.appOrigin,
         shares: dataPlane.shares,
         viewerSessionTokenCodec: dataPlane.viewerSessionTokenCodec,
         revisions: dataPlane.revisions,

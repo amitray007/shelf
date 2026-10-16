@@ -6,15 +6,16 @@ import {
   type ShareClock,
   ShareNotFoundError,
   type ShareRepository,
+  type ShareResolutionAuthority,
+  type StoredFolderRevision,
 } from '@shelf/core';
 
 import type { RendererHtmlResolver } from './app.js';
-import { inlineFolderAssetSources } from './folder-assets.js';
 
 export const DEFAULT_MAX_HTML_BYTES = 10 * 1024 * 1024;
-export const RENDERED_HTML_EXPANSION_FACTOR = 3;
 const MAX_CACHED_HTML_BYTES = 1024 * 1024;
 const MAX_HTML_CACHE_BYTES = 32 * 1024 * 1024;
+const MAX_CACHED_FOLDER_REVISIONS = 256;
 
 export interface ViewerSessionTokenVerifier {
   verify(
@@ -49,8 +50,33 @@ async function readExactUtf8(
   }
 }
 
+/**
+ * A folder page can request dozens of sibling files. Folder revision rows are immutable, so cache
+ * them by revision ID; share authority and entries are still resolved on every request.
+ */
+function withFolderRevisionCache(folders: FolderRevisionRepository): FolderRevisionRepository {
+  const revisions = new Map<string, StoredFolderRevision>();
+  return {
+    findFolderIdempotency: (namespace) => folders.findFolderIdempotency(namespace),
+    commitFolderPublish: (input) => folders.commitFolderPublish(input),
+    findFolderEntry: (request) => folders.findFolderEntry(request),
+    listFolderEntries: (request) => folders.listFolderEntries(request),
+    async findFolderRevision(revisionId) {
+      const cached = revisions.get(revisionId);
+      if (cached !== undefined) return cached;
+      const revision = await folders.findFolderRevision(revisionId);
+      if (revision === undefined) return undefined;
+      if (revisions.size >= MAX_CACHED_FOLDER_REVISIONS) {
+        const oldest = revisions.keys().next().value;
+        if (oldest !== undefined) revisions.delete(oldest);
+      }
+      revisions.set(revisionId, revision);
+      return revision;
+    },
+  };
+}
+
 export function createCoreHtmlResolver(dependencies: {
-  appOrigin: string;
   shares: ShareRepository;
   viewerSessionTokenCodec: ViewerSessionTokenVerifier;
   revisions: RevisionRepository;
@@ -63,11 +89,10 @@ export function createCoreHtmlResolver(dependencies: {
   if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1) {
     throw new Error('Renderer maxHtmlBytes must be a positive safe integer.');
   }
-  const appOrigin = new URL(dependencies.appOrigin).origin;
   const access = createShareAccessService({
     shares: dependencies.shares,
     revisions: dependencies.revisions,
-    folders: dependencies.folders,
+    folders: withFolderRevisionCache(dependencies.folders),
     contentReader: dependencies.contentReader,
     ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
   });
@@ -103,21 +128,23 @@ export function createCoreHtmlResolver(dependencies: {
   return {
     async resolveHtml(request) {
       try {
-        const authority =
-          request.accessType === 'public'
-            ? { type: 'public' as const, publicCode: request.publicCode }
-            : (() => {
-                const claims = dependencies.viewerSessionTokenCodec.verify(request.viewerToken, {
-                  now: dependencies.clock?.() ?? new Date(),
-                  shareId: request.shareId,
-                });
-                if (claims === undefined) throw new ShareNotFoundError();
-                return {
-                  type: 'protected-session' as const,
-                  shareId: request.shareId,
-                  sessionId: claims.sessionId,
-                };
-              })();
+        let authority: ShareResolutionAuthority;
+        let protectedAccessExpiresAt: number | undefined;
+        if (request.accessType === 'public') {
+          authority = { type: 'public', publicCode: request.publicCode };
+        } else {
+          const claims = dependencies.viewerSessionTokenCodec.verify(request.viewerToken, {
+            now: dependencies.clock?.() ?? new Date(),
+            shareId: request.shareId,
+          });
+          if (claims === undefined) throw new ShareNotFoundError();
+          authority = {
+            type: 'protected-session',
+            shareId: request.shareId,
+            sessionId: claims.sessionId,
+          };
+          protectedAccessExpiresAt = Date.parse(claims.accessExpiresAt);
+        }
         const file =
           request.path === undefined
             ? await access.readFile({
@@ -134,38 +161,54 @@ export function createCoreHtmlResolver(dependencies: {
         if (normalizedMediaType(file.mediaType) !== 'text/html' || file.byteCount > maximumBytes) {
           return { status: 'unavailable' };
         }
-        const cacheKey = request.path === undefined ? file.contentHash : undefined;
+        if (request.path !== undefined) {
+          // Folder HTML loads through a revision-scoped folder session so the browser resolves
+          // sibling scripts, styles, fonts, and media itself. The bytes are read on that request.
+          return {
+            status: 'folder',
+            authority,
+            revisionId: file.revisionId,
+            path: request.path,
+            ...(protectedAccessExpiresAt === undefined
+              ? {}
+              : { accessExpiresAt: protectedAccessExpiresAt }),
+          };
+        }
         const html =
-          (cacheKey === undefined ? undefined : cachedHtml(cacheKey, file.byteCount)) ??
+          cachedHtml(file.contentHash, file.byteCount) ??
           (await readExactUtf8(await file.read(), file.byteCount, maximumBytes));
         if (html === undefined) return { status: 'unavailable' };
-        if (request.path === undefined) {
-          if (cacheKey !== undefined) cacheHtml(cacheKey, file.byteCount, html);
-          return { status: 'available', html };
-        }
-        const renderedHtml = await inlineFolderAssetSources({
-          html,
-          htmlPath: request.path,
-          appOrigin,
-          ...(request.accessType === 'public' ? { publicCode: request.publicCode } : {}),
-          maximumOutputBytes: maximumBytes * RENDERED_HTML_EXPANSION_FACTOR,
-          async readAsset(path) {
-            const asset = await access.readTreeFile({
-              authority,
-              path,
-              ...(request.revisionId === undefined ? {} : { revisionId: request.revisionId }),
-              ...(request.signal === undefined ? {} : { signal: request.signal }),
-            });
-            return {
-              mediaType: asset.mediaType,
-              byteCount: asset.byteCount,
-              read: () => asset.read(undefined),
-            };
-          },
-        });
-        return { status: 'available', html: renderedHtml };
+        cacheHtml(file.contentHash, file.byteCount, html);
+        return { status: 'available', html };
       } catch (error) {
         if (error instanceof ShareNotFoundError) return { status: 'unavailable' };
+        throw error;
+      }
+    },
+
+    async readFolderFile(request) {
+      try {
+        const file = await access.readTreeFile({
+          authority: request.authority,
+          revisionId: request.revisionId,
+          issuedRevision: true,
+          path: request.path,
+          ...(request.signal === undefined ? {} : { signal: request.signal }),
+        });
+        if (file.revisionId !== request.revisionId) return undefined;
+        if (normalizedMediaType(file.mediaType) === 'text/html') {
+          if (file.byteCount > maximumBytes) return undefined;
+          const html = await readExactUtf8(await file.read(), file.byteCount, maximumBytes);
+          return html === undefined ? undefined : { kind: 'html', html };
+        }
+        return {
+          kind: 'file',
+          mediaType: file.mediaType,
+          byteCount: file.byteCount,
+          read: (range) => file.read(range),
+        };
+      } catch (error) {
+        if (error instanceof ShareNotFoundError) return undefined;
         throw error;
       }
     },

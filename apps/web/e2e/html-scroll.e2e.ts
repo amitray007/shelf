@@ -37,7 +37,7 @@ for (const surface of ['file', 'public folder', 'protected folder'] as const) {
             items: [
               {
                 kind: 'file',
-                path: 'mockup.html',
+                path: 'long.html',
                 mediaType: 'text/html',
                 byteCount: 100,
                 contentHash: `sha256:${'a'.repeat(64)}`,
@@ -53,6 +53,12 @@ for (const surface of ['file', 'public folder', 'protected folder'] as const) {
       releaseRenderer = resolve;
     });
     await page.route(`${rendererOrigin}/render`, async (route) => {
+      if (surface !== 'file') {
+        // Folder HTML redirects into a folder session; the fixture folder has the long document.
+        await rendererGate;
+        await route.continue();
+        return;
+      }
       const response = await route.fetch();
       const body = (await response.text())
         .replace(

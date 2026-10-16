@@ -164,3 +164,100 @@ export function rendererDependencies(
   };
   return { shares, revisions, folders, contentReader };
 }
+
+/** Dependencies for a Protected or Public share of one folder revision with the given files. */
+export function rendererFolderDependencies(
+  files: Record<string, { mediaType: string; content: Uint8Array }>,
+  options: { share?: StoredShare } = {},
+) {
+  const dependencies = rendererDependencies(
+    options.share === undefined ? {} : { share: options.share },
+  );
+  const share = options.share ?? rendererStoredShare();
+  const createdAt = '2026-08-17T12:00:00.000Z';
+  const byteCount = Object.values(files).reduce(
+    (total, file) => total + file.content.byteLength,
+    0,
+  );
+  const fileCount = Object.keys(files).length;
+  const revision = {
+    kind: 'folder' as const,
+    revisionId: rendererIds.revision,
+    revisionNumber: 1,
+    rootName: 'site',
+    contentHash: `sha256:${'b'.repeat(64)}`,
+    byteCount,
+    fileCount,
+    createdAt,
+    provenance: {
+      classification: 'direct-publish' as const,
+      observed: { actorId: 'private-actor', operation: 'folder.publish' as const },
+    },
+    publisherMetadata: {},
+  };
+  dependencies.shares.resolveShareTarget = async () => ({
+    share,
+    artifact: {
+      installationId: 'install-main',
+      workspaceId: 'workspace-main',
+      artifactId: rendererIds.artifact,
+      kind: 'folder',
+      name: 'Site',
+      createdAt,
+      updatedAt: createdAt,
+      retentionMode: 'automatic',
+      autoTrashAt: null,
+      latestRevision: revision,
+    },
+    revision: {
+      installationId: 'install-main',
+      workspaceId: 'workspace-main',
+      artifactId: rendererIds.artifact,
+      revision,
+    },
+  });
+  dependencies.folders.findFolderRevision = async () => ({
+    apiVersion: 'v1',
+    kind: 'folder',
+    installationId: 'install-main',
+    workspaceId: 'workspace-main',
+    artifactId: rendererIds.artifact,
+    revisionId: rendererIds.revision,
+    manifest: { contentId: 'folder-manifest', contentHash: revision.contentHash, byteCount: 1 },
+    rootName: revision.rootName,
+    totalByteCount: byteCount,
+    fileCount,
+    provenance: revision.provenance,
+    publisherMetadata: {},
+  });
+  dependencies.folders.findFolderEntry = async (input) => {
+    const file = files[input.path];
+    if (
+      file === undefined ||
+      input.installationId !== 'install-main' ||
+      input.revisionId !== rendererIds.revision
+    ) {
+      return undefined;
+    }
+    return {
+      kind: 'file',
+      path: input.path,
+      mediaType: file.mediaType,
+      content: {
+        contentId: `content:${input.path}`,
+        contentHash: `sha256:${'c'.repeat(64)}`,
+        byteCount: file.content.byteLength,
+      },
+    };
+  };
+  dependencies.contentReader.read = async (content, readOptions) => {
+    const path = content.contentId.replace(/^content:/u, '');
+    const bytes = files[path]?.content ?? new Uint8Array();
+    const range = readOptions?.range;
+    const slice = range === undefined ? bytes : bytes.slice(range.start, range.end + 1);
+    return (async function* folderContent() {
+      yield slice;
+    })();
+  };
+  return dependencies;
+}

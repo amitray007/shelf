@@ -97,6 +97,13 @@ their Docker network. Shelf's session cookie is host-only. If a custom authentic
 configuration adds a parent-domain `Domain` attribute, place the renderer on an unrelated
 registrable domain rather than a sibling subdomain; otherwise renderer requests fail closed.
 
+The renderer builds each folder preview's Content Security Policy from the request `Host` header.
+The reverse proxy must forward the browser's original `Host` to the renderer. Traefik, which
+Dokploy uses, and Caddy do this by default; nginx needs `proxy_set_header Host $host;`. Folder
+previews load sibling files from `/f/<session>/...` URLs on the renderer hostname. The session
+segment is a read-only grant for one revision that lasts at most one hour, and every request checks
+the share again. Keep renderer access logs private, or remove that path segment from them.
+
 When upgrading from the older `compose.yaml`, do not generate replacement values for existing
 credentials. Keep the current `POSTGRES_PASSWORD`, copy the contents of the existing auth,
 share-signing, and privacy key files into `SHELF_AUTH_SECRET`, `SHELF_SHARE_SIGNING_KEY`, and

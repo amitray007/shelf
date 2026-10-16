@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createCoreHtmlResolver } from '../src/resolver.js';
 import {
   rendererDependencies,
+  rendererFolderDependencies,
   rendererIds,
   rendererStoredShare,
 } from './support/renderer-dependencies.js';
@@ -12,7 +13,6 @@ const html = '<!doctype html><title>Artifact</title><h1>Hello</h1>';
 
 function resolver(options: Parameters<typeof rendererDependencies>[0] = {}, maxHtmlBytes?: number) {
   return createCoreHtmlResolver({
-    appOrigin: 'https://shelf.example',
     ...rendererDependencies(options),
     viewerSessionTokenCodec: {
       verify: (token) =>
@@ -27,6 +27,21 @@ function resolver(options: Parameters<typeof rendererDependencies>[0] = {}, maxH
     },
     clock: () => new Date('2026-08-17T12:30:00.000Z'),
     ...(maxHtmlBytes === undefined ? {} : { maxHtmlBytes }),
+  });
+}
+
+function folderResolver(dependencies: ReturnType<typeof rendererFolderDependencies>) {
+  return createCoreHtmlResolver({
+    ...dependencies,
+    viewerSessionTokenCodec: {
+      verify: () => ({
+        shareId: rendererIds.share,
+        sessionId: rendererIds.sessionId,
+        issuedAt: '2026-08-17T12:00:00.000Z',
+        accessExpiresAt: '2026-08-18T12:00:00.000Z',
+      }),
+    },
+    clock: () => new Date('2026-08-17T12:30:00.000Z'),
   });
 }
 
@@ -121,7 +136,6 @@ describe('core HTML resolver', () => {
         : result;
     };
     const htmlResolver = createCoreHtmlResolver({
-      appOrigin: 'https://shelf.example',
       ...dependencies,
       viewerSessionTokenCodec: { verify: () => undefined },
       clock: () => new Date('2026-08-17T12:30:00.000Z'),
@@ -137,105 +151,161 @@ describe('core HTML resolver', () => {
     expect(reads).toBe(1);
   });
 
-  it('opens an exact HTML entry from a shared folder', async () => {
+  it('grants a folder session for an exact HTML entry without reading its bytes', async () => {
     const path = 'site/index.html';
-    const content = new TextEncoder().encode(html);
-    const dependencies = rendererDependencies({ content });
-    const createdAt = '2026-08-17T12:00:00.000Z';
-    const revision = {
-      kind: 'folder' as const,
-      revisionId: rendererIds.revision,
-      revisionNumber: 1,
-      rootName: 'site',
-      contentHash: `sha256:${'b'.repeat(64)}`,
-      byteCount: content.byteLength,
-      fileCount: 1,
-      createdAt,
-      provenance: {
-        classification: 'direct-publish' as const,
-        observed: { actorId: 'private-actor', operation: 'folder.publish' as const },
-      },
-      publisherMetadata: {},
-    };
-    dependencies.shares.resolveShareTarget = async () => ({
-      share: rendererStoredShare(),
-      artifact: {
-        installationId: 'install-main',
-        workspaceId: 'workspace-main',
-        artifactId: rendererIds.artifact,
-        kind: 'folder',
-        name: 'Site',
-        createdAt,
-        updatedAt: createdAt,
-        retentionMode: 'automatic',
-        autoTrashAt: null,
-        latestRevision: revision,
-      },
-      revision: {
-        installationId: 'install-main',
-        workspaceId: 'workspace-main',
-        artifactId: rendererIds.artifact,
-        revision,
-      },
+    const dependencies = rendererFolderDependencies({
+      [path]: { mediaType: 'text/html', content: new TextEncoder().encode(html) },
     });
-    dependencies.folders.findFolderRevision = async () => ({
-      apiVersion: 'v1',
-      kind: 'folder',
-      installationId: 'install-main',
-      workspaceId: 'workspace-main',
-      artifactId: rendererIds.artifact,
-      revisionId: rendererIds.revision,
-      manifest: {
-        contentId: 'folder-manifest',
-        contentHash: revision.contentHash,
-        byteCount: 1,
-      },
-      rootName: revision.rootName,
-      totalByteCount: content.byteLength,
-      fileCount: 1,
-      provenance: revision.provenance,
-      publisherMetadata: {},
-    });
-    dependencies.folders.findFolderEntry = async (input) => {
-      if (
-        input.installationId !== 'install-main' ||
-        input.revisionId !== rendererIds.revision ||
-        input.path !== path
-      ) {
-        return undefined;
-      }
-      return {
-        kind: 'file',
-        path,
-        mediaType: 'text/html',
-        content: {
-          contentId: 'folder-html',
-          contentHash: `sha256:${'c'.repeat(64)}`,
-          byteCount: content.byteLength,
-        },
-      };
+    let reads = 0;
+    const read = dependencies.contentReader.read;
+    dependencies.contentReader.read = async (...args) => {
+      reads += 1;
+      return read(...args);
     };
 
     await expect(
-      createCoreHtmlResolver({
-        appOrigin: 'https://shelf.example',
-        ...dependencies,
-        viewerSessionTokenCodec: {
-          verify: () => ({
-            shareId: rendererIds.share,
-            sessionId: rendererIds.sessionId,
-            issuedAt: createdAt,
-            accessExpiresAt: '2026-08-18T12:00:00.000Z',
-          }),
-        },
-        clock: () => new Date('2026-08-17T12:30:00.000Z'),
-      }).resolveHtml({
+      folderResolver(dependencies).resolveHtml({
         accessType: 'protected',
         shareId: rendererIds.share,
         viewerToken,
         path,
       }),
-    ).resolves.toEqual({ status: 'available', html });
+    ).resolves.toEqual({
+      status: 'folder',
+      authority: {
+        type: 'protected-session',
+        shareId: rendererIds.share,
+        sessionId: rendererIds.sessionId,
+      },
+      revisionId: rendererIds.revision,
+      path,
+      accessExpiresAt: Date.parse('2026-08-18T12:00:00.000Z'),
+    });
+    expect(reads).toBe(0);
+  });
+
+  it('does not grant a folder session for a non-HTML entry', async () => {
+    const dependencies = rendererFolderDependencies({
+      'app.js': { mediaType: 'text/javascript', content: new TextEncoder().encode('1') },
+    });
+
+    await expect(
+      folderResolver(dependencies).resolveHtml({
+        accessType: 'protected',
+        shareId: rendererIds.share,
+        viewerToken,
+        path: 'app.js',
+      }),
+    ).resolves.toEqual({ status: 'unavailable' });
+  });
+
+  it('reads sibling files and nested HTML from the granted revision', async () => {
+    const script = new TextEncoder().encode('export const ready = true;');
+    const resolver = folderResolver(
+      rendererFolderDependencies({
+        'index.html': { mediaType: 'text/html', content: new TextEncoder().encode(html) },
+        'js/app.js': { mediaType: 'text/javascript', content: script },
+      }),
+    );
+    const authority = {
+      type: 'protected-session' as const,
+      shareId: rendererIds.share,
+      sessionId: rendererIds.sessionId,
+    };
+
+    const file = await resolver.readFolderFile?.({
+      authority,
+      revisionId: rendererIds.revision,
+      path: 'js/app.js',
+    });
+    expect(file).toMatchObject({
+      kind: 'file',
+      mediaType: 'text/javascript',
+      byteCount: script.byteLength,
+    });
+    if (file?.kind !== 'file') throw new Error('expected a file');
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of await file.read({ start: 7, end: 11 })) chunks.push(chunk);
+    expect(Buffer.concat(chunks).toString()).toBe('const');
+
+    await expect(
+      resolver.readFolderFile?.({
+        authority,
+        revisionId: rendererIds.revision,
+        path: 'index.html',
+      }),
+    ).resolves.toEqual({ kind: 'html', html });
+    await expect(
+      resolver.readFolderFile?.({
+        authority,
+        revisionId: rendererIds.revision,
+        path: 'missing.js',
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      resolver.readFolderFile?.({
+        authority,
+        revisionId: 'rev_CCCCCCCCCCCCCCCCCCCCCC',
+        path: 'js/app.js',
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('keeps serving the issued revision after a newer Latest revision is published', async () => {
+    const dependencies = rendererFolderDependencies({
+      'js/lazy.js': { mediaType: 'text/javascript', content: new TextEncoder().encode('1') },
+    });
+    const resolveCurrent = dependencies.shares.resolveShareTarget.bind(dependencies.shares);
+    dependencies.shares.resolveShareTarget = async (shareId) => {
+      const current = await resolveCurrent(shareId);
+      if (current === undefined) return undefined;
+      const issued = current.revision;
+      const newer = {
+        ...issued.revision,
+        revisionId: 'rev_CCCCCCCCCCCCCCCCCCCCCC',
+        revisionNumber: 2,
+      };
+      dependencies.shares.findRevisionForShare = async (revisionId) =>
+        revisionId === rendererIds.revision ? issued : undefined;
+      return {
+        ...current,
+        artifact: { ...current.artifact, latestRevision: newer },
+        revision: { ...issued, revision: newer },
+      };
+    };
+
+    await expect(
+      folderResolver(dependencies).readFolderFile?.({
+        authority: {
+          type: 'protected-session',
+          shareId: rendererIds.share,
+          sessionId: rendererIds.sessionId,
+        },
+        revisionId: rendererIds.revision,
+        path: 'js/lazy.js',
+      }),
+    ).resolves.toMatchObject({ kind: 'file', mediaType: 'text/javascript' });
+  });
+
+  it('stops serving folder files once the share is revoked', async () => {
+    const resolver = folderResolver(
+      rendererFolderDependencies(
+        { 'app.js': { mediaType: 'text/javascript', content: new TextEncoder().encode('1') } },
+        { share: rendererStoredShare({ revokedAt: '2026-08-17T12:10:00.000Z' }) },
+      ),
+    );
+
+    await expect(
+      resolver.readFolderFile?.({
+        authority: {
+          type: 'protected-session',
+          shareId: rendererIds.share,
+          sessionId: rendererIds.sessionId,
+        },
+        revisionId: rendererIds.revision,
+        path: 'app.js',
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it('rejects cross-share viewer-token replay and revalidates revocation after issuance', async () => {

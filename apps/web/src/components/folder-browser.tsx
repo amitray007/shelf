@@ -212,6 +212,10 @@ export function FolderBrowser({
     review?.sidebarControlsId ?? navigation?.sidebarControlsId ?? 'folder-browser-sidebar-content';
   const restoredExpandedPaths = useMemo(() => readExpandedTreePaths(paths), [paths]);
   const appliedPathsRef = useRef(paths);
+  // A folder link's fragment applies only to the render that the link opened.
+  const [linkedFragment, setLinkedFragment] = useState<
+    { readonly path: string; readonly fragment: string } | undefined
+  >(undefined);
   const handleSelectionChange = useCallback((selectedPaths: readonly string[]) => {
     const nextFile = [...selectedPaths].reverse().find((path) => filePathsRef.current.has(path));
     if (nextFile === undefined) return;
@@ -219,8 +223,16 @@ export function FolderBrowser({
       programmaticSelectionPathRef.current = undefined;
     } else if (treeMountedRef.current) {
       onSelectFileRef.current?.(nextFile);
+      setLinkedFragment(undefined);
     }
     setSelectedPath(nextFile);
+  }, []);
+  // A link inside rendered folder HTML selects its target like a tree click.
+  const openLinkedPath = useCallback((path: string, fragment: string) => {
+    if (!filePathsRef.current.has(path)) return;
+    onSelectFileRef.current?.(path);
+    setLinkedFragment(fragment === '' ? undefined : { path, fragment });
+    setSelectedPath(path);
   }, []);
   const { model } = useFileTree({
     density: 'default',
@@ -294,6 +306,10 @@ export function FolderBrowser({
   useEffect(() => {
     if (selectedPath === undefined) return;
     programmaticSelectionPathRef.current = selectedPath;
+    // Item selection is additive, so clear rows left from a link or review-thread selection.
+    for (const path of model.getSelectedPaths()) {
+      if (path !== selectedPath) model.getItem(path)?.deselect();
+    }
     model.getItem(selectedPath)?.select();
     try {
       window.sessionStorage.setItem(viewerSessionStorageKey('folder-selected-file'), selectedPath);
@@ -529,6 +545,12 @@ export function FolderBrowser({
                               <div className="artifact-surface artifact-html">
                                 <RendererFrame
                                   authority={authority}
+                                  fragment={
+                                    linkedFragment?.path === selected.path
+                                      ? linkedFragment.fragment
+                                      : undefined
+                                  }
+                                  onOpenPath={openLinkedPath}
                                   path={selected.path}
                                   renderer={renderer}
                                   resolution={resolution}
