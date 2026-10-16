@@ -222,6 +222,12 @@ export function FolderBrowser({
     }
     setSelectedPath(nextFile);
   }, []);
+  // A link inside rendered folder HTML selects its target like a tree click.
+  const openLinkedPath = useCallback((path: string) => {
+    if (!filePathsRef.current.has(path)) return;
+    onSelectFileRef.current?.(path);
+    setSelectedPath(path);
+  }, []);
   const { model } = useFileTree({
     density: 'default',
     fileTreeSearchMode: 'expand-matches',
@@ -294,6 +300,10 @@ export function FolderBrowser({
   useEffect(() => {
     if (selectedPath === undefined) return;
     programmaticSelectionPathRef.current = selectedPath;
+    // Item selection is additive, so clear rows left from a link or review-thread selection.
+    for (const path of model.getSelectedPaths()) {
+      if (path !== selectedPath) model.getItem(path)?.deselect();
+    }
     model.getItem(selectedPath)?.select();
     try {
       window.sessionStorage.setItem(viewerSessionStorageKey('folder-selected-file'), selectedPath);
@@ -529,6 +539,7 @@ export function FolderBrowser({
                               <div className="artifact-surface artifact-html">
                                 <RendererFrame
                                   authority={authority}
+                                  onOpenPath={openLinkedPath}
                                   path={selected.path}
                                   renderer={renderer}
                                   resolution={resolution}

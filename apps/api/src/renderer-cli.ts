@@ -2,7 +2,12 @@
 
 import { pathToFileURL } from 'node:url';
 
-import { createRendererRuntime, loadRendererConfig, type RendererRuntime } from '@shelf/renderer';
+import {
+  createRendererRuntime,
+  deriveFolderSessionKey,
+  loadRendererConfig,
+  type RendererRuntime,
+} from '@shelf/renderer';
 
 import { createShelfPersistence } from './persistence.js';
 import { shelfPersistenceConfigFromEnv } from './persistence-env.js';
@@ -34,7 +39,8 @@ export async function runShelfRenderer(
   try {
     const rendererConfig = loadRendererConfig(runtime.env);
     const persistenceConfig = shelfPersistenceConfigFromEnv(runtime.env);
-    const securityCodecs = createHmacShareSecurityCodecs(await loadShareSigningKey(runtime.env));
+    const shareSigningKey = await loadShareSigningKey(runtime.env);
+    const securityCodecs = createHmacShareSecurityCodecs(shareSigningKey);
     const persistence = createShelfPersistence(persistenceConfig);
     let closePromise: Promise<void> | undefined;
     closePersistence = () => {
@@ -48,6 +54,7 @@ export async function runShelfRenderer(
       revisions: persistence.revisionRepository,
       folders: persistence.revisionRepository,
       contentReader: persistence.contentReader,
+      folderSessionKey: deriveFolderSessionKey(shareSigningKey),
       ready: () => persistence.ready(),
       close: closePersistence,
     });

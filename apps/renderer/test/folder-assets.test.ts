@@ -1,253 +1,57 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { inlineFolderAssetSources } from '../src/folder-assets.js';
+import { folderSessionFileUrl, rewritePublicPreviewReferences } from '../src/folder-assets.js';
 
 const appOrigin = 'https://shelf.example';
 const publicCode = 'AbCdEf0123_-';
-const pngBytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47]);
-const mp4Bytes = Uint8Array.from([0x00, 0x00, 0x00, 0x18]);
+const sessionPath = '/f/token.signature/';
 
-function imageAsset() {
-  return {
-    mediaType: 'image/png',
-    byteCount: pngBytes.byteLength,
-    async read() {
-      return (async function* content() {
-        yield pngBytes;
-      })();
-    },
-  };
+function previewUrl(path: string, origin = appOrigin, code = publicCode): string {
+  return `${origin}/api/v1/public/links/${code}/tree/content/preview?path=${encodeURIComponent(path)}`;
 }
 
-describe('folder HTML asset embedding', () => {
-  it('embeds local stylesheets once while preserving cascade, media, and authored CSS bytes', async () => {
-    const css = 'body { color: #2456d6; } /* </style><script>not markup</script> */';
-    const bytes = new TextEncoder().encode(css);
-    const read = vi.fn(async () =>
-      (async function* () {
-        yield bytes;
-      })(),
+describe('folder session URLs', () => {
+  it('encodes each portable path segment under the session path', () => {
+    expect(folderSessionFileUrl(sessionPath, 'assets/hero image#1.png')).toBe(
+      '/f/token.signature/assets/hero%20image%231.png',
     );
-    const readAsset = vi.fn(async () => ({
-      mediaType: 'text/css; charset=utf-8',
-      byteCount: bytes.length,
-      read,
-    }));
-    const html = await inlineFolderAssetSources({
-      html: '<!doctype html><link rel="stylesheet" href="../theme.css"><style>body { margin: 0; }</style><link rel="alternate stylesheet" title="Print" media="print" href="../theme.css">',
-      htmlPath: 'pages/mockup.html',
-      appOrigin,
-      maximumOutputBytes: 8192,
-      readAsset,
-    });
+  });
+});
 
-    expect(readAsset).toHaveBeenCalledExactlyOnceWith('theme.css');
-    expect(read).toHaveBeenCalledOnce();
-    expect(html.match(/data-shelf-embedded-href="0"/gu)).toHaveLength(2);
-    expect(html).toContain(Buffer.from(bytes).toString('base64'));
-    expect(html).not.toContain('<script>not markup</script>');
-    expect(html).toContain('rel="alternate stylesheet" title="Print" media="print"');
-    expect(html.indexOf('rel="stylesheet"')).toBeLessThan(html.indexOf('<style>body'));
-    expect(html.indexOf('<style>body')).toBeLessThan(html.indexOf('rel="alternate stylesheet"'));
+describe('Public preview reference compatibility', () => {
+  it('points exact same-link preview URLs at the folder session', () => {
+    const html = `<!doctype html><html><head><link rel="stylesheet" href="${previewUrl('css/site.css')}"></head><body><img src="${previewUrl('img/a b.png')}"><video poster="${previewUrl('img/poster.png')}"></video><template><img src="${previewUrl('img/t.png')}"></template></body></html>`;
+
+    const rendered = rewritePublicPreviewReferences({ html, appOrigin, publicCode, sessionPath });
+
+    expect(rendered).toContain('href="/f/token.signature/css/site.css"');
+    expect(rendered).toContain('src="/f/token.signature/img/a%20b.png"');
+    expect(rendered).toContain('poster="/f/token.signature/img/poster.png"');
+    expect(rendered).toContain('src="/f/token.signature/img/t.png"');
+    expect(rendered).not.toContain('/api/v1/public/links/');
   });
 
-  it('leaves external, missing, and non-CSS stylesheet references blocked', async () => {
-    const readAsset = vi.fn(async (path: string) =>
-      path === 'missing.css' ? undefined : imageAsset(),
-    );
-    const source =
-      '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist"><link rel="stylesheet" href="missing.css"><link rel="stylesheet" href="image.png"><link rel="preload" href="unused.css">';
-    const html = await inlineFolderAssetSources({
-      html: source,
-      htmlPath: 'index.html',
-      appOrigin,
-      maximumOutputBytes: 8192,
-      readAsset,
-    });
-    expect(html).toBe(source);
-    expect(readAsset.mock.calls.map(([path]) => path)).toEqual(['missing.css', 'image.png']);
-  });
+  it('leaves other origins, other links, extra parameters, and invalid paths unchanged', () => {
+    const references = [
+      previewUrl('a.png', 'https://other.example'),
+      previewUrl('a.png', appOrigin, 'ZZZZZZZZZZZZ'),
+      `${previewUrl('a.png')}&download=1`,
+      `${previewUrl('a.png')}#fragment`,
+      previewUrl('../escape.png'),
+    ];
+    const html = `<!doctype html><body>${references.map((src) => `<img src="${src}">`).join('')}<img src="${previewUrl('ok.png')}"></body>`;
 
-  it('does not read stylesheets beyond the output budget or embed truncated bytes', async () => {
-    const read = vi.fn(async () =>
-      (async function* () {
-        yield new Uint8Array([1]);
-      })(),
-    );
-    const asset = { mediaType: 'text/css', byteCount: 100, read };
-    const source = '<link rel="stylesheet" href="theme.css">';
-    const options = {
-      html: source,
-      htmlPath: 'index.html',
-      appOrigin,
-      readAsset: async () => asset,
-    };
-    expect(await inlineFolderAssetSources({ ...options, maximumOutputBytes: 50 })).toBe(source);
-    expect(read).not.toHaveBeenCalled();
-    expect(await inlineFolderAssetSources({ ...options, maximumOutputBytes: 8192 })).toBe(source);
-    expect(read).toHaveBeenCalledOnce();
-  });
+    const rendered = rewritePublicPreviewReferences({ html, appOrigin, publicCode, sessionPath });
 
-  it('embeds repeated exact Public image URLs from the same revision with one content read', async () => {
-    const source = `${appOrigin}/api/v1/public/links/${publicCode}/tree/content/preview?path=images%2Flogo.png`;
-    const readAsset = vi.fn(async () => imageAsset());
-
-    const html = await inlineFolderAssetSources({
-      html: `<!doctype html><img src="${source}"><img src="${source}">`,
-      htmlPath: 'index.html',
-      appOrigin,
-      publicCode,
-      maximumOutputBytes: 4_096,
-      readAsset,
-    });
-
-    expect(readAsset).toHaveBeenCalledTimes(1);
-    expect(readAsset).toHaveBeenCalledWith('images/logo.png');
-    expect(html.match(/iVBORw==/gu)).toHaveLength(1);
-    expect(html.match(/data-shelf-embedded-src="0"/gu)).toHaveLength(2);
-    expect(html).toContain('new Map([["0",["image/png","iVBORw=="]]])');
-    expect(html).toContain('URL.createObjectURL(new Blob');
-    expect(html).not.toContain(source);
-
-    const script = /<script>([\s\S]*?)<\/script>/u.exec(html)?.[1];
-    expect(script).toBeDefined();
-    let observerCallback: ((records: Array<{ addedNodes: unknown[] }>) => void) | undefined;
-    class MutationObserverStub {
-      constructor(callback: typeof observerCallback) {
-        observerCallback = callback;
-      }
-      observe() {}
-      disconnect() {}
+    for (const reference of references) {
+      expect(rendered).toContain(reference.replaceAll('&', '&amp;'));
     }
-    const setAttribute = vi.fn();
-    const removeAttribute = vi.fn();
-    const element = {
-      nodeType: 1,
-      matches: () => true,
-      querySelectorAll: () => [],
-      getAttribute: (name: string) => (name === 'data-shelf-embedded-src' ? '0' : null),
-      setAttribute,
-      removeAttribute,
-    };
-    const createObjectURL = vi.fn(() => 'blob:null/embedded-image');
-    Function(
-      'MutationObserver',
-      'document',
-      'addEventListener',
-      'URL',
-      'Blob',
-      script ?? '',
-    )(
-      MutationObserverStub,
-      {},
-      () => undefined,
-      { createObjectURL, revokeObjectURL: () => undefined },
-      Blob,
-    );
-    observerCallback?.([{ addedNodes: [element] }]);
-
-    expect(createObjectURL).toHaveBeenCalledOnce();
-    expect(setAttribute).toHaveBeenCalledWith('src', 'blob:null/embedded-image');
-    expect(removeAttribute).toHaveBeenCalledWith('data-shelf-embedded-src');
+    expect(rendered).toContain('src="/f/token.signature/ok.png"');
   });
 
-  it('resolves relative image paths against the HTML entry for Protected shares', async () => {
-    const readAsset = vi.fn(async () => imageAsset());
+  it('returns authored HTML bytes unchanged when no preview URL is present', () => {
+    const html = '<!DOCTYPE html><p>Unparsed <b>markup';
 
-    const html = await inlineFolderAssetSources({
-      html: '<!doctype html><img src="../images/logo.png">',
-      htmlPath: 'site/pages/index.html',
-      appOrigin,
-      maximumOutputBytes: 4_096,
-      readAsset,
-    });
-
-    expect(readAsset).toHaveBeenCalledWith('site/images/logo.png');
-    expect(html).toContain('data-shelf-embedded-src="0"');
-    expect(html).toContain('iVBORw==');
-  });
-
-  it('embeds a video poster and source from the same folder revision', async () => {
-    const readAsset = vi.fn(async (path: string) => {
-      const mediaType = path.endsWith('.mp4') ? 'video/mp4' : 'image/png';
-      const bytes = path.endsWith('.mp4') ? mp4Bytes : pngBytes;
-      return {
-        mediaType,
-        byteCount: bytes.byteLength,
-        async read() {
-          return (async function* content() {
-            yield bytes;
-          })();
-        },
-      };
-    });
-
-    const html = await inlineFolderAssetSources({
-      html: [
-        '<!doctype html><video controls preload="none" poster="02-lookup.png">',
-        '<source src="btree-index-lesson.mp4" type="video/mp4">',
-        '</video>',
-      ].join(''),
-      htmlPath: 'index.html',
-      appOrigin,
-      maximumOutputBytes: 4_096,
-      readAsset,
-    });
-
-    expect(readAsset).toHaveBeenCalledTimes(2);
-    expect(readAsset).toHaveBeenCalledWith('02-lookup.png');
-    expect(readAsset).toHaveBeenCalledWith('btree-index-lesson.mp4');
-    expect(html).toContain('data-shelf-embedded-poster="0"');
-    expect(html).toContain('data-shelf-embedded-src="1"');
-    expect(html).toContain('["image/png","iVBORw=="]');
-    expect(html).toContain('["video/mp4","AAAAGA=="]');
-    expect(html).not.toContain('poster="02-lookup.png"');
-    expect(html).not.toContain('src="btree-index-lesson.mp4"');
-  });
-
-  it('does not resolve external, cross-share, or unsafe media references', async () => {
-    const readAsset = vi.fn(async (path: string) =>
-      path === 'notes.txt'
-        ? {
-            ...imageAsset(),
-            mediaType: 'text/plain',
-          }
-        : imageAsset(),
-    );
-    const external = 'https://outside.example/logo.png';
-    const otherShare = `${appOrigin}/api/v1/public/links/ZbCdEf0123_-/tree/content/preview?path=logo.png`;
-
-    const html = await inlineFolderAssetSources({
-      html: `<!doctype html><img src="${external}"><img src="${otherShare}"><img src="notes.txt"><video src="logo.png"></video>`,
-      htmlPath: 'index.html',
-      appOrigin,
-      publicCode,
-      maximumOutputBytes: 4_096,
-      readAsset,
-    });
-
-    expect(readAsset).toHaveBeenCalledTimes(2);
-    expect(readAsset).toHaveBeenCalledWith('notes.txt');
-    expect(readAsset).toHaveBeenCalledWith('logo.png');
-    expect(html).toContain(external);
-    expect(html).toContain(otherShare);
-    expect(html).toContain('notes.txt');
-    expect(html).toContain('logo.png');
-  });
-
-  it('does not read an image when embedding it would exceed the response bound', async () => {
-    const asset = imageAsset();
-    const read = vi.spyOn(asset, 'read');
-
-    const html = await inlineFolderAssetSources({
-      html: '<!doctype html><img src="logo.png">',
-      htmlPath: 'index.html',
-      appOrigin,
-      maximumOutputBytes: 32,
-      readAsset: async () => asset,
-    });
-
-    expect(read).not.toHaveBeenCalled();
-    expect(html).toContain('logo.png');
+    expect(rewritePublicPreviewReferences({ html, appOrigin, publicCode, sessionPath })).toBe(html);
   });
 });

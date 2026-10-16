@@ -18,6 +18,8 @@ interface RendererFrameProps {
   readonly authority: ViewerAuthority;
   readonly path?: string | undefined;
   readonly theme: HtmlPreviewTheme;
+  /** Opens a same-folder file after the rendered document asks for one through a link. */
+  readonly onOpenPath?: ((path: string) => void) | undefined;
 }
 
 export function RendererFrame(props: RendererFrameProps) {
@@ -26,7 +28,16 @@ export function RendererFrame(props: RendererFrameProps) {
   return <RendererDocument key={props.theme} {...props} />;
 }
 
-function RendererDocument({ renderer, resolution, authority, path, theme }: RendererFrameProps) {
+function RendererDocument({
+  renderer,
+  resolution,
+  authority,
+  path,
+  theme,
+  onOpenPath,
+}: RendererFrameProps) {
+  const onOpenPathRef = useRef(onOpenPath);
+  onOpenPathRef.current = onOpenPath;
   const frameRef = useRef<HTMLIFrameElement>(null);
   const nonceRef = useRef<string>(window.crypto.randomUUID());
   const frameNameRef = useRef<string>(`shelf-renderer-${window.crypto.randomUUID()}`);
@@ -91,6 +102,14 @@ function RendererDocument({ renderer, resolution, authority, path, theme }: Rend
         setStatus('ready');
       } else if (event.data.type === 'shelf:renderer-unavailable') {
         terminateFrame();
+      } else if (
+        event.data.type === 'shelf:renderer-open-path' &&
+        readyRef.current &&
+        'path' in event.data &&
+        typeof event.data.path === 'string' &&
+        event.data.path.length <= 4096
+      ) {
+        onOpenPathRef.current?.(event.data.path);
       }
     };
     window.addEventListener('message', receive);
