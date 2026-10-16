@@ -102,10 +102,17 @@ from the filesystem:
 shelf publish ./site --title "Design preview" --description "Static preview of the new site" --share
 ```
 
-A folder's HTML can use separate CSS, JavaScript modules, fonts, images, and JSON from the same
-folder, and links between its pages work in the viewer. Use relative paths such as `css/site.css`.
-Root-relative paths such as `/assets/app.js` and external URLs do not load; for a Vite build, set
-`base: './'`.
+A folder's HTML previews like a static site: separate CSS, JavaScript modules, fonts, images,
+`fetch()` of folder files, and links between its pages work in the viewer.
+
+- Use relative paths such as `css/site.css`. A root-relative path such as `/assets/app.js`
+  resolves outside the folder. For a Vite build, set `base: './'`.
+- Keep every asset inside the folder. CDN, font-service, and API requests are blocked.
+- Publish built output, not `.ts`, `.jsx`, or bare `import "package"` source.
+- Navigate with `<a href>` links. Script-driven navigation closes the preview.
+
+When a folder publish returns `warnings`, the revision exists but something in it will not load.
+Fix each warning's `path` as its `message` says, then publish a revision with `--artifact`.
 
 Add repeatable string metadata with `--metadata key=value`. Provenance keys such as `actorId`,
 `classification`, and `contentHash` are reserved and rejected.

@@ -150,7 +150,14 @@ The output JSON has `operation: "publish"`, `status: "complete"`, `publish` (art
 
 Folder publishing includes regular files and empty directories, rejects symlinks and special files, and never uploads an absolute host path.
 
-HTML in a folder previews like a page on a static web server. `index.html` can load `css/site.css`, `js/app.js` and its module imports, fonts, images, and `fetch('data.json')` from the same revision. A link to another file in the folder opens that file in the viewer. Use relative paths. Root-relative paths such as `/assets/app.js` and external URLs do not load. For a Vite build, set `base: './'`.
+HTML in a folder previews like a page on a static web server. `index.html` can load `css/site.css`, `js/app.js` and its module imports, fonts, images, and `fetch('data.json')` from the same revision. A link to another file in the folder opens that file in the viewer, and `docs/` opens `docs/index.html`. To publish a folder that works:
+
+- Use relative paths. Root-relative paths such as `/assets/app.js` resolve outside the folder. For a Vite build, set `base: './'`.
+- Keep every asset inside the folder. CDN, font-service, and API requests are blocked.
+- Publish built output. Browsers cannot run `.ts`, `.jsx`, or bare `import "package"` source unless an import map in the page points the name at a file in the folder.
+- Navigate with `<a href>` links. Script-driven navigation closes the preview.
+
+A folder publish checks the folder's HTML, CSS, and JavaScript and adds a `warnings` array to the output when something will not load in the viewer. Each warning has `code`, `path` (the file containing the reference), `reference`, and `message`. Codes are `ROOT_RELATIVE_REFERENCE`, `EXTERNAL_REFERENCE`, `BARE_MODULE_SPECIFIER`, `UNBUILT_SOURCE`, `MISSING_REFERENCE`, `DIRECTORY_REFERENCE`, and `NO_ROOT_INDEX`. Warnings never change the exit code; the revision is already published. Fix each named file and publish a new revision with `--artifact`. The key is absent when the folder is clean.
 
 ### Publish a new revision
 
