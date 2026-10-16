@@ -18,8 +18,10 @@ interface RendererFrameProps {
   readonly authority: ViewerAuthority;
   readonly path?: string | undefined;
   readonly theme: HtmlPreviewTheme;
+  /** A fragment from the folder link that opened this file, applied when the document loads. */
+  readonly fragment?: string | undefined;
   /** Opens a same-folder file after the rendered document asks for one through a link. */
-  readonly onOpenPath?: ((path: string) => void) | undefined;
+  readonly onOpenPath?: ((path: string, fragment: string) => void) | undefined;
 }
 
 export function RendererFrame(props: RendererFrameProps) {
@@ -34,6 +36,7 @@ function RendererDocument({
   authority,
   path,
   theme,
+  fragment,
   onOpenPath,
 }: RendererFrameProps) {
   const onOpenPathRef = useRef(onOpenPath);
@@ -109,7 +112,13 @@ function RendererDocument({
         typeof event.data.path === 'string' &&
         event.data.path.length <= 4096
       ) {
-        onOpenPathRef.current?.(event.data.path);
+        const linkedFragment =
+          'fragment' in event.data &&
+          typeof event.data.fragment === 'string' &&
+          event.data.fragment.length <= 1024
+            ? event.data.fragment
+            : '';
+        onOpenPathRef.current?.(event.data.path, linkedFragment);
       }
     };
     window.addEventListener('message', receive);
@@ -134,6 +143,7 @@ function RendererDocument({
     for (const [name, value] of Object.entries({
       ...fields,
       ...(path === undefined ? {} : { path }),
+      ...(path === undefined || fragment === undefined || fragment === '' ? {} : { fragment }),
       ...(resolution.target.mode === 'pinned' ||
       shareRevisionAccess(resolution) === 'shared-history'
         ? { revisionId: resolution.revision.revisionId }
@@ -155,7 +165,7 @@ function RendererDocument({
     }
     clearDeadline();
     timeoutRef.current = window.setTimeout(terminateFrame, 8_000);
-  }, [authority, clearDeadline, path, renderer.url, resolution, terminateFrame]);
+  }, [authority, clearDeadline, fragment, path, renderer.url, resolution, terminateFrame]);
 
   const stopPostReadyNavigation = useCallback(() => {
     if (terminatedRef.current) return;

@@ -38,10 +38,14 @@ async function postRender(
     nonce?: string;
     path?: string;
     revisionId?: string;
+    fragment?: string;
   } = {},
 ) {
   const path = values.path === undefined ? {} : { path: values.path };
-  const revisionId = values.revisionId === undefined ? {} : { revisionId: values.revisionId };
+  const revisionId = {
+    ...(values.revisionId === undefined ? {} : { revisionId: values.revisionId }),
+    ...(values.fragment === undefined ? {} : { fragment: values.fragment }),
+  };
   return app.inject({
     method: 'POST',
     url: '/render',
@@ -392,7 +396,6 @@ describe('isolated HTML renderer', () => {
       const app = await createRendererApp({
         appOrigin,
         resolver: createCoreHtmlResolver({
-          appOrigin,
           ...testCase.dependencies,
           viewerSessionTokenCodec: {
             verify: (token) =>
@@ -472,7 +475,6 @@ describe('folder sessions', () => {
       appOrigin,
       clock: () => new Date('2026-08-17T12:30:00.000Z'),
       resolver: createCoreHtmlResolver({
-        appOrigin,
         ...rendererFolderDependencies(files, { share }),
         viewerSessionTokenCodec: {
           verify: (token) =>
@@ -638,5 +640,82 @@ describe('folder sessions', () => {
     } finally {
       files['index.html'].content = new TextEncoder().encode(indexHtml);
     }
+  });
+  it('carries a folder link fragment into the session redirect and rejects unsafe fragments', async () => {
+    const app = await folderApp();
+
+    const linked = await postRender(app, { path: 'index.html', fragment: 'team%20notes' });
+    expect(linked.statusCode).toBe(303);
+    expect(String(linked.headers.location)).toMatch(/\/index\.html#team%20notes$/u);
+
+    for (const fragment of ['bad\r\nheader', 'a<b', 'x'.repeat(1025)]) {
+      const rejected = await postRender(app, { path: 'index.html', fragment });
+      expect(rejected.statusCode, fragment).toBe(404);
+      expect(rejected.body).toContain('shelf:renderer-unavailable');
+    }
+    const fileFragment = await postRender(app, { fragment: 'top' });
+    expect(fileFragment.statusCode).toBe(404);
+  });
+
+  it('lets scripts read missing-file statuses and loads HTML without Fetch Metadata', async () => {
+    const app = await folderApp();
+    const { sessionPath } = await openSession(app);
+
+    const missing = await get(app, `${sessionPath}optional.json`, {
+      'sec-fetch-dest': 'empty',
+      origin: 'null',
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.headers['access-control-allow-origin']).toBe('*');
+
+    const document = await get(app, `${sessionPath}index.html`, {});
+    expect(document.statusCode).toBe(200);
+    expect(document.body).toContain('shelf:renderer-ready');
+    expect(String(document.headers['content-security-policy'])).toContain(
+      `connect-src https://${host}${sessionPath}`,
+    );
+    const script = await get(app, `${sessionPath}js/app.js`, {});
+    expect(script.headers['content-type']).toBe('text/javascript');
+  });
+
+  it('streams a slow file past the handler deadline', async () => {
+    const chunks = ['one ', 'two ', 'three'];
+    const app = await createRendererApp({
+      appOrigin,
+      handlerTimeoutMs: 50,
+      resolver: {
+        async resolveHtml() {
+          return {
+            status: 'folder',
+            authority: { type: 'public', publicCode: 'AbCdEf0123_-' },
+            revisionId: 'rev_BBBBBBBBBBBBBBBBBBBBBB',
+            path: 'index.html',
+          };
+        },
+        async readFolderFile() {
+          return {
+            kind: 'file',
+            mediaType: 'video/mp4',
+            byteCount: chunks.join('').length,
+            async read() {
+              return (async function* slowContent() {
+                for (const chunk of chunks) {
+                  await new Promise((resolve) => setTimeout(resolve, 40));
+                  yield Buffer.from(chunk);
+                }
+              })();
+            },
+          };
+        },
+      },
+    });
+    apps.push(app);
+    const { sessionPath } = await openSession(app, 'index.html', 'AbCdEf0123_-');
+
+    const response = await get(app, `${sessionPath}clip.mp4`, { 'sec-fetch-dest': 'video' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-length']).toBe(String(chunks.join('').length));
+    expect(response.body).toBe(chunks.join(''));
   });
 });

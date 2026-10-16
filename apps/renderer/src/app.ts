@@ -1,4 +1,5 @@
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 import {
   type ContentByteRange,
@@ -92,6 +93,8 @@ const REVISION_ID_PATTERN = /^rev_[A-Za-z0-9_-]{22}$/u;
 const FOLDER_SESSION_ROUTE = /^\/f\/([^/?#]+)\/([^?#]*)(?:\?[^#]*)?$/u;
 const RENDERER_HOST_PATTERN = /^(?:[A-Za-z0-9.-]{1,253}|\[[0-9A-Fa-f:.]{2,45}\])(?::\d{1,5})?$/u;
 const FOLDER_INDEX_FILE = 'index.html';
+// RFC 3986 fragment characters, already percent-encoded by the document's URL parser.
+const FRAGMENT_PATTERN = /^[A-Za-z0-9\-._~!$&'()*+,;=:@/?%]{1,1024}$/u;
 
 function applyBoundaryHeaders(reply: FastifyReply, contentSecurityPolicy: string): void {
   void reply.header('Cache-Control', 'no-store, no-transform');
@@ -104,6 +107,8 @@ function applyBoundaryHeaders(reply: FastifyReply, contentSecurityPolicy: string
 
 function parseRenderRequest(body: unknown): {
   nonce: string;
+  /** A folder link's target fragment, applied to the folder session redirect. */
+  fragment?: string;
   request?:
     | {
         accessType: 'protected';
@@ -136,7 +141,15 @@ function parseRenderRequest(body: unknown): {
   if (revisionValues.length > 1) return { nonce };
   const revisionId = revisionValues[0];
   if (revisionId !== undefined && !REVISION_ID_PATTERN.test(revisionId)) return { nonce };
-  const keys = [...parameters.keys()];
+  const fragmentValues = parameters.getAll('fragment');
+  const fragment = fragmentValues[0];
+  if (
+    fragmentValues.length > 1 ||
+    (fragment !== undefined && (path === undefined || !FRAGMENT_PATTERN.test(fragment)))
+  ) {
+    return { nonce };
+  }
+  const keys = [...parameters.keys()].filter((key) => key !== 'fragment');
   const protectedBody = keys.every(
     (key) =>
       key === 'shareId' ||
@@ -156,6 +169,7 @@ function parseRenderRequest(body: unknown): {
     return SHARE_ID_PATTERN.test(shareId) && VIEWER_TOKEN_PATTERN.test(viewerToken)
       ? {
           nonce,
+          ...(fragment === undefined ? {} : { fragment }),
           request: {
             accessType: 'protected',
             shareId,
@@ -178,6 +192,7 @@ function parseRenderRequest(body: unknown): {
     return PUBLIC_CODE_PATTERN.test(publicCode)
       ? {
           nonce,
+          ...(fragment === undefined ? {} : { fragment }),
           request: {
             accessType: 'public',
             publicCode,
@@ -213,8 +228,8 @@ function signalScript(
   const folderLinks =
     folderSessionPath === undefined
       ? ''
-      : `if(!url.pathname.startsWith(${javascriptLiteral(folderSessionPath)}))return;event.preventDefault();let path;try{path=decodeURIComponent(url.pathname.slice(${folderSessionPath.length}))}catch{return}notify("shelf:renderer-open-path",{path});`;
-  const links = `const closest=Element.prototype.closest;addEventListener("click",event=>{if(event.defaultPrevented||event.button!==0||!(event.target instanceof Element))return;const anchor=closest.call(event.target,"a[href],area[href]");if(anchor===null)return;let url;try{url=new URL(anchor.getAttribute("href")??"",document.baseURI)}catch{return}if(url.origin!==location.origin)return;if(url.pathname===location.pathname&&url.search===location.search&&url.hash!==""){event.preventDefault();const oldURL=location.href;try{history.pushState(history.state,"",url.href)}catch{return}let id=url.hash.slice(1);try{id=decodeURIComponent(id)}catch{}const target=id===""||id.toLowerCase()==="top"?document.documentElement:document.getElementById(id)??document.getElementsByName(id)[0];target?.scrollIntoView();if(oldURL!==location.href)dispatchEvent(new HashChangeEvent("hashchange",{oldURL,newURL:location.href}));return}${folderLinks}});`;
+      : `if(!url.pathname.startsWith(${javascriptLiteral(folderSessionPath)}))return;event.preventDefault();let path;try{path=decodeURIComponent(url.pathname.slice(${folderSessionPath.length}))}catch{return}if(path===""||path.endsWith("/"))path+="index.html";notify("shelf:renderer-open-path",{path,fragment:url.hash.slice(1)});`;
+  const links = `const closest=Element.prototype.closest;addEventListener("click",event=>{if(event.defaultPrevented||event.button!==0||!(event.target instanceof Element))return;const anchor=closest.call(event.target,"a[href],area[href]");if(anchor===null)return;let url;try{url=new URL(anchor.getAttribute("href")??"",document.baseURI)}catch{return}if(url.origin!==location.origin)return;if(url.pathname===location.pathname&&url.search===location.search&&(url.hash!==""||url.href.endsWith("#"))){event.preventDefault();const oldURL=location.href;try{history.pushState(history.state,"",url.href)}catch{return}let id=url.hash.slice(1);try{id=decodeURIComponent(id)}catch{}const target=id===""||id.toLowerCase()==="top"?document.documentElement:document.getElementById(id)??document.getElementsByName(id)[0];target?.scrollIntoView();if(oldURL!==location.href)dispatchEvent(new HashChangeEvent("hashchange",{oldURL,newURL:location.href}));return}${folderLinks}});`;
   return `<script>(()=>{const target=parent;const channel=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,"0")).join("");const notify=(type,detail)=>target.postMessage({...detail,type,version:1,nonce:${nonceLiteral},channel},${originLiteral});notify("shelf:renderer-armed");addEventListener("load",()=>notify(${typeLiteral}),{once:true});${links}})()</script>`;
 }
 
@@ -348,8 +363,9 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
       signal: requestCancellationSignal(request, reply),
     }).catch(() => null);
 
-    if (destination === 'iframe') {
-      // Only the sandboxed viewer frame may load a folder document.
+    // Only the sandboxed viewer frame may load a folder document. Browsers without Fetch Metadata
+    // omit the destination, so an HTML file then loads as a document too.
+    if (destination === 'iframe' || (destination === undefined && file?.kind === 'html')) {
       const host = request.headers.host;
       if (
         file === null ||
@@ -387,10 +403,11 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
     }
 
     applyBoundaryHeaders(reply, FOLDER_FILE_CONTENT_SECURITY_POLICY);
+    // Module scripts, fonts, and fetch() from the opaque sandbox origin use CORS, so failures
+    // carry the header too and scripts can read their status.
+    void reply.header('Access-Control-Allow-Origin', '*');
     if (file === null) return reply.status(503).send();
     if (file === undefined) return reply.status(404).send();
-    // Module scripts, fonts, and fetch() from the opaque sandbox origin use CORS.
-    void reply.header('Access-Control-Allow-Origin', '*');
     if (file.kind === 'html') return reply.type('text/html; charset=utf-8').send(file.html);
     void reply.header('Accept-Ranges', 'bytes');
     void reply.type(file.mediaType);
@@ -398,20 +415,29 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
     if (range === 'unsatisfiable') {
       return reply.status(416).header('Content-Range', `bytes */${file.byteCount}`).send();
     }
-    if (range === undefined) {
-      void reply.header('Content-Length', String(file.byteCount));
-    } else {
-      void reply
-        .status(206)
-        .header('Content-Range', `bytes ${range.start}-${range.end}/${file.byteCount}`)
-        .header('Content-Length', String(range.end - range.start + 1));
+    const status = range === undefined ? 200 : 206;
+    void reply.header(
+      'Content-Length',
+      String(range === undefined ? file.byteCount : range.end - range.start + 1),
+    );
+    if (range !== undefined) {
+      void reply.header('Content-Range', `bytes ${range.start}-${range.end}/${file.byteCount}`);
     }
-    if (file.byteCount === 0) return reply.send('');
+    if (file.byteCount === 0) return reply.status(status).send('');
+    let content: AsyncIterable<Uint8Array>;
     try {
-      return reply.send(Readable.from(await file.read(range)));
+      content = await file.read(range);
     } catch {
       return reply.status(503).removeHeader('Content-Length').send();
     }
+    // The handler deadline bounds the lookup above. Streaming a large file can outlast it, so the
+    // body is written outside Fastify's reply lifecycle.
+    reply.hijack();
+    for (const [name, value] of Object.entries(reply.getHeaders())) {
+      if (value !== undefined) reply.raw.setHeader(name, value);
+    }
+    reply.raw.writeHead(status);
+    await pipeline(Readable.from(content), reply.raw).catch(() => reply.raw.destroy());
   });
 
   app.post('/render', async (request, reply) => {
@@ -459,7 +485,12 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
       // A real hierarchical document URL lets the browser resolve relative references itself.
       return reply
         .status(303)
-        .header('Location', folderSessionFileUrl(`/f/${token}/`, result.path))
+        .header(
+          'Location',
+          `${folderSessionFileUrl(`/f/${token}/`, result.path)}${
+            input.fragment === undefined ? '' : `#${input.fragment}`
+          }`,
+        )
         .send();
     }
     const ready = signalScript('shelf:renderer-ready', input.nonce, appOrigin);

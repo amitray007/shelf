@@ -246,6 +246,7 @@ export function createShareAccessService(dependencies: {
     async readTreeFile(request: {
       authority: ShareResolutionAuthority;
       revisionId?: string;
+      issuedRevision?: boolean;
       path: string;
       signal?: AbortSignal;
     }): Promise<PublicSharedFolderFile> {

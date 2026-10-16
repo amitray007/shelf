@@ -41,7 +41,6 @@ export async function createRendererRuntime(
         : { folderSessionKey: dataPlane.folderSessionKey }),
       ...(dataPlane.clock === undefined ? {} : { clock: dataPlane.clock }),
       resolver: createCoreHtmlResolver({
-        appOrigin: config.appOrigin,
         shares: dataPlane.shares,
         viewerSessionTokenCodec: dataPlane.viewerSessionTokenCodec,
         revisions: dataPlane.revisions,

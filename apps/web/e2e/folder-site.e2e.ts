@@ -10,6 +10,7 @@ const files = [
   ['css/base.css', 'text/css'],
   ['css/site.css', 'text/css'],
   ['data.json', 'application/json'],
+  ['guide/index.html', 'text/html'],
   ['img/dot.png', 'image/png'],
   ['js/app.js', 'text/javascript'],
   ['js/classic.js', 'text/javascript'],
@@ -102,6 +103,8 @@ test('folder HTML loads relative scripts, modules, styles, images, and data, and
     'color',
     'rgb(1, 2, 3)',
   );
+  // The link's fragment carries into the newly opened file.
+  await expect(aboutFrame.getByText('Team section')).toBeInViewport();
   // Narrow viewports keep the files sidebar closed, so the tree is checked only where it renders.
   const aboutItem = page.getByRole('treeitem', { name: 'about.html', exact: true });
   if (await page.getByRole('tree').isVisible()) {
@@ -115,9 +118,21 @@ test('folder HTML loads relative scripts, modules, styles, images, and data, and
   const homeFrame = page.frameLocator('iframe[title="index.html isolated preview"]');
   await expect(homeFrame.locator('#module')).toHaveText('module:ok');
 
-  // A same-document fragment link scrolls inside the frame and keeps it open.
+  // Directory links open that directory's index.html.
+  await homeFrame.getByRole('link', { name: 'Guide', exact: true }).click();
+  const guideFrame = page.frameLocator('iframe[title="guide/index.html isolated preview"]');
+  await expect(guideFrame.getByRole('heading', { name: 'Guide index' })).toHaveCSS(
+    'color',
+    'rgb(1, 2, 3)',
+  );
+  await guideFrame.getByRole('link', { name: 'Site home' }).click();
+  await expect(homeFrame.locator('#module')).toHaveText('module:ok');
+
+  // Same-document fragment links scroll inside the frame and keep it open.
   await homeFrame.locator('#section').click();
   await expect(homeFrame.locator('#details')).toBeInViewport();
+  await homeFrame.getByRole('link', { name: 'Back to top' }).click();
+  await expect(homeFrame.getByRole('heading', { name: 'Agent site' })).toBeInViewport();
   await expect(home).toBeVisible();
   await expect(page.locator('.renderer-stage')).toHaveAttribute('data-status', 'ready');
   expect(externalRequests).toEqual([]);

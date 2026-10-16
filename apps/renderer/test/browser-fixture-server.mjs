@@ -65,11 +65,13 @@ const folders = {
 </head><body><h1>Agent site</h1>
 <p id="classic">classic:pending</p><p id="module">module:pending</p><p id="lazy">lazy:pending</p><p id="data">data:pending</p><p id="external">external:pending</p>
 <img id="dot" alt="dot" src="img/dot.png" width="8" height="8">
-<nav><a id="about" href="about.html#team">About this site</a> <a id="section" href="#details">Details</a></nav>
-<section id="details" style="margin-top:2000px">Details</section>
+<nav><a id="about" href="about.html#team">About this site</a> <a href="guide/">Guide</a> <a id="section" href="#details">Details</a></nav>
+<section id="details" style="margin-top:2000px">Details <a href="#">Back to top</a></section>
 </body></html>`,
     'about.html':
-      '<!doctype html><html><head><link rel="stylesheet" href="css/site.css"></head><body><h1>About page</h1><a href="index.html">Home</a></body></html>',
+      '<!doctype html><html><head><link rel="stylesheet" href="css/site.css"></head><body><h1>About page</h1><a href="index.html">Home</a><section id="team" style="margin-top:2000px">Team section</section></body></html>',
+    'guide/index.html':
+      '<!doctype html><html><head><link rel="stylesheet" href="../css/site.css"></head><body><h1>Guide index</h1><a href="../">Site home</a></body></html>',
     'css/site.css': '@import "base.css"; body { background-image: url("../img/dot.png"); }',
     'css/base.css': 'h1 { color: rgb(1, 2, 3); }',
     'js/classic.js': 'window.classicReady = true;',

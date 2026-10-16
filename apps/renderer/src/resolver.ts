@@ -7,6 +7,7 @@ import {
   ShareNotFoundError,
   type ShareRepository,
   type ShareResolutionAuthority,
+  type StoredFolderRevision,
 } from '@shelf/core';
 
 import type { RendererHtmlResolver } from './app.js';
@@ -14,6 +15,7 @@ import type { RendererHtmlResolver } from './app.js';
 export const DEFAULT_MAX_HTML_BYTES = 10 * 1024 * 1024;
 const MAX_CACHED_HTML_BYTES = 1024 * 1024;
 const MAX_HTML_CACHE_BYTES = 32 * 1024 * 1024;
+const MAX_CACHED_FOLDER_REVISIONS = 256;
 
 export interface ViewerSessionTokenVerifier {
   verify(
@@ -48,8 +50,33 @@ async function readExactUtf8(
   }
 }
 
+/**
+ * A folder page can request dozens of sibling files. Folder revision rows are immutable, so cache
+ * them by revision ID; share authority and entries are still resolved on every request.
+ */
+function withFolderRevisionCache(folders: FolderRevisionRepository): FolderRevisionRepository {
+  const revisions = new Map<string, StoredFolderRevision>();
+  return {
+    findFolderIdempotency: (namespace) => folders.findFolderIdempotency(namespace),
+    commitFolderPublish: (input) => folders.commitFolderPublish(input),
+    findFolderEntry: (request) => folders.findFolderEntry(request),
+    listFolderEntries: (request) => folders.listFolderEntries(request),
+    async findFolderRevision(revisionId) {
+      const cached = revisions.get(revisionId);
+      if (cached !== undefined) return cached;
+      const revision = await folders.findFolderRevision(revisionId);
+      if (revision === undefined) return undefined;
+      if (revisions.size >= MAX_CACHED_FOLDER_REVISIONS) {
+        const oldest = revisions.keys().next().value;
+        if (oldest !== undefined) revisions.delete(oldest);
+      }
+      revisions.set(revisionId, revision);
+      return revision;
+    },
+  };
+}
+
 export function createCoreHtmlResolver(dependencies: {
-  appOrigin: string;
   shares: ShareRepository;
   viewerSessionTokenCodec: ViewerSessionTokenVerifier;
   revisions: RevisionRepository;
@@ -65,7 +92,7 @@ export function createCoreHtmlResolver(dependencies: {
   const access = createShareAccessService({
     shares: dependencies.shares,
     revisions: dependencies.revisions,
-    folders: dependencies.folders,
+    folders: withFolderRevisionCache(dependencies.folders),
     contentReader: dependencies.contentReader,
     ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
   });
@@ -164,6 +191,7 @@ export function createCoreHtmlResolver(dependencies: {
         const file = await access.readTreeFile({
           authority: request.authority,
           revisionId: request.revisionId,
+          issuedRevision: true,
           path: request.path,
           ...(request.signal === undefined ? {} : { signal: request.signal }),
         });

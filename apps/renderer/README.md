@@ -9,7 +9,7 @@ it redirects the frame to a revision-scoped folder session so the browser can lo
 
 - `GET /` is an inert availability document. It does not accept a capability.
 - `POST /render` accepts `nonce` plus either `shareId` and `viewerToken` or `publicCode`, with an
-  optional folder `path` and `revisionId`, as `application/x-www-form-urlencoded` body fields from
+  optional folder `path`, `revisionId`, and link `fragment`, as `application/x-www-form-urlencoded` body fields from
   the iframe's opaque sandbox origin. A
   sandboxed form navigation reports `Origin: null`; missing, cookie-bearing, application-origin,
   and other-origin requests are rejected. The capability is the request authority, and a dedicated
@@ -38,16 +38,19 @@ A render request with a folder `path` that names an HTML file answers `303 See O
 `/f/<session>/<path>`. The session is an HMAC-signed token, derived from the share-signing key, that
 names the share authority, one exact revision, the parent nonce, and an expiry of at most one hour.
 A Protected session never outlives its viewer session. A Latest share is pinned to the revision
-that was current when the session started.
+that was current when the session started, and an open session keeps reading that revision after a
+newer one is published.
 
-- `GET /f/<session>/<path>` with `Sec-Fetch-Dest: iframe` returns an HTML file as the document. Its
+- `GET /f/<session>/<path>` with `Sec-Fetch-Dest: iframe`, or with no `Sec-Fetch-Dest` for an HTML
+  file, returns that HTML file as the document. Its
   CSP allows scripts, styles, images, fonts, media, and `connect-src` only from
   `https://<Host>/f/<session>/` and `http://<Host>/f/<session>/`. External origins and other
   sessions stay blocked. A path that ends in `/` serves that directory's `index.html`.
 - Any other destination returns the file bytes with the stored media type, `nosniff`, a
   `default-src 'none'; sandbox` CSP, `Access-Control-Allow-Origin: *` for module scripts, fonts,
-  and `fetch()` from the opaque sandbox origin, and one optional byte range. Query strings are
-  ignored, so `app.js?v=2` reads `app.js`.
+  and `fetch()` from the opaque sandbox origin, and one optional byte range. Error responses carry
+  the same CORS header, so scripts can read a 404. The body streams outside the handler deadline,
+  which bounds only the lookup. Query strings are ignored, so `app.js?v=2` reads `app.js`.
 - The route rejects top-level document requests, cookies, foreign `Origin` values, invalid or
   expired sessions, encoded slashes, and paths outside the folder. Every request resolves the
   share again, so revocation and expiry apply at once.
@@ -56,8 +59,10 @@ that was current when the session started.
 
 The injected handshake script handles link clicks. A same-document fragment link updates history
 and scrolls without a navigation, because WebKit fires a frame load for fragment navigation. In a
-folder session, a link to another file in the session posts `shelf:renderer-open-path` on the
-private channel, and the parent viewer selects that file. The parent still terminates every later
+folder session, a link to another file in the session posts `shelf:renderer-open-path` with the
+file path and the link's fragment on the private channel. A directory link names its
+`index.html`. The parent viewer selects that file and sends the fragment as the render request's
+`fragment` field, which the session redirect appends to its `Location`. The parent still terminates every later
 frame load. Root-relative references such as `/assets/app.js` resolve outside the session and stay
 blocked.
 

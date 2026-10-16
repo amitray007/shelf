@@ -13,7 +13,6 @@ const html = '<!doctype html><title>Artifact</title><h1>Hello</h1>';
 
 function resolver(options: Parameters<typeof rendererDependencies>[0] = {}, maxHtmlBytes?: number) {
   return createCoreHtmlResolver({
-    appOrigin: 'https://shelf.example',
     ...rendererDependencies(options),
     viewerSessionTokenCodec: {
       verify: (token) =>
@@ -33,7 +32,6 @@ function resolver(options: Parameters<typeof rendererDependencies>[0] = {}, maxH
 
 function folderResolver(dependencies: ReturnType<typeof rendererFolderDependencies>) {
   return createCoreHtmlResolver({
-    appOrigin: 'https://shelf.example',
     ...dependencies,
     viewerSessionTokenCodec: {
       verify: () => ({
@@ -138,7 +136,6 @@ describe('core HTML resolver', () => {
         : result;
     };
     const htmlResolver = createCoreHtmlResolver({
-      appOrigin: 'https://shelf.example',
       ...dependencies,
       viewerSessionTokenCodec: { verify: () => undefined },
       clock: () => new Date('2026-08-17T12:30:00.000Z'),
@@ -252,6 +249,42 @@ describe('core HTML resolver', () => {
         path: 'js/app.js',
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it('keeps serving the issued revision after a newer Latest revision is published', async () => {
+    const dependencies = rendererFolderDependencies({
+      'js/lazy.js': { mediaType: 'text/javascript', content: new TextEncoder().encode('1') },
+    });
+    const resolveCurrent = dependencies.shares.resolveShareTarget.bind(dependencies.shares);
+    dependencies.shares.resolveShareTarget = async (shareId) => {
+      const current = await resolveCurrent(shareId);
+      if (current === undefined) return undefined;
+      const issued = current.revision;
+      const newer = {
+        ...issued.revision,
+        revisionId: 'rev_CCCCCCCCCCCCCCCCCCCCCC',
+        revisionNumber: 2,
+      };
+      dependencies.shares.findRevisionForShare = async (revisionId) =>
+        revisionId === rendererIds.revision ? issued : undefined;
+      return {
+        ...current,
+        artifact: { ...current.artifact, latestRevision: newer },
+        revision: { ...issued, revision: newer },
+      };
+    };
+
+    await expect(
+      folderResolver(dependencies).readFolderFile?.({
+        authority: {
+          type: 'protected-session',
+          shareId: rendererIds.share,
+          sessionId: rendererIds.sessionId,
+        },
+        revisionId: rendererIds.revision,
+        path: 'js/lazy.js',
+      }),
+    ).resolves.toMatchObject({ kind: 'file', mediaType: 'text/javascript' });
   });
 
   it('stops serving folder files once the share is revoked', async () => {
