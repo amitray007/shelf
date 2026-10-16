@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/amitray007/shelf/compare/v0.1.6...v0.1.7) (2026-10-16)
+
+
+### Features
+
+* **cli:** warn about folder references the viewer cannot load ([#36](https://github.com/amitray007/shelf/issues/36)) ([d1440f0](https://github.com/amitray007/shelf/commit/d1440f0f15f78b2c93da0fb61ba57c14f0304e3f))
+
 ## [0.1.6](https://github.com/amitray007/shelf/compare/v0.1.5...v0.1.6) (2026-08-29)
 
 
