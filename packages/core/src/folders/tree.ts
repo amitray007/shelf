@@ -153,13 +153,14 @@ export function createFolderEntryContentService(dependencies: {
       },
       request.signal,
     );
-    const page = await dependencies.folders.listFolderEntries({
+    const entry = await dependencies.folders.findFolderEntry({
       installationId: request.installationId,
       revisionId: request.revisionId,
-      limit: FOLDER_LIMITS.maxEntries,
+      path: request.path,
     });
-    const entry = page.items.find((candidate) => candidate.path === request.path);
-    if (entry === undefined || entry.kind !== 'file') throw new RevisionNotFoundError();
+    if (entry === undefined || entry.kind !== 'file' || entry.path !== request.path) {
+      throw new RevisionNotFoundError();
+    }
     return {
       path: entry.path,
       mediaType: entry.mediaType,

@@ -244,7 +244,15 @@ export async function prepareLocalFolder(directory: string): Promise<PreparedLoc
   for (const file of files) {
     fingerprint.update(`\n${Buffer.byteLength(file.path, 'utf8')}:${file.path}:${file.byteCount}:`);
     try {
-      for await (const chunk of createReadStream(file.absolutePath)) fingerprint.update(chunk);
+      const content = createReadStream(file.absolutePath, {
+        highWaterMark: Math.max(1, Math.min(file.byteCount, 64 * 1024)),
+      });
+      let readBytes = 0;
+      for await (const chunk of content) {
+        readBytes += chunk.byteLength;
+        if (readBytes > file.byteCount) throw new Error('changed');
+        fingerprint.update(chunk);
+      }
       const current = await lstat(file.absolutePath);
       if (
         !current.isFile() ||

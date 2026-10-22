@@ -1,4 +1,6 @@
+import fs from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -51,6 +53,61 @@ const result = {
 };
 
 describe('shelf folders', () => {
+  it.each([0, 1, 1_024])(
+    'stops reading a growing file after its recorded %i bytes',
+    async (size) => {
+      const parent = await mkdtemp(join(tmpdir(), 'shelf-folder-growth-cli-'));
+      roots.push(parent);
+      const directory = join(parent, 'project');
+      await mkdir(directory);
+      const target = join(directory, 'growing.txt');
+      await writeFile(target, Buffer.alloc(size, 97));
+      let bytesRead = 0;
+      const original = fs.createReadStream;
+      const stream = vi.spyOn(fs, 'createReadStream').mockImplementation((path, options) => {
+        if (path !== target) return original(path, options);
+        fs.appendFileSync(target, Buffer.alloc(8_192, 98));
+        const content = original(path, options);
+        const read = content.read.bind(content);
+        content.read = (count) => {
+          const chunk = read(count);
+          if (Buffer.isBuffer(chunk)) bytesRead += chunk.byteLength;
+          return chunk;
+        };
+        return content;
+      });
+      syncBuiltinESMExports();
+      try {
+        await expect(prepareLocalFolder(directory)).rejects.toThrow(
+          'The directory tree changed while it was being inspected.',
+        );
+        expect(bytesRead).toBeGreaterThan(size);
+        expect(bytesRead).toBeLessThanOrEqual(size + Math.max(1, size));
+      } finally {
+        stream.mockRestore();
+        syncBuiltinESMExports();
+      }
+    },
+  );
+
+  it('keeps the exact fingerprint for empty, small, boundary-size, and large files', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'shelf-folder-buffer-cli-'));
+    roots.push(parent);
+    const directory = join(parent, 'project');
+    await mkdir(directory);
+    const sizes = [0, 1, 65_535, 65_536, 65_537, 10 * 1024 * 1024];
+    for (const [index, size] of sizes.entries()) {
+      await writeFile(join(directory, `size-${index}.bin`), Buffer.alloc(size, index));
+    }
+
+    const prepared = await prepareLocalFolder(directory);
+
+    expect(prepared.contentFingerprint).toBe(
+      '4145099106d75d33769fcdcc99108254c30bf69dc1501756a10272498d7cadfc',
+    );
+    expect(prepared.files.map((file) => file.byteCount)).toEqual(sizes);
+  });
+
   it('fingerprints exact folder bytes rather than only paths or sizes', async () => {
     const directory = await folderFixture();
     const first = await prepareLocalFolder(directory);

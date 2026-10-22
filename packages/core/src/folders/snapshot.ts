@@ -123,9 +123,12 @@ export function validateFolderManifestInput(manifest: FolderManifestInput): Fold
     ]);
   }
   for (const entry of entries) {
-    const segments = entry.path.split('/');
-    for (let index = 1; index < segments.length; index += 1) {
-      const parent = segments.slice(0, index).join('/');
+    for (
+      let index = entry.path.indexOf('/');
+      index !== -1;
+      index = entry.path.indexOf('/', index + 1)
+    ) {
+      const parent = entry.path.slice(0, index);
       if (kinds.get(parent) !== 'directory') {
         throw invalidPath(entry.path, `parent directory ${parent} must be explicit`);
       }
@@ -134,20 +137,18 @@ export function validateFolderManifestInput(manifest: FolderManifestInput): Fold
   return { ...manifest, entries };
 }
 
-function comparePaths(left: StoredFolderEntry, right: StoredFolderEntry): number {
-  return Buffer.compare(Buffer.from(left.path, 'utf8'), Buffer.from(right.path, 'utf8'));
-}
-
 export function canonicalFolderManifest(entries: readonly StoredFolderEntry[]): {
   bytes: Uint8Array;
   contentHash: string;
   byteCount: number;
   fileCount: number;
 } {
-  const ordered = [...entries].sort(comparePaths);
+  const ordered = entries
+    .map((entry) => ({ entry, pathBytes: Buffer.from(entry.path, 'utf8') }))
+    .sort((left, right) => Buffer.compare(left.pathBytes, right.pathBytes));
   let byteCount = 0;
   let fileCount = 0;
-  const canonicalEntries = ordered.map((entry) => {
+  const canonicalEntries = ordered.map(({ entry }) => {
     if (entry.kind === 'directory') return { path: entry.path, kind: entry.kind };
     byteCount += entry.content.byteCount;
     fileCount += 1;
