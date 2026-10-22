@@ -10,6 +10,49 @@ import {
 } from '../src/index.js';
 
 describe('folder snapshot module', () => {
+  it('validates explicit ancestors through the maximum supported depth without changing paths', () => {
+    const segments = Array.from({ length: 63 }, (_, index) => `café-${index}`);
+    const entries = segments.map((_, index) => ({
+      path: segments.slice(0, index + 1).join('/'),
+      kind: 'directory' as const,
+    }));
+    const manifest = {
+      version: 'shelf-folder-manifest/v1' as const,
+      rootName: 'Deep folder',
+      entries: [
+        ...entries,
+        { path: `${segments.join('/')}/file.txt`, kind: 'file' as const, mediaType: 'text/plain' },
+      ].reverse(),
+    };
+    expect(validateFolderManifestInput(manifest)).toEqual(manifest);
+  });
+
+  it.each([
+    { directories: [], parent: 'café' },
+    { directories: ['café'], parent: 'café/docs' },
+  ])('reports the first missing ancestor: $parent', ({ directories, parent }) => {
+    expect(() =>
+      validateFolderManifestInput({
+        version: 'shelf-folder-manifest/v1',
+        rootName: 'Project',
+        entries: [
+          ...directories.map((path) => ({ path, kind: 'directory' as const })),
+          { path: 'café/docs/readme.txt', kind: 'file', mediaType: 'text/plain' },
+        ],
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: 'INVALID_REQUEST',
+        details: [
+          {
+            field: 'manifest.entries.café/docs/readme.txt',
+            reason: `parent directory ${parent} must be explicit`,
+          },
+        ],
+      }),
+    );
+  });
+
   it('restores a folder by referencing its immutable manifest and entry set', async () => {
     const source = {
       apiVersion: 'v1' as const,
@@ -273,6 +316,19 @@ describe('folder snapshot module', () => {
       ],
     });
     expect(staged.size).toBe(0);
+  });
+
+  it('orders canonical paths by UTF-8 bytes without changing the input order', () => {
+    const entries = ['𐀀', '\uE000', 'é', 'z', 'a'].map((path) => ({
+      path,
+      kind: 'directory' as const,
+    }));
+    const result = canonicalFolderManifest(entries);
+
+    expect(new TextDecoder().decode(result.bytes)).toBe(
+      '{"version":"shelf-folder-manifest/v1","entries":[{"path":"a","kind":"directory"},{"path":"z","kind":"directory"},{"path":"é","kind":"directory"},{"path":"\uE000","kind":"directory"},{"path":"𐀀","kind":"directory"}]}',
+    );
+    expect(entries.map((entry) => entry.path)).toEqual(['𐀀', '\uE000', 'é', 'z', 'a']);
   });
 
   it('normalizes paths and hashes one deterministic canonical manifest', () => {

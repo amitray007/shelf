@@ -251,6 +251,175 @@ describe('core HTML resolver', () => {
     ).resolves.toBeUndefined();
   });
 
+  it.each([
+    { type: 'public', change: 'revoked' },
+    { type: 'public', change: 'expired' },
+    { type: 'protected-session', change: 'revoked' },
+    { type: 'protected-session', change: 'expired' },
+  ] as const)(
+    'rechecks $type authority and the exact entry when warm HTML becomes $change',
+    async ({ type, change }) => {
+      const dependencies = rendererFolderDependencies(
+        { 'index.html': { mediaType: 'text/html', content: new TextEncoder().encode(html) } },
+        {
+          share: rendererStoredShare(
+            type === 'public' ? { accessType: 'public', publicCode: rendererIds.publicCode } : {},
+          ),
+        },
+      );
+      let reads = 0;
+      let resolutions = 0;
+      let lookups = 0;
+      let unavailable = false;
+      const read = dependencies.contentReader.read;
+      dependencies.contentReader.read = async (...args) => {
+        reads += 1;
+        return read(...args);
+      };
+      const resolve = dependencies.shares.resolveShareTarget;
+      dependencies.shares.resolveShareTarget = async (...args) => {
+        resolutions += 1;
+        const target = await resolve(...args);
+        return unavailable && target !== undefined
+          ? {
+              ...target,
+              share: {
+                ...target.share,
+                ...(change === 'revoked'
+                  ? { revokedAt: '2026-08-17T12:15:00.000Z' }
+                  : { expiresAt: '2026-08-17T12:15:00.000Z' }),
+              },
+            }
+          : target;
+      };
+      const find = dependencies.folders.findFolderEntry;
+      dependencies.folders.findFolderEntry = async (...args) => {
+        lookups += 1;
+        return find(...args);
+      };
+      const resolver = folderResolver(dependencies);
+      const authority =
+        type === 'public'
+          ? { type, publicCode: rendererIds.publicCode }
+          : { type, shareId: rendererIds.share, sessionId: rendererIds.sessionId };
+      const request = { authority, revisionId: rendererIds.revision, path: 'index.html' };
+
+      for (let index = 0; index < 2; index += 1) {
+        await expect(resolver.readFolderFile?.(request)).resolves.toEqual({ kind: 'html', html });
+      }
+      expect({ reads, resolutions, lookups }).toEqual({ reads: 1, resolutions: 2, lookups: 2 });
+      await expect(
+        resolver.readFolderFile?.({
+          ...request,
+          authority:
+            type === 'public'
+              ? { type, publicCode: 'ZbCdEf0123_-' }
+              : { type, shareId: 'shr_CCCCCCCCCCCCCCCCCCCCCC', sessionId: rendererIds.sessionId },
+        }),
+      ).resolves.toBeUndefined();
+      await expect(
+        resolver.readFolderFile?.({ ...request, path: 'missing.html' }),
+      ).resolves.toBeUndefined();
+      await expect(
+        resolver.readFolderFile?.({ ...request, revisionId: 'rev_CCCCCCCCCCCCCCCCCCCCCC' }),
+      ).resolves.toBeUndefined();
+      unavailable = true;
+      await expect(resolver.readFolderFile?.(request)).resolves.toBeUndefined();
+      expect(reads).toBe(1);
+    },
+  );
+
+  it('keeps same-size folder HTML entries separate by their content hashes', async () => {
+    const resolver = folderResolver(
+      rendererFolderDependencies({
+        'one.html': { mediaType: 'text/html', content: new TextEncoder().encode('<p>one</p>') },
+        'two.html': { mediaType: 'text/html', content: new TextEncoder().encode('<p>two</p>') },
+      }),
+    );
+    const request = {
+      authority: {
+        type: 'protected-session' as const,
+        shareId: rendererIds.share,
+        sessionId: rendererIds.sessionId,
+      },
+      revisionId: rendererIds.revision,
+    };
+    for (const name of ['one', 'two', 'one']) {
+      await expect(
+        resolver.readFolderFile?.({ ...request, path: `${name}.html` }),
+      ).resolves.toEqual({ kind: 'html', html: `<p>${name}</p>` });
+    }
+  });
+
+  it('preserves cancellation during a warm-cache entry lookup', async () => {
+    const dependencies = rendererFolderDependencies({
+      'index.html': { mediaType: 'text/html', content: new TextEncoder().encode(html) },
+    });
+    const resolver = folderResolver(dependencies);
+    const request = {
+      authority: {
+        type: 'protected-session' as const,
+        shareId: rendererIds.share,
+        sessionId: rendererIds.sessionId,
+      },
+      revisionId: rendererIds.revision,
+      path: 'index.html',
+    };
+    await expect(resolver.readFolderFile?.(request)).resolves.toEqual({ kind: 'html', html });
+    const controller = new AbortController();
+    const find = dependencies.folders.findFolderEntry;
+    dependencies.folders.findFolderEntry = async (...args) => {
+      const result = await find(...args);
+      controller.abort();
+      return result;
+    };
+    await expect(
+      resolver.readFolderFile?.({ ...request, signal: controller.signal }),
+    ).rejects.toMatchObject({ code: 'CONTENT_UNAVAILABLE' });
+  });
+
+  it.each(['invalid UTF-8', 'wrong byte count', 'above cache limit'])(
+    'does not cache folder HTML with %s',
+    async (scenario) => {
+      const content =
+        scenario === 'invalid UTF-8'
+          ? Uint8Array.from([0xc3, 0x28])
+          : new TextEncoder().encode(
+              scenario === 'above cache limit' ? 'x'.repeat(1_048_577) : html,
+            );
+      const dependencies = rendererFolderDependencies({
+        'index.html': { mediaType: 'text/html', content },
+      });
+      let reads = 0;
+      const read = dependencies.contentReader.read;
+      dependencies.contentReader.read = async (...args) => {
+        reads += 1;
+        if (scenario === 'wrong byte count') {
+          return (async function* () {
+            yield new Uint8Array();
+          })();
+        }
+        return read(...args);
+      };
+      const resolver = folderResolver(dependencies);
+      const request = {
+        authority: {
+          type: 'protected-session' as const,
+          shareId: rendererIds.share,
+          sessionId: rendererIds.sessionId,
+        },
+        revisionId: rendererIds.revision,
+        path: 'index.html',
+      };
+      for (let index = 0; index < 2; index += 1) {
+        const result = await resolver.readFolderFile?.(request);
+        if (scenario === 'above cache limit') expect(result?.kind).toBe('html');
+        else expect(result).toBeUndefined();
+      }
+      expect(reads).toBe(2);
+    },
+  );
+
   it('keeps serving the issued revision after a newer Latest revision is published', async () => {
     const dependencies = rendererFolderDependencies({
       'js/lazy.js': { mediaType: 'text/javascript', content: new TextEncoder().encode('1') },

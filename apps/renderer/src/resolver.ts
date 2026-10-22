@@ -198,8 +198,14 @@ export function createCoreHtmlResolver(dependencies: {
         if (file.revisionId !== request.revisionId) return undefined;
         if (normalizedMediaType(file.mediaType) === 'text/html') {
           if (file.byteCount > maximumBytes) return undefined;
+          const cached = request.signal?.aborted
+            ? undefined
+            : cachedHtml(file.contentHash, file.byteCount);
+          if (cached !== undefined) return { kind: 'html', html: cached };
           const html = await readExactUtf8(await file.read(), file.byteCount, maximumBytes);
-          return html === undefined ? undefined : { kind: 'html', html };
+          if (html === undefined) return undefined;
+          cacheHtml(file.contentHash, file.byteCount, html);
+          return { kind: 'html', html };
         }
         return {
           kind: 'file',

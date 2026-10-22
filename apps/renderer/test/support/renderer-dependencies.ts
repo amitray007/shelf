@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type {
   ContentReader,
   FolderRevisionRepository,
@@ -170,6 +172,12 @@ export function rendererFolderDependencies(
   files: Record<string, { mediaType: string; content: Uint8Array }>,
   options: { share?: StoredShare } = {},
 ) {
+  const entries = new Map(
+    Object.entries(files).map(([path, file]) => [
+      path,
+      { ...file, contentHash: `sha256:${createHash('sha256').update(file.content).digest('hex')}` },
+    ]),
+  );
   const dependencies = rendererDependencies(
     options.share === undefined ? {} : { share: options.share },
   );
@@ -231,7 +239,7 @@ export function rendererFolderDependencies(
     publisherMetadata: {},
   });
   dependencies.folders.findFolderEntry = async (input) => {
-    const file = files[input.path];
+    const file = entries.get(input.path);
     if (
       file === undefined ||
       input.installationId !== 'install-main' ||
@@ -245,7 +253,7 @@ export function rendererFolderDependencies(
       mediaType: file.mediaType,
       content: {
         contentId: `content:${input.path}`,
-        contentHash: `sha256:${'c'.repeat(64)}`,
+        contentHash: file.contentHash,
         byteCount: file.content.byteLength,
       },
     };
