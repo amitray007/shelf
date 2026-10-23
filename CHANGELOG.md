@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.8](https://github.com/amitray007/shelf/compare/v0.1.7...v0.1.8) (2026-10-23)
+
+
+### Performance
+
+* reduce folder publish and preview work ([72c2069](https://github.com/amitray007/shelf/commit/72c2069bf70678dd7c5ccafa3849d921474dff7e))
+* reduce folder publish and preview work ([2470f9a](https://github.com/amitray007/shelf/commit/2470f9aba1c722fa07eb5a83307cf44c00bb5f0c))
+
 ## [0.1.7](https://github.com/amitray007/shelf/compare/v0.1.6...v0.1.7) (2026-10-16)
 
 
