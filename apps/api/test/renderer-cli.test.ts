@@ -4,6 +4,7 @@ import { runShelfRenderer } from '../src/renderer-cli.js';
 
 function environment(secret: string) {
   return {
+    SHELF_INSTALLATION_ID: 'installation-main',
     DATABASE_URL: 'postgresql://shelf@localhost/shelf',
     SHELF_STORAGE_DRIVER: 'local',
     SHELF_STORAGE_LOCAL_ROOT: '/tmp/shelf-renderer-test-content',
@@ -28,7 +29,10 @@ describe('shelf-renderer process boundary', () => {
 
     await expect(
       runShelfRenderer({
-        env: environment('s'.repeat(32)),
+        env: {
+          ...environment('s'.repeat(32)),
+          SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS: 'https://cdn.example',
+        },
         stdout: (chunk) => stdout.push(chunk),
         stderr: (chunk) => stderr.push(chunk),
         onSignal: (signal, listener) => listeners.set(signal, listener),
@@ -41,6 +45,10 @@ describe('shelf-renderer process boundary', () => {
       { status: 'started', address: 'http://127.0.0.1:3001' },
     ]);
     expect(stderr).toEqual([]);
+    expect(createRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({ trustedResourceOrigins: ['https://cdn.example'] }),
+      expect.anything(),
+    );
     listeners.get('SIGTERM')?.();
     listeners.get('SIGINT')?.();
     await vi.waitFor(() => expect(exitCodes).toEqual([0]));

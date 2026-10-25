@@ -11,6 +11,17 @@ beforeAll(async () => {
     stagingRoot: '/tmp/shelf-openapi-contract',
     authenticator: { async authenticate() {} },
     authorizer: { async authorize() {} },
+    htmlPreviewSettings: {
+      async isOwner() {
+        return false;
+      },
+      async read() {
+        throw new Error('OpenAPI fixture does not read settings.');
+      },
+      async save() {
+        throw new Error('OpenAPI fixture does not save settings.');
+      },
+    },
     dashboardAccess: {
       async session() {
         return { actorId: 'actor-openapi', workspaces: [] };
@@ -280,6 +291,38 @@ describe('OpenAPI v1', () => {
         { cookieAuth: [] },
       ]);
     }
+  });
+
+  it('documents owner settings operations with human-session authentication', () => {
+    const document = app.swagger();
+    const path = '/api/v1/dashboard/settings/html-preview';
+    for (const [method, operationId] of [
+      ['get', 'getHtmlPreviewSettingsV1'],
+      ['put', 'updateHtmlPreviewSettingsV1'],
+    ] as const) {
+      expect(document.paths?.[path]?.[method]).toMatchObject({
+        operationId,
+        security: [{ cookieAuth: [] }],
+      });
+    }
+    expect(document.paths?.[path]?.put?.requestBody).toMatchObject({
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            additionalProperties: false,
+            required: ['trustedResourceOrigins'],
+            properties: {
+              trustedResourceOrigins: {
+                type: 'array',
+                maxItems: 32,
+                items: { type: 'string', minLength: 1, maxLength: 2048 },
+              },
+            },
+          },
+        },
+      },
+    });
   });
 
   it('matches the checked generated contract', async () => {

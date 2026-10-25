@@ -31,6 +31,23 @@ function environment(overrides: Record<string, string | undefined> = {}) {
 }
 
 describe('loadShelfServerConfig', () => {
+  it('uses the same exact-origin fallback as the renderer and rejects the dashboard host', async () => {
+    expect(
+      (
+        await loadShelfServerConfig(
+          environment({
+            SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS:
+              'https://CDN.example:443/, https://fonts.example',
+          }),
+        )
+      ).trustedResourceOrigins,
+    ).toEqual(['https://cdn.example', 'https://fonts.example']);
+    await expect(
+      loadShelfServerConfig(
+        environment({ SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS: 'https://shelf.example.test:8443' }),
+      ),
+    ).rejects.toThrow('application hostname');
+  });
   it('loads explicit production settings with conservative bind defaults', async () => {
     await expect(loadShelfServerConfig(environment())).resolves.toMatchObject({
       host: '127.0.0.1',

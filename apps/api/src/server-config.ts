@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { isIP } from 'node:net';
+import { validatedTrustedResourceOrigins } from '@shelf/core';
 import { validatedAppOrigin } from '@shelf/renderer';
 import {
   installationIdFromEnvironment,
@@ -38,6 +39,7 @@ export interface ShelfServerConfig {
     clearInterval?: typeof clearInterval;
   };
   rendererPublicOrigin?: string;
+  trustedResourceOrigins?: readonly string[];
   allowedFrameOrigins?: string[];
   webRoot?: string;
   persistence: ShelfPersistenceConfig;
@@ -199,6 +201,10 @@ export async function loadShelfServerConfig(
     port,
     maxFileBytes,
     installationId,
+    trustedResourceOrigins: validatedTrustedResourceOrigins(
+      (environment.SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS ?? '').split(/[\s,]+/u).filter(Boolean),
+      baseUrl.origin,
+    ),
     auth: {
       baseUrl: baseUrl.toString().replace(/\/$/u, ''),
       secret: await loadSecret(environment, {

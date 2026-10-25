@@ -2,6 +2,7 @@ export * from './auth-repository.js';
 export * from './comment-repository.js';
 export * from './content-inventory.js';
 export * from './database.js';
+export * from './html-preview-settings-repository.js';
 export * from './installation-inventory.js';
 export * from './migrations.js';
 export * from './revision-repository.js';

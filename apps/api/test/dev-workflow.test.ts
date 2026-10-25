@@ -271,6 +271,7 @@ test('development renderer receives only its explicit data-plane environment', a
         SHELF_SHARE_SIGNING_KEY: 's'.repeat(43),
         SHELF_RENDERER_APP_ORIGIN: 'http://127.0.0.1:5173',
         SHELF_AUTH_SECRET: secret,
+        SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS: 'https://cdn.example',
         SHELF_AUTH_SECRET_FILE: `/tmp/${secret}`,
         UNRELATED_SECRET: secret,
       },
@@ -284,6 +285,7 @@ test('development renderer receives only its explicit data-plane environment', a
     SHELF_SHARE_SIGNING_KEY: 's'.repeat(43),
     SHELF_RENDERER_APP_ORIGIN: 'http://127.0.0.1:5173',
     USER: 'shelf-test-user',
+    SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS: 'https://cdn.example',
   });
   expect(JSON.stringify(environment)).not.toContain(secret);
   expect(environment).not.toHaveProperty('SHELF_AUTH_SECRET');

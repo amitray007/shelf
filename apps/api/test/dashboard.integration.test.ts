@@ -138,6 +138,7 @@ describe('dashboard HTTP API', () => {
     expect(session.json()).toEqual({
       apiVersion: 'v1',
       actorId: 'act_owner',
+      canManageSettings: false,
       workspaces: [{ workspaceId: 'workspace-main', actions: ['file.publish', 'revision.read'] }],
     });
 

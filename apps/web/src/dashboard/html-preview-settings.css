@@ -1,0 +1,96 @@
+.html-preview-settings {
+  width: min(100%, 760px);
+}
+
+.html-preview-settings-panel {
+  display: grid;
+  gap: 20px;
+  padding: 22px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.html-preview-settings-field {
+  display: grid;
+  gap: 8px;
+}
+
+.html-preview-settings-field label {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.html-preview-settings-field p,
+.html-preview-settings-notes p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.html-preview-settings-field textarea {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--canvas);
+  color: var(--text);
+  font:
+    450 13px / 1.5 "Geist Mono Variable",
+    ui-monospace,
+    monospace;
+}
+
+.html-preview-settings-field textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.html-preview-settings-notes {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-left: 2px solid var(--rule-strong);
+  background: var(--raised);
+}
+
+.html-preview-settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.html-preview-settings-actions span,
+.html-preview-settings-success,
+.html-preview-settings-error {
+  margin: 0;
+  font-size: 13px;
+}
+
+.html-preview-settings-actions span,
+.html-preview-settings-success {
+  color: var(--text-muted);
+}
+
+.html-preview-settings-error {
+  color: var(--danger);
+}
+
+@media (max-width: 430px) {
+  .html-preview-settings-field textarea {
+    font-size: 16px;
+  }
+
+  .html-preview-settings-panel {
+    padding: 16px;
+  }
+
+  .html-preview-settings-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

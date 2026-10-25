@@ -14,6 +14,7 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 it('composes the existing share data plane into an independently managed renderer process', async () => {
   const viewerToken = `${'v'.repeat(24)}.${'s'.repeat(43)}`;
   const ready = vi.fn(async () => undefined);
+  let currentOrigins = ['https://cdn.example'];
   let runtime: RendererRuntime;
   const close = vi.fn(async () => {
     expect(runtime.app.server.listening).toBe(false);
@@ -25,6 +26,7 @@ it('composes the existing share data plane into an independently managed rendere
       port: 0,
       appOrigin: 'http://127.0.0.1:5173',
       maxHtmlBytes: 1024,
+      trustedResourceOrigins: ['https://cdn.example'],
     },
     {
       ...dependencies,
@@ -42,6 +44,7 @@ it('composes the existing share data plane into an independently managed rendere
       },
       clock: () => new Date('2026-08-17T12:30:00.000Z'),
       ready,
+      readTrustedResourceOrigins: async () => currentOrigins,
       close,
     },
   );
@@ -62,7 +65,23 @@ it('composes the existing share data plane into an independently managed rendere
 
     expect(ready).toHaveBeenCalledOnce();
     expect(response.status).toBe(200);
+    expect(response.headers.get('content-security-policy')).toContain(
+      "script-src 'unsafe-inline' data: https://cdn.example",
+    );
     expect(await response.text()).toContain('<h1>Artifact</h1>');
+    currentOrigins = [];
+    const reloaded = await runtime.app.inject({
+      method: 'POST',
+      url: '/render',
+      headers: { origin: 'null', 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        shareId: rendererIds.share,
+        viewerToken,
+        nonce: 'n'.repeat(22),
+      }).toString(),
+    });
+    expect(reloaded.statusCode).toBe(200);
+    expect(reloaded.headers['content-security-policy']).not.toContain('https://cdn.example');
   } finally {
     await runtime.close();
   }

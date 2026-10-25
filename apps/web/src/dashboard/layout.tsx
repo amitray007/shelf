@@ -1,6 +1,7 @@
 import { Button } from '@cloudflare/kumo/components/button';
 import { DropdownMenu } from '@cloudflare/kumo/components/dropdown';
 import { CaretDownIcon } from '@phosphor-icons/react/CaretDown';
+import { GearIcon } from '@phosphor-icons/react/Gear';
 import { PlusIcon } from '@phosphor-icons/react/Plus';
 import { SignOutIcon } from '@phosphor-icons/react/SignOut';
 import { StackIcon } from '@phosphor-icons/react/Stack';
@@ -37,6 +38,7 @@ export function DashboardLayout() {
       void import('./artifact-page.js');
       void import('./trash-page.js');
       void import('./access-page.js');
+      void import('./html-preview-settings-page.js');
     };
     if (typeof window.requestIdleCallback === 'function') {
       const handle = window.requestIdleCallback(prefetch);
@@ -71,6 +73,7 @@ export function DashboardLayout() {
       : `/app/w/${encodeURIComponent(activeWorkspace.workspaceId)}/trash`;
   const accessActive = location.pathname.endsWith('/access');
   const trashActive = location.pathname.endsWith('/trash');
+  const settingsActive = location.pathname === '/app/settings';
 
   const changeWorkspace = (workspaceId: string) => {
     const section = accessActive ? 'access' : trashActive ? 'trash' : 'artifacts';
@@ -174,7 +177,9 @@ export function DashboardLayout() {
             <div className="dashboard-section-actions">
               <nav aria-label="Dashboard sections" className="dashboard-section-tabs">
                 <Link
-                  aria-current={!accessActive && !trashActive ? 'page' : undefined}
+                  aria-current={
+                    !accessActive && !trashActive && !settingsActive ? 'page' : undefined
+                  }
                   to={artifactsPath}
                 >
                   Artifacts
@@ -187,6 +192,17 @@ export function DashboardLayout() {
           </div>
 
           <div className="dashboard-actions">
+            {session.canManageSettings === true ? (
+              <Link
+                aria-current={settingsActive ? 'page' : undefined}
+                aria-label="Settings"
+                className="dashboard-trash-link"
+                to="/app/settings"
+              >
+                <GearIcon aria-hidden="true" size={16} />
+                <span>Settings</span>
+              </Link>
+            ) : null}
             <Link
               aria-current={trashActive ? 'page' : undefined}
               aria-label="Trash"
@@ -261,10 +277,13 @@ export function DashboardLoading() {
 
 export function DashboardErrorBoundary() {
   const error = useRouteError();
+  const location = useLocation();
   const message = isRouteErrorResponse(error)
-    ? error.status === 404
-      ? 'This item could not be found.'
-      : 'Shelf could not load this view.'
+    ? error.status === 403 && location.pathname === '/app/settings'
+      ? 'Installation settings are available to owners only.'
+      : error.status === 404
+        ? 'This item could not be found.'
+        : 'Shelf could not load this view.'
     : 'Shelf could not load this view.';
   return (
     <div className="dashboard-error">

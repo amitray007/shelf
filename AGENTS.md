@@ -153,7 +153,7 @@ Folder publishing includes regular files and empty directories, rejects symlinks
 HTML in a folder previews like a page on a static web server. `index.html` can load `css/site.css`, `js/app.js` and its module imports, fonts, images, and `fetch('data.json')` from the same revision. A link to another file in the folder opens that file in the viewer, and `docs/` opens `docs/index.html`. To publish a folder that works:
 
 - Use relative paths. Root-relative paths such as `/assets/app.js` resolve outside the folder. For a Vite build, set `base: './'`.
-- Keep every asset inside the folder. CDN, font-service, and API requests are blocked.
+- Keep every asset inside the folder. CDN, font-service, and API requests are blocked. The renderer's optional `SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS` setting applies only to standalone HTML files, not folder previews.
 - Publish built output. Browsers cannot run `.ts`, `.jsx`, or bare `import "package"` source unless an import map in the page points the name at a file in the folder.
 - Navigate with `<a href>` links. Script-driven navigation closes the preview.
 

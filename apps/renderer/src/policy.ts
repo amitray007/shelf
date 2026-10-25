@@ -1,3 +1,5 @@
+export { validatedTrustedResourceOrigins } from '@shelf/core';
+
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 export const DENIED_PERMISSIONS_POLICY = [
@@ -61,20 +63,25 @@ export function bootstrapContentSecurityPolicy(appOrigin: string): string {
   return [...commonPolicy(appOrigin), "script-src 'none'", "style-src 'none'"].join('; ');
 }
 
-export function artifactContentSecurityPolicy(appOrigin: string): string {
+export function artifactContentSecurityPolicy(
+  appOrigin: string,
+  trustedResourceOrigins: readonly string[] = [],
+): string {
+  const sources = trustedResourceOrigins.length === 0 ? '' : ` ${trustedResourceOrigins.join(' ')}`;
   return [
     ...commonPolicy(appOrigin),
-    "script-src 'unsafe-inline' data:",
-    "style-src 'unsafe-inline' blob:",
-    'img-src data: blob:',
-    'font-src data:',
-    'media-src data: blob:',
+    `script-src 'unsafe-inline' data:${sources}`,
+    `style-src 'unsafe-inline' blob:${sources}`,
+    `img-src data: blob:${sources}`,
+    `font-src data:${sources}`,
+    `media-src data: blob:${sources}`,
   ].join('; ');
 }
 
 /**
  * Folder HTML may load sibling files, but only from its own revision-scoped folder session path.
  * External origins, other folder sessions, and renderer routes outside that path stay blocked.
+ * CDN redirects would bypass CSP path matching, so CDN trust applies to standalone HTML only.
  */
 export function folderDocumentContentSecurityPolicy(
   appOrigin: string,

@@ -26,10 +26,10 @@ it redirects the frame to a revision-scoped folder session so the browser can lo
   `ready`, blanks a response that loads without completing the private handshake, and immediately
   blanks every later iframe load. Renderer data-plane work also has a finite request timeout.
 
-The final artifact response applies the restrictive CSP directly: no fetch/connect, external
-subresources, forms, nested frames, workers, object content, or base URL; only inline and `data:`
-scripts, inline styles, and data/blob media are allowed. Every response is `no-store`,
-`no-transform`, `no-referrer`, `nosniff`, and denies browser permissions. `no-transform` also
+The final artifact response blocks fetch/connect, forms, nested frames, workers, object content,
+and base URLs. External subresources are blocked unless the operator configures trusted resource
+origins as described below. Inline and `data:` scripts, inline styles, and data/blob media are
+allowed. Every response is `no-store`, `no-transform`, `no-referrer`, `nosniff`, and denies browser permissions. `no-transform` also
 prevents a CDN from injecting scripts into the isolated document.
 
 ## Folder sessions
@@ -65,6 +65,46 @@ file path and the link's fragment on the private channel. A directory link names
 `fragment` field, which the session redirect appends to its `Location`. The parent still terminates every later
 frame load. Root-relative references such as `/assets/app.js` resolve outside the session and stay
 blocked.
+
+## Trusted CDN resources
+
+The installation owner can open **Settings > HTML previews** in the dashboard and edit
+**Trusted asset sources**. The list allows external scripts, module imports, stylesheets, images,
+fonts, and media in standalone HTML previews across all workspaces. Save an empty list to block
+external assets. Saved changes apply when a preview opens or reloads, without a renderer restart.
+They do not stop scripts already running in an open preview.
+
+Before the first dashboard save, `SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS` supplies deployment
+defaults. Set the same value on the API and renderer processes:
+
+```sh
+SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS=https://cdn.shopify.com
+```
+
+Separate environment entries with spaces or commas. Empty or unset blocks external resources
+until the owner saves a list. A saved list always overrides the environment, including an empty
+saved list. The renderer reads the stored policy for each standalone preview; a failed or invalid
+read makes that preview unavailable. Apply migration `0017_html_preview_settings` before startup.
+Each entry must be an exact HTTPS origin, with no credentials, path, query, fragment, or wildcard.
+The configuration accepts at most 32 entries and 2,048 characters after separating entries.
+The application hostname is rejected, including other ports. The renderer excludes its own
+request hostname from resource permissions, including other ports, to preserve folder isolation.
+The reverse proxy must preserve the browser's `Host` header.
+
+Trust applies to standalone HTML previews, including Protected shares. A permitted script can read
+the artifact and send data to permitted origins through resource URLs. A CDN request also discloses
+the visitor's IP address. Use only origins you trust with that content. Browser requests go
+directly to the CDN; Shelf does not proxy or store these resources. CDN content can change without
+a new artifact revision. Bundle dependencies in the folder when an immutable preview is needed.
+
+Folder previews still require bundled assets. CSP skips path matching after redirects, so a CDN
+redirect could otherwise load assets from another known folder-session URL. Enabling CDN resources
+in folders requires a separate session isolation design; this setting does not enable it.
+
+This setting does not allow external fetch/XHR, frames, workers, forms, popups, or dashboard access.
+The sandbox still omits `allow-same-origin`. The dashboard CSP and renderer availability/error
+documents do not gain CDN permissions. Libraries that need network APIs or origin storage may
+still fail. Folder publish warnings continue to flag external references.
 
 ## Known browser limit
 

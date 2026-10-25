@@ -31,6 +31,7 @@ export const DashboardSessionSchema = Type.Object(
   {
     apiVersion: Type.Literal('v1'),
     actorId: Type.String({ minLength: 1, maxLength: 128 }),
+    canManageSettings: Type.Optional(Type.Boolean()),
     workspaces: Type.Array(DashboardWorkspaceSchema, { maxItems: 100 }),
   },
   { additionalProperties: false, $id: 'DashboardSession' },

@@ -46,8 +46,20 @@ const pngDot = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
   'base64',
 );
+const cdnHtml = `<!doctype html><html><head><title>CDN preview</title>
+<link rel="stylesheet" href="https://trusted-cdn.example/style.css">
+<script defer src="https://trusted-cdn.example/library.js"></script>
+<script type="module" src="https://trusted-cdn.example/module.js"></script>
+<script src="https://untrusted-cdn.example/leak.js"></script>
+</head><body><h1>CDN preview</h1><cdn-greeting></cdn-greeting>
+<img alt="CDN dot" src="https://trusted-cdn.example/dot.png">
+</body></html>`;
 // Folders keyed by Public code. The Protected fixture share opens the CSS folder.
 const folders = {
+  CdnFolder123: {
+    'index.html': cdnHtml,
+    'other.js': "document.body.dataset.otherSession = 'ran';",
+  },
   CssFolder123: {
     'mockup.html':
       '<!doctype html><html><head><link rel="stylesheet" href="theme.css"><link rel="stylesheet" href="https://styles-canary.invalid/leak.css"><style>h1 { font-size: 24px; }</style></head><body><h1>Styled folder mockup</h1><div class="layout"><span>Account</span><span>Quota</span></div></body></html>',
@@ -107,8 +119,12 @@ const server = await createRendererServer({
   appOrigin: 'http://127.0.0.1:43873',
   host: '127.0.0.1',
   port: 43874,
+  trustedResourceOrigins: ['https://trusted-cdn.example'],
   resolver: {
     async resolveHtml(request) {
+      if (request.accessType === 'public' && request.publicCode === 'CdnFile12345') {
+        return { status: 'available', html: cdnHtml };
+      }
       if (request.path !== undefined) {
         const authority =
           request.accessType === 'public'

@@ -236,6 +236,7 @@ export interface AuthEventTable {
 }
 
 export interface ShelfPostgresSchema {
+  shelf_html_preview_settings: { installation_id: string; trusted_resource_origins: unknown };
   shelf_access_credentials: AccessCredentialTable;
   shelf_actor_grants: ActorGrantTable;
   shelf_actors: ActorTable;

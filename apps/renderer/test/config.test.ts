@@ -16,6 +16,7 @@ describe('renderer configuration', () => {
       host: '0.0.0.0',
       port: 3101,
       maxHtmlBytes: 1_048_576,
+      trustedResourceOrigins: [],
     });
   });
 
@@ -23,6 +24,46 @@ describe('renderer configuration', () => {
     expect(
       loadRendererConfig({ SHELF_RENDERER_APP_ORIGIN: 'http://127.0.0.1:5173' }),
     ).toMatchObject({ appOrigin: 'http://127.0.0.1:5173', host: '127.0.0.1', port: 3001 });
+  });
+
+  it('normalizes and deduplicates explicitly trusted CDN origins', () => {
+    expect(
+      loadRendererConfig({
+        SHELF_RENDERER_APP_ORIGIN: 'https://shelf.example',
+        SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS:
+          ' https://CDN.example:443/, https://fonts.example\nhttps://cdn.example ',
+      }).trustedResourceOrigins,
+    ).toEqual(['https://cdn.example', 'https://fonts.example']);
+  });
+
+  it.each([
+    'https:',
+    '*',
+    "'self'",
+    'https://*.example',
+    'http://cdn.example',
+    'https://user:password@cdn.example',
+    'https://cdn.example/scripts',
+    'https://cdn.example/path/..',
+    'https://cdn.example/?query',
+    'https://cdn.example/#fragment',
+    'https://cdn.example?',
+    'https://cdn.example#',
+    'https://cdn.example\\path',
+    'https://cdn.example;connect-src',
+    'https://cdn.example%3Bconnect-src',
+    'https://shelf.example',
+    'https://SHELF.example:8443',
+    'https://shelf.example.',
+    'https://cdn.example, https://bad.example/path',
+    Array.from({ length: 33 }, (_, index) => `https://cdn${index}.example`).join(' '),
+  ])('rejects unsafe resource configuration: %s', (value) => {
+    expect(() =>
+      loadRendererConfig({
+        SHELF_RENDERER_APP_ORIGIN: 'https://shelf.example',
+        SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS: value,
+      }),
+    ).toThrow('SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS');
   });
 
   it.each([

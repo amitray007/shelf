@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
 import { pathToFileURL } from 'node:url';
-
+import { createHtmlPreviewSettingsService } from '@shelf/core';
 import {
   createRendererRuntime,
   deriveFolderSessionKey,
   loadRendererConfig,
   type RendererRuntime,
 } from '@shelf/renderer';
+import { installationIdFromEnvironment } from './environment.js';
 
 import { createShelfPersistence } from './persistence.js';
 import { shelfPersistenceConfigFromEnv } from './persistence-env.js';
@@ -49,6 +50,14 @@ export async function runShelfRenderer(
     };
     const createRuntime = runtime.createRuntime ?? createRendererRuntime;
     renderer = await createRuntime(rendererConfig, {
+      readTrustedResourceOrigins: createHtmlPreviewSettingsService({
+        installationId: installationIdFromEnvironment(runtime.env),
+        appOrigin: rendererConfig.appOrigin,
+        repository: persistence.htmlPreviewSettingsRepository,
+        ...(rendererConfig.trustedResourceOrigins === undefined
+          ? {}
+          : { defaultTrustedResourceOrigins: rendererConfig.trustedResourceOrigins }),
+      }).read,
       shares: persistence.shareRepository,
       viewerSessionTokenCodec: securityCodecs.viewerSession,
       revisions: persistence.revisionRepository,

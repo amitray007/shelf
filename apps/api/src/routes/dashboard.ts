@@ -18,9 +18,9 @@ import {
 import { AuthorizationDeniedError, ShelfCoreError } from '@shelf/core';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { Type } from 'typebox';
-
 import type { Authenticator } from '../authenticate.js';
 import { authenticateHumanSession } from '../authenticate.js';
+import type { DashboardHtmlPreviewSettings } from '../html-preview-settings.js';
 
 const PageQuerySchema = Type.Object(
   {
@@ -128,7 +128,11 @@ function optionalExpiry(value: string | null | undefined): Date | undefined {
 
 export function registerDashboardRoutes(
   app: FastifyInstance,
-  dependencies: { authenticator: Authenticator; access: DashboardAccessService },
+  dependencies: {
+    authenticator: Authenticator;
+    access: DashboardAccessService;
+    settings?: DashboardHtmlPreviewSettings;
+  },
 ): void {
   app.get(
     '/api/v1/dashboard/session',
@@ -148,7 +152,11 @@ export function registerDashboardRoutes(
         installationId: identity.installationId,
         actorId: identity.actorId,
       });
-      return { apiVersion: 'v1' as const, ...session };
+      return {
+        apiVersion: 'v1' as const,
+        ...session,
+        canManageSettings: (await dependencies.settings?.isOwner(identity)) ?? false,
+      };
     },
   );
 

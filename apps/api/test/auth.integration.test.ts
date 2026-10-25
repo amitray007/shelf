@@ -9,19 +9,21 @@ import {
   createDashboardAccessService,
   createHumanAuth,
 } from '@shelf/auth';
+import { createHtmlPreviewSettingsService } from '@shelf/core';
 import {
   createPostgresDatabase,
   migratePostgresToLatest,
   PostgresAuthRepository,
+  PostgresHtmlPreviewSettingsRepository,
   PostgresRevisionRepository,
 } from '@shelf/postgres';
 import { LocalContentStorage } from '@shelf/storage';
 import type { FastifyInstance } from 'fastify';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-
 import { createShelfApp } from '../src/app.js';
 import { createHybridAuthenticator, createShelfAuthorizer } from '../src/auth/runtime.js';
+import { createDashboardHtmlPreviewSettings } from '../src/html-preview-settings.js';
 
 const adminConnectionString = process.env.SHELF_TEST_POSTGRES_URL;
 const databaseName = `shelf_api_auth_test_${randomBytes(8).toString('hex')}`;
@@ -85,6 +87,16 @@ describePostgres('hybrid HTTP authentication', () => {
       authenticator: createHybridAuthenticator({ humanAuth, credentials, actors: repository }),
       authorizer: createShelfAuthorizer(credentials),
       dashboardAccess: createDashboardAccessService({ repository, credentials }),
+      htmlPreviewSettings: createDashboardHtmlPreviewSettings({
+        installationId: 'installation-main',
+        appOrigin: 'http://127.0.0.1:3000',
+        owners: repository,
+        settings: createHtmlPreviewSettingsService({
+          installationId: 'installation-main',
+          appOrigin: 'http://127.0.0.1:3000',
+          repository: new PostgresHtmlPreviewSettingsRepository(database),
+        }),
+      }),
       humanAuth,
       contentStore: content,
       contentReader: content,
@@ -145,8 +157,37 @@ describePostgres('hybrid HTTP authentication', () => {
     expect(dashboardSession.statusCode).toBe(200);
     expect(dashboardSession.json()).toMatchObject({
       actorId: owner.actorId,
+      canManageSettings: true,
       workspaces: [{ workspaceId: 'workspace-main', actions: ['file.publish', 'revision.read'] }],
     });
+
+    const settingsUrl = '/api/v1/dashboard/settings/html-preview';
+    const savedSettings = await app.inject({
+      method: 'PUT',
+      url: settingsUrl,
+      headers: { cookie: sessionCookie, origin: 'http://127.0.0.1:3000' },
+      payload: { trustedResourceOrigins: ['https://cdn.example'] },
+    });
+    expect(savedSettings.statusCode).toBe(200);
+    expect(
+      await new PostgresHtmlPreviewSettingsRepository(database).findTrustedResourceOrigins(
+        'installation-main',
+      ),
+    ).toEqual(['https://cdn.example']);
+    expect(
+      (await app.inject({ url: settingsUrl, headers: { cookie: sessionCookie } })).json()
+        .trustedResourceOrigins,
+    ).toEqual(['https://cdn.example']);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: settingsUrl,
+          headers: { authorization: `Bearer ${agent.token}`, origin: 'http://127.0.0.1:3000' },
+          payload: { trustedResourceOrigins: [] },
+        })
+      ).statusCode,
+    ).toBe(403);
 
     const dashboardIssue = await app.inject({
       method: 'POST',
