@@ -7,6 +7,17 @@ const app = await createShelfApp({
   stagingRoot: '/tmp/shelf-openapi-generation',
   authenticator: { async authenticate() {} },
   authorizer: { async authorize() {} },
+  htmlPreviewSettings: {
+    async isOwner() {
+      return false;
+    },
+    async read() {
+      throw new Error('OpenAPI fixture does not read settings.');
+    },
+    async save() {
+      throw new Error('OpenAPI fixture does not save settings.');
+    },
+  },
   dashboardAccess: {
     async session() {
       return { actorId: 'actor-openapi', workspaces: [] };
