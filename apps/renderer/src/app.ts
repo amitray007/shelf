@@ -21,6 +21,7 @@ import {
   FOLDER_FILE_CONTENT_SECURITY_POLICY,
   folderDocumentContentSecurityPolicy,
   validatedAppOrigin,
+  validatedTrustedResourceOrigins,
 } from './policy.js';
 import { requestCancellationSignal } from './request-cancellation.js';
 
@@ -76,6 +77,8 @@ export type RendererFolderFile =
 
 export interface CreateRendererAppOptions {
   appOrigin: string;
+  trustedResourceOrigins?: readonly string[];
+  readTrustedResourceOrigins?: () => Promise<readonly string[]>;
   resolver: RendererHtmlResolver;
   handlerTimeoutMs?: number;
   /** Signs folder sessions. Defaults to a per-process random key. */
@@ -289,6 +292,28 @@ function requestedByteRange(
 
 export async function createRendererApp(options: CreateRendererAppOptions): Promise<RendererApp> {
   const appOrigin = validatedAppOrigin(options.appOrigin);
+  const trustedResourceOrigins = validatedTrustedResourceOrigins(
+    options.trustedResourceOrigins ?? [],
+    appOrigin,
+  );
+  const resourceOriginsForHost = async (host: string | undefined): Promise<readonly string[]> => {
+    const currentOrigins =
+      options.readTrustedResourceOrigins === undefined
+        ? trustedResourceOrigins
+        : validatedTrustedResourceOrigins(await options.readTrustedResourceOrigins(), appOrigin);
+    if (currentOrigins.length === 0 || host === undefined || !RENDERER_HOST_PATTERN.test(host))
+      return [];
+    let hostname: string;
+    try {
+      hostname = new URL(`https://${host}`).hostname.replace(/\.$/u, '');
+    } catch {
+      return [];
+    }
+    // Trusting the renderer itself would allow another folder session's assets.
+    return currentOrigins.filter(
+      (origin) => new URL(origin).hostname.replace(/\.$/u, '') !== hostname,
+    );
+  };
   const bootstrapPolicy = bootstrapContentSecurityPolicy(appOrigin);
   const artifactPolicy = artifactContentSecurityPolicy(appOrigin);
   const folderSessions = createFolderSessionCodec(options.folderSessionKey);
@@ -493,7 +518,17 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
         )
         .send();
     }
+    let origins: readonly string[];
+    try {
+      origins = await resourceOriginsForHost(request.headers.host);
+    } catch {
+      return reply
+        .status(503)
+        .type('text/html; charset=utf-8')
+        .send(unavailableDocument(input.nonce, appOrigin));
+    }
     const ready = signalScript('shelf:renderer-ready', input.nonce, appOrigin);
+    applyBoundaryHeaders(reply, artifactContentSecurityPolicy(appOrigin, origins));
     return reply
       .type('text/html; charset=utf-8')
       .send(injectBeforeAuthoredScripts(result.html, ready));

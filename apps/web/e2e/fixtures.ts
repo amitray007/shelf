@@ -318,6 +318,7 @@ const paginationArtifacts = paginationRevisions.map(
 export const dashboardSession = {
   apiVersion: 'v1',
   actorId: 'actor-browser-owner',
+  canManageSettings: true,
   workspaces: [
     {
       workspaceId,

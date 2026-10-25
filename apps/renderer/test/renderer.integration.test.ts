@@ -73,6 +73,64 @@ async function postRender(
 }
 
 describe('isolated HTML renderer', () => {
+  it('allows configured assets only on successful HTML responses, with network and sandbox limits intact', async () => {
+    const app = await createRendererApp({
+      appOrigin,
+      trustedResourceOrigins: ['https://cdn.example', 'https://localhost'],
+      resolver: {
+        async resolveHtml(request) {
+          return request.accessType === 'public'
+            ? {
+                status: 'available',
+                html: '<!doctype html><script src="https://cdn.example/lib.js"></script>',
+              }
+            : { status: 'unavailable' };
+        },
+      },
+    });
+    apps.push(app);
+    const response = await postRender(app, { publicCode: 'PublicCode12' });
+    expect(response.statusCode).toBe(200);
+    const directives = String(response.headers['content-security-policy']).split('; ');
+    expect(directives).toEqual(
+      expect.arrayContaining([
+        "script-src 'unsafe-inline' data: https://cdn.example",
+        "style-src 'unsafe-inline' blob: https://cdn.example",
+        'img-src data: blob: https://cdn.example',
+        'font-src data: https://cdn.example',
+        'media-src data: blob: https://cdn.example',
+        "connect-src 'none'",
+        "frame-src 'none'",
+        "worker-src 'none'",
+        "form-action 'none'",
+        'sandbox allow-scripts',
+      ]),
+    );
+    expect(response.headers['content-security-policy']).not.toContain('https://localhost');
+    expect(response.headers['referrer-policy']).toBe('no-referrer');
+    for (const unavailable of [
+      await app.inject({ method: 'GET', url: '/' }),
+      await postRender(app),
+      await app.inject({ method: 'GET', url: '/missing' }),
+    ]) {
+      expect(unavailable.headers['content-security-policy']).not.toContain('https://cdn.example');
+    }
+  });
+
+  it('validates resource trust for programmatic callers as well as environment configuration', async () => {
+    await expect(
+      createRendererApp({
+        appOrigin,
+        trustedResourceOrigins: ['https://shelf.example:8443'],
+        resolver: {
+          async resolveHtml() {
+            return { status: 'unavailable' };
+          },
+        },
+      }),
+    ).rejects.toThrow('application hostname');
+  });
+
   it('serves an inert availability document with no active bootstrap permissions', async () => {
     const app = await fixture();
 
@@ -470,9 +528,13 @@ describe('folder sessions', () => {
     'img/a b.png': { mediaType: 'image/png', content: Uint8Array.from([1, 2, 3, 4, 5]) },
   };
 
-  async function folderApp(share = rendererStoredShare()) {
+  async function folderApp(
+    share = rendererStoredShare(),
+    trustedResourceOrigins: readonly string[] = [],
+  ) {
     const app = await createRendererApp({
       appOrigin,
+      trustedResourceOrigins,
       clock: () => new Date('2026-08-17T12:30:00.000Z'),
       resolver: createCoreHtmlResolver({
         ...rendererFolderDependencies(files, { share }),
@@ -574,6 +636,26 @@ describe('folder sessions', () => {
     expect(fetched.statusCode).toBe(200);
     expect(fetched.headers['content-security-policy']).toBe("default-src 'none'; sandbox");
     expect(fetched.body).toBe(indexHtml);
+  });
+
+  it('keeps folder policies closed even when standalone CDN resources are trusted', async () => {
+    const app = await folderApp(rendererStoredShare(), [
+      'https://cdn.example',
+      `https://${host}`,
+      `https://${host}:8443`,
+    ]);
+    const { location, sessionPath } = await openSession(app);
+    const response = await get(app, location, { 'sec-fetch-dest': 'iframe' });
+    expect(response.statusCode).toBe(200);
+    const directives = String(response.headers['content-security-policy']).split('; ');
+    const sessionSources = `https://${host}${sessionPath} http://${host}${sessionPath}`;
+    expect(directives).toContain(`script-src 'unsafe-inline' data: ${sessionSources}`);
+    expect(directives).toContain(`connect-src ${sessionSources}`);
+    expect(directives).toContain('sandbox allow-scripts');
+    expect(directives).toContain("frame-src 'none'");
+    expect(response.headers['content-security-policy']).not.toContain('https://cdn.example');
+    const script = await get(app, `${sessionPath}js/app.js`);
+    expect(script.headers['content-security-policy']).toBe("default-src 'none'; sandbox");
   });
 
   it('serves a directory link as its index document', async () => {

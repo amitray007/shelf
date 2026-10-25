@@ -19,6 +19,7 @@ import {
   type DashboardCredentialRevoke,
   type DashboardSession,
   type FolderEntry,
+  type HtmlPreviewSettings,
   isArtifact,
   isArtifactDefaultShares,
   isArtifactDeletionResult,
@@ -33,6 +34,7 @@ import {
   isDashboardSession,
   isErrorEnvelope,
   isFolderTreePage,
+  isHtmlPreviewSettings,
   isRestoreResult,
   isShareCreateResult,
   isSharePage,
@@ -170,6 +172,30 @@ export async function loadDashboardSession(signal?: AbortSignal): Promise<Dashbo
     signal === undefined ? undefined : { signal },
   );
   if (!isDashboardSession(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
+  }
+  return value;
+}
+
+export async function loadHtmlPreviewSettings(signal?: AbortSignal): Promise<HtmlPreviewSettings> {
+  const value = await requestJson(
+    '/api/v1/dashboard/settings/html-preview',
+    signal === undefined ? undefined : { signal },
+  );
+  if (!isHtmlPreviewSettings(value)) {
+    throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
+  }
+  return value;
+}
+
+export async function saveHtmlPreviewSettings(
+  trustedResourceOrigins: readonly string[],
+): Promise<HtmlPreviewSettings> {
+  const value = await requestJson(
+    '/api/v1/dashboard/settings/html-preview',
+    jsonRequest('PUT', { trustedResourceOrigins }),
+  );
+  if (!isHtmlPreviewSettings(value)) {
     throw new DashboardApiError('INVALID_RESPONSE', 'Shelf returned an invalid response.');
   }
   return value;

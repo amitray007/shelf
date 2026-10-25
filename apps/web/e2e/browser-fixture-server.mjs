@@ -48,6 +48,7 @@ const historiesByArtifactId = new Map(historyPages.map((page) => [page.artifactI
 const deletedArtifacts = new Set();
 const purgedArtifacts = new Set();
 const createdWorkspaces = new Set();
+const htmlPreviewOriginsBySession = new Map();
 const filesByRevisionId = new Map(
   historyPages.flatMap((page) =>
     page.items.flatMap((revision) =>
@@ -233,6 +234,18 @@ function createdWorkspaceKey(request, requestedWorkspaceId) {
   return `${fixtureSession(request)}:${requestedWorkspaceId}`;
 }
 
+function canManageSettings(request) {
+  return !(request.headers.cookie ?? '').includes('shelf-browser-non-owner=1');
+}
+
+function htmlPreviewOrigins(request) {
+  const key = fixtureSession(request);
+  if (!htmlPreviewOriginsBySession.has(key)) {
+    htmlPreviewOriginsBySession.set(key, ['https://cdn.example.com']);
+  }
+  return htmlPreviewOriginsBySession.get(key);
+}
+
 async function api(request, response, url) {
   const path = url.pathname;
   if (path === '/api/v1/dashboard/session') {
@@ -243,6 +256,7 @@ async function api(request, response, url) {
     }
     json(response, 200, {
       ...dashboardSession,
+      canManageSettings: canManageSettings(request),
       workspaces: [
         ...dashboardSession.workspaces,
         ...[...createdWorkspaces]
@@ -254,6 +268,68 @@ async function api(request, response, url) {
       ],
     });
     return;
+  }
+  if (path === '/api/v1/dashboard/settings/html-preview') {
+    if (
+      !canManageSettings(request) ||
+      (request.method === 'PUT' && request.headers.origin !== 'http://127.0.0.1:43873')
+    ) {
+      json(response, 403, {
+        error: {
+          code: 'AUTHORIZATION_DENIED',
+          retryable: false,
+          requestId: 'fixture',
+          message: 'Installation settings are available to owners only.',
+        },
+      });
+      return;
+    }
+    if (
+      request.method === 'PUT' &&
+      (request.headers.cookie ?? '').includes('shelf-browser-settings-error=1')
+    ) {
+      json(response, 500, {
+        error: {
+          code: 'INTERNAL_ERROR',
+          retryable: false,
+          requestId: 'fixture',
+          message: 'Shelf could not save trusted asset sources.',
+        },
+      });
+      return;
+    }
+    if (request.method === 'GET') {
+      json(response, 200, {
+        apiVersion: 'v1',
+        trustedResourceOrigins: htmlPreviewOrigins(request),
+      });
+      return;
+    }
+    if (request.method === 'PUT') {
+      const value = JSON.parse(await body(request));
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !Array.isArray(value.trustedResourceOrigins) ||
+        !value.trustedResourceOrigins.every((origin) => typeof origin === 'string')
+      ) {
+        json(response, 400, {
+          error: {
+            code: 'INVALID_REQUEST',
+            retryable: false,
+            requestId: 'fixture',
+            message: 'Trusted asset sources are invalid.',
+          },
+        });
+        return;
+      }
+      htmlPreviewOriginsBySession.set(fixtureSession(request), value.trustedResourceOrigins);
+      json(response, 200, {
+        apiVersion: 'v1',
+        trustedResourceOrigins: value.trustedResourceOrigins,
+      });
+      return;
+    }
   }
   if (request.method === 'POST' && path === '/api/v1/workspaces') {
     const value = JSON.parse(await body(request));

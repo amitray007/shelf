@@ -12,6 +12,7 @@ import { createCoreHtmlResolver } from './resolver.js';
 import { createRendererServer, type RendererServer } from './server.js';
 
 export interface RendererDataPlane {
+  readTrustedResourceOrigins?: () => Promise<readonly string[]>;
   shares: ShareRepository;
   viewerSessionTokenCodec: ViewerSessionTokenVerifier;
   revisions: RevisionRepository;
@@ -36,6 +37,12 @@ export async function createRendererRuntime(
       host: config.host,
       port: config.port,
       appOrigin: config.appOrigin,
+      ...(dataPlane.readTrustedResourceOrigins === undefined
+        ? {}
+        : { readTrustedResourceOrigins: dataPlane.readTrustedResourceOrigins }),
+      ...(config.trustedResourceOrigins === undefined
+        ? {}
+        : { trustedResourceOrigins: config.trustedResourceOrigins }),
       ...(dataPlane.folderSessionKey === undefined
         ? {}
         : { folderSessionKey: dataPlane.folderSessionKey }),

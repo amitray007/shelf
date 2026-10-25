@@ -16,11 +16,13 @@ import {
   loadDashboardCredentials,
   loadDashboardSession,
   loadFolderEntries,
+  loadHtmlPreviewSettings,
   permanentlyDeleteArtifact,
   recoverArtifact,
   renameArtifact,
   restoreArtifact,
   revisionPreviewUrl,
+  saveHtmlPreviewSettings,
 } from '../src/dashboard/api.js';
 
 const originalFetch = globalThis.fetch;
@@ -126,6 +128,50 @@ describe('dashboard API client', () => {
       '/api/v1/dashboard/session',
       expect.objectContaining({ cache: 'no-store', credentials: 'same-origin' }),
     );
+  });
+
+  it('loads and saves canonical HTML preview asset origins', async () => {
+    const settings = {
+      apiVersion: 'v1',
+      trustedResourceOrigins: ['https://cdn.example.com'],
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(json(settings))
+      .mockResolvedValueOnce(json(settings));
+    globalThis.fetch = fetch;
+
+    await expect(loadHtmlPreviewSettings()).resolves.toEqual(settings);
+    await expect(saveHtmlPreviewSettings(['https://cdn.example.com'])).resolves.toEqual(settings);
+    expect(fetch.mock.calls[0]?.[0]).toBe('/api/v1/dashboard/settings/html-preview');
+    expect(fetch.mock.calls[1]).toEqual([
+      '/api/v1/dashboard/settings/html-preview',
+      expect.objectContaining({
+        method: 'PUT',
+        credentials: 'same-origin',
+        body: JSON.stringify({ trustedResourceOrigins: ['https://cdn.example.com'] }),
+      }),
+    ]);
+  });
+
+  it('surfaces server errors while saving HTML preview asset origins', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      json(
+        {
+          error: {
+            code: 'AUTHORIZATION_DENIED',
+            retryable: false,
+            requestId: 'fixture',
+            message: 'Installation settings are available to owners only.',
+          },
+        },
+        403,
+      ),
+    );
+    await expect(saveHtmlPreviewSettings([])).rejects.toMatchObject({
+      code: 'AUTHORIZATION_DENIED',
+      message: 'Installation settings are available to owners only.',
+    });
   });
 
   it('creates a workspace through the owner session API', async () => {

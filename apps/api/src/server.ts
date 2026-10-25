@@ -1,16 +1,16 @@
 import { randomBytes } from 'node:crypto';
-
 import {
   createAccessCredentialService,
   createDashboardAccessService,
   createHumanAuth,
   type HumanAuth,
 } from '@shelf/auth';
+import { createHtmlPreviewSettingsService } from '@shelf/core';
 import type { FastifyInstance } from 'fastify';
-
 import { createShelfApp } from './app.js';
 import { createHybridAuthenticator, createShelfAuthorizer } from './auth/runtime.js';
 import { createReadinessState, type ReadinessState } from './health.js';
+import { createDashboardHtmlPreviewSettings } from './html-preview-settings.js';
 import { createShelfPersistence, type ShelfPersistence } from './persistence.js';
 import type { ShelfServerConfig } from './server-config.js';
 import { createHmacShareSecurityCodecs } from './share-capability.js';
@@ -191,6 +191,22 @@ export async function createShelfServer(config: ShelfServerConfig): Promise<Shel
       dashboardAccess: createDashboardAccessService({
         repository: persistence.authRepository,
         credentials,
+      }),
+      htmlPreviewSettings: createDashboardHtmlPreviewSettings({
+        installationId: config.installationId,
+        appOrigin: config.auth.baseUrl,
+        owners: persistence.authRepository,
+        settings: createHtmlPreviewSettingsService({
+          installationId: config.installationId,
+          repository: persistence.htmlPreviewSettingsRepository,
+          appOrigin: config.auth.baseUrl,
+          ...(config.rendererPublicOrigin === undefined
+            ? {}
+            : { rendererOrigin: config.rendererPublicOrigin }),
+          ...(config.trustedResourceOrigins === undefined
+            ? {}
+            : { defaultTrustedResourceOrigins: config.trustedResourceOrigins }),
+        }),
       }),
       humanAuth: shelfHumanAuth,
       contentStore: persistence.contentStore,

@@ -29,6 +29,7 @@ import {
   loadDashboardCredentials,
   loadDashboardSession,
   loadFolderEntries,
+  loadHtmlPreviewSettings,
   loadRevisionBytes,
   loadTrash,
   loadWorkspaceShares,
@@ -119,6 +120,23 @@ export async function signInAction({ request }: ActionFunctionArgs) {
 
 export function dashboardLoader({ request }: LoaderFunctionArgs): Promise<DashboardSession> {
   return withSessionRedirect(request, () => loadDashboardSession(request.signal));
+}
+
+export async function htmlPreviewSettingsLoader({ request }: LoaderFunctionArgs) {
+  const session = await withSessionRedirect(request, () => loadDashboardSession(request.signal));
+  if (session.canManageSettings !== true) {
+    throw new Response('Installation settings are available to owners only.', { status: 403 });
+  }
+  return withSessionRedirect(request, async () => {
+    try {
+      return await loadHtmlPreviewSettings(request.signal);
+    } catch (error) {
+      if (error instanceof DashboardApiError && error.code === 'AUTHORIZATION_DENIED') {
+        throw new Response('Installation settings are available to owners only.', { status: 403 });
+      }
+      throw error;
+    }
+  });
 }
 
 export async function dashboardIndexLoader({ request }: LoaderFunctionArgs) {

@@ -5,11 +5,13 @@ import { describe, expect, it } from 'vitest';
 const sourceRoot = path.resolve(import.meta.dirname, '../src');
 
 describe('dashboard architecture', () => {
-  it('keeps authenticated navigation to the two approved utilities', async () => {
+  it('keeps authenticated navigation to the approved utilities and owner settings', async () => {
     const source = await readFile(path.join(sourceRoot, 'dashboard/layout.tsx'), 'utf8');
     expect(source).toContain('Artifacts');
     expect(source).toContain('Access');
-    expect(source).not.toMatch(/Collections|Activity|Analytics|Settings/);
+    expect(source).toContain('Settings');
+    expect(source).toContain('session.canManageSettings === true');
+    expect(source).not.toMatch(/Collections|Activity|Analytics/);
   });
 
   it('routes sign-in, workspace artifacts, artifact detail, and access without a dashboard publish route', async () => {
@@ -20,6 +22,7 @@ describe('dashboard architecture', () => {
     expect(source).toContain("path: 'w/:workspaceId/artifacts'");
     expect(source).toContain("path: 'w/:workspaceId/artifacts/:artifactId'");
     expect(source).toContain("path: 'w/:workspaceId/access'");
+    expect(source).toContain("path: 'settings'");
     expect(source).not.toMatch(/path:\s*['"][^'"]*publish/);
     expect(source).not.toMatch(
       /import \{ (?:AccessPage|ArtifactPage|ArtifactsPage|SignInPage) \}/u,

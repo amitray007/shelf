@@ -5,6 +5,7 @@ import {
   PostgresAuthRepository,
   PostgresCommentRepository,
   type PostgresDatabaseOptions,
+  PostgresHtmlPreviewSettingsRepository,
   PostgresInstallationInventory,
   PostgresReferencedContentInventory,
   PostgresRevisionRepository,
@@ -26,6 +27,7 @@ export interface ShelfPersistence {
   contentReader: ContentStorage;
   contentInventory: ContentStorage;
   installationInventory: PostgresInstallationInventory;
+  htmlPreviewSettingsRepository: PostgresHtmlPreviewSettingsRepository;
   revisionRepository: PostgresRevisionRepository;
   artifactDeletionRepository: PostgresRevisionRepository;
   shareRepository: PostgresShareRepository;
@@ -57,6 +59,7 @@ export function createShelfPersistence(config: ShelfPersistenceConfig): ShelfPer
     contentReader: contentStorage,
     contentInventory: contentStorage,
     installationInventory: new PostgresInstallationInventory(database),
+    htmlPreviewSettingsRepository: new PostgresHtmlPreviewSettingsRepository(database),
     revisionRepository,
     artifactDeletionRepository: revisionRepository,
     shareRepository: new PostgresShareRepository(database),

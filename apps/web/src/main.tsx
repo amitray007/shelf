@@ -147,6 +147,19 @@ const router = createBrowserRouter([
           return { Component: page.AccessPage, loader: routes.accessLoader };
         },
       },
+      {
+        path: 'settings',
+        lazy: async () => {
+          const [page, routes] = await Promise.all([
+            import('./dashboard/html-preview-settings-page.js'),
+            import('./dashboard/routes.js'),
+          ]);
+          return {
+            Component: page.HtmlPreviewSettingsPage,
+            loader: routes.htmlPreviewSettingsLoader,
+          };
+        },
+      },
     ],
   },
   { path: '*', element: <Navigate replace to="/app" /> },

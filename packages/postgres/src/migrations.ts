@@ -18,6 +18,8 @@ import { workspaceDeletionMigration } from './migrations/0014_workspace_deletion
 import { artifactRetentionMigration } from './migrations/0015_artifact_retention.js';
 import { shareRevisionAccessMigration } from './migrations/0016_share_revision_access.js';
 
+import { htmlPreviewSettingsMigration } from './migrations/0017_html_preview_settings.js';
+
 const migrations = Object.freeze<Record<string, Migration>>({
   '0001_initial': initialMigration,
   '0002_human_auth': humanAuthMigration,
@@ -35,6 +37,7 @@ const migrations = Object.freeze<Record<string, Migration>>({
   '0014_workspace_deletion': workspaceDeletionMigration,
   '0015_artifact_retention': artifactRetentionMigration,
   '0016_share_revision_access': shareRevisionAccessMigration,
+  '0017_html_preview_settings': htmlPreviewSettingsMigration,
 });
 
 const provider: MigrationProvider = {

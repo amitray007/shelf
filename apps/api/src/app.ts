@@ -60,11 +60,13 @@ import { TemporaryContentStore } from './adapters/temporary-content-store.js';
 import { registerHumanAuthRoutes } from './auth/runtime.js';
 import type { Authenticator } from './authenticate.js';
 import { type ReadinessState, registerHealthRoutes } from './health.js';
+import type { DashboardHtmlPreviewSettings } from './html-preview-settings.js';
 import { registerErrorHandler } from './plugins/errors.js';
 import { registerArtifactRoutes } from './routes/artifacts.js';
 import { registerCommentRoutes } from './routes/comments.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
 import { FolderMultipartOpenApiSchema, registerFolderRoutes } from './routes/folders.js';
+import { registerHtmlPreviewSettingsRoutes } from './routes/html-preview-settings.js';
 import { registerPublicConfigRoute } from './routes/public-config.js';
 import { PublishMultipartOpenApiSchema, registerPublishRoute } from './routes/publish.js';
 import { registerRevisionRoutes } from './routes/revisions.js';
@@ -167,6 +169,7 @@ export interface CreateShelfAppOptions {
   allowedFrameOrigins?: readonly string[];
   webRoot?: string;
   dashboardAccess?: DashboardAccessService;
+  htmlPreviewSettings?: DashboardHtmlPreviewSettings;
 }
 
 function isArtifactDeletionRepository(value: object): value is ArtifactDeletionRepository {
@@ -307,6 +310,15 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
     registerDashboardRoutes(app, {
       authenticator: dependencies.authenticator,
       access: options.dashboardAccess,
+      ...(options.htmlPreviewSettings === undefined
+        ? {}
+        : { settings: options.htmlPreviewSettings }),
+    });
+  }
+  if (options.htmlPreviewSettings !== undefined) {
+    registerHtmlPreviewSettingsRoutes(app, {
+      authenticator: dependencies.authenticator,
+      settings: options.htmlPreviewSettings,
     });
   }
   registerPublicConfigRoute(app, options.rendererPublicOrigin);

@@ -104,6 +104,24 @@ previews load sibling files from `/f/<session>/...` URLs on the renderer hostnam
 segment is a read-only grant for one revision that lasts at most one hour, and every request checks
 the share again. Keep renderer access logs private, or remove that path segment from them.
 
+The installation owner can configure trusted CDN libraries in **Settings > HTML previews** in
+the dashboard. Add exact HTTPS origins such as `https://cdn.shopify.com` to load Shopify Polaris
+scripts and assets. The setting applies to standalone HTML previews in every workspace. Save an
+empty list to block external assets. Changes apply to newly opened or reloaded previews without
+a process restart; scripts in already open previews keep running.
+
+Before the first dashboard save, `SHELF_RENDERER_TRUSTED_RESOURCE_ORIGINS` supplies defaults.
+Compose passes it to both API and renderer processes. For a custom deployment, set the same value
+on both processes. Separate origins with spaces or commas. A saved list overrides these defaults,
+including an empty list. The application hostname is rejected, and the renderer excludes its own
+hostname so other folder sessions remain isolated. The new `0017_html_preview_settings` migration
+must be applied through the normal migration step before either process starts.
+
+This trust covers standalone HTML previews, including Protected shares. Folder previews still
+require bundled assets. External scripts can read the artifact they run inside, and permitted
+resource requests can send data to those origins. The dashboard remains isolated; external fetch/XHR, frames, workers, and forms stay blocked. For limits
+and configuration syntax, see [Trusted CDN resources](../../apps/renderer/README.md#trusted-cdn-resources).
+
 When upgrading from the older `compose.yaml`, do not generate replacement values for existing
 credentials. Keep the current `POSTGRES_PASSWORD`, copy the contents of the existing auth,
 share-signing, and privacy key files into `SHELF_AUTH_SECRET`, `SHELF_SHARE_SIGNING_KEY`, and
