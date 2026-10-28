@@ -22,7 +22,7 @@ describePostgres('persistent HTML preview settings', () => {
     let database = createPostgresDatabase({ connectionString: target.toString() });
     try {
       const migrations = await migratePostgresToLatest(database);
-      expect(migrations.at(-1)).toEqual({
+      expect(migrations).toContainEqual({
         migrationName: '0017_html_preview_settings',
         status: 'Success',
       });

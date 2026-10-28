@@ -53,6 +53,14 @@ function harness(policy: 'off' | 'private' | 'shared') {
       };
     },
     async createThread(input) {
+      if (input.post.author.kind === 'visitor' && input.post.visitorKey !== null) {
+        await comments.upsertVisitor({
+          installationId: input.installationId,
+          visitorKey: input.post.visitorKey,
+          displayName: input.post.author.displayName,
+          now: input.post.createdAt,
+        });
+      }
       const thread = {
         installationId: input.installationId,
         workspaceId: input.workspaceId,
@@ -75,6 +83,14 @@ function harness(policy: 'off' | 'private' | 'shared') {
       return structuredClone(thread);
     },
     async createReply(input) {
+      if (input.post.author.kind === 'visitor' && input.post.visitorKey !== null) {
+        await comments.upsertVisitor({
+          installationId: input.installationId,
+          visitorKey: input.post.visitorKey,
+          displayName: input.post.author.displayName,
+          now: input.post.createdAt,
+        });
+      }
       const thread = threads.get(input.threadId);
       if (thread === undefined) throw new Error('missing thread');
       const post = { ...input.post, threadId: input.threadId };

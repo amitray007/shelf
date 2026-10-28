@@ -10,12 +10,14 @@ import type {
 } from '@shelf/core';
 import {
   CommentResolvedThreadEditError,
+  CommentSharePostLimitError,
   type CommentThreadCursor,
   type CommentThreadListScope,
   CommentThreadPostLimitError,
   commentCursorMatchesScope,
   commentParticipantId,
   encodeCommentThreadCursor,
+  SHARE_COMMENT_POST_LIMIT,
 } from '@shelf/core';
 
 function copy<T>(value: T): T {
@@ -31,6 +33,7 @@ function descendingCodePointOrder(left: string, right: string): number {
 export class MemoryCommentRepository implements CommentRepository {
   readonly #visitors = new Map<string, StoredCommentVisitor>();
   readonly #threads = new Map<string, StoredCommentThread>();
+  readonly #sharePostCounts = new Map<string, number>();
 
   async cleanupExpiredAbuse(_now: string, _limit: number): Promise<number> {
     // The process-local adapter deliberately does not retain abuse metadata.
@@ -38,6 +41,10 @@ export class MemoryCommentRepository implements CommentRepository {
   }
 
   async upsertVisitor(input: UpsertCommentVisitorInput): Promise<StoredCommentVisitor> {
+    return this.#upsertVisitor(input);
+  }
+
+  #upsertVisitor(input: UpsertCommentVisitorInput): StoredCommentVisitor {
     const key = `${input.installationId}\u0000${input.visitorKey}`;
     const existing = this.#visitors.get(key);
     const profile =
@@ -66,8 +73,32 @@ export class MemoryCommentRepository implements CommentRepository {
     return copy(profile);
   }
 
+  #shareKey(input: { installationId: string; workspaceId: string; shareId: string }): string {
+    return `${input.installationId}\u0000${input.workspaceId}\u0000${input.shareId}`;
+  }
+
+  #checkShareLimit(key: string): void {
+    if ((this.#sharePostCounts.get(key) ?? 0) >= SHARE_COMMENT_POST_LIMIT) {
+      throw new CommentSharePostLimitError();
+    }
+  }
+
+  #preparePostVisitor(installationId: string, post: Omit<StoredCommentPost, 'threadId'>): void {
+    if (post.author.kind === 'visitor' && post.visitorKey !== null) {
+      this.#upsertVisitor({
+        installationId,
+        visitorKey: post.visitorKey,
+        displayName: post.author.displayName,
+        now: post.createdAt,
+      });
+    }
+  }
+
   async createThread(input: CreateCommentThreadInput): Promise<StoredCommentThread> {
     if (this.#threads.has(input.threadId)) throw new Error('Comment thread ID collision.');
+    const key = this.#shareKey(input);
+    this.#checkShareLimit(key);
+    this.#preparePostVisitor(input.installationId, input.post);
     const thread: StoredCommentThread = {
       installationId: input.installationId,
       workspaceId: input.workspaceId,
@@ -86,6 +117,7 @@ export class MemoryCommentRepository implements CommentRepository {
       posts: [{ ...copy(input.post), threadId: input.threadId }],
     };
     this.#threads.set(input.threadId, thread);
+    this.#sharePostCounts.set(key, (this.#sharePostCounts.get(key) ?? 0) + 1);
     return copy(thread);
   }
 
@@ -98,9 +130,13 @@ export class MemoryCommentRepository implements CommentRepository {
     )
       return Promise.reject(new Error('Comment thread not found.'));
     if (thread.posts.length >= 100) throw new CommentThreadPostLimitError();
+    const key = this.#shareKey(thread);
+    this.#checkShareLimit(key);
+    this.#preparePostVisitor(input.installationId, input.post);
     const post = { ...copy(input.post), threadId: input.threadId };
     thread.posts.push(post);
     thread.updatedAt = post.createdAt;
+    this.#sharePostCounts.set(key, (this.#sharePostCounts.get(key) ?? 0) + 1);
     return copy(post);
   }
 

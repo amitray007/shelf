@@ -10,11 +10,13 @@ import type {
 } from '@shelf/core';
 import {
   CommentResolvedThreadEditError,
+  CommentSharePostLimitError,
   type CommentThreadCursor,
   type CommentThreadListScope,
   CommentThreadPostLimitError,
   commentParticipantId,
   encodeCommentThreadCursor,
+  SHARE_COMMENT_POST_LIMIT,
 } from '@shelf/core';
 import { type Kysely, sql, type Transaction } from 'kysely';
 
@@ -197,6 +199,67 @@ function postValues(
   };
 }
 
+async function upsertVisitor(
+  database: DatabaseExecutor,
+  input: UpsertCommentVisitorInput,
+): Promise<StoredCommentVisitor> {
+  const row = await database
+    .insertInto('shelf_comment_visitors')
+    .values({
+      installation_id: input.installationId,
+      visitor_key: input.visitorKey,
+      display_name: input.displayName,
+      created_at: new Date(input.now),
+      updated_at: new Date(input.now),
+    })
+    .onConflict((conflict) =>
+      conflict.columns(['installation_id', 'visitor_key']).doUpdateSet({
+        display_name: input.displayName,
+        updated_at: new Date(input.now),
+      }),
+    )
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  await database
+    .updateTable('shelf_comment_posts')
+    .set({ display_name: input.displayName })
+    .where('installation_id', '=', input.installationId)
+    .where('visitor_key', '=', input.visitorKey)
+    .where('display_name', '!=', input.displayName)
+    .execute();
+  return storedVisitor(row);
+}
+
+async function reserveSharePost(
+  database: DatabaseExecutor,
+  scope: { installationId: string; workspaceId: string; shareId: string },
+): Promise<void> {
+  const share = await database
+    .updateTable('shelf_shares')
+    .set((expression) => ({ comment_post_count: expression('comment_post_count', '+', 1) }))
+    .where('installation_id', '=', scope.installationId)
+    .where('workspace_id', '=', scope.workspaceId)
+    .where('share_id', '=', scope.shareId)
+    .where('comment_post_count', '<', SHARE_COMMENT_POST_LIMIT)
+    .returning('share_id')
+    .executeTakeFirst();
+  if (share === undefined) throw new CommentSharePostLimitError();
+}
+
+async function preparePostVisitor(
+  database: DatabaseExecutor,
+  input: { installationId: string; post: Omit<StoredCommentPost, 'threadId'> },
+): Promise<void> {
+  if (input.post.author.kind === 'visitor' && input.post.visitorKey !== null) {
+    await upsertVisitor(database, {
+      installationId: input.installationId,
+      visitorKey: input.post.visitorKey,
+      displayName: input.post.author.displayName,
+      now: input.post.createdAt,
+    });
+  }
+}
+
 export class PostgresCommentRepository implements CommentRepository {
   readonly #database: ShelfPostgresDatabase;
 
@@ -235,36 +298,14 @@ export class PostgresCommentRepository implements CommentRepository {
   }
 
   async upsertVisitor(input: UpsertCommentVisitorInput): Promise<StoredCommentVisitor> {
-    const row = await this.#database
-      .insertInto('shelf_comment_visitors')
-      .values({
-        installation_id: input.installationId,
-        visitor_key: input.visitorKey,
-        display_name: input.displayName,
-        created_at: new Date(input.now),
-        updated_at: new Date(input.now),
-      })
-      .onConflict((conflict) =>
-        conflict.columns(['installation_id', 'visitor_key']).doUpdateSet({
-          display_name: input.displayName,
-          updated_at: new Date(input.now),
-        }),
-      )
-      .returningAll()
-      .executeTakeFirstOrThrow();
-    await this.#database
-      .updateTable('shelf_comment_posts')
-      .set({ display_name: input.displayName })
-      .where('installation_id', '=', input.installationId)
-      .where('visitor_key', '=', input.visitorKey)
-      .where('display_name', '!=', input.displayName)
-      .execute();
-    return storedVisitor(row);
+    return upsertVisitor(this.#database, input);
   }
 
   async createThread(input: CreateCommentThreadInput): Promise<StoredCommentThread> {
     const { anchor } = input;
     const inserted = await this.#database.transaction().execute(async (transaction) => {
+      await reserveSharePost(transaction, input);
+      await preparePostVisitor(transaction, input);
       const thread = await transaction
         .insertInto('shelf_comment_threads')
         .values({
@@ -306,7 +347,7 @@ export class PostgresCommentRepository implements CommentRepository {
     const row = await this.#database.transaction().execute(async (transaction) => {
       const thread = await transaction
         .selectFrom('shelf_comment_threads')
-        .select(['thread_id'])
+        .select(['thread_id', 'share_id'])
         .where('installation_id', '=', input.installationId)
         .where('workspace_id', '=', input.workspaceId)
         .where('thread_id', '=', input.threadId)
@@ -321,6 +362,8 @@ export class PostgresCommentRepository implements CommentRepository {
         .where('thread_id', '=', input.threadId)
         .executeTakeFirstOrThrow();
       if (Number(postCount.count) >= 100) throw new CommentThreadPostLimitError();
+      await reserveSharePost(transaction, { ...input, shareId: thread.share_id });
+      await preparePostVisitor(transaction, input);
       const inserted = await transaction
         .insertInto('shelf_comment_posts')
         .values(values)

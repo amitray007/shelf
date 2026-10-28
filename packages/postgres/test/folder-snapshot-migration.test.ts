@@ -76,6 +76,7 @@ describePostgres('folder snapshot migration', () => {
         { migrationName: '0015_artifact_retention', status: 'Success' },
         { migrationName: '0016_share_revision_access', status: 'Success' },
         { migrationName: '0017_html_preview_settings', status: 'Success' },
+        { migrationName: '0018_share_comment_limit', status: 'Success' },
       ]);
       const artifact = await sql<{ kind: string }>`
         select kind from shelf_artifacts where artifact_id = 'art_AAAAAAAAAAAAAAAAAAAAAA'

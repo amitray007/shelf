@@ -256,6 +256,7 @@ function shareValues(result: StoredShare, purpose: CommitShareCreateInput['purpo
     visibility: result.visibility,
     access_type: result.accessType,
     comment_policy: result.commentPolicy ?? 'off',
+    comment_post_count: 0,
     revision_access: result.revisionAccess ?? 'target-only',
     history_from_revision_number:
       result.historyFromRevisionNumber === undefined || result.historyFromRevisionNumber === null

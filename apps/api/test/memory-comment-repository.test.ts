@@ -1,4 +1,5 @@
 import {
+  CommentSharePostLimitError,
   CommentThreadPostLimitError,
   commentParticipantId,
   decodeCommentThreadCursor,
@@ -8,6 +9,62 @@ import { describe, expect, it } from 'vitest';
 import { MemoryCommentRepository } from '../src/adapters/memory-comment-repository.js';
 
 describe('MemoryCommentRepository', () => {
+  it('caps a share across concurrent thread and reply writes without resetting on deletion', async () => {
+    const repository = new MemoryCommentRepository();
+    const scope = { installationId: 'install-cap', workspaceId: 'workspace-cap' };
+    const post = (index: number, displayName = 'Ada') => ({
+      postId: `post-cap-${index}`,
+      body: 'Review',
+      author: {
+        kind: 'visitor' as const,
+        participantId: commentParticipantId('visitor', 'visitor-cap'),
+        displayName,
+      },
+      visitorKey: 'visitor-cap',
+      actorId: null,
+      createdAt: '2026-10-29T00:00:00.000Z',
+      editedAt: null,
+      deletedAt: null,
+      hiddenAt: null,
+    });
+    const thread = (index: number, shareId = 'share-cap') => ({
+      ...scope,
+      artifactId: 'artifact-cap',
+      shareId,
+      threadId: `thread-cap-${index}`,
+      revisionId: 'revision-cap',
+      visibility: 'shared' as const,
+      anchor: { kind: 'file' as const, revisionId: 'revision-cap' },
+      post: post(index),
+    });
+    await repository.createThread(thread(0));
+    for (let index = 1; index < 99; index += 1) {
+      await repository.createThread(thread(index));
+    }
+    const results = await Promise.allSettled([
+      repository.createReply({ ...scope, threadId: 'thread-cap-0', post: post(99) }),
+      repository.createThread(thread(100)),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toEqual([
+      expect.objectContaining({ reason: expect.any(CommentSharePostLimitError) }),
+    ]);
+    await expect(
+      repository.createReply({ ...scope, threadId: 'thread-cap-0', post: post(101, 'Renamed') }),
+    ).rejects.toBeInstanceOf(CommentSharePostLimitError);
+    await expect(repository.findPost({ ...scope, postId: 'post-cap-0' })).resolves.toMatchObject({
+      author: { displayName: 'Ada' },
+    });
+    await repository.setPostHidden({ ...scope, postId: 'post-cap-1', hiddenAt: post(0).createdAt });
+    await repository.deletePost({ ...scope, postId: 'post-cap-0', deletedAt: post(0).createdAt });
+    await expect(repository.createThread(thread(102))).rejects.toBeInstanceOf(
+      CommentSharePostLimitError,
+    );
+    await expect(repository.createThread(thread(103, 'share-other'))).resolves.toMatchObject({
+      shareId: 'share-other',
+    });
+  });
+
   it('keeps visitor display names scoped to an installation', async () => {
     const repository = new MemoryCommentRepository();
     const visitorKey = 'visitor-key-shared-across-installations';

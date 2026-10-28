@@ -19,6 +19,7 @@ import { artifactRetentionMigration } from './migrations/0015_artifact_retention
 import { shareRevisionAccessMigration } from './migrations/0016_share_revision_access.js';
 
 import { htmlPreviewSettingsMigration } from './migrations/0017_html_preview_settings.js';
+import { shareCommentLimitMigration } from './migrations/0018_share_comment_limit.js';
 
 const migrations = Object.freeze<Record<string, Migration>>({
   '0001_initial': initialMigration,
@@ -38,6 +39,7 @@ const migrations = Object.freeze<Record<string, Migration>>({
   '0015_artifact_retention': artifactRetentionMigration,
   '0016_share_revision_access': shareRevisionAccessMigration,
   '0017_html_preview_settings': htmlPreviewSettingsMigration,
+  '0018_share_comment_limit': shareCommentLimitMigration,
 });
 
 const provider: MigrationProvider = {
