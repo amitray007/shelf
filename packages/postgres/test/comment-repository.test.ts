@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
 import {
+  CommentSharePostLimitError,
   CommentThreadPostLimitError,
   commentParticipantId,
   decodeCommentThreadCursor,
@@ -16,6 +17,7 @@ import {
   PostgresCommentRepository,
   PostgresRevisionRepository,
 } from '../src/index.js';
+import { shareCommentLimitMigration } from '../src/migrations/0018_share_comment_limit.js';
 
 const adminConnectionString = process.env.SHELF_TEST_POSTGRES_URL;
 const databaseName = `shelf_comment_repo_test_${randomBytes(8).toString('hex')}`;
@@ -64,6 +66,53 @@ function publish(scope: (typeof ids)['main'] | (typeof ids)['other']): StoredPub
       observed: { actorId: scope.actor, operation: 'file.publish' },
     },
     publisherMetadata: {},
+  };
+}
+
+async function createCommentShare(
+  database: ReturnType<typeof createPostgresDatabase>,
+  shareId: string,
+) {
+  const template = await database
+    .selectFrom('shelf_shares')
+    .selectAll()
+    .where('share_id', '=', ids.main.share)
+    .executeTakeFirstOrThrow();
+  await database
+    .insertInto('shelf_shares')
+    .values({ ...template, share_id: shareId, comment_post_count: 0 })
+    .execute();
+}
+
+function capPost(index: number, displayName = 'Ada', visitorKey = 'visitor-share-cap') {
+  return {
+    postId: `post-share-cap-${index}`,
+    body: 'Review',
+    author: {
+      kind: 'visitor' as const,
+      participantId: commentParticipantId('visitor', visitorKey),
+      displayName,
+    },
+    visitorKey,
+    actorId: null,
+    createdAt: new Date(Date.parse('2026-10-29T00:00:00.000Z') + index * 1000).toISOString(),
+    editedAt: null,
+    deletedAt: null,
+    hiddenAt: null,
+  };
+}
+
+function capThread(index: number, shareId: string) {
+  return {
+    installationId: ids.main.installation,
+    workspaceId: ids.main.workspace,
+    artifactId: ids.main.artifact,
+    shareId,
+    threadId: `thread-share-cap-${index}`,
+    revisionId: ids.main.revision,
+    visibility: 'shared' as const,
+    anchor: { kind: 'file' as const, revisionId: ids.main.revision },
+    post: capPost(index),
   };
 }
 
@@ -378,11 +427,21 @@ describePostgres('PostgresCommentRepository', () => {
       expect(second.items).toHaveLength(1);
       expect(second.items[0]?.threadId).not.toBe(first.items[0]?.threadId);
 
+      const limitShare = 'shr_DDDDDDDDDDDDDDDDDDDDDD';
+      const template = await database
+        .selectFrom('shelf_shares')
+        .selectAll()
+        .where('share_id', '=', pagingShare)
+        .executeTakeFirstOrThrow();
+      await database
+        .insertInto('shelf_shares')
+        .values({ ...template, share_id: limitShare, comment_post_count: 0 })
+        .execute();
       await repository.createThread({
         installationId: ids.main.installation,
         workspaceId: ids.main.workspace,
         artifactId: ids.main.artifact,
-        shareId: pagingShare,
+        shareId: limitShare,
         threadId: 'thread-limit',
         revisionId: ids.main.revision,
         visibility: 'shared',
@@ -444,6 +503,152 @@ describePostgres('PostgresCommentRepository', () => {
             result.status === 'rejected' && result.reason instanceof CommentThreadPostLimitError,
         ),
       ).toHaveLength(1);
+    } finally {
+      await database.destroy();
+    }
+  });
+  it('atomically caps a share across connections before visitor writes and retains spent slots', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const otherDatabase = createPostgresDatabase({ connectionString });
+    const repository = new PostgresCommentRepository(database);
+    const other = new PostgresCommentRepository(otherDatabase);
+    const shareId = 'shr_EEEEEEEEEEEEEEEEEEEEEE';
+    const scope = { installationId: ids.main.installation, workspaceId: ids.main.workspace };
+    try {
+      await createCommentShare(database, shareId);
+      await repository.createThread(capThread(0, shareId));
+      // A failed insert must roll back its reserved slot and visitor changes.
+      await expect(
+        repository.createThread({
+          ...capThread(0, shareId),
+          post: capPost(200, 'Failed', 'visitor-failed-insert'),
+        }),
+      ).rejects.toThrow();
+      expect(
+        await database
+          .selectFrom('shelf_comment_visitors')
+          .select('visitor_key')
+          .where('visitor_key', '=', 'visitor-failed-insert')
+          .execute(),
+      ).toEqual([]);
+      for (let index = 1; index < 99; index += 1) {
+        await repository.createThread(capThread(index, shareId));
+      }
+      const results = await Promise.allSettled([
+        repository.createThread(capThread(99, shareId)),
+        other.createReply({ ...scope, threadId: 'thread-share-cap-0', post: capPost(100) }),
+      ]);
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((result) => result.status === 'rejected')).toEqual([
+        expect.objectContaining({ reason: expect.any(CommentSharePostLimitError) }),
+      ]);
+      const count = await database
+        .selectFrom('shelf_comment_posts as posts')
+        .innerJoin('shelf_comment_threads as threads', 'threads.thread_id', 'posts.thread_id')
+        .where('threads.share_id', '=', shareId)
+        .select(({ fn }) => fn.countAll().as('count'))
+        .executeTakeFirstOrThrow();
+      expect(Number(count.count)).toBe(100);
+      for (const input of [capPost(101, 'Renamed'), capPost(102, 'New', 'visitor-after-cap')]) {
+        await expect(
+          other.createThread({ ...capThread(101, shareId), post: input }),
+        ).rejects.toBeInstanceOf(CommentSharePostLimitError);
+        await expect(
+          other.createReply({ ...scope, threadId: 'thread-share-cap-1', post: input }),
+        ).rejects.toBeInstanceOf(CommentSharePostLimitError);
+      }
+      expect(
+        await database
+          .selectFrom('shelf_comment_visitors')
+          .select('visitor_key')
+          .where('visitor_key', '=', 'visitor-after-cap')
+          .execute(),
+      ).toEqual([]);
+      await expect(
+        repository.findPost({ ...scope, postId: 'post-share-cap-1' }),
+      ).resolves.toMatchObject({ author: { displayName: 'Ada' } });
+      await repository.setPostHidden({
+        ...scope,
+        postId: 'post-share-cap-1',
+        hiddenAt: capPost(0).createdAt,
+      });
+      await repository.deletePost({
+        ...scope,
+        postId: 'post-share-cap-0',
+        deletedAt: capPost(0).createdAt,
+      });
+      await expect(other.createThread(capThread(103, shareId))).rejects.toBeInstanceOf(
+        CommentSharePostLimitError,
+      );
+      expect(
+        await database
+          .selectFrom('shelf_shares')
+          .select('comment_post_count')
+          .where('share_id', '=', shareId)
+          .executeTakeFirstOrThrow(),
+      ).toEqual({ comment_post_count: 100 });
+      const otherShare = 'shr_FFFFFFFFFFFFFFFFFFFFFF';
+      await createCommentShare(database, otherShare);
+      await expect(other.createThread(capThread(104, otherShare))).resolves.toMatchObject({
+        shareId: otherShare,
+      });
+    } finally {
+      await otherDatabase.destroy();
+      await database.destroy();
+    }
+  });
+
+  it('backfills existing hidden and deleted comments and preserves shares already above the cap', async () => {
+    const database = createPostgresDatabase({ connectionString });
+    const repository = new PostgresCommentRepository(database);
+    const empty = 'shr_GGGGGGGGGGGGGGGGGGGGGG';
+    const small = 'shr_HHHHHHHHHHHHHHHHHHHHHH';
+    const over = 'shr_IIIIIIIIIIIIIIIIIIIIII';
+    try {
+      for (const shareId of [empty, small, over]) await createCommentShare(database, shareId);
+      await repository.createThread(capThread(300, small));
+      await repository.createReply({
+        installationId: ids.main.installation,
+        workspaceId: ids.main.workspace,
+        threadId: 'thread-share-cap-300',
+        post: { ...capPost(301), deletedAt: capPost(301).createdAt },
+      });
+      await repository.setPostHidden({
+        installationId: ids.main.installation,
+        workspaceId: ids.main.workspace,
+        postId: 'post-share-cap-300',
+        hiddenAt: capPost(300).createdAt,
+      });
+      await repository.createThread(capThread(302, over));
+      await shareCommentLimitMigration.down?.(database);
+      await sql`
+        insert into shelf_comment_posts (
+          post_id, thread_id, installation_id, workspace_id, author_kind, actor_id, body, created_at
+        ) select 'legacy-extra-' || index, 'thread-share-cap-302', ${ids.main.installation},
+          ${ids.main.workspace}, 'actor', ${ids.main.actor}, 'Legacy comment', transaction_timestamp()
+        from generate_series(1, 104) as index
+      `.execute(database);
+      await shareCommentLimitMigration.up(database);
+      const shares = await database
+        .selectFrom('shelf_shares')
+        .select(['share_id', 'comment_post_count'])
+        .where('share_id', 'in', [empty, small, over])
+        .execute();
+      expect(
+        Object.fromEntries(shares.map((row) => [row.share_id, row.comment_post_count])),
+      ).toEqual({ [empty]: 0, [small]: 2, [over]: 100 });
+      const posts = await database
+        .selectFrom('shelf_comment_posts')
+        .select(({ fn }) => fn.countAll().as('count'))
+        .where('thread_id', '=', 'thread-share-cap-302')
+        .executeTakeFirstOrThrow();
+      expect(Number(posts.count)).toBe(105);
+      await expect(repository.createThread(capThread(303, over))).rejects.toBeInstanceOf(
+        CommentSharePostLimitError,
+      );
+      await expect(repository.createThread(capThread(304, small))).resolves.toMatchObject({
+        shareId: small,
+      });
     } finally {
       await database.destroy();
     }

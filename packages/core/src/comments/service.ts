@@ -39,6 +39,18 @@ export class CommentThreadPostLimitError extends ShelfCoreError {
   }
 }
 
+export const SHARE_COMMENT_POST_LIMIT = 100;
+
+export class CommentSharePostLimitError extends ShelfCoreError {
+  constructor() {
+    super('INVALID_REQUEST', 'This share has reached its limit of 100 comments.', {
+      retryable: false,
+      details: [{ field: 'shareId', reason: 'shares are limited to 100 total comments' }],
+    });
+    this.name = 'CommentSharePostLimitError';
+  }
+}
+
 const OPAQUE_VISITOR_KEY = /^[A-Za-z0-9_:-]{16,512}$/u;
 const BODY_MAX = 20_000;
 const PATH_MAX = 2_048;
@@ -460,7 +472,6 @@ export function createCommentService(dependencies: {
       }
       validateAnchor(request.anchor);
       await checkRevision(share, request.revisionId);
-      await prepareVisitor(request.authority, request.installationId, now);
       const post = postForAuthority(request.authority, generatePostId(), normalizedBody, now);
       let created: StoredCommentThread;
       try {
@@ -528,7 +539,6 @@ export function createCommentService(dependencies: {
         throw new CommentWriteDisabledError();
       }
       const now = clock().toISOString();
-      await prepareVisitor(request.authority, request.installationId, now);
       const post = postForAuthority(request.authority, generatePostId(), normalizedBody, now);
       let created: StoredCommentPost;
       try {

@@ -113,6 +113,88 @@ function expectAnonymousHeaders(response: {
 }
 
 describe('comment HTTP boundary', () => {
+  it.each(['public', 'protected'] as const)(
+    'limits %s shares to 100 comments across threads and replies',
+    async (accessType) => {
+      const app = await fixture();
+      const published = await publish(app);
+      const { artifactId, revisionId } = published.json();
+      const shared = await createShare(app, artifactId, accessType, 'cap-share');
+      expect(shared.statusCode, shared.body).toBe(201);
+      const { shareId, publicCode, url } = shared.json();
+      let authority: { token?: string } = {};
+      if (accessType === 'protected') {
+        const session = await app.inject({
+          method: 'POST',
+          url: `/api/v1/public/shares/${shareId}/sessions`,
+          payload: {
+            sessionId: '11111111-1111-4111-8111-111111111111',
+            secret: url.split('#')[1],
+          },
+        });
+        expect(session.statusCode, session.body).toBe(200);
+        authority = { token: session.json().token };
+      }
+      const prefix =
+        accessType === 'public'
+          ? `/api/v1/public/links/${publicCode}`
+          : `/api/v1/public/shares/${shareId}`;
+      const payload = {
+        ...authority,
+        visitorToken,
+        displayName: 'Ada',
+        revisionId,
+        anchor: { kind: 'file', revisionId },
+        body: 'Review',
+      };
+      const first = await app.inject({
+        method: 'POST',
+        url: `${prefix}/comments/threads`,
+        payload,
+      });
+      expect(first.statusCode, first.body).toBe(201);
+      const { threadId } = first.json();
+      for (let index = 1; index < 100; index += 1) {
+        const created = await app.inject({
+          method: 'POST',
+          url: `${prefix}/comments/threads`,
+          payload: { ...payload, visitorToken: `${visitorToken}${index}` },
+        });
+        expect(created.statusCode, created.body).toBe(201);
+      }
+      for (const request of [
+        { url: `${prefix}/comments/threads`, payload },
+        {
+          url: `${prefix}/comments/threads/${threadId}/replies`,
+          payload: { ...authority, visitorToken, displayName: 'Renamed', body: 'Reply' },
+        },
+      ]) {
+        const blocked = await app.inject({ method: 'POST', ...request });
+        expect(blocked.statusCode, blocked.body).toBe(400);
+        expect(blocked.json().error).toMatchObject({
+          code: 'INVALID_REQUEST',
+          message: 'This share has reached its limit of 100 comments.',
+          retryable: false,
+        });
+        expectAnonymousHeaders(blocked);
+      }
+      const history = await app.inject({
+        method: 'POST',
+        url: `${prefix}/comments/query`,
+        payload: { ...authority, visitorToken, limit: 50 },
+      });
+      expect(history.statusCode, history.body).toBe(200);
+      expect(history.json().items).toHaveLength(50);
+      expect(
+        history
+          .json()
+          .items.every((thread: { posts: Array<{ author: { displayName: string } }> }) =>
+            thread.posts.every((post) => post.author.displayName === 'Ada'),
+          ),
+      ).toBe(true);
+    },
+  );
+
   it('allows credentials to reach actor-owned edit and delete without a human-only gate', async () => {
     const app = await fixture('access-credential');
     const artifactId = `art_${'a'.repeat(22)}`;

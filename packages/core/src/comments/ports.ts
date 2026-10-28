@@ -92,7 +92,9 @@ export interface CreateCommentReplyInput {
 export interface CommentRepository {
   upsertVisitor(input: UpsertCommentVisitorInput): Promise<StoredCommentVisitor>;
   cleanupExpiredAbuse(now: string, limit: number): Promise<number>;
+  /** Atomically enforce the share's lifetime post cap before visitor upsert and insertion. */
   createThread(input: CreateCommentThreadInput): Promise<StoredCommentThread>;
+  /** Replies consume the same share budget as thread starters, including deleted posts. */
   createReply(input: CreateCommentReplyInput): Promise<StoredCommentPost>;
   findThread(request: {
     installationId: string;
