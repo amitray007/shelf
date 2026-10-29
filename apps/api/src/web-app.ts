@@ -50,6 +50,42 @@ function applyDocumentHeaders(
   void reply.header('X-Robots-Tag', 'noindex, nofollow, noarchive');
 }
 
+export function addSharePreloads(document: string, manifest: unknown): string {
+  if (typeof manifest !== 'object' || manifest === null) return document;
+  const entries = manifest as Record<string, { file?: unknown; imports?: unknown; css?: unknown }>;
+  const files = new Set<string>();
+  const styles = new Set<string>();
+  const entry = entries['index.html'];
+  const alreadyLoaded = new Set<unknown>([entry?.file]);
+  if (Array.isArray(entry?.imports)) {
+    for (const key of entry.imports)
+      if (typeof key === 'string') alreadyLoaded.add(entries[key]?.file);
+  }
+  for (const key of ['src/viewer-loader.ts', 'src/viewer-page.tsx']) {
+    const chunk = entries[key];
+    if (!chunk || typeof chunk !== 'object') continue;
+    const direct = [chunk.file];
+    if (Array.isArray(chunk.imports)) {
+      for (const dependency of chunk.imports)
+        if (typeof dependency === 'string') direct.push(entries[dependency]?.file);
+    }
+    for (const file of direct)
+      if (
+        typeof file === 'string' &&
+        /^assets\/[\w.-]+\.js$/.test(file) &&
+        !alreadyLoaded.has(file)
+      )
+        files.add(file);
+    if (key === 'src/viewer-page.tsx' && Array.isArray(chunk.css))
+      for (const css of chunk.css)
+        if (typeof css === 'string' && /^assets\/[\w.-]+\.css$/.test(css)) styles.add(css);
+  }
+  const hints = [...files]
+    .map((file) => `<link rel="modulepreload" href="/${file}">`)
+    .concat([...styles].map((file) => `<link rel="preload" as="style" href="/${file}">`));
+  return document.replace('</head>', `${hints.join('')}</head>`);
+}
+
 export async function registerWebApp(app: FastifyInstance, options: WebAppOptions): Promise<void> {
   const root = resolve(options.root);
   const metadata = await lstat(root);
@@ -93,12 +129,19 @@ export async function registerWebApp(app: FastifyInstance, options: WebAppOption
     });
   }
 
+  const indexDocument = await readFile(join(root, 'index.html'), 'utf8');
+  let shareDocument = indexDocument;
+  try {
+    shareDocument = addSharePreloads(
+      indexDocument,
+      JSON.parse(await readFile(join(root, '.vite/manifest.json'), 'utf8')),
+    );
+  } catch {
+    // Missing or invalid manifests leave the original shell intact.
+  }
   if (options.shareReader !== undefined) {
-    registerShareDocuments(
-      app,
-      options.shareReader,
-      await readFile(join(root, 'index.html'), 'utf8'),
-      (reply) => applyDocumentHeaders(reply, options.rendererOrigin, options.allowedFrameOrigins),
+    registerShareDocuments(app, options.shareReader, shareDocument, (reply) =>
+      applyDocumentHeaders(reply, options.rendererOrigin, options.allowedFrameOrigins),
     );
   }
   const paths = ['/', '/signin', '/app', '/app/*', '/preview/:artifactId'];
@@ -106,6 +149,7 @@ export async function registerWebApp(app: FastifyInstance, options: WebAppOption
   for (const path of paths) {
     app.get(path, { schema: { hide: true } }, async (_request, reply) => {
       applyDocumentHeaders(reply, options.rendererOrigin, options.allowedFrameOrigins);
+      if (path === '/s/:shareId') return reply.type('text/html').send(shareDocument);
       return reply.sendFile('index.html', root, {
         cacheControl: false,
         immutable: false,
