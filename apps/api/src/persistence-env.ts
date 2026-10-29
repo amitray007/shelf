@@ -26,12 +26,21 @@ export function shelfPersistenceConfigFromEnv(
     };
   }
   if (driver === 'r2') {
+    const cacheValue = optionalEnvironmentValue(environment, 'SHELF_STORAGE_CACHE_BYTES');
+    const cacheBytes = cacheValue === undefined ? undefined : Number(cacheValue);
+    if (
+      cacheValue !== undefined &&
+      (!/^\d+$/u.test(cacheValue) || !Number.isSafeInteger(cacheBytes))
+    ) {
+      throw new Error('SHELF_STORAGE_CACHE_BYTES must be a non-negative safe integer.');
+    }
     const sessionToken = optionalEnvironmentValue(environment, 'SHELF_R2_SESSION_TOKEN');
     const prefix = optionalEnvironmentValue(environment, 'SHELF_STORAGE_PREFIX');
     return {
       postgres: { connectionString },
       content: {
         driver,
+        ...(cacheBytes === undefined ? {} : { cacheBytes }),
         accountId: requiredEnvironmentValue(environment, 'SHELF_R2_ACCOUNT_ID'),
         bucket: requiredEnvironmentValue(environment, 'SHELF_R2_BUCKET'),
         accessKeyId: requiredEnvironmentValue(environment, 'SHELF_R2_ACCESS_KEY_ID'),
