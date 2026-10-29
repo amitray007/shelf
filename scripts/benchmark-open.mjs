@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Real-stack artifact-open benchmark. Build first with pnpm build.
- * --smoke: 1 open/cell, no warmups. --iterations N: default 7, plus 2 warmups/cell.
+ * --smoke: 1 open/cell, no warmups. --iterations N: default 3, plus 1 warmup/cell.
  * Only DATABASE_URL is read from .env.dev; every other setting is isolated here.
  * WARNING: resets ONLY shelf_bench_open, on the configured PostgreSQL server.
  *
@@ -14,7 +14,29 @@
  * Final Playwright assertions independently verify the actual rendered content.
  * Cache: each owner open uses a new authenticated context primed once with that
  * artifact (including lazy assets), then a fresh page in that same HTTP cache.
- * Share opens always use a new context. Warmups never leak their browser caches.
+ * First share opens use a new context. Return opens prime the full link once,
+ * drain it, then open that same full link (including fragment) in a fresh page
+ * in the same context, preserving stored sessions and HTTP cache. Every sample
+ * has its own context; warmups never leak browser caches.
+ * --scenarios a,b selects timed cells; --resilience-only skips timed cells;
+ * --no-resilience skips faults. Default includes all six scenarios and faults.
+ * --resilience-rounds N defaults to 3 (smoke: 1). Timed defaults reduce 7 measurements + 2 warmups
+ * to 3 + 1 to keep the expanded default near nine minutes.
+ * Faults run in batches of four fresh contexts for both access modes and all kinds:
+ * resolution_503: first resolve or sessions API request gets retryable JSON 503;
+ * content_reset: first content or tree API request aborts connectionreset;
+ * renderer_503: first renderer iframe document gets 503 (HTML/folder only);
+ * api_restart: every /api/ request aborts connectionrefused for 1500 ms from
+ * navigation start, then passes through. Only resilience uses network routes.
+ * Pass requires probe readiness AND independent content verification by 10 s,
+ * with no reload or user action. Recovery uses browser epoch time to readiness.
+ * A fault must actually fire to pass. Fail counts include non-injected cases.
+ * Fault errors never enter timed errors/all_rendered. Rate is passed/total.
+ * Missing subset aggregates are null; open_ms_geomean always requires the
+ * original 16 cells, share_open_ms_geomean all 16 share cells.
+ * Runtime reduction: four concurrent fault cases bound deadlines to 70 seconds
+ * per round (28 cases, including 4 renderer cases), plus setup/draining.
+ * Fault concurrency can affect recovery timing; timed cells remain serial.
  * Requests count /api/ requests from start through observed readiness, all frames;
  * reported count is the median across measured opens, excluding setup/priming.
  * Cells run serially, round-robin, with equal state for warmups and measurements.
@@ -35,7 +57,7 @@
  * Run on an idle host: scheduler and memory pressure are included, not normalized.
  * After recording/verification, every page drains to network idle before context
  * teardown. This is outside the measured window and avoids aborting local streams.
- * No product mocks, routes, source edits, or dev servers are used.
+ * No product mocks, source edits, or dev servers are used.
  */
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -55,7 +77,13 @@ const NETWORK = Object.freeze({
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ORIGIN = 'http://127.0.0.1:3200';
 const RENDERER = 'http://localhost:3201';
-const SCENARIOS = ['owner_navigate', 'owner_click', 'share_protected_first', 'share_public_first'];
+const ORIGINAL_SCENARIOS = [
+  'owner_navigate',
+  'owner_click',
+  'share_protected_first',
+  'share_public_first',
+];
+const SCENARIOS = [...ORIGINAL_SCENARIOS, 'share_protected_return', 'share_public_return'];
 const KINDS = ['markdown', 'html', 'image', 'folder'];
 const webRequire = createRequire(join(ROOT, 'apps/web/package.json'));
 const apiRequire = createRequire(join(ROOT, 'apps/api/package.json'));
@@ -357,9 +385,10 @@ async function openCell(fixture, scenario, storageState) {
   try {
     await context.addInitScript(installProbe, { kind: fixture.kind, owner });
     const detail = `${ORIGIN}/app/w/bench/artifacts/${fixture.id}`;
-    if (owner) {
+    const shareUrl = fixture[scenario.startsWith('share_public') ? 'public' : 'protected'];
+    if (owner || scenario.endsWith('_return')) {
       const prime = await throttledPage(context);
-      await prime.goto(detail, { waitUntil: 'commit' });
+      await prime.goto(owner ? detail : shareUrl, { waitUntil: 'commit' });
       await verify(prime, fixture.kind, owner);
       await prime.waitForLoadState('networkidle');
       await prime.close();
@@ -376,11 +405,7 @@ async function openCell(fixture, scenario, storageState) {
     const requests = pageRequests.get(page);
     if (scenario === 'owner_click')
       await page.getByRole('link', { name: fixture.title, exact: true }).click();
-    else
-      await page.goto(
-        owner ? detail : fixture[scenario === 'share_public_first' ? 'public' : 'protected'],
-        { waitUntil: 'commit' },
-      );
+    else await page.goto(owner ? detail : shareUrl, { waitUntil: 'commit' });
     await page.waitForFunction(
       () => window.__bench?.end !== null && window.__bench?.end !== undefined,
       {},
@@ -404,19 +429,117 @@ async function openCell(fixture, scenario, storageState) {
     await context.close();
   }
 }
+async function resilienceCase(fixture, access, fault) {
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    serviceWorkers: 'block',
+    reducedMotion: 'reduce',
+  });
+  let injected = false;
+  let started = 0;
+  try {
+    await context.addInitScript(installProbe, { kind: fixture.kind, owner: false });
+    const page = await throttledPage(context);
+    await page.route('**/*', async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const api = url.pathname.startsWith('/api/');
+      if (fault === 'api_restart' && api && Date.now() - started < 1500) {
+        injected = true;
+        return route.abort('connectionrefused');
+      }
+      if (!injected) {
+        if (fault === 'resolution_503' && api && /\/(resolve|sessions)$/.test(url.pathname)) {
+          injected = true;
+          return route.fulfill({
+            status: 503,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              error: {
+                code: 'SERVICE_UNAVAILABLE',
+                message: 'Service unavailable.',
+                retryable: true,
+                requestId: 'bench',
+              },
+            }),
+          });
+        }
+        if (fault === 'content_reset' && api && /\/(content|tree)(\/|$)/.test(url.pathname)) {
+          injected = true;
+          return route.abort('connectionreset');
+        }
+        if (
+          fault === 'renderer_503' &&
+          url.origin === RENDERER &&
+          request.isNavigationRequest() &&
+          request.frame() !== page.mainFrame()
+        ) {
+          injected = true;
+          return route.fulfill({
+            status: 503,
+            contentType: 'text/plain',
+            body: 'Service unavailable.',
+          });
+        }
+      }
+      return route.continue();
+    });
+    started = Date.now();
+    const deadline = started + 10000;
+    await page.goto(fixture[access], { waitUntil: 'commit', timeout: 10000 });
+    await page.waitForFunction(
+      () => window.__bench?.end != null,
+      {},
+      { timeout: Math.max(1, deadline - Date.now()), polling: 5 },
+    );
+    await Promise.race([
+      verify(page, fixture.kind, false),
+      new Promise((_, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error('Verification deadline')),
+          Math.max(1, deadline - Date.now()),
+        );
+        timer.unref();
+      }),
+    ]);
+    const timing = await page.evaluate(() => window.__bench);
+    return injected && Date.now() <= deadline && timing.end - timing.start <= 10000
+      ? timing.end - timing.start
+      : null;
+  } catch {
+    return null;
+  } finally {
+    await Promise.all(
+      context
+        .pages()
+        .map((page) => page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})),
+    );
+    await context.close();
+  }
+}
 async function main() {
   const args = process.argv.slice(2);
   const smoke = args.includes('--smoke');
-  const index = args.indexOf('--iterations');
-  const iterations = smoke ? 1 : index < 0 ? 7 : Number(args[index + 1]);
+  const options = new Map();
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    if (['--smoke', '--resilience-only', '--no-resilience'].includes(flag)) options.set(flag, true);
+    else if (['--iterations', '--resilience-rounds', '--scenarios'].includes(flag))
+      options.set(flag, args[++i]);
+    else throw new Error(`Unknown flag: ${flag}`);
+  }
+  const iterations = smoke ? 1 : Number(options.get('--iterations') ?? 3);
+  const resilienceRounds = Number(options.get('--resilience-rounds') ?? (smoke ? 1 : 3));
+  const scenarios = options.has('--resilience-only')
+    ? []
+    : String(options.get('--scenarios') ?? SCENARIOS.join(',')).split(',');
   if (
-    !Number.isInteger(iterations) ||
-    iterations < 1 ||
-    args.some(
-      (arg, i) => !['--smoke', '--iterations'].includes(arg) && !(index >= 0 && i === index + 1),
-    )
+    ![iterations, resilienceRounds].every((n) => Number.isInteger(n) && n > 0) ||
+    scenarios.some((scenario) => !SCENARIOS.includes(scenario)) ||
+    new Set(scenarios).size !== scenarios.length ||
+    (options.has('--resilience-only') && options.has('--no-resilience'))
   )
-    throw new Error('Usage: --smoke or --iterations <positive integer>');
+    throw new Error('Invalid benchmark options');
   await portFree(3200);
   await portFree(3201);
   temporary = await mkdtemp(join(tmpdir(), 'shelf-bench-open-'));
@@ -536,10 +659,10 @@ async function main() {
   if (!storageState.cookies.length) throw new Error('Owner login returned no session cookie');
   await login.close();
   const cells = fixtures.flatMap((fixture) =>
-    SCENARIOS.map((scenario) => ({ fixture, scenario, samples: [], counts: [] })),
+    scenarios.map((scenario) => ({ fixture, scenario, samples: [], counts: [] })),
   );
   let errors = 0;
-  const warmups = smoke ? 0 : 2;
+  const warmups = smoke ? 0 : 1;
   for (let iteration = -warmups; iteration < iterations; iteration++) {
     log(`Round ${iteration < 0 ? `warmup ${iteration + warmups + 1}` : iteration + 1}`);
     for (const cell of cells) {
@@ -578,10 +701,61 @@ async function main() {
   output.all_rendered =
     errors === 0 && cells.every((cell) => cell.samples.length === iterations) ? 1 : 0;
   output.errors = errors;
-  if (output.all_rendered)
-    output.open_ms_geomean = Math.exp(
-      cells.reduce((sum, cell) => sum + Math.log(median(cell.samples)), 0) / cells.length,
-    );
+  const aggregate = (selected, geometric = false) => {
+    const selectedCells = cells.filter((cell) => selected.includes(cell.scenario));
+    if (
+      selectedCells.length !== selected.length * KINDS.length ||
+      selectedCells.some((cell) => cell.samples.length !== iterations)
+    )
+      return null;
+    const values = selectedCells.map((cell) => median(cell.samples));
+    return geometric
+      ? Math.exp(values.reduce((sum, value) => sum + Math.log(value), 0) / values.length)
+      : median(values);
+  };
+  if (output.all_rendered) output.open_ms_geomean = aggregate(ORIGINAL_SCENARIOS, true);
+  output.share_open_ms_geomean = aggregate(
+    SCENARIOS.filter((scenario) => scenario.startsWith('share_')),
+    true,
+  );
+  output.share_return_ms_p50 = aggregate(['share_protected_return', 'share_public_return']);
+  output.resilience_cases = 0;
+  output.resilience_pass_rate = null;
+  output.resilience_recover_ms_p50 = null;
+  const recovered = [];
+  if (!options.has('--no-resilience')) {
+    for (let round = 0; round < resilienceRounds; round++) {
+      log(`Resilience round ${round + 1}`);
+      const cases = fixtures.flatMap((fixture) =>
+        ['protected', 'public'].flatMap((access) =>
+          [
+            'resolution_503',
+            'content_reset',
+            'api_restart',
+            ...(['html', 'folder'].includes(fixture.kind) ? ['renderer_503'] : []),
+          ].map((fault) => ({ fixture, access, fault })),
+        ),
+      );
+      for (let offset = 0; offset < cases.length; offset += 4) {
+        const batch = cases.slice(offset, offset + 4);
+        const results = await Promise.all(
+          batch.map(({ fixture, access, fault }) => resilienceCase(fixture, access, fault)),
+        );
+        for (const [index, result] of results.entries()) {
+          const { fixture, access, fault } = batch[index];
+          output.resilience_cases++;
+          if (result !== null) recovered.push(result);
+          else {
+            const key = `resilience_fail_${fault}_${access}_${fixture.kind}`;
+            output[key] = (output[key] ?? 0) + 1;
+            log(`Resilience failed: ${fault}/${access}/${fixture.kind}`);
+          }
+        }
+      }
+    }
+    output.resilience_pass_rate = recovered.length / output.resilience_cases;
+    output.resilience_recover_ms_p50 = recovered.length ? median(recovered) : null;
+  }
   return output;
 }
 try {
