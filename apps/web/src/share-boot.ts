@@ -4,6 +4,7 @@ import {
   PublicShareUnavailableError,
   prepareViewerRendererConfig,
   resolveViewerShare,
+  seedViewerInlineContent,
   type ViewerAuthority,
 } from './api.js';
 import {
@@ -106,6 +107,7 @@ export async function prepareShareOpen(
   const config = prepareViewerRendererConfig(signal, reference.accessType === 'public');
   const resolution =
     initialResolution ?? (await resolveViewerShare(reference, authority, signal, revisionId));
+  seedViewerInlineContent(resolution, authority);
   if (typeof window !== 'undefined') {
     prefetchRendererModules(
       isFolderShareResolution(resolution)

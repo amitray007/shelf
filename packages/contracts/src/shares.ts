@@ -1,6 +1,8 @@
 import { type Static, Type } from 'typebox';
 import { Check } from 'typebox/value';
 
+import { FolderTreePageSchema } from './folder-tree.js';
+
 import {
   OpaqueArtifactIdSchema,
   OpaqueRevisionIdSchema,
@@ -442,10 +444,33 @@ function resolutionAction(type: 'content' | 'tree', pathPattern: string) {
   );
 }
 
+export const MAX_INLINE_CONTENT_BYTES = 256 * 1024;
+export const InlineContentSchema = Type.Union(
+  [
+    Type.Object(
+      {
+        kind: Type.Literal('file'),
+        base64: Type.String({ maxLength: 4 * Math.ceil(MAX_INLINE_CONTENT_BYTES / 3) }),
+      },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      { kind: Type.Literal('folder'), page: Type.Ref('FolderTreePage') },
+      { additionalProperties: false },
+    ),
+  ],
+  { $id: 'InlineContent' },
+);
+const ShareContentSchemaContext = {
+  FolderTreePage: FolderTreePageSchema,
+  InlineContent: InlineContentSchema,
+};
+
 export const PublicFileShareResolutionSchema = Type.Union([
   Type.Object(
     {
       ...ProtectedResolutionFields,
+      inlineContent: Type.Optional(Type.Ref('InlineContent')),
       artifact: FileArtifactSchema,
       revision: FileRevisionSchema,
       action: resolutionAction('content', '^/api/v1/public/shares/shr_[A-Za-z0-9_-]{22}/content$'),
@@ -455,6 +480,7 @@ export const PublicFileShareResolutionSchema = Type.Union([
   Type.Object(
     {
       ...PublicResolutionFields,
+      inlineContent: Type.Optional(Type.Ref('InlineContent')),
       artifact: FileArtifactSchema,
       revision: FileRevisionSchema,
       action: resolutionAction('content', '^/api/v1/public/links/[A-Za-z0-9_-]{12}/content$'),
@@ -467,6 +493,7 @@ export const PublicFolderShareResolutionSchema = Type.Union([
   Type.Object(
     {
       ...ProtectedResolutionFields,
+      inlineContent: Type.Optional(Type.Ref('InlineContent')),
       artifact: FolderArtifactSchema,
       revision: FolderRevisionSchema,
       action: resolutionAction('tree', '^/api/v1/public/shares/shr_[A-Za-z0-9_-]{22}/tree$'),
@@ -476,6 +503,7 @@ export const PublicFolderShareResolutionSchema = Type.Union([
   Type.Object(
     {
       ...PublicResolutionFields,
+      inlineContent: Type.Optional(Type.Ref('InlineContent')),
       artifact: FolderArtifactSchema,
       revision: FolderRevisionSchema,
       action: resolutionAction('tree', '^/api/v1/public/links/[A-Za-z0-9_-]{12}/tree$'),
@@ -492,11 +520,17 @@ export const PublicShareResolutionSchema = Type.Union(
 export const ProtectedSessionEstablishInputSchema = Type.Union(
   [
     Type.Object(
-      { sessionId: ViewerSessionIdSchema, secret: ShareCapabilitySecretSchema },
+      {
+        sessionId: ViewerSessionIdSchema,
+        secret: ShareCapabilitySecretSchema,
+      },
       { additionalProperties: false },
     ),
     Type.Object(
-      { sessionId: ViewerSessionIdSchema, token: ViewerSessionTokenSchema },
+      {
+        sessionId: ViewerSessionIdSchema,
+        token: ViewerSessionTokenSchema,
+      },
       { additionalProperties: false },
     ),
   ],
@@ -529,9 +563,15 @@ export type ShareManagementSummary = Static<typeof ShareManagementSummarySchema>
 export type ArtifactDefaultShares = Static<typeof ArtifactDefaultSharesSchema>;
 export type ShareCreateResult = Static<typeof ShareCreateResultSchema>;
 export type SharePage = Static<typeof SharePageSchema>;
-export type PublicShareResolution = Static<typeof PublicShareResolutionSchema>;
+export type PublicShareResolution = Static<
+  typeof PublicShareResolutionSchema,
+  typeof ShareContentSchemaContext
+>;
 export type ProtectedSessionEstablishInput = Static<typeof ProtectedSessionEstablishInputSchema>;
-export type ProtectedSessionAuthority = Static<typeof ProtectedSessionAuthoritySchema>;
+export type ProtectedSessionAuthority = Static<
+  typeof ProtectedSessionAuthoritySchema,
+  typeof ShareContentSchemaContext
+>;
 
 export function isShareCreateInput(value: unknown): value is ShareCreateInput {
   return Check(ShareCreateInputSchema, value);
@@ -550,9 +590,9 @@ export function isSharePage(value: unknown): value is SharePage {
 }
 
 export function isPublicShareResolution(value: unknown): value is PublicShareResolution {
-  return Check(PublicShareResolutionSchema, value);
+  return Check(ShareContentSchemaContext, PublicShareResolutionSchema, value);
 }
 
 export function isProtectedSessionAuthority(value: unknown): value is ProtectedSessionAuthority {
-  return Check(ProtectedSessionAuthoritySchema, value);
+  return Check(ShareContentSchemaContext, ProtectedSessionAuthoritySchema, value);
 }

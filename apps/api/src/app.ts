@@ -19,6 +19,7 @@ import {
   ErrorEnvelopeSchema,
   FolderPublishResultSchema,
   FolderTreePageSchema,
+  InlineContentSchema,
   ProtectedSessionAuthoritySchema,
   ProtectedSessionEstablishInputSchema,
   PublicShareResolutionSchema,
@@ -299,6 +300,7 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
   app.addSchema(CommentThreadSchema);
   app.addSchema(CommentThreadPageSchema);
   app.addSchema(CommentSummarySchema);
+  app.addSchema(InlineContentSchema);
   registerErrorHandler(app);
   await registerPublishRoute(app, dependencies, limits);
   await registerFolderRoutes(app, dependencies);
