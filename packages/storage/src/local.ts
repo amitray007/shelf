@@ -242,12 +242,16 @@ export class LocalContentStorage implements ContentStorage {
         return (async function* emptyContent() {})();
       }
       const range = resolveContentRange(options.range, content.byteCount);
-      return handle.createReadStream({
+      const stream = handle.createReadStream({
         start: range.start,
         end: range.end,
         autoClose: true,
         ...(options.signal === undefined ? {} : { signal: options.signal }),
       });
+      // Cancellation can arrive before an async-iterator consumer attaches.
+      // Keep error ownership from creation; iteration still rejects with the same error.
+      stream.on('error', () => undefined);
+      return stream;
     } catch (error) {
       await handle.close().catch(() => undefined);
       throw error;

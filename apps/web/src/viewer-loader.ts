@@ -3,12 +3,12 @@ import type { LoaderFunctionArgs } from 'react-router';
 
 import {
   establishProtectedSession,
-  loadPublicClientConfig,
   loadViewerFileBytes,
   loadViewerFolderPage,
   MAX_VIEWER_CACHED_BYTES,
   type PublicSharePayload,
   PublicShareUnavailableError,
+  prepareViewerRendererConfig,
   resolveViewerShare,
   type ViewerAuthority,
   viewerSharePreviewUrl,
@@ -139,10 +139,7 @@ export async function viewerLoader({
   }
 
   // Public shares need resolution to identify HTML, so overlap config with that request.
-  const config =
-    reference.accessType === 'public'
-      ? loadPublicClientConfig(request.signal)
-      : () => loadPublicClientConfig(request.signal);
+  const config = prepareViewerRendererConfig(request.signal, reference.accessType === 'public');
   const revisionId = new URL(request.url).searchParams.get('revision') ?? undefined;
   return loadViewerPayload(
     reference,
