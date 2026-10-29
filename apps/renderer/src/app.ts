@@ -220,6 +220,7 @@ function signalScript(
   nonce: string,
   appOrigin: string,
   folderSessionPath?: string,
+  retryable = false,
 ): string {
   const nonceLiteral = javascriptLiteral(nonce);
   const originLiteral = javascriptLiteral(appOrigin);
@@ -233,7 +234,7 @@ function signalScript(
       ? ''
       : `if(!url.pathname.startsWith(${javascriptLiteral(folderSessionPath)}))return;event.preventDefault();let path;try{path=decodeURIComponent(url.pathname.slice(${folderSessionPath.length}))}catch{return}if(path===""||path.endsWith("/"))path+="index.html";notify("shelf:renderer-open-path",{path,fragment:url.hash.slice(1)});`;
   const links = `const closest=Element.prototype.closest;addEventListener("click",event=>{if(event.defaultPrevented||event.button!==0||!(event.target instanceof Element))return;const anchor=closest.call(event.target,"a[href],area[href]");if(anchor===null)return;let url;try{url=new URL(anchor.getAttribute("href")??"",document.baseURI)}catch{return}if(url.origin!==location.origin)return;if(url.pathname===location.pathname&&url.search===location.search&&(url.hash!==""||url.href.endsWith("#"))){event.preventDefault();const oldURL=location.href;try{history.pushState(history.state,"",url.href)}catch{return}let id=url.hash.slice(1);try{id=decodeURIComponent(id)}catch{}const target=id===""||id.toLowerCase()==="top"?document.documentElement:document.getElementById(id)??document.getElementsByName(id)[0];target?.scrollIntoView();if(oldURL!==location.href)dispatchEvent(new HashChangeEvent("hashchange",{oldURL,newURL:location.href}));return}${folderLinks}});`;
-  return `<script>(()=>{const target=parent;const channel=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,"0")).join("");const notify=(type,detail)=>target.postMessage({...detail,type,version:1,nonce:${nonceLiteral},channel},${originLiteral});notify("shelf:renderer-armed");addEventListener("load",()=>notify(${typeLiteral}),{once:true});${links}})()</script>`;
+  return `<script>(()=>{const target=parent;const channel=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,"0")).join("");const notify=(type,detail)=>target.postMessage({...detail,type,version:1,nonce:${nonceLiteral},channel},${originLiteral});notify("shelf:renderer-armed");addEventListener("load",()=>notify(${typeLiteral},${retryable ? '{retryable:true}' : '{}'}),{once:true});${links}})()</script>`;
 }
 
 function injectBeforeAuthoredScripts(html: string, script: string): string {
@@ -244,8 +245,8 @@ function injectBeforeAuthoredScripts(html: string, script: string): string {
   return `${script}${html}`;
 }
 
-function unavailableDocument(nonce: string, appOrigin: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Preview unavailable</title>${signalScript('shelf:renderer-unavailable', nonce, appOrigin)}</head><body></body></html>`;
+function unavailableDocument(nonce: string, appOrigin: string, transient = false): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Preview unavailable</title>${signalScript('shelf:renderer-unavailable', nonce, appOrigin, undefined, transient)}</head><body></body></html>`;
 }
 
 function folderSessionRequest(
@@ -403,7 +404,7 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
         return reply
           .status(file === null ? 503 : 404)
           .type('text/html; charset=utf-8')
-          .send(unavailableDocument(claims.nonce, appOrigin));
+          .send(unavailableDocument(claims.nonce, appOrigin, file === null));
       }
       const sessionPath = `/f/${route.token}/`;
       // The renderer may sit behind a TLS-terminating proxy, so name the session path for both schemes.
@@ -489,7 +490,7 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
       return reply
         .status(503)
         .type('text/html; charset=utf-8')
-        .send(unavailableDocument(input.nonce, appOrigin));
+        .send(unavailableDocument(input.nonce, appOrigin, true));
     }
     if (result.status === 'unavailable' || (result.status === 'folder' && !folderReadable)) {
       return reply
@@ -525,7 +526,7 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
       return reply
         .status(503)
         .type('text/html; charset=utf-8')
-        .send(unavailableDocument(input.nonce, appOrigin));
+        .send(unavailableDocument(input.nonce, appOrigin, true));
     }
     const ready = signalScript('shelf:renderer-ready', input.nonce, appOrigin);
     applyBoundaryHeaders(reply, artifactContentSecurityPolicy(appOrigin, origins));
