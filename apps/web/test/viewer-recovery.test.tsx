@@ -21,6 +21,19 @@ it('shows the existing loading view for a transient route failure', () => {
   expect(markup).not.toContain('This artifact is unavailable');
 });
 
+it('does not recover a render fault, even when it looks transient', () => {
+  const markup = renderToStaticMarkup(
+    createElement(ViewerRecoveryView, {
+      error: new TypeError("Cannot read properties of undefined (reading 'kind')"),
+      revalidate: async () => {},
+      readFailure: () => undefined,
+      recoverable: false,
+    }),
+  );
+  expect(markup).toContain('This artifact is unavailable');
+  expect(markup).not.toContain('Opening artifact');
+});
+
 it.each([
   [new PublicShareUnavailableError({ failure: 'terminal' }), 'This artifact is unavailable'],
   [new IncompleteShareLinkError(), 'This protected link is incomplete'],

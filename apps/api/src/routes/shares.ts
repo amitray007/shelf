@@ -379,12 +379,28 @@ export async function registerShareRoutes(
     signal: AbortSignal,
   ) {
     if (!requested) return resolved;
+    try {
+      const inlineContent = await readInlineContent(resolved, authority, signal);
+      return inlineContent === undefined ? resolved : { ...resolved, inlineContent };
+    } catch (error) {
+      // Inline bytes are optional. A failed read, including a Latest publish racing this
+      // response, leaves the client on its normal content request.
+      if (signal.aborted) throw error;
+      return resolved;
+    }
+  }
+
+  async function readInlineContent(
+    resolved: Awaited<ReturnType<typeof resolution>>,
+    authority: Parameters<typeof access.readFile>[0]['authority'],
+    signal: AbortSignal,
+  ) {
     const request = { authority, revisionId: resolved.revision.revisionId, signal };
     if (resolved.revision.kind === 'folder') {
       const page = await access.readTree({ ...request, limit: FOLDER_LIMITS.treePageSize });
       // Bound serialized tree metadata too (paths may be long).
-      if (Buffer.byteLength(JSON.stringify(page)) > MAX_INLINE_CONTENT_BYTES) return resolved;
-      return { ...resolved, inlineContent: { kind: 'folder' as const, page } };
+      if (Buffer.byteLength(JSON.stringify(page)) > MAX_INLINE_CONTENT_BYTES) return undefined;
+      return { kind: 'folder' as const, page };
     }
     const mediaType = resolved.revision.mediaType.split(';')[0] ?? '';
     if (
@@ -395,19 +411,16 @@ export async function registerShareRoutes(
         /^application\/(json|.*\+json|javascript|typescript|xml|.*\+xml)$/.test(mediaType)
       )
     )
-      return resolved;
+      return undefined;
     const file = await access.readFile(request);
     const chunks: Buffer[] = [];
     let size = 0;
     for await (const chunk of await file.read()) {
       size += chunk.byteLength;
-      if (size > MAX_INLINE_CONTENT_BYTES) return resolved;
+      if (size > MAX_INLINE_CONTENT_BYTES) return undefined;
       chunks.push(Buffer.from(chunk));
     }
-    return {
-      ...resolved,
-      inlineContent: { kind: 'file' as const, base64: Buffer.concat(chunks).toString('base64') },
-    };
+    return { kind: 'file' as const, base64: Buffer.concat(chunks).toString('base64') };
   }
 
   const clock = dependencies.shareClock ?? (() => new Date());

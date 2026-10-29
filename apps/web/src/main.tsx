@@ -44,10 +44,13 @@ document.documentElement.dataset.mode = 'dark';
 function ViewerErrorBoundary() {
   const error = useRouteError();
   const location = useLocation();
+  // Only loader failures are network-shaped. Render errors never enter router state.
+  const loaderFailure = Object.values(router.state.errors ?? {}).includes(error);
   return (
     <ViewerRecoveryView
       key={location.key}
       error={error}
+      recoverable={loaderFailure}
       revalidate={() => router.revalidate()}
       readFailure={() => Object.values(router.state.errors ?? {})[0]}
     />

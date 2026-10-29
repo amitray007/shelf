@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { TemporaryContentStore } from '../src/adapters/temporary-content-store.js';
 import { type CreateShelfAppOptions, createShelfApp } from '../src/app.js';
 import { createHmacShareCapabilityCodec } from '../src/share-capability.js';
 
@@ -157,6 +158,58 @@ describe('opt-in inline share content', () => {
       expect((await request(false)).statusCode).toBe(404);
     }
   });
+});
+
+it('omits inline content instead of failing when the inline read fails', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'shelf-share-inline-failure-'));
+  roots.push(root);
+  const store = new TemporaryContentStore(root);
+  let failReads = false;
+  const app = await fixture({
+    contentStore: store,
+    contentReader: {
+      async read(content, options) {
+        if (failReads) throw new Error('storage offline');
+        return store.read(content, options);
+      },
+    },
+  });
+  const published = await publishFile(app, 'hello', 'inline-read-failure');
+  expect(published.statusCode).toBe(201);
+  const artifactId = published.json().artifactId as string;
+  failReads = true;
+  for (const accessType of ['protected', 'public'] as const) {
+    const created = await createShare(
+      app,
+      artifactId,
+      `inline-failure-${accessType}`,
+      { mode: 'latest' },
+      null,
+      accessType,
+    );
+    expect(created.statusCode).toBe(201);
+    const share = created.json();
+    const response =
+      accessType === 'protected'
+        ? await app.inject({
+            method: 'POST',
+            url: `/api/v1/public/shares/${share.shareId}/sessions`,
+            headers: { 'X-Shelf-Inline-Content': 'true' },
+            payload: {
+              sessionId: '22222222-2222-4222-8222-222222222222',
+              secret: (share.url as string).split('#')[1],
+            },
+          })
+        : await app.inject({
+            method: 'GET',
+            url: `/api/v1/public/links/${share.publicCode}/resolve`,
+            headers: { 'X-Shelf-Inline-Content': 'true' },
+          });
+    expect(response.statusCode).toBe(200);
+    const resolved = response.json().resolution ?? response.json();
+    expect(resolved.revision.revisionId).toBe(published.json().revisionId);
+    expect(resolved.inlineContent).toBeUndefined();
+  }
 });
 
 it('inlines the same authorized first folder page for both access types', async () => {

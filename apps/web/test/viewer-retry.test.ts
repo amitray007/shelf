@@ -43,7 +43,6 @@ it('stops immediately on navigation cancellation during backoff', async () => {
   expect(consumeViewerRecovery()).toBe(false);
 });
 it.each([
-  [503, false],
   [404, undefined],
   [429, false],
 ])('does not retry terminal HTTP %s with retryable %s', async (status, retryable) => {
@@ -56,6 +55,28 @@ it.each([
   ).rejects.toMatchObject({ failure: 'terminal' });
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
+it.each([500, 503])(
+  'retries server fault %s even when its envelope is not retryable',
+  async (status) => {
+    vi.useFakeTimers();
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: 'INTERNAL_ERROR', retryable: false } }), {
+          status,
+        }),
+      )
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { retryable: false } }), { status: 403 }),
+      );
+    vi.stubGlobal('fetch', fetcher);
+    const result = establishProtectedSession('share', 'session', { token: 'token' });
+    const assertion = expect(result).rejects.toMatchObject({ failure: 'terminal' });
+    await vi.advanceTimersByTimeAsync(121);
+    await assertion;
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  },
+);
 it('retries a retryable envelope on the session exchange', async () => {
   vi.useFakeTimers();
   const fetcher = vi

@@ -155,14 +155,13 @@ async function responseJson(response: Response): Promise<unknown> {
       throw new ViewerCommentRevisionMismatchError();
     }
     throw new PublicShareUnavailableError({
+      // A server fault never erases a visitor's link, even when its envelope is not retryable.
       failure:
-        envelopeRetryable(errorBody) === false
-          ? 'terminal'
-          : envelopeRetryable(errorBody) === true
-            ? 'transient'
-            : definitiveClientFailure(response.status)
-              ? 'terminal'
-              : 'transient',
+        response.status >= 500 || envelopeRetryable(errorBody) === true
+          ? 'transient'
+          : envelopeRetryable(errorBody) === false || definitiveClientFailure(response.status)
+            ? 'terminal'
+            : 'transient',
     });
   }
   try {
@@ -322,7 +321,8 @@ async function resolveViewerShareOnce(
   signal?: AbortSignal,
   revisionId?: string,
 ): Promise<FileShareResolution | FolderShareResolution> {
-  if (reference.accessType !== authority.accessType) throw new PublicShareUnavailableError();
+  if (reference.accessType !== authority.accessType)
+    throw new PublicShareUnavailableError({ failure: 'terminal' });
   const url =
     reference.accessType === 'protected'
       ? `/api/v1/public/shares/${encodeURIComponent(reference.shareId)}/resolve`

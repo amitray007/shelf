@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { expect, it } from 'vitest';
-import { LocalContentStorage } from '../../../packages/storage/src/index.js';
+import { LocalContentStorage } from '../src/index.js';
 
 it('owns cancellation errors before the response starts consuming storage bytes', async () => {
   const root = await mkdtemp(join(tmpdir(), 'shelf-cancel-'));

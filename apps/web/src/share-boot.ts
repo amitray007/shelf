@@ -42,7 +42,7 @@ async function establishProtectedAuthority(
   let tokenRejection: unknown;
   if (token !== null) {
     const sessionId = readOrCreateProtectedSessionId(shareId, durable);
-    if (sessionId === null) throw new PublicShareUnavailableError();
+    if (sessionId === null) throw new PublicShareUnavailableError({ failure: 'terminal' });
     try {
       const renewed = await establishProtectedSession(shareId, sessionId, { token }, signal);
       saveProtectedSessionAuthority(durable, renewed);
@@ -66,7 +66,7 @@ async function establishProtectedAuthority(
     throw new IncompleteShareLinkError();
   }
   const sessionId = readOrCreateProtectedSessionId(shareId, durable);
-  if (sessionId === null) throw new PublicShareUnavailableError();
+  if (sessionId === null) throw new PublicShareUnavailableError({ failure: 'terminal' });
   try {
     const established = await establishProtectedSession(shareId, sessionId, { secret }, signal);
     saveProtectedSessionAuthority(durable, established);
@@ -169,20 +169,13 @@ async function adoptShareBoot(
     return await pending.promise;
   } catch (error) {
     signal.throwIfAborted();
+    // A classified failure already spent its retry budget, and a terminal exchange erased
+    // the secret on purpose. Only an unexpected boot fault starts over.
+    if (error instanceof PublicShareUnavailableError || error instanceof IncompleteShareLinkError)
+      throw error;
     const reference = shareReferenceFromViewerPath(url.pathname);
     if (reference === null) return undefined;
-    try {
-      return await prepareShareOpen(
-        reference,
-        signal,
-        url.searchParams.get('revision') ?? undefined,
-      );
-    } catch (fallbackError) {
-      // A terminal exchange intentionally erased the secret. Preserve its error view.
-      if (fallbackError instanceof IncompleteShareLinkError && isTerminalUnavailable(error))
-        throw error;
-      throw fallbackError;
-    }
+    return await prepareShareOpen(reference, signal, url.searchParams.get('revision') ?? undefined);
   } finally {
     signal.removeEventListener('abort', abort);
   }

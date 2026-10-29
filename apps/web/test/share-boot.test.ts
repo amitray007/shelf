@@ -10,9 +10,10 @@ vi.mock('../src/rendering.js', async (original) => ({
   prefetchRendererModules: vi.fn(),
 }));
 
-import { resolveViewerShare } from '../src/api.js';
+import { PublicShareUnavailableError, resolveViewerShare } from '../src/api.js';
 import { consumeShareBoot, startShareBoot } from '../src/share-boot.js';
 import { viewerLoader } from '../src/viewer-loader.js';
+import { consumeViewerRecovery, retryViewerRequest } from '../src/viewer-retry.js';
 
 const url = new URL('https://shelf.test/s/AbCdEf0123_-');
 const resolution = {
@@ -74,6 +75,37 @@ describe('share boot adoption', () => {
     startShareBoot(url);
     expect((await load()).resolution).toEqual(resolution);
     expect(resolve).toHaveBeenCalledTimes(2);
+  });
+  it('keeps a classified boot failure without spending a second retry budget', async () => {
+    const failure = new PublicShareUnavailableError({ failure: 'transient' });
+    resolve.mockRejectedValueOnce(failure).mockResolvedValueOnce(resolution);
+    startShareBoot(url);
+    await expect(load()).rejects.toBe(failure);
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
+  it('shows a malformed link as unavailable without route recovery', async () => {
+    await expect(
+      viewerLoader({
+        params: { shareRef: 'not a share' },
+        request: new Request('https://shelf.test/s/not%20a%20share'),
+        context: {},
+      } as never),
+    ).rejects.toMatchObject({ failure: 'terminal' });
+    expect(resolve).not.toHaveBeenCalled();
+  });
+  it('clears a pending route recovery once the route loads', async () => {
+    vi.useFakeTimers();
+    const failing = expect(
+      retryViewerRequest(async () => {
+        throw new TypeError('offline');
+      }),
+    ).rejects.toThrow('offline');
+    await vi.advanceTimersByTimeAsync(3_000);
+    await failing;
+    vi.useRealTimers();
+    resolve.mockResolvedValueOnce(resolution);
+    await load();
+    expect(consumeViewerRecovery()).toBe(false);
   });
   it('does not adopt a different revision', async () => {
     resolve.mockResolvedValueOnce(resolution);

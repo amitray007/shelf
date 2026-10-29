@@ -8,12 +8,15 @@ export function ViewerRecoveryView({
   error,
   revalidate,
   readFailure,
+  recoverable = true,
 }: {
   readonly error: unknown;
   readonly revalidate: () => Promise<void>;
   readonly readFailure: () => unknown;
+  /** False for render faults: revalidating would remount the same failing view in a loop. */
+  readonly recoverable?: boolean;
 }) {
-  const transient = isTransientViewerFailure(error);
+  const transient = recoverable && isTransientViewerFailure(error);
   const [recovering, setRecovering] = useState(transient);
   const [cycle, setCycle] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Revalidation changes error; one recovery window spans those changes.

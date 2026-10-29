@@ -22,6 +22,7 @@ import {
 import { consumeShareBoot, prepareShareOpen } from './share-boot.js';
 import type { FileShareResolution, FolderShareResolution } from './share-types.js';
 import { isFileShareResolution, isFolderShareResolution } from './share-types.js';
+import { consumeViewerRecovery } from './viewer-retry.js';
 
 function preconnectRenderer(origin: string | undefined): void {
   if (origin === undefined || typeof document === 'undefined') return;
@@ -51,7 +52,7 @@ export async function viewerLoader({
   request,
 }: LoaderFunctionArgs): Promise<PublicSharePayload> {
   const reference = shareReferenceFromViewerPath(`/s/${params.shareRef ?? ''}`);
-  if (reference === null) throw new PublicShareUnavailableError();
+  if (reference === null) throw new PublicShareUnavailableError({ failure: 'terminal' });
 
   const url = new URL(request.url);
   const revisionId = url.searchParams.get('revision') ?? undefined;
@@ -59,7 +60,7 @@ export async function viewerLoader({
   const prepared =
     (pending === undefined ? undefined : await pending) ??
     (await prepareShareOpen(reference, request.signal, revisionId));
-  return loadViewerPayload(
+  const payload = await loadViewerPayload(
     reference,
     prepared.authority,
     request.signal,
@@ -67,6 +68,9 @@ export async function viewerLoader({
     revisionId,
     prepared.resolution,
   );
+  // The route loaded, so an earlier exhausted request no longer needs a revalidation.
+  consumeViewerRecovery();
+  return payload;
 }
 
 export async function loadViewerPayload(
