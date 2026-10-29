@@ -14,9 +14,7 @@ import type { FileContents, FileOptions, FileProps } from '@pierre/diffs/react';
 import type { CommentAnchor, CommentThread } from '@shelf/contracts';
 import {
   type ComponentType,
-  lazy,
   type KeyboardEvent as ReactKeyboardEvent,
-  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -24,6 +22,7 @@ import {
 } from 'react';
 import { ArtifactLoadingState } from './boot-views.js';
 import { formatFileDisplayName } from './format.js';
+import { lazyModule } from './lazy-module.js';
 import type { HtmlPreviewTheme } from './renderer-frame.js';
 import { ReviewComposer } from './review/discussion-panel.js';
 import { InlineSourceThread, type InlineSourceThreadData } from './review/inline-source-thread.js';
@@ -88,12 +87,13 @@ export function groupSourceThreadsByLine(
     .map(([lineNumber, lineThreads]) => ({ lineNumber, threads: lineThreads }));
 }
 
-const PierreFile = lazy(async () => {
-  const module = await import('@pierre/diffs/react');
-  return {
-    default: module.File as ComponentType<FileProps<SourceLineAnnotationMetadata>>,
-  };
-});
+const PierreFile = lazyModule(
+  async () => {
+    const module = await import('@pierre/diffs/react');
+    return module.File as ComponentType<FileProps<SourceLineAnnotationMetadata>>;
+  },
+  <FileLoadingState />,
+);
 
 function pierreSourceCSS(fontSize: number): string {
   return `
@@ -428,11 +428,7 @@ function PierreCode({
       ? { selectedLines: selectedLines ?? null }
       : { selectedLines: null };
 
-  return (
-    <Suspense fallback={<FileLoadingState />}>
-      <PierreFile file={file} options={options} {...annotationProps} {...selectionProps} />
-    </Suspense>
-  );
+  return <PierreFile file={file} options={options} {...annotationProps} {...selectionProps} />;
 }
 
 export function CodeView({

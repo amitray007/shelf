@@ -2,7 +2,7 @@
 
 import { Button } from '@cloudflare/kumo/components/button';
 import { DownloadSimpleIcon } from '@phosphor-icons/react/DownloadSimple';
-import { lazy, type ReactNode, Suspense, useEffect, useMemo } from 'react';
+import { type ReactNode, useEffect, useMemo } from 'react';
 
 import {
   type PassiveRenderer,
@@ -20,6 +20,7 @@ import {
   FileView,
 } from './file-view.js';
 import { formatFileType } from './format.js';
+import { lazyModule } from './lazy-module.js';
 import { LazyMarkdownView as MarkdownView } from './lazy-views.js';
 import { extractMarkdownFrontMatter, MarkdownFrontMatter } from './markdown-front-matter.js';
 import { DelimitedTablePreview } from './preview/delimited-table-preview.js';
@@ -33,9 +34,10 @@ import { useViewerControls, ViewerToolbarContent } from './viewer-controls.js';
 
 type HtmlRenderer = Extract<PassiveRenderer, { kind: 'html' }>;
 
-const PdfPreview = lazy(async () => ({
-  default: (await import('./preview/pdf-preview.js')).PdfPreview,
-}));
+const PdfPreview = lazyModule(
+  async () => (await import('./preview/pdf-preview.js')).PdfPreview,
+  <FileLoadingState />,
+);
 
 export interface ArtifactFileDescriptor {
   readonly id: string;
@@ -203,9 +205,7 @@ export function ArtifactFileView({
   } else if (renderer.kind === 'pdf' && previewUrl !== undefined) {
     preview = (
       <div className="artifact-surface artifact-pdf">
-        <Suspense fallback={<FileLoadingState />}>
-          <PdfPreview src={previewUrl} />
-        </Suspense>
+        <PdfPreview src={previewUrl} />
       </div>
     );
   } else if (renderer.kind === 'audio' && previewUrl !== undefined) {
