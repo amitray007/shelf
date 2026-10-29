@@ -215,9 +215,13 @@ async function establishProtectedSessionOnce(
   authority: { readonly secret: string } | { readonly token: string },
   signal?: AbortSignal,
 ): Promise<ProtectedSessionAuthority> {
+  const init = jsonPost({ sessionId, ...authority }, signal);
+  const headers = new Headers(init.headers);
+  headers.set('X-Shelf-Inline-Content', 'true');
   const value = await responseJson(
     await anonymousFetch(`/api/v1/public/shares/${encodeURIComponent(shareId)}/sessions`, {
-      ...jsonPost({ sessionId, ...authority }, signal),
+      ...init,
+      headers,
       credentials: 'include',
     }),
   );
@@ -322,16 +326,18 @@ async function resolveViewerShareOnce(
   const url =
     reference.accessType === 'protected'
       ? `/api/v1/public/shares/${encodeURIComponent(reference.shareId)}/resolve`
-      : `/api/v1/public/links/${encodeURIComponent(reference.publicCode)}/resolve${
-          revisionId === undefined ? '' : `?${new URLSearchParams({ revisionId }).toString()}`
-        }`;
+      : `/api/v1/public/links/${encodeURIComponent(reference.publicCode)}/resolve${revisionId === undefined ? '' : `?${new URLSearchParams({ revisionId }).toString()}`}`;
   const init =
     authority.accessType === 'protected'
       ? jsonPost(
           { token: authority.token, ...(revisionId === undefined ? {} : { revisionId }) },
           signal,
         )
-      : { ...anonymousRequest(signal), method: 'GET' };
+      : {
+          ...anonymousRequest(signal),
+          method: 'GET',
+          headers: { 'X-Shelf-Inline-Content': 'true' },
+        };
   const value = await responseJson(await anonymousFetch(url, init));
   if (!isPublicShareResolution(value)) throw new PublicShareUnavailableError();
   if (value.accessType !== authority.accessType) throw new PublicShareUnavailableError();
@@ -351,6 +357,34 @@ function cachedContentActionUrl(
   const url = new URL(action, 'https://shelf.invalid');
   url.searchParams.set('revisionId', resolution.revision.revisionId);
   return `${url.pathname}${url.search}`;
+}
+
+export function seedViewerInlineContent(
+  resolution: FileShareResolution | FolderShareResolution,
+  authority: ViewerAuthority,
+): void {
+  const inline = resolution.inlineContent;
+  if (inline === undefined) return;
+  let bytes: ArrayBuffer;
+  let folderPath: string;
+  if (inline.kind === 'file' && resolution.revision.kind === 'file') {
+    bytes = Uint8Array.from(atob(inline.base64), (character) => character.charCodeAt(0)).buffer;
+    folderPath = '';
+  } else if (
+    inline.kind === 'folder' &&
+    inline.page.revisionId === resolution.revision.revisionId
+  ) {
+    bytes = new TextEncoder().encode(JSON.stringify(inline.page)).buffer;
+    folderPath = '\0tree:';
+  } else return;
+  viewerContentCache.seed(
+    {
+      accessScope: viewerAccessScope(authority),
+      revisionId: resolution.revision.revisionId,
+      folderPath,
+    },
+    bytes,
+  );
 }
 
 async function loadViewerFileBytesOnce(
