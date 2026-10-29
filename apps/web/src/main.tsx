@@ -18,6 +18,7 @@ import { LoadingView } from './components/boot-views.js';
 import './components/viewer-controls.css';
 import './components/viewer-loading.css';
 import './styles.css';
+import { startShareBoot } from './share-boot.js';
 import { ViewerRecoveryView } from './viewer-recovery-view.js';
 import { consumeViewerRecovery } from './viewer-retry.js';
 
@@ -33,6 +34,11 @@ function captureCurrentCapability(): string | null {
 }
 
 captureCurrentCapability();
+const shareBootUrl = new URL(window.location.href);
+const shareRoute = shareReferenceFromViewerPath(shareBootUrl.pathname) !== null;
+if (shareRoute) startShareBoot(shareBootUrl);
+const viewerLoaderModule = shareRoute ? import('./viewer-loader.js') : undefined;
+const viewerPageModule = shareRoute ? import('./viewer-page.js') : undefined;
 document.documentElement.dataset.mode = 'dark';
 
 function ViewerErrorBoundary() {
@@ -51,9 +57,10 @@ function ViewerErrorBoundary() {
 const router = createBrowserRouter([
   {
     path: '/s/:shareRef',
-    loader: async (args) => (await import('./viewer-loader.js')).viewerLoader(args),
+    loader: async (args) =>
+      (await (viewerLoaderModule ?? import('./viewer-loader.js'))).viewerLoader(args),
     lazy: async () => {
-      const viewer = await import('./viewer-page.js');
+      const viewer = await (viewerPageModule ?? import('./viewer-page.js'));
       return { Component: viewer.ViewerPage };
     },
     ErrorBoundary: ViewerErrorBoundary,
