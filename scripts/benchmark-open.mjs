@@ -58,8 +58,16 @@
  * After recording/verification, every page drains to network idle before context
  * teardown. This is outside the measured window and avoids aborting local streams.
  * No product mocks, source edits, or dev servers are used.
+ * --storage r2 runs the API on the real R2 driver. It reads BENCH_R2_ACCOUNT_ID,
+ * BENCH_R2_BUCKET, BENCH_R2_ACCESS_KEY_ID, and BENCH_R2_SECRET_ACCESS_KEY, and
+ * passes NODE_EXTRA_CA_CERTS through, so a host can point the R2 hostname at an
+ * S3-compatible emulator behind a latency proxy. Each run uses a fresh prefix.
+ * Downloads: after timed cells, Node fetches 1 MiB and 8 MiB share files over
+ * loopback (no CDP profile) for both access types. Each cell takes one warmup,
+ * then `iterations` timed full-body reads; time is request start to last byte.
  */
 import { spawn } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
@@ -517,6 +525,100 @@ async function resilienceCase(fixture, access, fault) {
     await context.close();
   }
 }
+function storageEnvironment(storage) {
+  if (storage === 'local')
+    return { SHELF_STORAGE_DRIVER: 'local', SHELF_STORAGE_LOCAL_ROOT: join(temporary, 'storage') };
+  const required = (name) => {
+    const value = process.env[name];
+    if (!value) throw new Error(`--storage r2 requires ${name}`);
+    return value;
+  };
+  return {
+    SHELF_STORAGE_DRIVER: 'r2',
+    SHELF_R2_ACCOUNT_ID: required('BENCH_R2_ACCOUNT_ID'),
+    SHELF_R2_BUCKET: required('BENCH_R2_BUCKET'),
+    SHELF_R2_ACCESS_KEY_ID: required('BENCH_R2_ACCESS_KEY_ID'),
+    SHELF_R2_SECRET_ACCESS_KEY: required('BENCH_R2_SECRET_ACCESS_KEY'),
+    SHELF_STORAGE_PREFIX: `bench-${randomUUID()}`,
+    ...(process.env.NODE_EXTRA_CA_CERTS === undefined
+      ? {}
+      : { NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS }),
+  };
+}
+// Deterministic bytes, so every run and candidate downloads identical files.
+function downloadBytes(size) {
+  const blocks = [];
+  for (let i = 0; blocks.length * 32 < size; i++)
+    blocks.push(createHash('sha256').update(`shelf-download-${i}`).digest());
+  return Buffer.concat(blocks).subarray(0, size);
+}
+async function publishDownloads(cli) {
+  const cells = [];
+  for (const [label, size] of [
+    ['1mib', 1024 * 1024],
+    ['8mib', 8 * 1024 * 1024],
+  ]) {
+    const file = join(temporary, `download-${label}.bin`);
+    await writeFile(file, downloadBytes(size));
+    const published = await cli(
+      'publish',
+      file,
+      '--title',
+      `Benchmark download ${label}`,
+      '--description',
+      'Deterministic download benchmark fixture',
+    );
+    const id = published.publish.artifactId;
+    for (const access of ['protected', 'public']) {
+      const shared = await cli(
+        'shares',
+        'create',
+        '--artifact',
+        id,
+        '--access',
+        access,
+        '--idempotency-key',
+        `download-${label}-${access}`,
+      );
+      const url = new URL(shared.url, ORIGIN);
+      const cell = { access, label, size, samples: [] };
+      if (access === 'public') {
+        const code = url.pathname.split('/').at(-1);
+        cell.request = () => fetch(`${ORIGIN}/api/v1/public/links/${code}/content`);
+      } else {
+        const shareId = url.pathname.split('/').at(-1);
+        const session = await fetch(`${ORIGIN}/api/v1/public/shares/${shareId}/sessions`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sessionId: randomUUID(), secret: url.hash.slice(1) }),
+        });
+        if (!session.ok) throw new Error(`Download session failed: ${session.status}`);
+        const established = await session.json();
+        const body = JSON.stringify({
+          token: established.token,
+          revisionId: established.resolution.revision.revisionId,
+        });
+        cell.request = () =>
+          fetch(`${ORIGIN}/api/v1/public/shares/${shareId}/content`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body,
+          });
+      }
+      cells.push(cell);
+    }
+  }
+  return cells;
+}
+async function downloadOnce(cell) {
+  const started = performance.now();
+  const response = await cell.request();
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  const ms = performance.now() - started;
+  if (!bytes.equals(downloadBytes(cell.size))) throw new Error('Downloaded bytes differ');
+  return ms;
+}
 async function main() {
   const args = process.argv.slice(2);
   const smoke = args.includes('--smoke');
@@ -524,7 +626,7 @@ async function main() {
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (['--smoke', '--resilience-only', '--no-resilience'].includes(flag)) options.set(flag, true);
-    else if (['--iterations', '--resilience-rounds', '--scenarios'].includes(flag))
+    else if (['--iterations', '--resilience-rounds', '--scenarios', '--storage'].includes(flag))
       options.set(flag, args[++i]);
     else throw new Error(`Unknown flag: ${flag}`);
   }
@@ -537,7 +639,8 @@ async function main() {
     ![iterations, resilienceRounds].every((n) => Number.isInteger(n) && n > 0) ||
     scenarios.some((scenario) => !SCENARIOS.includes(scenario)) ||
     new Set(scenarios).size !== scenarios.length ||
-    (options.has('--resilience-only') && options.has('--no-resilience'))
+    (options.has('--resilience-only') && options.has('--no-resilience')) ||
+    !['local', 'r2'].includes(String(options.get('--storage') ?? 'local'))
   )
     throw new Error('Invalid benchmark options');
   await portFree(3200);
@@ -571,8 +674,7 @@ async function main() {
     SHELF_RENDERER_PUBLIC_ORIGIN: RENDERER,
     SHELF_RENDERER_APP_ORIGIN: ORIGIN,
     SHELF_WEB_ROOT: join(ROOT, 'apps/web/dist'),
-    SHELF_STORAGE_DRIVER: 'local',
-    SHELF_STORAGE_LOCAL_ROOT: join(temporary, 'storage'),
+    ...storageEnvironment(String(options.get('--storage') ?? 'local')),
     SHELF_AUTH_SECRET: 'benchmark-auth-secret-0000000000000000',
     SHELF_SHARE_SIGNING_KEY: 'benchmark-share-key-00000000000000000',
     SHELF_PRIVACY_KEY: 'benchmark-privacy-key-0000000000000000',
@@ -648,6 +750,7 @@ async function main() {
     }
     fixtures.push(fixture);
   }
+  const downloads = options.has('--resilience-only') ? [] : await publishDownloads(cli);
   browser = await chromium.launch();
   const login = await browser.newContext();
   const response = await login.request.post(`${ORIGIN}/api/auth/sign-in/email`, {
@@ -719,6 +822,28 @@ async function main() {
     true,
   );
   output.share_return_ms_p50 = aggregate(['share_protected_return', 'share_public_return']);
+  for (const cell of downloads) {
+    for (let iteration = -1; iteration < iterations; iteration++) {
+      try {
+        const ms = await downloadOnce(cell);
+        if (iteration >= 0) cell.samples.push(ms);
+      } catch (error) {
+        errors++;
+        output.errors = errors;
+        output.all_rendered = 0;
+        log(`download ${cell.access}/${cell.size}: ${error.message}`);
+      }
+    }
+    output[`download_${cell.access}_${cell.label}_ms_p50`] =
+      cell.samples.length === iterations ? median(cell.samples) : null;
+  }
+  output.download_ms_geomean =
+    downloads.length && downloads.every((cell) => cell.samples.length === iterations)
+      ? Math.exp(
+          downloads.reduce((sum, cell) => sum + Math.log(median(cell.samples)), 0) /
+            downloads.length,
+        )
+      : null;
   output.resilience_cases = 0;
   output.resilience_pass_rate = null;
   output.resilience_recover_ms_p50 = null;
