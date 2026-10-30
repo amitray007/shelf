@@ -42,6 +42,7 @@ import {
   shareLatestRevision,
   shareRevisionAccess,
 } from './share-types.js';
+import { recoverViewerOperation } from './viewer-recovery.js';
 
 export function updateViewerThreadUrl(currentUrl: string, threadId: string): string {
   const url = new URL(currentUrl, 'https://shelf.invalid');
@@ -92,7 +93,10 @@ function FileArtifact({
     }
     const controller = new AbortController();
     setContent({ status: 'loading' });
-    void loadViewerFileBytes(payload.resolution, payload.authority, controller.signal).then(
+    void recoverViewerOperation(
+      () => loadViewerFileBytes(payload.resolution, payload.authority, controller.signal),
+      controller.signal,
+    ).then(
       (bytes) => {
         if (!controller.signal.aborted) setContent({ status: 'ready', bytes });
       },
@@ -243,7 +247,7 @@ function FolderArtifact({
       );
       if (!controller.signal.aborted) setTree({ payload, entries, failed: false, loading: false });
     };
-    void loadTree().catch(() => {
+    void recoverViewerOperation(loadTree, controller.signal).catch(() => {
       if (!controller.signal.aborted)
         setTree((current) => ({ ...current, failed: true, loading: false }));
     });
@@ -253,7 +257,10 @@ function FolderArtifact({
     tree.payload === payload ? tree : { entries: [], failed: false, loading: true };
   const loadFile = useCallback(
     (path: string, signal: AbortSignal) =>
-      loadViewerFolderEntryBytes(payload.resolution, payload.authority, path, signal),
+      recoverViewerOperation(
+        () => loadViewerFolderEntryBytes(payload.resolution, payload.authority, path, signal),
+        signal,
+      ),
     [payload.authority, payload.resolution],
   );
   const loadPreviewUrl = useCallback(

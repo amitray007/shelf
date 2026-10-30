@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 
 import {
   FOLDER_LIMITS,
+  MAX_INLINE_CONTENT_BYTES,
   OpaqueArtifactIdSchema,
   OpaqueRevisionIdSchema,
   OpaqueShareIdSchema,
@@ -371,6 +372,57 @@ export async function registerShareRoutes(
     contentReader: dependencies.contentReader,
     ...(dependencies.shareClock === undefined ? {} : { clock: dependencies.shareClock }),
   });
+  async function withInline(
+    resolved: Awaited<ReturnType<typeof resolution>>,
+    authority: Parameters<typeof access.readFile>[0]['authority'],
+    requested: boolean,
+    signal: AbortSignal,
+  ) {
+    if (!requested) return resolved;
+    try {
+      const inlineContent = await readInlineContent(resolved, authority, signal);
+      return inlineContent === undefined ? resolved : { ...resolved, inlineContent };
+    } catch (error) {
+      // Inline bytes are optional. A failed read, including a Latest publish racing this
+      // response, leaves the client on its normal content request.
+      if (signal.aborted) throw error;
+      return resolved;
+    }
+  }
+
+  async function readInlineContent(
+    resolved: Awaited<ReturnType<typeof resolution>>,
+    authority: Parameters<typeof access.readFile>[0]['authority'],
+    signal: AbortSignal,
+  ) {
+    const request = { authority, revisionId: resolved.revision.revisionId, signal };
+    if (resolved.revision.kind === 'folder') {
+      const page = await access.readTree({ ...request, limit: FOLDER_LIMITS.treePageSize });
+      // Bound serialized tree metadata too (paths may be long).
+      if (Buffer.byteLength(JSON.stringify(page)) > MAX_INLINE_CONTENT_BYTES) return undefined;
+      return { kind: 'folder' as const, page };
+    }
+    const mediaType = resolved.revision.mediaType.split(';')[0] ?? '';
+    if (
+      resolved.revision.byteCount > MAX_INLINE_CONTENT_BYTES ||
+      !(
+        (mediaType.startsWith('text/') && mediaType !== 'text/html') ||
+        mediaType.startsWith('image/') ||
+        /^application\/(json|.*\+json|javascript|typescript|xml|.*\+xml)$/.test(mediaType)
+      )
+    )
+      return undefined;
+    const file = await access.readFile(request);
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of await file.read()) {
+      size += chunk.byteLength;
+      if (size > MAX_INLINE_CONTENT_BYTES) return undefined;
+      chunks.push(Buffer.from(chunk));
+    }
+    return { kind: 'file' as const, base64: Buffer.concat(chunks).toString('base64') };
+  }
+
   const clock = dependencies.shareClock ?? (() => new Date());
 
   function protectedAuthority(shareId: string, token: string) {
@@ -624,6 +676,10 @@ export async function registerShareRoutes(
         operationId: 'establishProtectedShareSessionV1',
         summary: 'Establish or renew one bounded Protected viewer session',
         tags: ['public shares'],
+        headers: Type.Object(
+          { 'x-shelf-inline-content': Type.Optional(Type.Literal('true')) },
+          { additionalProperties: true },
+        ),
         params: PublicShareParamsSchema,
         body: Type.Ref('ProtectedSessionEstablishInput'),
         response: {
@@ -651,7 +707,19 @@ export async function registerShareRoutes(
           },
           signal,
         });
-        return { ...sendAuthority(request, reply, authorization), resolution: resolved };
+        return {
+          ...sendAuthority(request, reply, authorization),
+          resolution: await withInline(
+            resolved,
+            {
+              type: 'protected-session',
+              shareId: authorization.shareId,
+              sessionId: authorization.sessionId,
+            },
+            request.headers['x-shelf-inline-content'] === 'true',
+            signal,
+          ),
+        };
       }
       const now = clock();
       const claims = dependencies.viewerSessionTokenCodec.verify(body.token, {
@@ -681,7 +749,12 @@ export async function registerShareRoutes(
           issuedAt: now.toISOString(),
           expiresAt,
         }),
-        resolution: resolved,
+        resolution: await withInline(
+          resolved,
+          { type: 'protected-session', shareId: claims.shareId, sessionId: claims.sessionId },
+          request.headers['x-shelf-inline-content'] === 'true',
+          signal,
+        ),
       };
     },
   );
@@ -904,6 +977,10 @@ export async function registerShareRoutes(
         operationId: 'resolvePublicLinkV1',
         summary: 'Resolve a secret-free Public share link',
         tags: ['public links'],
+        headers: Type.Object(
+          { 'x-shelf-inline-content': Type.Optional(Type.Literal('true')) },
+          { additionalProperties: true },
+        ),
         params: PublicLinkParamsSchema,
         querystring: RevisionSelectionQuerySchema,
         response: {
@@ -915,11 +992,18 @@ export async function registerShareRoutes(
     async (request, reply) => {
       const params = request.params as { publicCode: string };
       const query = request.query as { revisionId?: string };
-      return resolution({
+      const signal = requestCancellationSignal(request, reply);
+      const resolved = await resolution({
         authority: { type: 'public', publicCode: params.publicCode },
         ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
-        signal: requestCancellationSignal(request, reply),
+        signal,
       });
+      return withInline(
+        resolved,
+        { type: 'public', publicCode: params.publicCode },
+        request.headers['x-shelf-inline-content'] === 'true',
+        signal,
+      );
     },
   );
 

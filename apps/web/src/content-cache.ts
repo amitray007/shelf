@@ -66,6 +66,10 @@ export class ContentCache {
     return this.totalBytes;
   }
 
+  seed(key: ContentCacheKey, bytes: ArrayBuffer): void {
+    this.store(cacheKey(key), copyBytes(bytes));
+  }
+
   clear(): void {
     this.entries.clear();
     this.totalBytes = 0;

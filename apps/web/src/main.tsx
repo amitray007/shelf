@@ -1,17 +1,26 @@
 import '@fontsource-variable/geist/wght.css';
 import '@fontsource-variable/geist-mono/wght.css';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, Navigate, RouterProvider, useRouteError } from 'react-router';
+import {
+  createBrowserRouter,
+  Navigate,
+  RouterProvider,
+  useLocation,
+  useRouteError,
+} from 'react-router';
 
 import {
   captureShareCapability,
   IncompleteShareLinkError,
   shareReferenceFromViewerPath,
 } from './capability.js';
-import { LoadingView, UnavailableView } from './components/boot-views.js';
+import { LoadingView } from './components/boot-views.js';
 import './components/viewer-controls.css';
 import './components/viewer-loading.css';
 import './styles.css';
+import { startShareBoot } from './share-boot.js';
+import { ViewerRecoveryView } from './viewer-recovery-view.js';
+import { consumeViewerRecovery } from './viewer-retry.js';
 
 function captureCurrentCapability(): string | null {
   const reference = shareReferenceFromViewerPath(window.location.pathname);
@@ -25,19 +34,36 @@ function captureCurrentCapability(): string | null {
 }
 
 captureCurrentCapability();
+const shareBootUrl = new URL(window.location.href);
+const shareRoute = shareReferenceFromViewerPath(shareBootUrl.pathname) !== null;
+if (shareRoute) startShareBoot(shareBootUrl);
+const viewerLoaderModule = shareRoute ? import('./viewer-loader.js') : undefined;
+const viewerPageModule = shareRoute ? import('./viewer-page.js') : undefined;
 document.documentElement.dataset.mode = 'dark';
 
 function ViewerErrorBoundary() {
   const error = useRouteError();
-  return <UnavailableView incompleteLink={error instanceof IncompleteShareLinkError} />;
+  const location = useLocation();
+  // Only loader failures are network-shaped. Render errors never enter router state.
+  const loaderFailure = Object.values(router.state.errors ?? {}).includes(error);
+  return (
+    <ViewerRecoveryView
+      key={location.key}
+      error={error}
+      recoverable={loaderFailure}
+      revalidate={() => router.revalidate()}
+      readFailure={() => Object.values(router.state.errors ?? {})[0]}
+    />
+  );
 }
 
 const router = createBrowserRouter([
   {
     path: '/s/:shareRef',
-    loader: async (args) => (await import('./viewer-loader.js')).viewerLoader(args),
+    loader: async (args) =>
+      (await (viewerLoaderModule ?? import('./viewer-loader.js'))).viewerLoader(args),
     lazy: async () => {
-      const viewer = await import('./viewer-page.js');
+      const viewer = await (viewerPageModule ?? import('./viewer-page.js'));
       return { Component: viewer.ViewerPage };
     },
     ErrorBoundary: ViewerErrorBoundary,
@@ -173,3 +199,27 @@ const root = document.getElementById('root');
 if (root === null) throw new Error('Viewer root is unavailable');
 
 createRoot(root).render(<RouterProvider router={router} />);
+
+function recoverViewer() {
+  // An unrelated speculative request must not restart a terminal route failure.
+  const terminal = Object.values(router.state.errors ?? {}).some(
+    (error) =>
+      error instanceof IncompleteShareLinkError ||
+      (typeof error === 'object' &&
+        error !== null &&
+        'failure' in error &&
+        error.failure === 'terminal'),
+  );
+  if (terminal) {
+    consumeViewerRecovery();
+    return;
+  }
+  if (router.state.errors !== null) return;
+  if (shareReferenceFromViewerPath(window.location.pathname) && consumeViewerRecovery()) {
+    void router.revalidate();
+  }
+}
+window.addEventListener('online', recoverViewer);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') recoverViewer();
+});

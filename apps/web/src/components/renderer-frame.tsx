@@ -27,7 +27,35 @@ interface RendererFrameProps {
 export function RendererFrame(props: RendererFrameProps) {
   // Set the scheme before authored scripts run. Updating a live frame can trigger
   // a page's theme-change reload handler, which the navigation guard must block.
-  return <RendererDocument key={props.theme} {...props} />;
+  return <RecoveringRenderer key={props.theme} {...props} />;
+}
+
+function RecoveringRenderer(props: RendererFrameProps) {
+  const [attempt, setAttempt] = useState(0);
+  const started = useRef(Date.now());
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const recover = useCallback(() => {
+    const delay = [300, 600, 1200, 2400][attempt];
+    if (
+      timer.current !== undefined ||
+      delay === undefined ||
+      Date.now() - started.current + delay >= 10_000
+    )
+      return;
+    timer.current = window.setTimeout(() => {
+      timer.current = undefined;
+      setAttempt((value) => value + 1);
+    }, delay);
+  }, [attempt]);
+  return (
+    <RendererDocument
+      key={attempt}
+      {...props}
+      onRecover={recover}
+      deadline={started.current + 10_000}
+    />
+  );
 }
 
 function RendererDocument({
@@ -38,7 +66,9 @@ function RendererDocument({
   theme,
   fragment,
   onOpenPath,
-}: RendererFrameProps) {
+  onRecover,
+  deadline,
+}: RendererFrameProps & { readonly onRecover: () => void; readonly deadline: number }) {
   const onOpenPathRef = useRef(onOpenPath);
   onOpenPathRef.current = onOpenPath;
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -68,6 +98,12 @@ function RendererDocument({
     if (frame !== null) frame.src = 'about:blank';
     setStatus('unavailable');
   }, [clearDeadline]);
+
+  const recoverFrame = useCallback(() => {
+    if (terminatedRef.current) return;
+    terminateFrame();
+    onRecover();
+  }, [onRecover, terminateFrame]);
 
   useEffect(() => {
     const receive = (event: MessageEvent<unknown>) => {
@@ -104,7 +140,8 @@ function RendererDocument({
         readyRef.current = true;
         setStatus('ready');
       } else if (event.data.type === 'shelf:renderer-unavailable') {
-        terminateFrame();
+        if ('retryable' in event.data && event.data.retryable === true) recoverFrame();
+        else terminateFrame();
       } else if (
         event.data.type === 'shelf:renderer-open-path' &&
         readyRef.current &&
@@ -126,7 +163,7 @@ function RendererDocument({
       window.removeEventListener('message', receive);
       clearDeadline();
     };
-  }, [clearDeadline, terminateFrame]);
+  }, [clearDeadline, recoverFrame, terminateFrame]);
 
   const submitRenderer = useCallback(() => {
     if (submittedRef.current || terminatedRef.current) return;
@@ -164,8 +201,13 @@ function RendererDocument({
       form.remove();
     }
     clearDeadline();
-    timeoutRef.current = window.setTimeout(terminateFrame, 8_000);
-  }, [authority, clearDeadline, fragment, path, renderer.url, resolution, terminateFrame]);
+    // Armed is posted before authored scripts; ready waits for window.load. Keep the
+    // existing eight-second allowance for healthy subresources, capped by the recovery budget.
+    timeoutRef.current = window.setTimeout(
+      recoverFrame,
+      Math.min(8_000, Math.max(0, deadline - Date.now())),
+    );
+  }, [authority, clearDeadline, deadline, fragment, path, renderer.url, resolution, recoverFrame]);
 
   const stopPostReadyNavigation = useCallback(() => {
     if (terminatedRef.current) return;
@@ -183,10 +225,12 @@ function RendererDocument({
       return;
     }
     rendererLoadSeenRef.current = true;
+    // A completed document with no bootstrap signal is an error page. An armed
+    // document keeps its full readiness allowance instead of this short message grace.
     loadGuardRef.current = window.setTimeout(() => {
-      if (!readyRef.current) terminateFrame();
+      if (!readyRef.current && channelRef.current === undefined) recoverFrame();
     }, 250);
-  }, [submitRenderer, terminateFrame]);
+  }, [submitRenderer, terminateFrame, recoverFrame]);
 
   useEffect(() => {
     submitRenderer();
@@ -216,7 +260,7 @@ function RendererDocument({
         className="renderer-frame"
         data-preview-theme={theme}
         name={frameNameRef.current}
-        onError={() => setStatus('unavailable')}
+        onError={recoverFrame}
         onLoad={stopPostReadyNavigation}
         ref={attachFrame}
         referrerPolicy="no-referrer"

@@ -12,7 +12,6 @@ import {
   isPublicShareResolution,
   type ProtectedSessionAuthority,
 } from '@shelf/contracts';
-
 import type { ViewerShareReference } from './capability.js';
 import { ContentCache } from './content-cache.js';
 import {
@@ -22,6 +21,7 @@ import {
   isFolderShareResolution,
   shareRevisionAccess,
 } from './share-types.js';
+import { retryViewerRequest } from './viewer-retry.js';
 
 const PROTECTED_ACTION = /^\/api\/v1\/public\/shares\/(shr_[A-Za-z0-9_-]{22})\/(content|tree)$/;
 const PUBLIC_ACTION = /^\/api\/v1\/public\/links\/([A-Za-z0-9_-]{12})\/(content|tree)$/;
@@ -106,12 +106,20 @@ async function anonymousFetch(input: string, init: RequestInit): Promise<Respons
   try {
     return await fetch(input, init);
   } catch {
+    if (init.signal?.aborted) throw init.signal.reason;
     throw new PublicShareUnavailableError({ failure: 'transient' });
   }
 }
 
 function definitiveClientFailure(status: number): boolean {
   return status >= 400 && status < 500 && ![408, 425, 429, 499].includes(status);
+}
+
+function envelopeRetryable(body: unknown): boolean | undefined {
+  if (typeof body !== 'object' || body === null || !('error' in body)) return undefined;
+  const error = body.error;
+  if (typeof error !== 'object' || error === null || !('retryable' in error)) return undefined;
+  return typeof error.retryable === 'boolean' ? error.retryable : undefined;
 }
 
 async function responseJson(response: Response): Promise<unknown> {
@@ -147,7 +155,13 @@ async function responseJson(response: Response): Promise<unknown> {
       throw new ViewerCommentRevisionMismatchError();
     }
     throw new PublicShareUnavailableError({
-      failure: definitiveClientFailure(response.status) ? 'terminal' : 'transient',
+      // A server fault never erases a visitor's link, even when its envelope is not retryable.
+      failure:
+        response.status >= 500 || envelopeRetryable(errorBody) === true
+          ? 'transient'
+          : envelopeRetryable(errorBody) === false || definitiveClientFailure(response.status)
+            ? 'terminal'
+            : 'transient',
     });
   }
   try {
@@ -171,42 +185,42 @@ function viewerAccessScope(authority: ViewerAuthority): string {
     : `public:${authority.publicCode}`;
 }
 
-export async function loadPublicClientConfig(signal?: AbortSignal): Promise<PublicClientConfig> {
+async function loadPublicClientConfigOnce(signal?: AbortSignal): Promise<PublicClientConfig> {
   if (publicConfig !== undefined && publicConfig.expiresAt > Date.now()) return publicConfig.value;
-  try {
-    const response = await anonymousFetch('/api/v1/public/config', {
-      ...anonymousRequest(signal),
-      method: 'GET',
-    });
-    const value: unknown = await responseJson(response);
-    if (
-      typeof value !== 'object' ||
-      value === null ||
-      Object.keys(value).some((key) => key !== 'apiVersion' && key !== 'rendererOrigin') ||
-      !('apiVersion' in value) ||
-      value.apiVersion !== 'v1' ||
-      !('rendererOrigin' in value) ||
-      (value.rendererOrigin !== null && typeof value.rendererOrigin !== 'string')
-    ) {
-      return {};
-    }
-    const config = value.rendererOrigin === null ? {} : { rendererOrigin: value.rendererOrigin };
-    publicConfig = { value: config, expiresAt: Date.now() + 60_000 };
-    return config;
-  } catch {
+  const response = await anonymousFetch('/api/v1/public/config', {
+    ...anonymousRequest(signal),
+    method: 'GET',
+  });
+  const value: unknown = await responseJson(response);
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Object.keys(value).some((key) => key !== 'apiVersion' && key !== 'rendererOrigin') ||
+    !('apiVersion' in value) ||
+    value.apiVersion !== 'v1' ||
+    !('rendererOrigin' in value) ||
+    (value.rendererOrigin !== null && typeof value.rendererOrigin !== 'string')
+  ) {
     return {};
   }
+  const config = value.rendererOrigin === null ? {} : { rendererOrigin: value.rendererOrigin };
+  publicConfig = { value: config, expiresAt: Date.now() + 60_000 };
+  return config;
 }
 
-export async function establishProtectedSession(
+async function establishProtectedSessionOnce(
   shareId: string,
   sessionId: string,
   authority: { readonly secret: string } | { readonly token: string },
   signal?: AbortSignal,
 ): Promise<ProtectedSessionAuthority> {
+  const init = jsonPost({ sessionId, ...authority }, signal);
+  const headers = new Headers(init.headers);
+  headers.set('X-Shelf-Inline-Content', 'true');
   const value = await responseJson(
     await anonymousFetch(`/api/v1/public/shares/${encodeURIComponent(shareId)}/sessions`, {
-      ...jsonPost({ sessionId, ...authority }, signal),
+      ...init,
+      headers,
       credentials: 'include',
     }),
   );
@@ -301,26 +315,29 @@ export function viewerShareDownloadUrl(
   return `${url.pathname}${url.search}`;
 }
 
-export async function resolveViewerShare(
+async function resolveViewerShareOnce(
   reference: ViewerShareReference,
   authority: ViewerAuthority,
   signal?: AbortSignal,
   revisionId?: string,
 ): Promise<FileShareResolution | FolderShareResolution> {
-  if (reference.accessType !== authority.accessType) throw new PublicShareUnavailableError();
+  if (reference.accessType !== authority.accessType)
+    throw new PublicShareUnavailableError({ failure: 'terminal' });
   const url =
     reference.accessType === 'protected'
       ? `/api/v1/public/shares/${encodeURIComponent(reference.shareId)}/resolve`
-      : `/api/v1/public/links/${encodeURIComponent(reference.publicCode)}/resolve${
-          revisionId === undefined ? '' : `?${new URLSearchParams({ revisionId }).toString()}`
-        }`;
+      : `/api/v1/public/links/${encodeURIComponent(reference.publicCode)}/resolve${revisionId === undefined ? '' : `?${new URLSearchParams({ revisionId }).toString()}`}`;
   const init =
     authority.accessType === 'protected'
       ? jsonPost(
           { token: authority.token, ...(revisionId === undefined ? {} : { revisionId }) },
           signal,
         )
-      : { ...anonymousRequest(signal), method: 'GET' };
+      : {
+          ...anonymousRequest(signal),
+          method: 'GET',
+          headers: { 'X-Shelf-Inline-Content': 'true' },
+        };
   const value = await responseJson(await anonymousFetch(url, init));
   if (!isPublicShareResolution(value)) throw new PublicShareUnavailableError();
   if (value.accessType !== authority.accessType) throw new PublicShareUnavailableError();
@@ -342,7 +359,35 @@ function cachedContentActionUrl(
   return `${url.pathname}${url.search}`;
 }
 
-export async function loadViewerFileBytes(
+export function seedViewerInlineContent(
+  resolution: FileShareResolution | FolderShareResolution,
+  authority: ViewerAuthority,
+): void {
+  const inline = resolution.inlineContent;
+  if (inline === undefined) return;
+  let bytes: ArrayBuffer;
+  let folderPath: string;
+  if (inline.kind === 'file' && resolution.revision.kind === 'file') {
+    bytes = Uint8Array.from(atob(inline.base64), (character) => character.charCodeAt(0)).buffer;
+    folderPath = '';
+  } else if (
+    inline.kind === 'folder' &&
+    inline.page.revisionId === resolution.revision.revisionId
+  ) {
+    bytes = new TextEncoder().encode(JSON.stringify(inline.page)).buffer;
+    folderPath = '\0tree:';
+  } else return;
+  viewerContentCache.seed(
+    {
+      accessScope: viewerAccessScope(authority),
+      revisionId: resolution.revision.revisionId,
+      folderPath,
+    },
+    bytes,
+  );
+}
+
+async function loadViewerFileBytesOnce(
   resolution: FileShareResolution,
   authority: ViewerAuthority,
   signal?: AbortSignal,
@@ -366,14 +411,14 @@ export async function loadViewerFileBytes(
             )
           : { ...anonymousRequest(cacheSignal), method: 'GET' };
       const response = await anonymousFetch(url, init);
-      if (!response.ok) throw new PublicShareUnavailableError();
+      if (!response.ok) await responseJson(response);
       return response.arrayBuffer();
     },
     signal,
   );
 }
 
-export async function loadViewerFolderPage(
+async function loadViewerFolderPageOnce(
   resolution: FolderShareResolution,
   authority: ViewerAuthority,
   signal?: AbortSignal,
@@ -405,7 +450,11 @@ export async function loadViewerFolderPage(
               cacheSignal,
             )
           : { ...anonymousRequest(cacheSignal), method: 'GET' };
-      const value = await responseJson(await anonymousFetch(url, init));
+      // Retry transport and body failures, then validate the page once.
+      const value = await retryViewerRequest(
+        async () => responseJson(await anonymousFetch(url, init)),
+        cacheSignal,
+      );
       const data = new TextEncoder().encode(JSON.stringify(value)).buffer;
       parsePage(data);
       return data;
@@ -441,7 +490,7 @@ export async function loadViewerFolderEntries(
   return entries;
 }
 
-export async function loadViewerFolderEntryBytes(
+async function loadViewerFolderEntryBytesOnce(
   resolution: FolderShareResolution,
   authority: ViewerAuthority,
   path: string,
@@ -475,7 +524,7 @@ export async function loadViewerFolderEntryBytes(
             )
           : { ...anonymousRequest(cacheSignal), method: 'GET' };
       const response = await anonymousFetch(url, init);
-      if (!response.ok) throw new PublicShareUnavailableError();
+      if (!response.ok) await responseJson(response);
       return response.arrayBuffer();
     },
     signal,
@@ -666,4 +715,83 @@ export async function updateViewerCommentPost(
   );
   if (!isCommentPost(value)) throw new PublicShareUnavailableError();
   return value;
+}
+
+export async function loadPublicClientConfig(signal?: AbortSignal): Promise<PublicClientConfig> {
+  try {
+    return await loadPublicClientConfigOnce(signal);
+  } catch {
+    return {};
+  }
+}
+
+/** Start config speculatively, but retry only when the HTML/folder loader consumes it. */
+export function prepareViewerRendererConfig(
+  signal?: AbortSignal,
+  prefetch = false,
+): () => Promise<PublicClientConfig> {
+  let initial = prefetch ? loadPublicClientConfigOnce(signal) : undefined;
+  if (initial !== undefined) void initial.catch(() => undefined);
+  return () =>
+    retryViewerRequest((requestSignal) => {
+      const pending = initial;
+      initial = undefined;
+      return pending ?? loadPublicClientConfigOnce(requestSignal);
+    }, signal);
+}
+
+export function establishProtectedSession(
+  shareId: string,
+  sessionId: string,
+  authority: { readonly secret: string } | { readonly token: string },
+  signal?: AbortSignal,
+): Promise<ProtectedSessionAuthority> {
+  return retryViewerRequest(
+    (requestSignal) => establishProtectedSessionOnce(shareId, sessionId, authority, requestSignal),
+    signal,
+  );
+}
+
+export function resolveViewerShare(
+  reference: ViewerShareReference,
+  authority: ViewerAuthority,
+  signal?: AbortSignal,
+  revisionId?: string,
+): Promise<FileShareResolution | FolderShareResolution> {
+  return retryViewerRequest(
+    (requestSignal) => resolveViewerShareOnce(reference, authority, requestSignal, revisionId),
+    signal,
+  );
+}
+
+export function loadViewerFileBytes(
+  resolution: FileShareResolution,
+  authority: ViewerAuthority,
+  signal?: AbortSignal,
+): Promise<ArrayBuffer> {
+  return retryViewerRequest(
+    (requestSignal) => loadViewerFileBytesOnce(resolution, authority, requestSignal),
+    signal,
+  );
+}
+
+export function loadViewerFolderPage(
+  resolution: FolderShareResolution,
+  authority: ViewerAuthority,
+  signal?: AbortSignal,
+  cursor?: string,
+): Promise<FolderTreePage> {
+  return loadViewerFolderPageOnce(resolution, authority, signal, cursor);
+}
+
+export function loadViewerFolderEntryBytes(
+  resolution: FolderShareResolution,
+  authority: ViewerAuthority,
+  path: string,
+  signal?: AbortSignal,
+): Promise<ArrayBuffer> {
+  return retryViewerRequest(
+    (requestSignal) => loadViewerFolderEntryBytesOnce(resolution, authority, path, requestSignal),
+    signal,
+  );
 }

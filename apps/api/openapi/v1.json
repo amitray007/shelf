@@ -5143,6 +5143,9 @@
                       }
                     ]
                   },
+                  "inlineContent": {
+                    "$ref": "#/components/schemas/def-33"
+                  },
                   "artifact": {
                     "type": "object",
                     "required": ["artifactId", "name", "kind"],
@@ -5454,6 +5457,9 @@
                       }
                     ]
                   },
+                  "inlineContent": {
+                    "$ref": "#/components/schemas/def-33"
+                  },
                   "artifact": {
                     "type": "object",
                     "required": ["artifactId", "name", "kind"],
@@ -5763,6 +5769,9 @@
                         "enum": ["shared"]
                       }
                     ]
+                  },
+                  "inlineContent": {
+                    "$ref": "#/components/schemas/def-33"
                   },
                   "artifact": {
                     "type": "object",
@@ -6074,6 +6083,9 @@
                         "enum": ["shared"]
                       }
                     ]
+                  },
+                  "inlineContent": {
+                    "$ref": "#/components/schemas/def-33"
                   },
                   "artifact": {
                     "type": "object",
@@ -6459,6 +6471,9 @@
                           }
                         ]
                       },
+                      "inlineContent": {
+                        "$ref": "#/components/schemas/def-33"
+                      },
                       "artifact": {
                         "type": "object",
                         "required": ["artifactId", "name", "kind"],
@@ -6770,6 +6785,9 @@
                           }
                         ]
                       },
+                      "inlineContent": {
+                        "$ref": "#/components/schemas/def-33"
+                      },
                       "artifact": {
                         "type": "object",
                         "required": ["artifactId", "name", "kind"],
@@ -7079,6 +7097,9 @@
                             "enum": ["shared"]
                           }
                         ]
+                      },
+                      "inlineContent": {
+                        "$ref": "#/components/schemas/def-33"
                       },
                       "artifact": {
                         "type": "object",
@@ -7390,6 +7411,9 @@
                             "enum": ["shared"]
                           }
                         ]
+                      },
+                      "inlineContent": {
+                        "$ref": "#/components/schemas/def-33"
                       },
                       "artifact": {
                         "type": "object",
@@ -8832,6 +8856,40 @@
         },
         "additionalProperties": false,
         "title": "CommentSummaryRecentThread"
+      },
+      "def-33": {
+        "anyOf": [
+          {
+            "type": "object",
+            "required": ["kind", "base64"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["file"]
+              },
+              "base64": {
+                "type": "string",
+                "maxLength": 349528
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["kind", "page"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["folder"]
+              },
+              "page": {
+                "$ref": "#/components/schemas/def-2"
+              }
+            },
+            "additionalProperties": false
+          }
+        ],
+        "title": "InlineContent"
       }
     }
   },
@@ -16735,6 +16793,15 @@
             "in": "path",
             "name": "shareId",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["true"]
+            },
+            "in": "header",
+            "name": "x-shelf-inline-content",
+            "required": false
           }
         ],
         "responses": {
@@ -18997,6 +19064,15 @@
             "in": "path",
             "name": "publicCode",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["true"]
+            },
+            "in": "header",
+            "name": "x-shelf-inline-content",
+            "required": false
           }
         ],
         "responses": {
