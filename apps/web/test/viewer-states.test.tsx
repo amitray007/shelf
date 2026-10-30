@@ -1,6 +1,6 @@
 import type { CommentThread, PublicShareResolution } from '@shelf/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ArtifactFileView } from '../src/components/artifact-file-view.js';
 import {
@@ -20,6 +20,7 @@ import {
   isProgrammaticFolderSelection,
   shouldApplyFolderFocusRequest,
 } from '../src/components/folder-browser.js';
+import * as lazyPreviews from '../src/components/lazy-file-previews.js';
 import {
   formatRelativeReviewTime,
   ReviewAvatar,
@@ -169,6 +170,16 @@ function sourceThread(threadId: string, lineNumber: number, path = 'idea.md'): C
     ],
   };
 }
+
+// Preview chunks load on demand. These synchronous renders run after the chunks
+// arrive; PDF stays cold because it was already lazy before chunks moved.
+beforeAll(async () => {
+  await Promise.all(
+    Object.entries(lazyPreviews)
+      .filter(([name]) => name !== 'PdfPreview')
+      .map(([, preview]) => preview.preload()),
+  );
+});
 
 describe('viewer content states', () => {
   it('keeps authorized history visible when new writes are off', () => {

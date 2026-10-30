@@ -1,9 +1,10 @@
 import type { ArtifactRevision, PublicShareResolution } from '@shelf/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import { viewerSharePreviewUrl } from '../src/api.js';
 import { ArtifactFileView } from '../src/components/artifact-file-view.js';
+import * as lazyPreviews from '../src/components/lazy-file-previews.js';
 import { ViewerRail } from '../src/components/viewer-shell.js';
 import { ManagedArtifactContent } from '../src/dashboard/managed-artifact-content.js';
 import { selectRenderer } from '../src/rendering.js';
@@ -56,6 +57,16 @@ const managedRevision = {
   revisionNumber: 1,
   byteCount: 8,
 } satisfies ArtifactRevision;
+
+// Preview chunks load on demand. These synchronous renders run after the chunks
+// arrive; PDF stays cold because it was already lazy before chunks moved.
+beforeAll(async () => {
+  await Promise.all(
+    Object.entries(lazyPreviews)
+      .filter(([name]) => name !== 'PdfPreview')
+      .map(([, preview]) => preview.preload()),
+  );
+});
 
 describe('web preview integration', () => {
   it.each([

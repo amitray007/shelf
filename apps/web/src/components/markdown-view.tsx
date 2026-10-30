@@ -3,8 +3,8 @@ import { type ComponentPropsWithoutRef, isValidElement, type ReactNode } from 'r
 import ReactMarkdown, { type ExtraProps, type UrlTransform } from 'react-markdown';
 import remarkFrontmatter from 'remark-frontmatter';
 import remarkGfm from 'remark-gfm';
-import { MarkdownFrontMatter } from './markdown-front-matter.js';
-import { useViewerControls } from './viewer-controls.js';
+import { extractMarkdownFrontMatter, MarkdownFrontMatter } from './markdown-front-matter.js';
+import { useViewerControls, ViewerToolbarContent } from './viewer-controls.js';
 
 import './markdown-view.css';
 
@@ -122,5 +122,15 @@ export function MarkdownView({ source }: { readonly source: string }) {
         {source}
       </ReactMarkdown>
     </div>
+  );
+}
+
+// The details panel shares the Markdown chunk, including its YAML parser.
+export function MarkdownProperties({ source }: { readonly source: string }) {
+  const frontMatter = extractMarkdownFrontMatter(source);
+  return frontMatter === null ? null : (
+    <ViewerToolbarContent slot="document">
+      <MarkdownFrontMatter {...frontMatter} panel />
+    </ViewerToolbarContent>
   );
 }
