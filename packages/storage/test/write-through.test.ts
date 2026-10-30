@@ -91,6 +91,35 @@ async function* chunks(value: string) {
 }
 
 describe('R2 seal write-through', () => {
+  it('charges a small upload only for its captured bytes on a warm cache', async () => {
+    const { storage, cache } = fixture();
+    try {
+      for (let index = 0; index < 32; index += 1)
+        cache.reserve(2)?.commit(`warm:${index}`, Buffer.from('ab'));
+      const staged = await storage.stage(chunks('abc'), {});
+      expect(cache.get('warm:0')).toBeUndefined();
+      expect(cache.get('warm:1')).toBeUndefined();
+      for (let index = 2; index < 32; index += 1)
+        expect(cache.get(`warm:${index}`)?.toString()).toBe('ab');
+      expect(cache.get(`stage:${staged.stageId}`)?.toString()).toBe('abc');
+    } finally {
+      storage.close();
+    }
+  });
+
+  it('stops capturing above the object cap and releases the entire reservation', async () => {
+    const { storage, cache } = fixture();
+    try {
+      const staged = await storage.stage(chunks('123456789'), {});
+      expect(cache.get(`stage:${staged.stageId}`)).toBeUndefined();
+      const reservations = Array.from({ length: 8 }, () => cache.reserve(8));
+      expect(reservations.every((reservation) => reservation !== undefined)).toBe(true);
+      for (const reservation of reservations) reservation?.release();
+    } finally {
+      storage.close();
+    }
+  });
+
   it('warms the first open for each sealed folder entry, including empty entries', async () => {
     const { storage, gets } = fixture();
     for (const value of ['index', 'asset', '']) {

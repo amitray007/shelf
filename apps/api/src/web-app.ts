@@ -51,7 +51,7 @@ function applyDocumentHeaders(
 }
 
 export function addSharePreloads(document: string, manifest: unknown): string {
-  if (typeof manifest !== 'object' || manifest === null) return document;
+  if (typeof manifest !== 'object' || manifest === null || Array.isArray(manifest)) return document;
   const entries = manifest as Record<string, { file?: unknown; imports?: unknown; css?: unknown }>;
   const files = new Set<string>();
   const styles = new Set<string>();
@@ -132,12 +132,32 @@ export async function registerWebApp(app: FastifyInstance, options: WebAppOption
   const indexDocument = await readFile(join(root, 'index.html'), 'utf8');
   let shareDocument = indexDocument;
   try {
-    shareDocument = addSharePreloads(
-      indexDocument,
-      JSON.parse(await readFile(join(root, '.vite/manifest.json'), 'utf8')),
+    const manifest: unknown = JSON.parse(await readFile(join(root, '.vite/manifest.json'), 'utf8'));
+    if (
+      typeof manifest !== 'object' ||
+      manifest === null ||
+      Array.isArray(manifest) ||
+      !Object.values(manifest).every(
+        (entry) =>
+          typeof entry === 'object' &&
+          entry !== null &&
+          'file' in entry &&
+          typeof entry.file === 'string' &&
+          (!('imports' in entry) ||
+            (Array.isArray(entry.imports) &&
+              entry.imports.every((key: unknown) => typeof key === 'string'))) &&
+          (!('css' in entry) ||
+            (Array.isArray(entry.css) &&
+              entry.css.every((file: unknown) => typeof file === 'string'))),
+      )
+    )
+      throw new Error('Invalid Vite manifest.');
+    shareDocument = addSharePreloads(indexDocument, manifest);
+  } catch (error) {
+    app.log.warn(
+      { err: error },
+      'Vite manifest unavailable or invalid; serving share shell without preloads.',
     );
-  } catch {
-    // Missing or invalid manifests leave the original shell intact.
   }
   if (options.shareReader !== undefined) {
     registerShareDocuments(app, options.shareReader, shareDocument, (reply) =>

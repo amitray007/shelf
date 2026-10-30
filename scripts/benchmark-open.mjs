@@ -104,12 +104,61 @@ let temporary;
 let cleaning;
 let databaseLock;
 let instrumentationFailure;
+let r2Environment;
 const servers = new Set();
 function log(message) {
   process.stderr.write(
     `${String(message).replace(/(https?:\/\/[^\s#]+)#[^\s'"]+/gu, '$1#[REDACTED]')}\n`,
   );
 }
+async function cleanupR2() {
+  if (r2Environment === undefined) return;
+  const storageRequire = createRequire(join(ROOT, 'packages/storage/package.json'));
+  const { S3Client, ListObjectsV2Command, DeleteObjectsCommand } =
+    storageRequire('@aws-sdk/client-s3');
+  const client = new S3Client({
+    region: 'auto',
+    endpoint: `https://${r2Environment.SHELF_R2_ACCOUNT_ID.toLowerCase()}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: r2Environment.SHELF_R2_ACCESS_KEY_ID,
+      secretAccessKey: r2Environment.SHELF_R2_SECRET_ACCESS_KEY,
+      ...(r2Environment.SHELF_R2_SESSION_TOKEN === undefined
+        ? {}
+        : { sessionToken: r2Environment.SHELF_R2_SESSION_TOKEN }),
+    },
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
+  });
+  const Bucket = r2Environment.SHELF_R2_BUCKET;
+  const Prefix = `${r2Environment.SHELF_STORAGE_PREFIX}/`;
+  try {
+    let ContinuationToken;
+    do {
+      const page = await client.send(
+        new ListObjectsV2Command({ Bucket, Prefix, ContinuationToken, MaxKeys: 1000 }),
+      );
+      const Objects = (page.Contents ?? []).flatMap(({ Key }) =>
+        typeof Key === 'string' && Key.startsWith(Prefix) ? [{ Key }] : [],
+      );
+      if (Objects.length > 0) {
+        try {
+          const result = await client.send(
+            new DeleteObjectsCommand({ Bucket, Delete: { Objects, Quiet: true } }),
+          );
+          if (result.Errors?.length) log(`R2 cleanup failed for ${result.Errors.length} objects.`);
+        } catch (error) {
+          log(`R2 cleanup delete failed: ${error.name}`);
+        }
+      }
+      if (page.IsTruncated && !page.NextContinuationToken)
+        throw new Error('R2 cleanup listing has no continuation token.');
+      ContinuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (ContinuationToken !== undefined);
+  } finally {
+    client.destroy();
+  }
+}
+
 async function cleanup() {
   cleaning ??= (async () => {
     await browser?.close().catch(() => {});
@@ -129,6 +178,7 @@ async function cleanup() {
           }),
       ),
     );
+    await cleanupR2().catch((error) => log(`R2 cleanup failed: ${error.name}`));
     await databaseLock?.end().catch(() => {});
     if (temporary) await rm(temporary, { recursive: true, force: true });
   })();
@@ -533,17 +583,21 @@ function storageEnvironment(storage) {
     if (!value) throw new Error(`--storage r2 requires ${name}`);
     return value;
   };
-  return {
+  r2Environment = {
     SHELF_STORAGE_DRIVER: 'r2',
     SHELF_R2_ACCOUNT_ID: required('BENCH_R2_ACCOUNT_ID'),
     SHELF_R2_BUCKET: required('BENCH_R2_BUCKET'),
     SHELF_R2_ACCESS_KEY_ID: required('BENCH_R2_ACCESS_KEY_ID'),
     SHELF_R2_SECRET_ACCESS_KEY: required('BENCH_R2_SECRET_ACCESS_KEY'),
     SHELF_STORAGE_PREFIX: `bench-${randomUUID()}`,
+    ...(process.env.BENCH_R2_SESSION_TOKEN === undefined
+      ? {}
+      : { SHELF_R2_SESSION_TOKEN: process.env.BENCH_R2_SESSION_TOKEN }),
     ...(process.env.NODE_EXTRA_CA_CERTS === undefined
       ? {}
       : { NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS }),
   };
+  return r2Environment;
 }
 // Deterministic bytes, so every run and candidate downloads identical files.
 function downloadBytes(size) {

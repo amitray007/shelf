@@ -40,6 +40,35 @@ function deferred() {
   return { promise, resolve };
 }
 
+describe('ContentByteCache reservations', () => {
+  it('preserves completed entries when outstanding reservations make a charge impossible', () => {
+    const cache = new ContentByteCache(64);
+    cache.reserve(2)?.commit('first', Buffer.from('ab'));
+    cache.reserve(2)?.commit('second', Buffer.from('cd'));
+    const reservations = Array.from({ length: 7 }, () => cache.reserve(8));
+    reservations.push(cache.reserve(4));
+    expect(reservations.every((reservation) => reservation !== undefined)).toBe(true);
+    expect(cache.reserve(8)).toBeUndefined();
+    expect(cache.get('first')?.toString()).toBe('ab');
+    expect(cache.get('second')?.toString()).toBe('cd');
+    for (const reservation of reservations) reservation?.release();
+  });
+
+  it('grows within the shared budget and evicts only enough completed entries', () => {
+    const cache = new ContentByteCache(64);
+    for (let index = 0; index < 32; index += 1)
+      cache.reserve(2)?.commit(String(index), Buffer.from('ab'));
+    const reservation = cache.reserve(0);
+    expect(reservation?.grow(3)).toBe(true);
+    expect(cache.get('0')).toBeUndefined();
+    expect(cache.get('1')).toBeUndefined();
+    expect(cache.get('2')?.toString()).toBe('ab');
+    expect(reservation?.grow(6)).toBe(false);
+    reservation?.commit('new', Buffer.from('abc'));
+    expect(cache.get('new')?.toString()).toBe('abc');
+  });
+});
+
 describe('CachedContentReader', () => {
   it('loads once for a cold range and serves full and exact ranges from the same bytes', async () => {
     const { read, reader } = fixture();
@@ -65,6 +94,32 @@ describe('CachedContentReader', () => {
     expect(await collect(await reader.read(descriptor(), {}))).toBe('abcdefgh');
     expect(await collect(await reader.read(descriptor(1, 8, 'b'), {}))).toBe('abcdefgh');
     expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('copies a 1 MiB cache hit into four isolated 256 KiB chunks', async () => {
+    const { read, reader } = fixture(8 * 1024 * 1024);
+    const content = descriptor(1, 1024 * 1024);
+    const expected = Buffer.from('abcdefgh'.repeat(128 * 1024));
+    await collect(await reader.read(content, {}));
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of await reader.read(content, {})) chunks.push(chunk);
+    expect(chunks.map((chunk) => chunk.length)).toEqual(Array(4).fill(256 * 1024));
+    expect(Buffer.concat(chunks)).toEqual(expected);
+    chunks[0]?.fill(0);
+    expect(Buffer.from(await collect(await reader.read(content, {})))).toEqual(expected);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks abort between cache-hit slices', async () => {
+    const { reader } = fixture(8 * 1024 * 1024);
+    const content = descriptor(1, 1024 * 1024);
+    await collect(await reader.read(content, {}));
+    const controller = new AbortController();
+    const stream = await reader.read(content, { signal: controller.signal });
+    const iterator = stream[Symbol.asyncIterator]();
+    expect((await iterator.next()).value?.length).toBe(256 * 1024);
+    controller.abort(new Error('stop between slices'));
+    await expect(iterator.next()).rejects.toThrow('stop between slices');
   });
 
   it('evicts the least recently used bytes within its budget', async () => {
@@ -163,7 +218,8 @@ describe('CachedContentReader', () => {
         yield Buffer.from('abcdefgh');
       })(),
     );
-    const reader = new CachedContentReader({ read }, new ContentByteCache(64));
+    const cache = new ContentByteCache(64);
+    const reader = new CachedContentReader({ read }, cache);
     const controller = new AbortController();
     const result = reader.read(descriptor(), { signal: controller.signal });
     const rejected = expect(result).rejects.toThrow('cancel all');
@@ -171,6 +227,8 @@ describe('CachedContentReader', () => {
     await rejected;
     expect(read.mock.calls[0]?.[1].signal?.aborted).toBe(true);
     gate.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(cache.get(cache.key(descriptor()))).toBeUndefined();
     expect(await collect(await reader.read(descriptor(), {}))).toBe('abcdefgh');
     expect(read).toHaveBeenCalledTimes(2);
   });

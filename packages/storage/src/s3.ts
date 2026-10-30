@@ -160,17 +160,17 @@ export class S3ContentStorage implements ContentStorage {
     options.signal?.throwIfAborted();
     const stageId = createContentId();
     const cache = this.#cache;
-    const reservation = cache?.reserve(cache.objectLimit);
+    const reservation = cache?.reserve(0);
     let captured: Buffer[] | undefined = reservation === undefined ? undefined : [];
     let capturedLength = 0;
     async function* capture() {
       for await (const chunk of content) {
         if (captured !== undefined) {
-          capturedLength += chunk.byteLength;
-          if (capturedLength > (cache?.objectLimit ?? 0)) {
+          if (!reservation?.grow(chunk.byteLength)) {
             captured = undefined;
             reservation?.release();
           } else {
+            capturedLength += chunk.byteLength;
             captured.push(Buffer.from(chunk));
           }
         }

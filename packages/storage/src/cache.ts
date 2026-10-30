@@ -10,6 +10,7 @@ export class ContentByteCache {
   readonly #limit: number;
   readonly #entries = new Map<string, Buffer>();
   #used = 0;
+  #reserved = 0;
 
   constructor(limit = DEFAULT_STORAGE_CACHE_BYTES) {
     if (!Number.isSafeInteger(limit) || limit < 0) {
@@ -51,23 +52,50 @@ export class ContentByteCache {
     for (const key of this.#entries.keys()) this.take(key);
   }
 
-  reserve(size: number) {
-    if (this.#limit === 0 || size > this.objectLimit) return undefined;
-    const charge = Math.max(1, size);
+  #makeRoom(charge: number): boolean {
+    // Reservations cannot be evicted. Check feasibility before disturbing the LRU.
+    if (this.#reserved + charge > this.#limit) return false;
     while (this.#used + charge > this.#limit) {
       const oldest = this.#entries.keys().next().value;
-      if (oldest === undefined) return undefined;
+      if (oldest === undefined) return false;
       this.take(oldest);
     }
+    return true;
+  }
+
+  reserve(size: number) {
+    if (!Number.isSafeInteger(size) || size < 0 || this.#limit === 0 || size > this.objectLimit)
+      return undefined;
+    let charge = Math.max(1, size);
+    if (!this.#makeRoom(charge)) return undefined;
     this.#used += charge;
+    this.#reserved += charge;
     let active = true;
     const release = () => {
       if (!active) return;
       active = false;
       this.#used -= charge;
+      this.#reserved -= charge;
     };
     return {
       release,
+      grow: (additional: number): boolean => {
+        if (
+          !active ||
+          !Number.isSafeInteger(additional) ||
+          additional < 0 ||
+          additional > this.objectLimit - size
+        )
+          return false;
+        const nextCharge = Math.max(1, size + additional);
+        const increase = nextCharge - charge;
+        if (!this.#makeRoom(increase)) return false;
+        size += additional;
+        charge = nextCharge;
+        this.#used += increase;
+        this.#reserved += increase;
+        return true;
+      },
       commit: (key: string, bytes: Buffer) => {
         if (!active || bytes.length > size) return;
         release();
@@ -209,7 +237,10 @@ export class CachedContentReader implements ContentReader {
     return (async function* () {
       options.signal?.throwIfAborted();
       // Never expose the cache's mutable backing buffer to a consumer.
-      if (selected.length > 0) yield Buffer.from(selected);
+      for (let offset = 0; offset < selected.length; offset += 256 * 1024) {
+        options.signal?.throwIfAborted();
+        yield Buffer.from(selected.subarray(offset, offset + 256 * 1024));
+      }
     })();
   }
 }
