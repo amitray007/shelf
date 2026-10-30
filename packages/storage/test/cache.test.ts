@@ -104,9 +104,10 @@ describe('CachedContentReader', () => {
     const chunks: Uint8Array[] = [];
     for await (const chunk of await reader.read(content, {})) chunks.push(chunk);
     expect(chunks.map((chunk) => chunk.length)).toEqual(Array(4).fill(256 * 1024));
-    expect(Buffer.concat(chunks)).toEqual(expected);
+    // Buffer.equals keeps the 1 MiB comparison fast; toEqual walks every byte.
+    expect(Buffer.concat(chunks).equals(expected)).toBe(true);
     chunks[0]?.fill(0);
-    expect(Buffer.from(await collect(await reader.read(content, {})))).toEqual(expected);
+    expect(Buffer.from(await collect(await reader.read(content, {}))).equals(expected)).toBe(true);
     expect(read).toHaveBeenCalledTimes(1);
   });
 
