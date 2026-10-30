@@ -80,7 +80,8 @@ established by visiting Shelf directly. Signing in to one does not sign in to th
 The example selects Local File storage. To use R2, set `SHELF_STORAGE_DRIVER=r2` and provide
 `SHELF_R2_ACCOUNT_ID`, `SHELF_R2_BUCKET`, `SHELF_R2_ACCESS_KEY_ID`, and
 `SHELF_R2_SECRET_ACCESS_KEY`. `SHELF_STORAGE_PREFIX` defaults to `shelf`, and
-`SHELF_R2_SESSION_TOKEN` is optional. Compose passes the same storage selection to Shelf and the
+`SHELF_R2_SESSION_TOKEN` is optional. See [persistence.md](persistence.md) for the
+`SHELF_STORAGE_CACHE_BYTES` memory budget. Compose passes the same storage selection to Shelf and the
 renderer. The local named volume remains attached for profile compatibility but is unused while R2
 is selected.
 

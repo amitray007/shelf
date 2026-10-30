@@ -16,6 +16,7 @@ import type {
   StagedContent,
 } from '@shelf/core';
 
+import { CachedContentReader, type ContentByteCache } from './cache.js';
 import {
   assertContentId,
   assertDescriptor,
@@ -34,6 +35,7 @@ export interface S3ContentStorageOptions {
   client: S3Client;
   bucket: string;
   prefix?: string;
+  cache?: ContentByteCache;
   multipart?: {
     partSize?: number;
     queueSize?: number;
@@ -99,6 +101,8 @@ export class S3ContentStorage implements ContentStorage {
   readonly #prefix: string;
   readonly #partSize: number;
   readonly #queueSize: number;
+  readonly #cache: ContentByteCache | undefined;
+  readonly #reader: CachedContentReader | undefined;
 
   constructor(options: S3ContentStorageOptions) {
     validateBucket(options.bucket);
@@ -108,9 +112,18 @@ export class S3ContentStorage implements ContentStorage {
     this.#prefix = normalizePrefix(options.prefix);
     this.#partSize = multipart.partSize;
     this.#queueSize = multipart.queueSize;
+    this.#cache = options.cache;
+    this.#reader =
+      options.cache === undefined
+        ? undefined
+        : new CachedContentReader(
+            { read: (content, options) => this.#readStorage(content, options) },
+            options.cache,
+          );
   }
 
   close(): void {
+    this.#reader?.close();
     this.#client.destroy();
   }
 
@@ -146,13 +159,31 @@ export class S3ContentStorage implements ContentStorage {
   ): Promise<StagedContent> {
     options.signal?.throwIfAborted();
     const stageId = createContentId();
+    const cache = this.#cache;
+    const reservation = cache?.reserve(0);
+    let captured: Buffer[] | undefined = reservation === undefined ? undefined : [];
+    let capturedLength = 0;
+    async function* capture() {
+      for await (const chunk of content) {
+        if (captured !== undefined) {
+          if (!reservation?.grow(chunk.byteLength)) {
+            captured = undefined;
+            reservation?.release();
+          } else {
+            capturedLength += chunk.byteLength;
+            captured.push(Buffer.from(chunk));
+          }
+        }
+        yield chunk;
+      }
+    }
     const abortController = new AbortController();
     const upload = new Upload({
       client: this.#client,
       params: {
         Bucket: this.#bucket,
         Key: this.#key(stageId),
-        Body: Readable.from(content, { objectMode: false }),
+        Body: Readable.from(reservation === undefined ? content : capture(), { objectMode: false }),
       },
       partSize: this.#partSize,
       queueSize: this.#queueSize,
@@ -164,6 +195,9 @@ export class S3ContentStorage implements ContentStorage {
     try {
       await upload.done();
       options.signal?.throwIfAborted();
+      if (captured !== undefined) {
+        reservation?.commit(`stage:${stageId}`, Buffer.concat(captured, capturedLength));
+      }
       return { stageId };
     } catch (error) {
       await upload.abort().catch(() => undefined);
@@ -171,17 +205,20 @@ export class S3ContentStorage implements ContentStorage {
       throw error;
     } finally {
       options.signal?.removeEventListener('abort', abort);
+      reservation?.release();
     }
   }
 
   async discard(staged: StagedContent): Promise<void> {
     assertStagedContent(staged);
+    this.#cache?.take(`stage:${staged.stageId}`);
     await this.#delete(staged.stageId);
   }
 
   async deleteSealed(contentId: string): Promise<void> {
     assertContentId(contentId);
     await this.#delete(contentId);
+    this.#reader?.invalidate(contentId);
   }
 
   async seal(
@@ -189,14 +226,20 @@ export class S3ContentStorage implements ContentStorage {
     descriptor: { contentHash: string; byteCount: number },
   ): Promise<SealedContent> {
     assertStagedContent(staged);
-    assertDescriptor(descriptor);
-    const result = await this.#client.send(
-      new HeadObjectCommand({ Bucket: this.#bucket, Key: this.#key(staged.stageId) }),
-    );
-    if (result.ContentLength !== descriptor.byteCount) {
-      throw new Error('Staged content size mismatch.');
+    try {
+      assertDescriptor(descriptor);
+      const result = await this.#client.send(
+        new HeadObjectCommand({ Bucket: this.#bucket, Key: this.#key(staged.stageId) }),
+      );
+      if (result.ContentLength !== descriptor.byteCount) {
+        throw new Error('Staged content size mismatch.');
+      }
+      const sealed = Object.freeze({ contentId: staged.stageId, ...descriptor });
+      this.#cache?.seal(staged.stageId, sealed);
+      return sealed;
+    } finally {
+      this.#cache?.take(`stage:${staged.stageId}`);
     }
-    return Object.freeze({ contentId: staged.stageId, ...descriptor });
   }
 
   async inventory(): Promise<ContentInventorySnapshot> {
@@ -271,7 +314,16 @@ export class S3ContentStorage implements ContentStorage {
     return { sealed, staging, unrecognizedEntries };
   }
 
-  async read(
+  read(
+    content: SealedContent,
+    options: { range?: ContentByteRange; signal?: AbortSignal },
+  ): Promise<AsyncIterable<Uint8Array>> {
+    return this.#reader === undefined
+      ? this.#readStorage(content, options)
+      : this.#reader.read(content, options);
+  }
+
+  async #readStorage(
     content: SealedContent,
     options: { range?: ContentByteRange; signal?: AbortSignal },
   ): Promise<AsyncIterable<Uint8Array>> {

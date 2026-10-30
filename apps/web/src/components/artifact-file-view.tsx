@@ -20,24 +20,24 @@ import {
   FileView,
 } from './file-view.js';
 import { formatFileType } from './format.js';
-import { lazyModule } from './lazy-module.js';
-import { LazyMarkdownView as MarkdownView } from './lazy-views.js';
-import { extractMarkdownFrontMatter, MarkdownFrontMatter } from './markdown-front-matter.js';
-import { DelimitedTablePreview } from './preview/delimited-table-preview.js';
-import { ImagePreview } from './preview/image-preview.js';
-import { AudioPreview, VideoPreview } from './preview/media-preview.js';
-import { DocxPreview } from './preview/office-document-preview.js';
-import { StructuredDataPreview } from './preview/structured-data-preview.js';
-import { WorkbookPreview } from './preview/workbook-preview.js';
+import {
+  AudioPreview,
+  DelimitedTablePreview,
+  DocxPreview,
+  ImagePreview,
+  PdfPreview,
+  StructuredDataPreview,
+  VideoPreview,
+  WorkbookPreview,
+} from './lazy-file-previews.js';
+import {
+  LazyMarkdownProperties as MarkdownProperties,
+  LazyMarkdownView as MarkdownView,
+} from './lazy-views.js';
 import type { HtmlPreviewTheme } from './renderer-frame.js';
 import { useViewerControls, ViewerToolbarContent } from './viewer-controls.js';
 
 type HtmlRenderer = Extract<PassiveRenderer, { kind: 'html' }>;
-
-const PdfPreview = lazyModule(
-  async () => (await import('./preview/pdf-preview.js')).PdfPreview,
-  <FileLoadingState />,
-);
 
 export interface ArtifactFileDescriptor {
   readonly id: string;
@@ -131,11 +131,6 @@ export function ArtifactFileView({
     [bytes, sourceEligible],
   );
 
-  const frontMatter = useMemo(
-    () =>
-      renderer.kind === 'markdown' && source !== null ? extractMarkdownFrontMatter(source) : null,
-    [renderer.kind, source],
-  );
   let preview: ReactNode | undefined;
   let htmlPreview: ((theme: HtmlPreviewTheme) => ReactNode) | undefined;
   if (content.status === 'loading') {
@@ -263,10 +258,8 @@ export function ArtifactFileView({
               </div>
             </dl>
           </ViewerToolbarContent>
-          {frontMatter ? (
-            <ViewerToolbarContent slot="document">
-              <MarkdownFrontMatter {...frontMatter} panel />
-            </ViewerToolbarContent>
+          {renderer.kind === 'markdown' && source !== null ? (
+            <MarkdownProperties source={source} />
           ) : null}
         </>
       ) : null}

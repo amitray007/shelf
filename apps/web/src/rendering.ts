@@ -288,25 +288,29 @@ export function prefetchRendererModules(revision: {
   readonly mediaType?: string;
   readonly originalFileName?: string;
 }): void {
+  // Prefetch is best effort. The mounted lazy module retries and sends failures
+  // through the route's existing error boundary.
+  const warm = (load: Promise<unknown>) => void load.catch(() => undefined);
   if (revision.kind === 'folder') {
-    void import('./components/folder-browser.js');
+    warm(import('./components/folder-browser.js'));
     return;
   }
   const renderer = selectRenderer(revision.mediaType, undefined, revision.originalFileName);
-  if (renderer.kind === 'markdown') void import('./components/markdown-view.js');
-  if (renderer.kind === 'table') void import('./components/preview/delimited-table-preview.js');
-  if (renderer.kind === 'json') void import('./components/preview/structured-data-preview.js');
-  if (renderer.kind === 'pdf') void import('./components/preview/pdf-preview.js');
+  if (renderer.kind === 'markdown') warm(import('./components/markdown-view.js'));
+  if (renderer.kind === 'image') warm(import('./components/preview/image-preview.js'));
+  if (renderer.kind === 'table') warm(import('./components/preview/delimited-table-preview.js'));
+  if (renderer.kind === 'json') warm(import('./components/preview/structured-data-preview.js'));
+  if (renderer.kind === 'pdf') warm(import('./components/preview/pdf-preview.js'));
   if (renderer.kind === 'audio' || renderer.kind === 'video') {
-    void import('./components/preview/media-preview.js');
+    warm(import('./components/preview/media-preview.js'));
   }
   if (renderer.kind === 'docx') {
-    void import('./components/preview/office-document-preview.js');
-    void import('./components/preview/office-parser-bindings.js');
+    warm(import('./components/preview/office-document-preview.js'));
+    warm(import('./components/preview/office-parser-bindings.js'));
   }
   if (renderer.kind === 'workbook') {
-    void import('./components/preview/workbook-preview.js');
-    void import('./components/preview/office-parser-bindings.js');
+    warm(import('./components/preview/workbook-preview.js'));
+    warm(import('./components/preview/office-parser-bindings.js'));
   }
 }
 

@@ -1,6 +1,7 @@
 import { S3Client } from '@aws-sdk/client-s3';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 
+import { ContentByteCache } from './cache.js';
 import { LocalContentStorage } from './local.js';
 import { S3ContentStorage } from './s3.js';
 import type { ContentStorage } from './types.js';
@@ -12,6 +13,7 @@ export interface LocalContentStorageConfig {
 
 export interface R2ContentStorageConfig {
   driver: 'r2';
+  cacheBytes?: number;
   accountId: string;
   bucket: string;
   accessKeyId: string;
@@ -42,6 +44,7 @@ export function createR2ContentStorage(config: R2ContentStorageConfig): S3Conten
   assertCredential('secretAccessKey', config.secretAccessKey);
   if (config.sessionToken !== undefined) assertCredential('sessionToken', config.sessionToken);
 
+  const cache = new ContentByteCache(config.cacheBytes);
   const client = new S3Client({
     region: 'auto',
     endpoint: `https://${config.accountId.toLowerCase()}.r2.cloudflarestorage.com`,
@@ -56,6 +59,7 @@ export function createR2ContentStorage(config: R2ContentStorageConfig): S3Conten
   });
   return new S3ContentStorage({
     client,
+    cache,
     bucket: config.bucket,
     ...(config.prefix === undefined ? {} : { prefix: config.prefix }),
   });

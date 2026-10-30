@@ -42,6 +42,17 @@ SHELF_STORAGE_PREFIX=shelf
 
 `SHELF_R2_SESSION_TOKEN` is optional for temporary credentials. Keep the bucket private and scope its token to Object Read & Write for that bucket. Shelf uses the account-scoped R2 S3 endpoint, `auto` region, bounded multipart uploads, exact range reads, and opaque keys beneath the configured prefix. Shelf share links must continue to terminate at Shelf rather than exposing provider URLs.
 
+`SHELF_STORAGE_CACHE_BYTES` sets the R2 memory cache budget per process. The default is
+134217728 bytes (128 MiB); `0` disables it. Values must be non-negative safe integers.
+Each object can use at most one eighth of the budget. The cache evicts the least recently
+used entries and reserves space for active fills and uploads. A cold read within the object
+cap loads the full object, even for a range request. Larger objects keep streaming from R2,
+including cold range requests. Pending upload bytes share the budget and become
+readable from the cache only after a successful seal. This covers folder entries and manifests.
+API and renderer processes have separate caches. Publishing warms only the process that
+accepts the upload. Each request still passes authorization before it reads cached bytes.
+Local storage does not use this setting.
+
 Run migrations explicitly before starting upgraded API replicas:
 
 ```sh
