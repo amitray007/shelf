@@ -58,6 +58,8 @@
  * After recording/verification, every page drains to network idle before context
  * teardown. This is outside the measured window and avoids aborting local streams.
  * No product mocks, source edits, or dev servers are used.
+ * BENCH_TRACE=<file> writes each measured open's request timeline (origin and path only,
+ * never query or fragment) relative to the open start. It does not change any metric.
  * --storage r2 runs the API on the real R2 driver. It reads BENCH_R2_ACCOUNT_ID,
  * BENCH_R2_BUCKET, BENCH_R2_ACCESS_KEY_ID, and BENCH_R2_SECRET_ACCESS_KEY, and
  * passes NODE_EXTRA_CA_CERTS through, so a host can point the R2 hostname at an
@@ -99,6 +101,8 @@ const { chromium, expect } = webRequire('@playwright/test');
 const { Client } = apiRequire('pg');
 const children = new Set();
 const pageRequests = new WeakMap();
+const pageTraces = new WeakMap();
+const traces = [];
 let browser;
 let temporary;
 let cleaning;
@@ -375,11 +379,46 @@ async function throttledPage(context) {
   const cdp = await context.newCDPSession(page);
   const requests = new Map();
   pageRequests.set(page, requests);
+  // BENCH_TRACE only: per-request wall-clock start, first byte, and finish (origin + path only).
+  const trace = process.env.BENCH_TRACE ? new Map() : undefined;
+  if (trace) pageTraces.set(page, trace);
+  const recordTrace = (method, params, target) => {
+    if (!trace) return;
+    const key = `${target}:${params.requestId}`;
+    if (method === 'Network.requestWillBeSent') {
+      const url = new URL(params.request.url);
+      trace.set(key, {
+        url: `${url.origin}${url.pathname}`,
+        method: params.request.method,
+        type: params.type,
+        target,
+        offset: params.wallTime * 1000 - params.timestamp * 1000,
+        start: params.wallTime * 1000,
+      });
+    } else {
+      const entry = trace.get(key);
+      if (!entry) return;
+      if (method === 'Network.responseReceived') {
+        entry.status = params.response.status;
+        entry.firstByte = params.timestamp * 1000 + entry.offset;
+      } else if (method === 'Network.loadingFinished' || method === 'Network.loadingFailed') {
+        entry.end = params.timestamp * 1000 + entry.offset;
+        if (method === 'Network.loadingFailed') entry.failed = params.errorText;
+      }
+    }
+  };
   const recordRequest = (event) => {
     if (new URL(event.request.url).pathname.startsWith('/api/')) {
       requests.set(`${event.requestId}:${event.wallTime}`, event.wallTime * 1000);
     }
   };
+  for (const method of [
+    'Network.requestWillBeSent',
+    'Network.responseReceived',
+    'Network.loadingFinished',
+    'Network.loadingFailed',
+  ])
+    cdp.on(method, (params) => recordTrace(method, params, 'page'));
   cdp.on('Network.requestWillBeSent', recordRequest);
   // Sandboxed cross-origin previews become OOPIF targets. Pause each new target
   // before its scripts run, set the same network profile, then resume it. The
@@ -389,6 +428,8 @@ async function throttledPage(context) {
   cdp.on('Target.receivedMessageFromTarget', ({ sessionId, message }) => {
     const response = JSON.parse(message);
     if (response.method === 'Network.requestWillBeSent') recordRequest(response.params);
+    if (response.method?.startsWith('Network.'))
+      recordTrace(response.method, response.params, sessionId);
     if (!response.id) return;
     const key = `${sessionId}:${response.id}`;
     const callback = pending.get(key);
@@ -471,6 +512,22 @@ async function openCell(fixture, scenario, storageState) {
     );
     const timing = await page.evaluate(() => window.__bench);
     await verify(page, fixture.kind, owner);
+    const trace = pageTraces.get(page);
+    if (trace)
+      traces.push({
+        scenario,
+        kind: fixture.kind,
+        ms: timing.end - timing.start,
+        requests: [...trace.values()]
+          .filter((entry) => entry.start >= timing.start - 5 && entry.start <= timing.end)
+          .map(({ offset, ...entry }) => ({
+            ...entry,
+            start: Math.round(entry.start - timing.start),
+            firstByte: entry.firstByte && Math.round(entry.firstByte - timing.start),
+            end: entry.end && Math.round(entry.end - timing.start),
+          }))
+          .sort((a, b) => a.start - b.start),
+      });
     return {
       ms: timing.end - timing.start,
       requests: [...requests.values()].filter((time) => time >= timing.start && time <= timing.end)
@@ -939,6 +996,7 @@ async function main() {
 }
 try {
   const output = await main();
+  if (process.env.BENCH_TRACE) await writeFile(process.env.BENCH_TRACE, JSON.stringify(traces));
   await cleanup();
   process.stdout.write(`${JSON.stringify(output)}\n`);
 } catch (error) {
