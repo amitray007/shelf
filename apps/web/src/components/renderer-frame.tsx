@@ -201,8 +201,8 @@ function RendererDocument({
       form.remove();
     }
     clearDeadline();
-    // Armed is posted before authored scripts; ready waits for window.load. Keep the
-    // existing eight-second allowance for healthy subresources, capped by the recovery budget.
+    // Armed is posted before authored scripts; ready follows DOMContentLoaded, so slow
+    // images and fonts never hold the frame hidden. The recovery budget caps the wait.
     timeoutRef.current = window.setTimeout(
       recoverFrame,
       Math.min(8_000, Math.max(0, deadline - Date.now())),

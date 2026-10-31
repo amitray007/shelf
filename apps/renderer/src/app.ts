@@ -226,6 +226,8 @@ function signalScript(
   const originLiteral = javascriptLiteral(appOrigin);
   const typeLiteral = javascriptLiteral(type);
   // The parent reference is captured before authored scripts can replace `window.parent`.
+  // The signal follows DOMContentLoaded, not window load, so slow images and fonts cannot keep
+  // the viewer waiting past its readiness deadline.
   // Same-document fragment links update history without a navigation, because WebKit fires the
   // frame's load event for fragment navigation and the parent terminates every later load.
   // In a folder session, same-folder links ask the parent viewer to open that file instead.
@@ -234,7 +236,7 @@ function signalScript(
       ? ''
       : `if(!url.pathname.startsWith(${javascriptLiteral(folderSessionPath)}))return;event.preventDefault();let path;try{path=decodeURIComponent(url.pathname.slice(${folderSessionPath.length}))}catch{return}if(path===""||path.endsWith("/"))path+="index.html";notify("shelf:renderer-open-path",{path,fragment:url.hash.slice(1)});`;
   const links = `const closest=Element.prototype.closest;addEventListener("click",event=>{if(event.defaultPrevented||event.button!==0||!(event.target instanceof Element))return;const anchor=closest.call(event.target,"a[href],area[href]");if(anchor===null)return;let url;try{url=new URL(anchor.getAttribute("href")??"",document.baseURI)}catch{return}if(url.origin!==location.origin)return;if(url.pathname===location.pathname&&url.search===location.search&&(url.hash!==""||url.href.endsWith("#"))){event.preventDefault();const oldURL=location.href;try{history.pushState(history.state,"",url.href)}catch{return}let id=url.hash.slice(1);try{id=decodeURIComponent(id)}catch{}const target=id===""||id.toLowerCase()==="top"?document.documentElement:document.getElementById(id)??document.getElementsByName(id)[0];target?.scrollIntoView();if(oldURL!==location.href)dispatchEvent(new HashChangeEvent("hashchange",{oldURL,newURL:location.href}));return}${folderLinks}});`;
-  return `<script>(()=>{const target=parent;const channel=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,"0")).join("");const notify=(type,detail)=>target.postMessage({...detail,type,version:1,nonce:${nonceLiteral},channel},${originLiteral});notify("shelf:renderer-armed");addEventListener("load",()=>notify(${typeLiteral},${retryable ? '{retryable:true}' : '{}'}),{once:true});${links}})()</script>`;
+  return `<script>(()=>{const target=parent;const channel=Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>value.toString(16).padStart(2,"0")).join("");const notify=(type,detail)=>target.postMessage({...detail,type,version:1,nonce:${nonceLiteral},channel},${originLiteral});notify("shelf:renderer-armed");document.addEventListener("DOMContentLoaded",()=>notify(${typeLiteral},${retryable ? '{retryable:true}' : '{}'}),{once:true});${links}})()</script>`;
 }
 
 function injectBeforeAuthoredScripts(html: string, script: string): string {

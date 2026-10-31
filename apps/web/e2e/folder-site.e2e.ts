@@ -137,3 +137,54 @@ test('folder HTML loads relative scripts, modules, styles, images, and data, and
   await expect(page.locator('.renderer-stage')).toHaveAttribute('data-status', 'ready');
   expect(externalRequests).toEqual([]);
 });
+
+test('folder HTML opens while a slow image is still loading', async ({ page }) => {
+  test.setTimeout(45_000);
+  await page.route(`**${prefix}/resolve*`, (route) =>
+    route.fulfill({
+      json: {
+        ...folderResolution,
+        accessType: 'public',
+        publicCode,
+        action: { type: 'tree', path: `${prefix}/tree` },
+      },
+    }),
+  );
+  await page.route(new RegExp(`${prefix}/tree(?:[/?]|$)`), (route) =>
+    route.fulfill({
+      json: {
+        ...folderTreePage,
+        items: files.map(([path, mediaType], index) => ({
+          kind: 'file',
+          path,
+          mediaType,
+          byteCount: 100,
+          contentHash: `sha256:${String(index).repeat(64).slice(0, 64)}`,
+        })),
+      },
+    }),
+  );
+  await page.route(/^https:\/\/[a-z-]+-canary\.invalid\//u, (route) => route.abort());
+  // The image holds the frame's window load event past the viewer's eight-second allowance.
+  let releaseImage = () => {};
+  const imageGate = new Promise<void>((resolve) => {
+    releaseImage = resolve;
+  });
+  await page.route(`${rendererOrigin}/f/*/img/dot.png`, async (route) => {
+    await imageGate;
+    await route.continue().catch(() => {});
+  });
+
+  try {
+    await page.goto(`/s/${publicCode}`);
+    const stage = page.locator('.renderer-stage');
+    await expect(stage).toHaveAttribute('data-status', 'ready');
+    const frame = page.frameLocator('iframe[title="index.html isolated preview"]');
+    await expect(frame.getByRole('heading', { name: 'Agent site' })).toBeVisible();
+    await page.waitForTimeout(12_000);
+    await expect(stage).toHaveAttribute('data-status', 'ready');
+    await expect(frame.getByRole('heading', { name: 'Agent site' })).toBeVisible();
+  } finally {
+    releaseImage();
+  }
+});
