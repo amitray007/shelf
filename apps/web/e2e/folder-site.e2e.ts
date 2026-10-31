@@ -183,7 +183,67 @@ test('folder HTML opens while a slow image is still loading', async ({ page }) =
     await expect(frame.getByRole('heading', { name: 'Agent site' })).toBeVisible();
     await page.waitForTimeout(12_000);
     await expect(stage).toHaveAttribute('data-status', 'ready');
+    releaseImage();
+    // The delayed window load must pass the parent's post-load guard.
+    await expect
+      .poll(() => frame.locator('#dot').evaluate((image: HTMLImageElement) => image.complete))
+      .toBe(true);
+    await page.waitForTimeout(500);
+    await expect(stage).toHaveAttribute('data-status', 'ready');
     await expect(frame.getByRole('heading', { name: 'Agent site' })).toBeVisible();
+  } finally {
+    releaseImage();
+  }
+});
+
+test('folder HTML that navigates away before its slow image loads closes the preview', async ({
+  page,
+}) => {
+  await page.route(`**${prefix}/resolve*`, (route) =>
+    route.fulfill({
+      json: {
+        ...folderResolution,
+        accessType: 'public',
+        publicCode,
+        action: { type: 'tree', path: `${prefix}/tree` },
+      },
+    }),
+  );
+  await page.route(new RegExp(`${prefix}/tree(?:[/?]|$)`), (route) =>
+    route.fulfill({
+      json: {
+        ...folderTreePage,
+        items: files.map(([path, mediaType], index) => ({
+          kind: 'file',
+          path,
+          mediaType,
+          byteCount: 100,
+          contentHash: `sha256:${String(index).repeat(64).slice(0, 64)}`,
+        })),
+      },
+    }),
+  );
+  await page.route(/^https:\/\/[a-z-]+-canary\.invalid\//u, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<h1>Escaped</h1>' }),
+  );
+  let releaseImage = () => {};
+  const imageGate = new Promise<void>((resolve) => {
+    releaseImage = resolve;
+  });
+  await page.route(`${rendererOrigin}/f/*/img/dot.png`, async (route) => {
+    await imageGate;
+    await route.continue().catch(() => {});
+  });
+
+  try {
+    await page.goto(`/s/${publicCode}`);
+    const stage = page.locator('.renderer-stage');
+    await expect(stage).toHaveAttribute('data-status', 'ready');
+    const frame = page.frameLocator('iframe[title="index.html isolated preview"]');
+    await frame.locator('body').evaluate(() => {
+      location.href = 'https://escape-canary.invalid/';
+    });
+    await expect(stage).toHaveAttribute('data-status', 'unavailable');
   } finally {
     releaseImage();
   }

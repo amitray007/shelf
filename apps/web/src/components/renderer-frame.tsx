@@ -80,6 +80,7 @@ function RendererDocument({
   const submittedRef = useRef(false);
   const rendererLoadSeenRef = useRef(false);
   const readyRef = useRef(false);
+  const loadedRef = useRef(false);
   const terminatedRef = useRef(false);
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
 
@@ -139,6 +140,8 @@ function RendererDocument({
         clearDeadline();
         readyRef.current = true;
         setStatus('ready');
+      } else if (event.data.type === 'shelf:renderer-loaded') {
+        loadedRef.current = true;
       } else if (event.data.type === 'shelf:renderer-unavailable') {
         if ('retryable' in event.data && event.data.retryable === true) recoverFrame();
         else terminateFrame();
@@ -227,8 +230,11 @@ function RendererDocument({
     rendererLoadSeenRef.current = true;
     // A completed document with no bootstrap signal is an error page. An armed
     // document keeps its full readiness allowance instead of this short message grace.
+    // A ready document must report its own load; otherwise a navigation replaced it.
     loadGuardRef.current = window.setTimeout(() => {
-      if (!readyRef.current && channelRef.current === undefined) recoverFrame();
+      if (readyRef.current) {
+        if (!loadedRef.current) terminateFrame();
+      } else if (channelRef.current === undefined) recoverFrame();
     }, 250);
   }, [submitRenderer, terminateFrame, recoverFrame]);
 
