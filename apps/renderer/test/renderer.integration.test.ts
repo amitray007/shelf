@@ -221,7 +221,7 @@ describe('isolated HTML renderer', () => {
     expect(response.body).toContain('shelf:renderer-ready');
     expect(response.body).toContain('shelf:renderer-armed');
     expect(response.body).toContain('crypto.getRandomValues');
-    expect(response.body).toContain('addEventListener("load"');
+    expect(response.body).toContain('document.addEventListener("DOMContentLoaded"');
     expect(response.body).toContain(nonce);
     expect(response.body).not.toContain(token);
     expect(response.body.indexOf('shelf:renderer-ready')).toBeLessThan(
