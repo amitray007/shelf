@@ -198,6 +198,7 @@ test('folder HTML opens while a slow image is still loading', async ({ page }) =
 
 test('folder HTML that navigates away before its slow image loads closes the preview', async ({
   page,
+  browserName,
 }) => {
   await page.route(`**${prefix}/resolve*`, (route) =>
     route.fulfill({
@@ -243,7 +244,14 @@ test('folder HTML that navigates away before its slow image loads closes the pre
     await frame.locator('body').evaluate(() => {
       location.href = 'https://escape-canary.invalid/';
     });
-    await expect(stage).toHaveAttribute('data-status', 'unavailable');
+    if (browserName === 'firefox') {
+      // Firefox never starts this navigation, so the original document stays in place.
+      await page.waitForTimeout(1_000);
+      await expect(stage).toHaveAttribute('data-status', 'ready');
+      await expect(frame.getByRole('heading', { name: 'Agent site' })).toBeVisible();
+    } else {
+      await expect(stage).toHaveAttribute('data-status', 'unavailable');
+    }
   } finally {
     releaseImage();
   }
