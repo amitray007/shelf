@@ -19,6 +19,7 @@ import {
   createShareResolutionService,
   ShareNotFoundError,
 } from '@shelf/core';
+import { allowTransferCompression } from '@shelf/renderer';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { Type } from 'typebox';
 
@@ -806,6 +807,8 @@ export async function registerShareRoutes(
         ...(body.revisionId === undefined ? {} : { revisionId: body.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
+      // Saved bytes stay exact; only the transfer is compressed for text-like files.
+      allowTransferCompression(reply, file.mediaType);
       return reply
         .type('application/octet-stream')
         .header(
@@ -1028,6 +1031,8 @@ export async function registerShareRoutes(
         ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
+      // Saved bytes stay exact; only the transfer is compressed for text-like files.
+      allowTransferCompression(reply, file.mediaType);
       return reply
         .type('application/octet-stream')
         .header(
