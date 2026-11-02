@@ -467,14 +467,14 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
       void reply.header('Content-Range', `bytes ${range.start}-${range.end}/${file.byteCount}`);
     }
     if (file.byteCount === 0) return reply.send('');
-    const encoding = selectResponseEncoding(request, reply, file.byteCount);
-    if (encoding !== undefined) markEncodedResponse(reply, encoding);
     let content: AsyncIterable<Uint8Array>;
     try {
       content = await file.read(range);
     } catch {
       return reply.status(503).removeHeader('Content-Length').send();
     }
+    const encoding = selectResponseEncoding(request, reply, file.byteCount);
+    if (encoding !== undefined) markEncodedResponse(reply, encoding);
     // The handler deadline bounds the lookup above. Streaming a large file can outlast it, so the
     // body is written outside Fastify's reply lifecycle.
     reply.hijack();
