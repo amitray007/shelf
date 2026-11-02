@@ -102,8 +102,24 @@ The renderer builds each folder preview's Content Security Policy from the reque
 The reverse proxy must forward the browser's original `Host` to the renderer. Traefik, which
 Dokploy uses, and Caddy do this by default; nginx needs `proxy_set_header Host $host;`. Folder
 previews load sibling files from `/f/<session>/...` URLs on the renderer hostname. The session
-segment is a read-only grant for one revision that lasts at most one hour, and every request checks
-the share again. Keep renderer access logs private, or remove that path segment from them.
+segment is a read-only grant for one revision that lasts at most one hour, and every request it
+sends checks the share again. The frame may reuse a script, style, font, or image it already loaded
+in that session without asking again, until the session ends. Keep renderer access logs private, or
+remove that path segment from them.
+
+### Delivery to visitors
+
+Shelf compresses share JSON, documents, and text content itself, with Brotli or gzip as the
+browser asks, so a proxy does not need to. A proxy that also compresses leaves these responses
+alone because they already carry `Content-Encoding`. Ranged responses and files over 64 MiB are
+never compressed, which keeps resumable media and large downloads byte-exact.
+
+Shared file bytes are sent as `Cache-Control: private, no-cache` with a SHA-256 `ETag`. A browser
+keeps them but asks again before each reuse, so revoked or expired links stop working at once and
+an unchanged file costs a `304` rather than a new download. `private` keeps shared caches such as a
+CDN from storing them, so no purge is needed when a link is revoked. The viewer also keeps
+immutable revision bytes in the browser's Cache Storage for 14 days, used only after the server
+confirms the link again on each open.
 
 The installation owner can configure trusted CDN libraries in **Settings > HTML previews** in
 the dashboard. Add exact HTTPS origins such as `https://cdn.shopify.com` to load Shopify Polaris

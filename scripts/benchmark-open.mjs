@@ -60,6 +60,7 @@
  * No product mocks, source edits, or dev servers are used.
  * BENCH_TRACE=<file> writes each measured open's request timeline (origin and path only,
  * never query or fragment) relative to the open start. It does not change any metric.
+ * --network slow-4g applies Lighthouse's mobile Slow 4G profile instead of the default.
  * --storage r2 runs the API on the real R2 driver. It reads BENCH_R2_ACCOUNT_ID,
  * BENCH_R2_BUCKET, BENCH_R2_ACCESS_KEY_ID, and BENCH_R2_SECRET_ACCESS_KEY, and
  * passes NODE_EXTRA_CA_CERTS through, so a host can point the R2 hostname at an
@@ -78,12 +79,22 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 
-const NETWORK = Object.freeze({
-  offline: false,
-  latency: 40,
-  downloadThroughput: 50_000_000 / 8,
-  uploadThroughput: 20_000_000 / 8,
+const NETWORK_PROFILES = Object.freeze({
+  default: Object.freeze({
+    offline: false,
+    latency: 40,
+    downloadThroughput: 50_000_000 / 8,
+    uploadThroughput: 20_000_000 / 8,
+  }),
+  // Lighthouse's mobile Slow 4G throttling: 150 ms RTT, 1.6 Mbps down, 675 Kbps up.
+  'slow-4g': Object.freeze({
+    offline: false,
+    latency: 150,
+    downloadThroughput: (1638.4 * 1024) / 8,
+    uploadThroughput: (675 * 1024) / 8,
+  }),
 });
+let NETWORK = NETWORK_PROFILES.default;
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ORIGIN = 'http://127.0.0.1:3200';
 const RENDERER = 'http://localhost:3201';
@@ -737,7 +748,9 @@ async function main() {
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (['--smoke', '--resilience-only', '--no-resilience'].includes(flag)) options.set(flag, true);
-    else if (['--iterations', '--resilience-rounds', '--scenarios', '--storage'].includes(flag))
+    else if (
+      ['--iterations', '--resilience-rounds', '--scenarios', '--storage', '--network'].includes(flag)
+    )
       options.set(flag, args[++i]);
     else throw new Error(`Unknown flag: ${flag}`);
   }
@@ -751,9 +764,11 @@ async function main() {
     scenarios.some((scenario) => !SCENARIOS.includes(scenario)) ||
     new Set(scenarios).size !== scenarios.length ||
     (options.has('--resilience-only') && options.has('--no-resilience')) ||
-    !['local', 'r2'].includes(String(options.get('--storage') ?? 'local'))
+    !['local', 'r2'].includes(String(options.get('--storage') ?? 'local')) ||
+    !Object.hasOwn(NETWORK_PROFILES, String(options.get('--network') ?? 'default'))
   )
     throw new Error('Invalid benchmark options');
+  NETWORK = NETWORK_PROFILES[String(options.get('--network') ?? 'default')];
   await portFree(3200);
   await portFree(3201);
   temporary = await mkdtemp(join(tmpdir(), 'shelf-bench-open-'));
