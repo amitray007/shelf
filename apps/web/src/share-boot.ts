@@ -20,6 +20,7 @@ import {
   shareReferenceFromViewerPath,
   type ViewerShareReference,
 } from './capability.js';
+import { warmPersistedContent } from './persistent-content.js';
 import { prefetchRendererModules } from './rendering.js';
 import {
   type FileShareResolution,
@@ -148,6 +149,7 @@ export function startShareBoot(url: URL): void {
   const reference = shareReferenceFromViewerPath(url.pathname);
   if (reference === null) return;
   boot?.controller.abort();
+  warmPersistedContent();
   const controller = new AbortController();
   const promise = prepareShareOpen(
     reference,

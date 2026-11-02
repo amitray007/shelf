@@ -52,6 +52,11 @@ function openCache(): Promise<Cache | undefined> {
   return opening;
 }
 
+/** Open storage while the share resolves, so a later lookup costs one match, not an open. */
+export function warmPersistedContent(): void {
+  void openCache();
+}
+
 export async function readPersistedContent(
   key: ContentCacheKey,
   now = Date.now(),
