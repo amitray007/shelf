@@ -268,3 +268,72 @@ describe('CachedContentReader', () => {
     expect(read).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('progressive cache fills', () => {
+  const MIB = 1024 * 1024;
+  const large = (id = 1) => descriptor(id, 2 * MIB);
+
+  function gatedSource() {
+    const gate = deferred();
+    const read = vi.fn<ContentReader['read']>(async (content, options) => {
+      const start = options.range?.start ?? 0;
+      const end = (options.range?.end ?? content.byteCount - 1) + 1;
+      return (async function* () {
+        const half = Math.floor((start + end) / 2);
+        yield Buffer.alloc(half - start, 'a');
+        await gate.promise;
+        options.signal?.throwIfAborted();
+        yield Buffer.alloc(end - half, 'b');
+      })();
+    });
+    return { gate, read };
+  }
+
+  it('sends the first bytes of a cold large object before storage finishes', async () => {
+    const { gate, read } = gatedSource();
+    const cache = new ContentByteCache(32 * MIB);
+    const reader = new CachedContentReader({ read }, cache);
+    const iterator = (await reader.read(large(), {}))[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    expect(Buffer.from(first.value as Uint8Array).every((byte) => byte === 97)).toBe(true);
+    expect(cache.get(cache.key(large()))).toBeUndefined();
+    gate.resolve();
+    let total = (first.value as Uint8Array).byteLength;
+    for (let next = await iterator.next(); !next.done; next = await iterator.next())
+      total += next.value.byteLength;
+    expect(total).toBe(2 * MIB);
+    expect(cache.get(cache.key(large()))?.length).toBe(2 * MIB);
+    await collect(await reader.read(large(), {}));
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('serves a cold seek directly while warming the cache in the background', async () => {
+    const { gate, read } = gatedSource();
+    const cache = new ContentByteCache(32 * MIB);
+    const reader = new CachedContentReader({ read }, cache);
+    const range = { start: MIB + 10, end: MIB + 19 };
+    gate.resolve();
+    const bytes = await collect(await reader.read(large(), { range }));
+    expect(bytes).toHaveLength(10);
+    expect(read.mock.calls.map((call) => call[1].range)).toEqual(
+      expect.arrayContaining([undefined, range]),
+    );
+    await vi.waitFor(() => expect(cache.get(cache.key(large()))?.length).toBe(2 * MIB));
+    await collect(await reader.read(large(), { range }));
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels a fill when its only reader disconnects mid-stream', async () => {
+    const { gate, read } = gatedSource();
+    const cache = new ContentByteCache(32 * MIB);
+    const reader = new CachedContentReader({ read }, cache);
+    const iterator = (await reader.read(large(), {}))[Symbol.asyncIterator]();
+    await iterator.next();
+    await iterator.return?.();
+    expect(read.mock.calls[0]?.[1].signal?.aborted).toBe(true);
+    gate.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(cache.get(cache.key(large()))).toBeUndefined();
+  });
+});
