@@ -76,6 +76,10 @@ export async function readPersistedContent(
   }
 }
 
+// Pruning scans every entry, so it runs on the first write and then every few writes.
+const PRUNE_EVERY_WRITES = 8;
+let writesSincePrune = 0;
+
 async function prune(cache: Cache): Promise<void> {
   const keys = await cache.keys();
   if (keys.length <= MAX_PERSISTED_ENTRIES) return;
@@ -106,10 +110,18 @@ export async function persistContent(
         headers: { 'content-type': 'application/octet-stream', [STORED_AT]: String(now) },
       }),
     );
-    await prune(cache);
+    if (writesSincePrune === 0) await prune(cache);
+    writesSincePrune = (writesSincePrune + 1) % PRUNE_EVERY_WRITES;
   } catch {
     // Quota and private-mode failures only cost the next visit a download.
   }
+}
+
+/** Store after the view has what it needs, so writing never competes with the first paint. */
+export function schedulePersistContent(key: ContentCacheKey, bytes: ArrayBuffer): void {
+  const write = () => void persistContent(key, bytes);
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(write, { timeout: 2000 });
+  else setTimeout(write, 0);
 }
 
 /** Drop every entry a share link stored, for example after the server says it is gone. */
@@ -131,6 +143,7 @@ export async function forgetPersistedContent(scopeStartsWith: string): Promise<v
 
 export async function clearPersistedContent(): Promise<void> {
   opening = undefined;
+  writesSincePrune = 0;
   try {
     await storage()?.delete(CACHE_NAME);
   } catch {

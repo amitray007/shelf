@@ -148,9 +148,55 @@ describe('viewer return visits', () => {
       ).toBeDefined(),
     );
 
+    // A slow link: the download never finishes on its own, so only the device copy can answer.
+    let downloadSignal: AbortSignal | undefined;
+    fetch.mockImplementationOnce(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          downloadSignal = init?.signal ?? undefined;
+          downloadSignal?.addEventListener('abort', () => reject(downloadSignal?.reason));
+        }),
+    );
     vi.resetModules();
     const secondVisit = await import('../src/api.js');
     expect(text(await secondVisit.loadViewerFileBytes(file, authority))).toBe('report bytes');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(downloadSignal?.aborted).toBe(true);
+  });
+
+  it('downloads on a miss without waiting for the device lookup', async () => {
+    vi.stubGlobal('caches', memoryCacheStorage().storage);
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response('fresh bytes'));
+    vi.stubGlobal('fetch', fetch);
+    const shareId = `shr_${'d'.repeat(22)}`;
+    const { loadViewerFileBytes } = await import('../src/api.js');
+    const pending = loadViewerFileBytes(
+      {
+        apiVersion: 'v1',
+        shareId,
+        accessType: 'protected',
+        target: { mode: 'latest' },
+        expiresAt: null,
+        artifact: { artifactId: `art_${'b'.repeat(22)}`, kind: 'file', name: 'report' },
+        revision: {
+          revisionId: `rev_${'e'.repeat(22)}`,
+          revisionNumber: 1,
+          createdAt: '2026-08-18T12:00:00.000Z',
+          kind: 'file',
+          byteCount: 11,
+          mediaType: 'text/plain',
+          originalFileName: 'report.txt',
+        },
+        action: { type: 'content', path: `/api/v1/public/shares/${shareId}/content` },
+      },
+      {
+        accessType: 'protected',
+        shareId,
+        sessionId: '123e4567-e89b-42d3-a456-426614174000',
+        token: `${'v'.repeat(24)}.${'s'.repeat(43)}`,
+      },
+    );
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(text(await pending)).toBe('fresh bytes');
   });
 });

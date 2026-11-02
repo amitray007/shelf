@@ -17,9 +17,9 @@ import { ContentCache, type ContentCacheKey } from './content-cache.js';
 import {
   clearPersistedContent,
   forgetPersistedContent,
-  persistContent,
   persistentContentAvailable,
   readPersistedContent,
+  schedulePersistContent,
 } from './persistent-content.js';
 import {
   type FileShareResolution,
@@ -195,7 +195,9 @@ function viewerAccessScope(authority: ViewerAuthority): string {
 
 /**
  * Every caller resolved the share in this open before asking for bytes, so a device copy of
- * this immutable revision is safe to reuse and saves the whole download on a return visit.
+ * this immutable revision is safe to reuse. The download starts at once and races the device
+ * lookup: a stored copy cancels it, a miss costs nothing, and stored bytes still render if the
+ * network drops after the server confirmed access.
  */
 function persistedLoader(
   key: ContentCacheKey,
@@ -203,12 +205,34 @@ function persistedLoader(
 ): (signal: AbortSignal) => Promise<ArrayBuffer> {
   if (!persistentContentAvailable()) return load;
   return async (signal) => {
-    const stored = await readPersistedContent(key);
-    signal.throwIfAborted();
-    if (stored !== undefined) return stored;
-    const bytes = await load(signal);
-    void persistContent(key, bytes);
-    return bytes;
+    const network = new AbortController();
+    const forward = () => network.abort(signal.reason);
+    signal.addEventListener('abort', forward, { once: true });
+    try {
+      const downloading = load(network.signal);
+      const stored = readPersistedContent(key);
+      const fromNetwork = downloading.then(
+        (bytes) => ({ bytes, downloaded: true }),
+        async (error: unknown) => {
+          const copy = signal.aborted ? undefined : await stored;
+          if (copy === undefined) throw error;
+          return { bytes: copy, downloaded: false };
+        },
+      );
+      const fromDevice = stored.then((copy) =>
+        copy === undefined ? fromNetwork : { bytes: copy, downloaded: false },
+      );
+      const winner = await Promise.race([fromNetwork, fromDevice]);
+      signal.throwIfAborted();
+      if (winner.downloaded) schedulePersistContent(key, winner.bytes);
+      else {
+        void fromNetwork.catch(() => undefined);
+        network.abort();
+      }
+      return winner.bytes;
+    } finally {
+      signal.removeEventListener('abort', forward);
+    }
   };
 }
 
