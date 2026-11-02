@@ -13,7 +13,14 @@ import {
   type ProtectedSessionAuthority,
 } from '@shelf/contracts';
 import type { ViewerShareReference } from './capability.js';
-import { ContentCache } from './content-cache.js';
+import { ContentCache, type ContentCacheKey } from './content-cache.js';
+import {
+  clearPersistedContent,
+  forgetPersistedContent,
+  persistContent,
+  persistentContentAvailable,
+  readPersistedContent,
+} from './persistent-content.js';
 import {
   type FileShareResolution,
   type FolderShareResolution,
@@ -177,12 +184,41 @@ let publicConfig: { value: PublicClientConfig; expiresAt: number } | undefined;
 export function clearViewerCaches(): void {
   viewerContentCache.clear();
   publicConfig = undefined;
+  void clearPersistedContent();
 }
 
 function viewerAccessScope(authority: ViewerAuthority): string {
   return authority.accessType === 'protected'
     ? `protected:${authority.shareId}:${authority.sessionId}`
     : `public:${authority.publicCode}`;
+}
+
+/**
+ * Every caller resolved the share in this open before asking for bytes, so a device copy of
+ * this immutable revision is safe to reuse and saves the whole download on a return visit.
+ */
+function persistedLoader(
+  key: ContentCacheKey,
+  load: (signal: AbortSignal) => Promise<ArrayBuffer>,
+): (signal: AbortSignal) => Promise<ArrayBuffer> {
+  if (!persistentContentAvailable()) return load;
+  return async (signal) => {
+    const stored = await readPersistedContent(key);
+    signal.throwIfAborted();
+    if (stored !== undefined) return stored;
+    const bytes = await load(signal);
+    void persistContent(key, bytes);
+    return bytes;
+  };
+}
+
+/** A share link the server reported gone takes its stored bytes with it. */
+export function forgetViewerShareContent(reference: ViewerShareReference): void {
+  void forgetPersistedContent(
+    reference.accessType === 'protected'
+      ? `protected:${reference.shareId}:`
+      : `public:${reference.publicCode}`,
+  );
 }
 
 async function loadPublicClientConfigOnce(signal?: AbortSignal): Promise<PublicClientConfig> {
@@ -393,13 +429,14 @@ async function loadViewerFileBytesOnce(
   signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
   const url = cachedContentActionUrl(resolution, authority);
+  const key = {
+    accessScope: viewerAccessScope(authority),
+    revisionId: resolution.revision.revisionId,
+    folderPath: '',
+  };
   return viewerContentCache.getOrLoad(
-    {
-      accessScope: viewerAccessScope(authority),
-      revisionId: resolution.revision.revisionId,
-      folderPath: '',
-    },
-    async (cacheSignal) => {
+    key,
+    persistedLoader(key, async (cacheSignal) => {
       const init =
         authority.accessType === 'protected'
           ? jsonPost(
@@ -413,7 +450,7 @@ async function loadViewerFileBytesOnce(
       const response = await anonymousFetch(url, init);
       if (!response.ok) await responseJson(response);
       return response.arrayBuffer();
-    },
+    }),
     signal,
   );
 }
@@ -432,14 +469,15 @@ async function loadViewerFolderPageOnce(
     }
     return value;
   };
+  // NUL cannot occur in a folder path, keeping metadata separate from content.
+  const key = {
+    accessScope: viewerAccessScope(authority),
+    revisionId: resolution.revision.revisionId,
+    folderPath: `\0tree:${cursor ?? ''}`,
+  };
   const bytes = await viewerContentCache.getOrLoad(
-    // NUL cannot occur in a folder path, keeping metadata separate from content.
-    {
-      accessScope: viewerAccessScope(authority),
-      revisionId: resolution.revision.revisionId,
-      folderPath: `\0tree:${cursor ?? ''}`,
-    },
-    async (cacheSignal) => {
+    key,
+    persistedLoader(key, async (cacheSignal) => {
       const init =
         authority.accessType === 'protected'
           ? jsonPost(
@@ -458,7 +496,7 @@ async function loadViewerFolderPageOnce(
       const data = new TextEncoder().encode(JSON.stringify(value)).buffer;
       parsePage(data);
       return data;
-    },
+    }),
     signal,
   );
   return parsePage(bytes);
@@ -497,13 +535,14 @@ async function loadViewerFolderEntryBytesOnce(
   signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
   cachedContentActionUrl(resolution, authority);
+  const key = {
+    accessScope: viewerAccessScope(authority),
+    revisionId: resolution.revision.revisionId,
+    folderPath: path,
+  };
   return viewerContentCache.getOrLoad(
-    {
-      accessScope: viewerAccessScope(authority),
-      revisionId: resolution.revision.revisionId,
-      folderPath: path,
-    },
-    async (cacheSignal) => {
+    key,
+    persistedLoader(key, async (cacheSignal) => {
       const query = new URLSearchParams({ path });
       const revisionId = resolution.revision.revisionId;
       if (authority.accessType === 'public') {
@@ -526,7 +565,7 @@ async function loadViewerFolderEntryBytesOnce(
       const response = await anonymousFetch(url, init);
       if (!response.ok) await responseJson(response);
       return response.arrayBuffer();
-    },
+    }),
     signal,
   );
 }
