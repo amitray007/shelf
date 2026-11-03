@@ -749,7 +749,9 @@ async function main() {
     const flag = args[i];
     if (['--smoke', '--resilience-only', '--no-resilience'].includes(flag)) options.set(flag, true);
     else if (
-      ['--iterations', '--resilience-rounds', '--scenarios', '--storage', '--network'].includes(flag)
+      ['--iterations', '--resilience-rounds', '--scenarios', '--storage', '--network'].includes(
+        flag,
+      )
     )
       options.set(flag, args[++i]);
     else throw new Error(`Unknown flag: ${flag}`);
