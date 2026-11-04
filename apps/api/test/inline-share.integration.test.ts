@@ -56,10 +56,16 @@ async function fixture(overrides: Partial<CreateShelfAppOptions> = {}) {
   return app;
 }
 
-async function publishFile(app: FastifyInstance, value: string, key: string, artifactId?: string) {
+async function publishFile(
+  app: FastifyInstance,
+  value: string,
+  key: string,
+  artifactId?: string,
+  file: { filename: string; type: string } = { filename: 'note.txt', type: 'text/plain' },
+) {
   const body = multipart([
     { name: 'publisherMetadata', value: '{"privateSource":"agent-run"}' },
-    { name: 'file', filename: 'note.txt', type: 'text/plain', value },
+    { name: 'file', ...file, value },
   ]);
   const suffix = artifactId === undefined ? 'artifacts' : `artifacts/${artifactId}/revisions`;
   return app.inject({
@@ -285,4 +291,35 @@ it('inlines the same authorized first folder page for both access types', async 
     expect(separate.json().nextCursor).not.toBeNull();
     expect(resolved.inlineContent).toEqual({ kind: 'folder', page: separate.json() });
   }
+});
+
+describe('inline media selection', () => {
+  it.each([
+    ['photo.png', 'image/png', false],
+    ['diagram.svg', 'image/svg+xml', true],
+  ] as const)('inlines %s only when it is text', async (filename, type, inlined) => {
+    const app = await fixture();
+    const value = type === 'image/png' ? 'PNG bytes' : '<svg xmlns="http://www.w3.org/2000/svg"/>';
+    const published = await publishFile(app, value, `inline-${filename}`, undefined, {
+      filename,
+      type,
+    });
+    expect(published.statusCode).toBe(201);
+    const created = await createShare(
+      app,
+      published.json().artifactId as string,
+      `share-${filename}`,
+      { mode: 'latest' },
+      null,
+      'public',
+    );
+    const response = await app.inject({
+      url: `/api/v1/public/links/${created.json().publicCode as string}/resolve`,
+      headers: { 'X-Shelf-Inline-Content': 'true' },
+    });
+    expect(response.statusCode).toBe(200);
+    if (inlined)
+      expect(Buffer.from(response.json().inlineContent.base64, 'base64').toString()).toBe(value);
+    else expect(response.json().inlineContent).toBeUndefined();
+  });
 });

@@ -67,6 +67,15 @@ export function matchesEntityTag(value: string | undefined, entityTag: string): 
   });
 }
 
+/** RFC 9110 If-Range uses strong comparison; Shelf sends no Last-Modified, so dates never match. */
+export function rangeStillApplies(
+  ifRange: string | readonly string[] | undefined,
+  entityTag: string,
+): boolean {
+  if (ifRange === undefined) return true;
+  return typeof ifRange === 'string' && ifRange.trim() === entityTag;
+}
+
 function encodedFileName(value: string): string {
   return encodeURIComponent(value).replace(
     /['()*]/gu,
@@ -97,6 +106,19 @@ export function contentDisposition(
   let asciiName = unicodeName.replace(/[^\x20-\x7e]/gu, '_').replace(/["\\;]/gu, '_');
   if (asciiName === '' || asciiName === '.' || asciiName === '..') asciiName = fallback;
   return `${mode}; filename="${asciiName}"; filename*=UTF-8''${encodedFileName(unicodeName)}`;
+}
+
+/**
+ * Only for authorized successful bodies. Browsers may keep the bytes but must ask again before
+ * each reuse, so revocation and Latest changes still apply, and an unchanged file costs one 304
+ * instead of a full download. Errors keep the route's no-store policy.
+ */
+function allowPrivateRevalidation(reply: FastifyReply): void {
+  const noTransform = /\bno-transform\b/i.test(String(reply.getHeader('cache-control') ?? ''));
+  reply.header(
+    'cache-control',
+    noTransform ? 'private, no-cache, no-transform' : 'private, no-cache',
+  );
 }
 
 export interface DeliverableContent {
@@ -139,11 +161,17 @@ export async function deliverContent(
   reply.header('accept-ranges', 'bytes').header('etag', entityTag);
 
   if (matchesEntityTag(request.ifNoneMatch, entityTag)) {
+    allowPrivateRevalidation(reply);
     return reply.status(304).send();
   }
 
   let range: ContentByteRange | undefined;
-  if (request.range !== undefined) {
+  // A resumed transfer names the representation it started from. Splicing bytes from a newer
+  // Latest revision would corrupt it, so a stale If-Range gets the whole current file.
+  if (
+    request.range !== undefined &&
+    rangeStillApplies(reply.request.headers['if-range'], entityTag)
+  ) {
     try {
       range = parseByteRange(request.range, content.byteCount);
     } catch (error) {
@@ -159,6 +187,7 @@ export async function deliverContent(
 
   const byteCount = range === undefined ? content.byteCount : range.end - range.start + 1;
   const source = await content.read(range);
+  allowPrivateRevalidation(reply);
   reply
     .type(content.mediaType)
     .header(

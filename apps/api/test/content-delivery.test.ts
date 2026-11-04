@@ -4,13 +4,15 @@ import { describe, expect, it } from 'vitest';
 import { deliverContent } from '../src/content-delivery.js';
 
 interface TestReply {
+  readonly request: { readonly headers: Record<string, string | undefined> };
   header(name: string, value: string | number): TestReply;
+  getHeader(name: string): string | undefined;
   type(value: string): TestReply;
   status(value: number): TestReply;
   send(value?: unknown): TestReply;
 }
 
-function captureReply(): {
+function captureReply(requestHeaders: Record<string, string | undefined> = {}): {
   readonly headers: Record<string, string>;
   readonly reply: FastifyReply;
   readonly status: () => number;
@@ -18,9 +20,13 @@ function captureReply(): {
   const headers: Record<string, string> = {};
   let statusCode = 200;
   const reply: TestReply = {
+    request: { headers: requestHeaders },
     header(name, value) {
       headers[name.toLowerCase()] = String(value);
       return reply;
+    },
+    getHeader(name) {
+      return headers[name.toLowerCase()];
     },
     type(value) {
       headers['content-type'] = value;
@@ -99,5 +105,49 @@ describe('deliverContent', () => {
     expect(capture.status()).toBe(304);
     expect(reads).toBe(0);
     expect(capture.headers['content-range']).toBeUndefined();
+  });
+
+  it('lets browsers keep authorized bytes only with revalidation', async () => {
+    const capture = captureReply();
+    await deliverContent(
+      capture.reply,
+      {},
+      content('text/plain', async function* () {
+        yield Buffer.from('bytes');
+      }),
+      { disposition: 'inline', fallbackFileName: 'preview.bin' },
+    );
+    expect(capture.headers['cache-control']).toBe('private, no-cache');
+
+    const notModified = captureReply();
+    await deliverContent(
+      notModified.reply,
+      { ifNoneMatch: '"sha256:content"' },
+      content('text/plain', async function* () {
+        yield Buffer.from('bytes');
+      }),
+      { disposition: 'inline', fallbackFileName: 'preview.bin' },
+    );
+    expect(notModified.status()).toBe(304);
+    expect(notModified.headers['cache-control']).toBe('private, no-cache');
+  });
+
+  it.each([
+    ['"sha256:content"', 206],
+    ['"sha256:older"', 200],
+    ['W/"sha256:content"', 200],
+    ['Tue, 01 Sep 2026 00:00:00 GMT', 200],
+  ])('honors a range only when If-Range %s names this exact file', async (ifRange, status) => {
+    const capture = captureReply({ 'if-range': ifRange });
+    await deliverContent(
+      capture.reply,
+      { range: 'bytes=0-1' },
+      content('application/octet-stream', async function* () {
+        yield Buffer.from('bytes');
+      }),
+      { disposition: 'attachment', fallbackFileName: 'download.bin' },
+    );
+    expect(capture.status()).toBe(status);
+    expect(capture.headers['content-length']).toBe(status === 206 ? '2' : '5');
   });
 });

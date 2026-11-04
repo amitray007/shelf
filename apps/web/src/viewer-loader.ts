@@ -1,7 +1,9 @@
+import type { FolderEntry } from '@shelf/contracts';
 import type { LoaderFunctionArgs } from 'react-router';
 
 import {
   loadViewerFileBytes,
+  loadViewerFolderEntryBytes,
   loadViewerFolderPage,
   MAX_VIEWER_CACHED_BYTES,
   type PublicSharePayload,
@@ -23,6 +25,19 @@ import { consumeShareBoot, prepareShareOpen } from './share-boot.js';
 import type { FileShareResolution, FolderShareResolution } from './share-types.js';
 import { isFileShareResolution, isFolderShareResolution } from './share-types.js';
 import { consumeViewerRecovery } from './viewer-retry.js';
+
+// Mirrors the folder browser's landing choice. A miss only costs one small extra request.
+const FOLDER_LANDING_FILES = ['index.html', 'index.htm', 'README.md', 'readme.md'];
+const MAX_SPECULATIVE_FOLDER_FILE_BYTES = 1024 * 1024;
+
+export function folderLandingFile(entries: readonly FolderEntry[]): string | undefined {
+  for (const path of FOLDER_LANDING_FILES) {
+    const entry = entries.find((item) => item.kind === 'file' && item.path === path);
+    if (entry?.kind === 'file' && entry.byteCount <= MAX_SPECULATIVE_FOLDER_FILE_BYTES)
+      return entry.path;
+  }
+  return undefined;
+}
 
 function preconnectRenderer(origin: string | undefined): void {
   if (origin === undefined || typeof document === 'undefined') return;
@@ -89,7 +104,17 @@ export async function loadViewerPayload(
     initialResolution ?? (await resolveViewerShare(reference, authority, signal, revisionId));
   if (isFolderShareResolution(resolution)) {
     // Begin the first tree page while the viewer UI chunk and renderer config load.
-    void loadViewerFolderPage(resolution, authority, signal).catch(() => undefined);
+    void loadViewerFolderPage(resolution, authority, signal)
+      .then((page) => {
+        // The folder browser opens its landing file once its 60 KiB chunk arrives. Fetch that
+        // file now so the browser finds it in the content cache instead of starting then.
+        const landing = folderLandingFile(page.items);
+        if (landing !== undefined)
+          void loadViewerFolderEntryBytes(resolution, authority, landing, signal).catch(
+            () => undefined,
+          );
+      })
+      .catch(() => undefined);
     if (typeof window !== 'undefined') prefetchRendererModules({ kind: 'folder' });
     const config =
       typeof rendererConfig === 'string'

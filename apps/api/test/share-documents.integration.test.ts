@@ -114,7 +114,7 @@ describe('agent share documents', () => {
       expect(response.headers.link).toContain(`/s/${link.publicCode}?format=json`);
       expect(response.headers.link).toContain('/llms.txt');
       expect(response.headers.link).toContain('/api/v1/openapi.json');
-      expect(response.headers.vary).toBe('Accept');
+      expect(response.headers.vary, method).toBe('Accept, Accept-Encoding');
       expect(response.headers['content-security-policy']).toContain("script-src 'self'");
       if (method === 'GET') {
         expect(response.body).toContain('<noscript>');
@@ -147,7 +147,7 @@ describe('agent share documents', () => {
       expect(response.statusCode).toBe(200);
       expect(response.body).toBe('# Report\n\nOriginal source.\n');
       expect(response.headers['content-type']).toContain('text/markdown');
-      expect(response.headers['cache-control']).toBe('no-store, no-transform');
+      expect(response.headers['cache-control']).toBe('private, no-cache, no-transform');
       expect(response.headers['x-robots-tag']).toBe('noindex, nofollow, noarchive');
     }
   });

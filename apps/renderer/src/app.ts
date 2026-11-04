@@ -8,6 +8,12 @@ import {
 } from '@shelf/core';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
+import {
+  createContentEncoder,
+  markEncodedResponse,
+  registerResponseCompression,
+  selectResponseEncoding,
+} from './compression.js';
 import { folderSessionFileUrl, rewritePublicPreviewReferences } from './folder-assets.js';
 import {
   createFolderSessionCodec,
@@ -330,6 +336,7 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
     bodyLimit: 2_048,
     handlerTimeout: options.handlerTimeoutMs ?? 30_000,
   });
+  registerResponseCompression(app);
 
   app.addContentTypeParser(
     'application/x-www-form-urlencoded',
@@ -438,6 +445,11 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
     void reply.header('Access-Control-Allow-Origin', '*');
     if (file === null) return reply.status(503).send();
     if (file === undefined) return reply.status(404).send();
+    // The session path pins one immutable revision, and the token expires with the session.
+    // Within it, page-to-page navigation reuses scripts, styles, fonts, and images.
+    const cacheSeconds = Math.floor((claims.expiresAt - now().getTime()) / 1000);
+    if (cacheSeconds > 0)
+      void reply.header('Cache-Control', `private, max-age=${cacheSeconds}, immutable`);
     if (file.kind === 'html') return reply.type('text/html; charset=utf-8').send(file.html);
     void reply.header('Accept-Ranges', 'bytes');
     void reply.type(file.mediaType);
@@ -446,6 +458,7 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
       return reply.status(416).header('Content-Range', `bytes */${file.byteCount}`).send();
     }
     const status = range === undefined ? 200 : 206;
+    void reply.status(status);
     void reply.header(
       'Content-Length',
       String(range === undefined ? file.byteCount : range.end - range.start + 1),
@@ -453,13 +466,15 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
     if (range !== undefined) {
       void reply.header('Content-Range', `bytes ${range.start}-${range.end}/${file.byteCount}`);
     }
-    if (file.byteCount === 0) return reply.status(status).send('');
+    if (file.byteCount === 0) return reply.send('');
     let content: AsyncIterable<Uint8Array>;
     try {
       content = await file.read(range);
     } catch {
       return reply.status(503).removeHeader('Content-Length').send();
     }
+    const encoding = selectResponseEncoding(request, reply, file.byteCount);
+    if (encoding !== undefined) markEncodedResponse(reply, encoding);
     // The handler deadline bounds the lookup above. Streaming a large file can outlast it, so the
     // body is written outside Fastify's reply lifecycle.
     reply.hijack();
@@ -467,7 +482,10 @@ export async function createRendererApp(options: CreateRendererAppOptions): Prom
       if (value !== undefined) reply.raw.setHeader(name, value);
     }
     reply.raw.writeHead(status);
-    await pipeline(Readable.from(content), reply.raw).catch(() => reply.raw.destroy());
+    await (encoding === undefined
+      ? pipeline(Readable.from(content), reply.raw)
+      : pipeline(Readable.from(content), createContentEncoder(encoding, file.byteCount), reply.raw)
+    ).catch(() => reply.raw.destroy());
   });
 
   app.post('/render', async (request, reply) => {

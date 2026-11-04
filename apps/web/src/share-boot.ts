@@ -1,6 +1,7 @@
 import type { ProtectedSessionAuthority } from '@shelf/contracts';
 import {
   establishProtectedSession,
+  forgetViewerShareContent,
   PublicShareUnavailableError,
   prepareViewerRendererConfig,
   resolveViewerShare,
@@ -19,6 +20,7 @@ import {
   shareReferenceFromViewerPath,
   type ViewerShareReference,
 } from './capability.js';
+import { warmPersistedContent } from './persistent-content.js';
 import { prefetchRendererModules } from './rendering.js';
 import {
   type FileShareResolution,
@@ -83,6 +85,20 @@ export async function prepareShareOpen(
   signal: AbortSignal,
   revisionId?: string,
 ) {
+  try {
+    return await openShare(reference, signal, revisionId);
+  } catch (error) {
+    // A revoked, expired, or missing link must not leave its bytes on this device.
+    if (isTerminalUnavailable(error)) forgetViewerShareContent(reference);
+    throw error;
+  }
+}
+
+async function openShare(
+  reference: ViewerShareReference,
+  signal: AbortSignal,
+  revisionId?: string,
+) {
   let authority: ViewerAuthority;
   let initialResolution: FileShareResolution | FolderShareResolution | undefined;
   if (reference.accessType === 'public') {
@@ -122,7 +138,7 @@ export async function prepareShareOpen(
   return { authority, resolution, config };
 }
 
-type ShareOpen = Awaited<ReturnType<typeof prepareShareOpen>>;
+type ShareOpen = Awaited<ReturnType<typeof openShare>>;
 let boot: { key: string; promise: Promise<ShareOpen>; controller: AbortController } | undefined;
 function bootKey(url: URL): string {
   return `${url.pathname.replace(/\/$/, '')}?${url.searchParams.get('revision') ?? ''}`;
@@ -133,6 +149,7 @@ export function startShareBoot(url: URL): void {
   const reference = shareReferenceFromViewerPath(url.pathname);
   if (reference === null) return;
   boot?.controller.abort();
+  warmPersistedContent();
   const controller = new AbortController();
   const promise = prepareShareOpen(
     reference,

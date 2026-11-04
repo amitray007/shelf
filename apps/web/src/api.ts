@@ -13,7 +13,19 @@ import {
   type ProtectedSessionAuthority,
 } from '@shelf/contracts';
 import type { ViewerShareReference } from './capability.js';
-import { ContentCache } from './content-cache.js';
+import { ContentCache, type ContentCacheKey } from './content-cache.js';
+import {
+  clearPersistedContent,
+  forgetPersistedContent,
+  persistentContentAvailable,
+  readPersistedContent,
+  schedulePersistContent,
+} from './persistent-content.js';
+import {
+  protectedSessionRequest,
+  publicResolveRequest,
+  takePrefetchedResponse,
+} from './share-requests.js';
 import {
   type FileShareResolution,
   type FolderShareResolution,
@@ -103,12 +115,43 @@ function jsonPost(body: object, signal?: AbortSignal): RequestInit {
 }
 
 async function anonymousFetch(input: string, init: RequestInit): Promise<Response> {
+  const early = takePrefetchedResponse(input, init);
+  if (early !== undefined) {
+    try {
+      return await adoptEarlyResponse(early, init.signal);
+    } catch {
+      // A failed early request costs nothing extra: send it now, as before.
+      init.signal?.throwIfAborted();
+    }
+  }
   try {
     return await fetch(input, init);
   } catch {
     if (init.signal?.aborted) throw init.signal.reason;
     throw new PublicShareUnavailableError({ failure: 'transient' });
   }
+}
+
+function adoptEarlyResponse(
+  early: Promise<Response>,
+  signal: AbortSignal | null | undefined,
+): Promise<Response> {
+  if (signal === null || signal === undefined) return early;
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    early.then(
+      (response) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(response);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
 }
 
 function definitiveClientFailure(status: number): boolean {
@@ -177,6 +220,7 @@ let publicConfig: { value: PublicClientConfig; expiresAt: number } | undefined;
 export function clearViewerCaches(): void {
   viewerContentCache.clear();
   publicConfig = undefined;
+  void clearPersistedContent();
 }
 
 function viewerAccessScope(authority: ViewerAuthority): string {
@@ -185,8 +229,77 @@ function viewerAccessScope(authority: ViewerAuthority): string {
     : `public:${authority.publicCode}`;
 }
 
+/**
+ * Every caller resolved the share in this open before asking for bytes, so a device copy of
+ * this immutable revision is safe to reuse. The download starts at once and races the device
+ * lookup: a stored copy cancels it, a miss costs nothing, and stored bytes still render if the
+ * network drops after the server confirmed access.
+ */
+function persistedLoader(
+  key: ContentCacheKey,
+  load: (signal: AbortSignal) => Promise<ArrayBuffer>,
+): (signal: AbortSignal) => Promise<ArrayBuffer> {
+  if (!persistentContentAvailable()) return load;
+  return async (signal) => {
+    const network = new AbortController();
+    const forward = () => network.abort(signal.reason);
+    signal.addEventListener('abort', forward, { once: true });
+    try {
+      const downloading = load(network.signal);
+      const stored = readPersistedContent(key);
+      const fromNetwork = downloading.then(
+        (bytes) => ({ bytes, downloaded: true }),
+        async (error: unknown) => {
+          const copy = signal.aborted ? undefined : await stored;
+          if (copy === undefined) throw error;
+          return { bytes: copy, downloaded: false };
+        },
+      );
+      const fromDevice = stored.then((copy) =>
+        copy === undefined ? fromNetwork : { bytes: copy, downloaded: false },
+      );
+      const winner = await Promise.race([fromNetwork, fromDevice]);
+      signal.throwIfAborted();
+      if (winner.downloaded) schedulePersistContent(key, winner.bytes);
+      else {
+        void fromNetwork.catch(() => undefined);
+        network.abort();
+      }
+      return winner.bytes;
+    } finally {
+      signal.removeEventListener('abort', forward);
+    }
+  };
+}
+
+/** A share link the server reported gone takes its stored bytes with it. */
+export function forgetViewerShareContent(reference: ViewerShareReference): void {
+  void forgetPersistedContent(
+    reference.accessType === 'protected'
+      ? `protected:${reference.shareId}:`
+      : `public:${reference.publicCode}`,
+  );
+}
+
+/** The share document names the renderer origin, which saves a request on every open. */
+function documentClientConfig(): PublicClientConfig | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="shelf-renderer-origin"]');
+  if (meta === null) return undefined;
+  const origin = meta.content;
+  if (origin === '') return {};
+  try {
+    const url = new URL(origin);
+    return url.origin === origin ? { rendererOrigin: origin } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function loadPublicClientConfigOnce(signal?: AbortSignal): Promise<PublicClientConfig> {
   if (publicConfig !== undefined && publicConfig.expiresAt > Date.now()) return publicConfig.value;
+  const fromDocument = documentClientConfig();
+  if (fromDocument !== undefined) return fromDocument;
   const response = await anonymousFetch('/api/v1/public/config', {
     ...anonymousRequest(signal),
     method: 'GET',
@@ -214,16 +327,8 @@ async function establishProtectedSessionOnce(
   authority: { readonly secret: string } | { readonly token: string },
   signal?: AbortSignal,
 ): Promise<ProtectedSessionAuthority> {
-  const init = jsonPost({ sessionId, ...authority }, signal);
-  const headers = new Headers(init.headers);
-  headers.set('X-Shelf-Inline-Content', 'true');
-  const value = await responseJson(
-    await anonymousFetch(`/api/v1/public/shares/${encodeURIComponent(shareId)}/sessions`, {
-      ...init,
-      headers,
-      credentials: 'include',
-    }),
-  );
+  const request = protectedSessionRequest(shareId, sessionId, authority, signal);
+  const value = await responseJson(await anonymousFetch(request.url, request.init));
   if (
     !isProtectedSessionAuthority(value) ||
     value.shareId !== shareId ||
@@ -323,22 +428,20 @@ async function resolveViewerShareOnce(
 ): Promise<FileShareResolution | FolderShareResolution> {
   if (reference.accessType !== authority.accessType)
     throw new PublicShareUnavailableError({ failure: 'terminal' });
-  const url =
+  const request =
     reference.accessType === 'protected'
-      ? `/api/v1/public/shares/${encodeURIComponent(reference.shareId)}/resolve`
-      : `/api/v1/public/links/${encodeURIComponent(reference.publicCode)}/resolve${revisionId === undefined ? '' : `?${new URLSearchParams({ revisionId }).toString()}`}`;
-  const init =
-    authority.accessType === 'protected'
-      ? jsonPost(
-          { token: authority.token, ...(revisionId === undefined ? {} : { revisionId }) },
-          signal,
-        )
-      : {
-          ...anonymousRequest(signal),
-          method: 'GET',
-          headers: { 'X-Shelf-Inline-Content': 'true' },
-        };
-  const value = await responseJson(await anonymousFetch(url, init));
+      ? {
+          url: `/api/v1/public/shares/${encodeURIComponent(reference.shareId)}/resolve`,
+          init: jsonPost(
+            {
+              token: (authority as { readonly token: string }).token,
+              ...(revisionId === undefined ? {} : { revisionId }),
+            },
+            signal,
+          ),
+        }
+      : publicResolveRequest(reference.publicCode, revisionId, signal);
+  const value = await responseJson(await anonymousFetch(request.url, request.init));
   if (!isPublicShareResolution(value)) throw new PublicShareUnavailableError();
   if (value.accessType !== authority.accessType) throw new PublicShareUnavailableError();
   if (isFileShareResolution(value) || isFolderShareResolution(value)) return value;
@@ -393,13 +496,14 @@ async function loadViewerFileBytesOnce(
   signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
   const url = cachedContentActionUrl(resolution, authority);
+  const key = {
+    accessScope: viewerAccessScope(authority),
+    revisionId: resolution.revision.revisionId,
+    folderPath: '',
+  };
   return viewerContentCache.getOrLoad(
-    {
-      accessScope: viewerAccessScope(authority),
-      revisionId: resolution.revision.revisionId,
-      folderPath: '',
-    },
-    async (cacheSignal) => {
+    key,
+    persistedLoader(key, async (cacheSignal) => {
       const init =
         authority.accessType === 'protected'
           ? jsonPost(
@@ -413,7 +517,7 @@ async function loadViewerFileBytesOnce(
       const response = await anonymousFetch(url, init);
       if (!response.ok) await responseJson(response);
       return response.arrayBuffer();
-    },
+    }),
     signal,
   );
 }
@@ -432,14 +536,15 @@ async function loadViewerFolderPageOnce(
     }
     return value;
   };
+  // NUL cannot occur in a folder path, keeping metadata separate from content.
+  const key = {
+    accessScope: viewerAccessScope(authority),
+    revisionId: resolution.revision.revisionId,
+    folderPath: `\0tree:${cursor ?? ''}`,
+  };
   const bytes = await viewerContentCache.getOrLoad(
-    // NUL cannot occur in a folder path, keeping metadata separate from content.
-    {
-      accessScope: viewerAccessScope(authority),
-      revisionId: resolution.revision.revisionId,
-      folderPath: `\0tree:${cursor ?? ''}`,
-    },
-    async (cacheSignal) => {
+    key,
+    persistedLoader(key, async (cacheSignal) => {
       const init =
         authority.accessType === 'protected'
           ? jsonPost(
@@ -458,7 +563,7 @@ async function loadViewerFolderPageOnce(
       const data = new TextEncoder().encode(JSON.stringify(value)).buffer;
       parsePage(data);
       return data;
-    },
+    }),
     signal,
   );
   return parsePage(bytes);
@@ -497,13 +602,14 @@ async function loadViewerFolderEntryBytesOnce(
   signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
   cachedContentActionUrl(resolution, authority);
+  const key = {
+    accessScope: viewerAccessScope(authority),
+    revisionId: resolution.revision.revisionId,
+    folderPath: path,
+  };
   return viewerContentCache.getOrLoad(
-    {
-      accessScope: viewerAccessScope(authority),
-      revisionId: resolution.revision.revisionId,
-      folderPath: path,
-    },
-    async (cacheSignal) => {
+    key,
+    persistedLoader(key, async (cacheSignal) => {
       const query = new URLSearchParams({ path });
       const revisionId = resolution.revision.revisionId;
       if (authority.accessType === 'public') {
@@ -526,7 +632,7 @@ async function loadViewerFolderEntryBytesOnce(
       const response = await anonymousFetch(url, init);
       if (!response.ok) await responseJson(response);
       return response.arrayBuffer();
-    },
+    }),
     signal,
   );
 }

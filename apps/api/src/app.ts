@@ -52,6 +52,7 @@ import type {
   ShareIdGenerator,
   ShareRepository,
 } from '@shelf/core';
+import { registerResponseCompression } from '@shelf/renderer';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import { MemoryArtifactDeletionRepository } from './adapters/memory-artifact-deletion-repository.js';
 import { MemoryCommentRepository } from './adapters/memory-comment-repository.js';
@@ -203,6 +204,8 @@ export async function createShelfApp(options: CreateShelfAppOptions): Promise<Fa
     logger: options.logger ?? false,
     genReqId: () => randomUUID(),
   });
+  // Before any route: share JSON, documents, and text content all leave compressed.
+  registerResponseCompression(app);
   const limits = { ...DEFAULT_MULTIPART_LIMITS, ...options.multipartLimits };
   const revisionRepository = options.revisionRepository ?? new MemoryRevisionRepository();
   const shareRepository = options.shareRepository ?? new MemoryShareRepository(revisionRepository);

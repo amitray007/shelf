@@ -114,10 +114,53 @@ export class ContentByteCache {
   }
 }
 
+/**
+ * Objects at least this large stream to the first caller while the cache fills, so a cold read
+ * starts sending bytes as soon as storage does. Smaller objects arrive in one or two round trips
+ * anyway and keep the all-or-nothing error contract.
+ */
+export const PROGRESSIVE_FILL_BYTES = 1024 * 1024;
+const SLICE_BYTES = 256 * 1024;
+
 interface PendingRead {
-  controller: AbortController;
+  readonly controller: AbortController;
+  readonly bytes: Buffer;
+  /** Settles when storage opened the object or failed to. */
+  readonly opened: Promise<void>;
+  /** Settles when every byte arrived and was committed, or the fill failed. */
   promise: Promise<Buffer>;
+  filled: number;
+  failure: unknown;
   users: number;
+  /** A background fill started for a range miss. No caller owns it, so none can cancel it. */
+  detached: boolean;
+  waiters: Set<() => void>;
+}
+
+function settled(pending: PendingRead): boolean {
+  return pending.failure !== undefined || pending.filled === pending.bytes.length;
+}
+
+function waitForProgress(pending: PendingRead, signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      pending.waiters.delete(wake);
+      reject(signal?.reason);
+    };
+    const wake = () => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    };
+    if (signal?.aborted) return reject(signal.reason);
+    pending.waiters.add(wake);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function notify(pending: PendingRead): void {
+  const waiters = [...pending.waiters];
+  pending.waiters.clear();
+  for (const wake of waiters) wake();
 }
 
 /** Wraps only byte reads. Callers still authorize each request before invoking this port. */
@@ -148,29 +191,134 @@ export class CachedContentReader implements ContentReader {
     this.#cache.clear();
   }
 
-  async #load(
+  #start(
+    key: string,
     content: SealedContent,
-    controller: AbortController,
     reservation: NonNullable<ReturnType<ContentByteCache['reserve']>>,
-  ): Promise<Buffer> {
-    try {
-      const bytes = Buffer.allocUnsafe(content.byteCount);
-      let length = 0;
-      const source = await this.#reader.read(content, { signal: controller.signal });
-      for await (const chunk of source) {
+    detached: boolean,
+  ): PendingRead {
+    const controller = new AbortController();
+    let markOpened: (error?: unknown) => void = () => undefined;
+    const opened = new Promise<void>((resolve, reject) => {
+      markOpened = (error) => (error === undefined ? resolve() : reject(error));
+    });
+    void opened.catch(() => undefined);
+    const pending: PendingRead = {
+      controller,
+      bytes: Buffer.allocUnsafe(content.byteCount),
+      opened,
+      promise: Promise.resolve(Buffer.alloc(0)),
+      filled: 0,
+      failure: undefined,
+      users: 0,
+      detached,
+      waiters: new Set(),
+    };
+    const load = async (): Promise<Buffer> => {
+      try {
+        const source = await this.#reader.read(content, { signal: controller.signal });
+        markOpened();
+        for await (const chunk of source) {
+          controller.signal.throwIfAborted();
+          if (pending.filled + chunk.byteLength > content.byteCount)
+            throw new Error('Stored content exceeds its descriptor.');
+          pending.bytes.set(chunk, pending.filled);
+          pending.filled += chunk.byteLength;
+          notify(pending);
+        }
         controller.signal.throwIfAborted();
-        if (length + chunk.byteLength > content.byteCount)
-          throw new Error('Stored content exceeds its descriptor.');
-        bytes.set(chunk, length);
-        length += chunk.byteLength;
+        if (pending.filled !== content.byteCount) throw new Error('Stored content size mismatch.');
+        reservation.commit(key, pending.bytes);
+        return pending.bytes;
+      } catch (error) {
+        pending.failure = error ?? new Error('Stored content read failed.');
+        markOpened(pending.failure);
+        throw pending.failure;
+      } finally {
+        reservation.release();
+        notify(pending);
       }
-      controller.signal.throwIfAborted();
-      if (length !== content.byteCount) throw new Error('Stored content size mismatch.');
-      reservation.commit(this.#cache.key(content), bytes);
-      return bytes;
-    } finally {
-      reservation.release();
+    };
+    pending.promise = load();
+    this.#pending.set(key, pending);
+    void pending.promise
+      .finally(() => {
+        if (this.#pending.get(key) === pending) this.#pending.delete(key);
+      })
+      .catch(() => undefined);
+    return pending;
+  }
+
+  #release(key: string, pending: PendingRead): void {
+    pending.users -= 1;
+    if (
+      pending.users === 0 &&
+      !pending.detached &&
+      !settled(pending) &&
+      this.#pending.get(key) === pending
+    ) {
+      this.#pending.delete(key);
+      pending.controller.abort();
     }
+  }
+
+  /** Await a fill phase on behalf of one caller, releasing that caller if it gives up first. */
+  async #join<T>(
+    key: string,
+    pending: PendingRead,
+    phase: Promise<T>,
+    signal: AbortSignal | undefined,
+  ): Promise<T> {
+    let abort: (() => void) | undefined;
+    try {
+      return await new Promise<T>((resolve, reject) => {
+        abort = () => reject(signal?.reason);
+        signal?.addEventListener('abort', abort, { once: true });
+        if (signal?.aborted) abort();
+        void phase.then(resolve, reject);
+      });
+    } catch (error) {
+      this.#release(key, pending);
+      throw error;
+    } finally {
+      if (abort !== undefined) signal?.removeEventListener('abort', abort);
+    }
+  }
+
+  /** Streams one range as the fill reaches it. The caller holds the fill until it finishes. */
+  #follow(
+    key: string,
+    pending: PendingRead,
+    start: number,
+    end: number,
+    signal: AbortSignal | undefined,
+  ): AsyncIterable<Uint8Array> {
+    const release = () => this.#release(key, pending);
+    return (async function* () {
+      let released = false;
+      try {
+        let offset = start;
+        while (offset < end) {
+          signal?.throwIfAborted();
+          if (pending.filled > offset) {
+            const stop = Math.min(pending.filled, end, offset + SLICE_BYTES);
+            // Copy: the fill buffer becomes a shared cache entry.
+            yield Buffer.from(pending.bytes.subarray(offset, stop));
+            offset = stop;
+            continue;
+          }
+          if (pending.failure !== undefined) throw pending.failure;
+          if (pending.filled === pending.bytes.length)
+            throw new Error('Stored content size mismatch.');
+          await waitForProgress(pending, signal);
+        }
+      } finally {
+        if (!released) {
+          released = true;
+          release();
+        }
+      }
+    })();
   }
 
   async read(
@@ -189,57 +337,49 @@ export class CachedContentReader implements ContentReader {
       throw new Error('Stored content size mismatch.');
     }
     if (bytes === undefined) {
+      const progressive = content.byteCount >= PROGRESSIVE_FILL_BYTES;
       let pending = this.#pending.get(key);
+      if (pending !== undefined && pending.bytes.length !== content.byteCount)
+        throw new Error('Stored content size mismatch.');
+      const start = range?.start ?? 0;
+      if (progressive && start > 0 && (pending === undefined || pending.filled <= start)) {
+        // A seek into a cold large object (video, PDF) should not wait for the bytes before it.
+        // Serve the range directly and warm the cache in the background for later reads.
+        if (pending === undefined) {
+          const reservation = this.#cache.reserve(content.byteCount);
+          if (reservation !== undefined) this.#start(key, content, reservation, true);
+        }
+        return this.#reader.read(content, options);
+      }
       if (pending === undefined) {
         const reservation = this.#cache.reserve(content.byteCount);
         if (reservation === undefined) return this.#reader.read(content, options);
-        const controller = new AbortController();
-        pending = { controller, users: 0, promise: this.#load(content, controller, reservation) };
-        this.#pending.set(key, pending);
-        const current = pending;
-        void pending.promise
-          .finally(() => {
-            if (this.#pending.get(key) === current) this.#pending.delete(key);
-          })
-          .catch(() => undefined);
+        pending = this.#start(key, content, reservation, false);
       }
       const current = pending;
       current.users += 1;
-      let released = false;
-      const releaseUser = () => {
-        if (released) return;
-        released = true;
-        current.users -= 1;
-        if (current.users === 0 && this.#pending.get(key) === current) {
-          this.#pending.delete(key);
-          current.controller.abort();
-        }
-      };
-      let abort: (() => void) | undefined;
-      try {
-        bytes = await new Promise<Buffer>((resolve, reject) => {
-          abort = () => {
-            releaseUser();
-            reject(options.signal?.reason);
-          };
-          options.signal?.addEventListener('abort', abort, { once: true });
-          if (options.signal?.aborted) abort();
-          void current.promise.then(resolve, reject);
-        });
-        options.signal?.throwIfAborted();
-      } finally {
-        if (abort !== undefined) options.signal?.removeEventListener('abort', abort);
-        releaseUser();
+      if (progressive) {
+        await this.#join(key, current, current.opened, options.signal);
+        return this.#follow(
+          key,
+          current,
+          start,
+          range === undefined ? content.byteCount : range.end + 1,
+          options.signal,
+        );
       }
+      bytes = await this.#join(key, current, current.promise, options.signal);
+      this.#release(key, current);
+      options.signal?.throwIfAborted();
     }
     if (bytes.length !== content.byteCount) throw new Error('Stored content size mismatch.');
     const selected = bytes.subarray(range?.start ?? 0, range === undefined ? 0 : range.end + 1);
     return (async function* () {
       options.signal?.throwIfAborted();
       // Never expose the cache's mutable backing buffer to a consumer.
-      for (let offset = 0; offset < selected.length; offset += 256 * 1024) {
+      for (let offset = 0; offset < selected.length; offset += SLICE_BYTES) {
         options.signal?.throwIfAborted();
-        yield Buffer.from(selected.subarray(offset, offset + 256 * 1024));
+        yield Buffer.from(selected.subarray(offset, offset + SLICE_BYTES));
       }
     })();
   }

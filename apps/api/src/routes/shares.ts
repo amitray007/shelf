@@ -19,6 +19,7 @@ import {
   createShareResolutionService,
   ShareNotFoundError,
 } from '@shelf/core';
+import { allowTransferCompression } from '@shelf/renderer';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { Type } from 'typebox';
 
@@ -407,7 +408,9 @@ export async function registerShareRoutes(
       resolved.revision.byteCount > MAX_INLINE_CONTENT_BYTES ||
       !(
         (mediaType.startsWith('text/') && mediaType !== 'text/html') ||
-        mediaType.startsWith('image/') ||
+        // Raster images stay out: base64 inflates them by a third, they do not compress, and
+        // they would block the whole response. The viewer fetches them as cacheable bytes.
+        mediaType === 'image/svg+xml' ||
         /^application\/(json|.*\+json|javascript|typescript|xml|.*\+xml)$/.test(mediaType)
       )
     )
@@ -806,6 +809,8 @@ export async function registerShareRoutes(
         ...(body.revisionId === undefined ? {} : { revisionId: body.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
+      // Saved bytes stay exact; only the transfer is compressed for text-like files.
+      allowTransferCompression(reply, file.mediaType);
       return reply
         .type('application/octet-stream')
         .header(
@@ -1028,6 +1033,8 @@ export async function registerShareRoutes(
         ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
         signal: requestCancellationSignal(request, reply),
       });
+      // Saved bytes stay exact; only the transfer is compressed for text-like files.
+      allowTransferCompression(reply, file.mediaType);
       return reply
         .type('application/octet-stream')
         .header(

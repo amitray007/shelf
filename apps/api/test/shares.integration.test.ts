@@ -108,8 +108,13 @@ async function establishSession(
   });
 }
 
-function publicHeaders(response: { headers: Record<string, string | string[] | undefined> }) {
-  expect(response.headers['cache-control']).toBe('no-store');
+const REVALIDATED = 'private, no-cache';
+
+function publicHeaders(
+  response: { headers: Record<string, string | string[] | undefined> },
+  cacheControl = 'no-store',
+) {
+  expect(response.headers['cache-control']).toBe(cacheControl);
   expect(response.headers['referrer-policy']).toBe('no-referrer');
   expect(response.headers['x-content-type-options']).toBe('nosniff');
   expect(response.headers['x-robots-tag']).toBe('noindex, nofollow, noarchive');
@@ -871,8 +876,8 @@ describe('share HTTP boundary', () => {
       expect(response.json()).toMatchObject({ error: { code: 'SHARE_NOT_FOUND' } });
       publicHeaders(response);
     }
-    publicHeaders(protectedPreview);
-    publicHeaders(protectedRange);
+    publicHeaders(protectedPreview, REVALIDATED);
+    publicHeaders(protectedRange, REVALIDATED);
     publicHeaders(protectedInvalid);
     publicHeaders(protectedUnsatisfiable);
     publicHeaders(protectedMissingCookie);
@@ -905,8 +910,8 @@ describe('share HTTP boundary', () => {
     });
     expect(publicNotModified.statusCode).toBe(304);
     expect(publicNotModified.rawPayload).toHaveLength(0);
-    publicHeaders(publicPreview);
-    publicHeaders(publicNotModified);
+    publicHeaders(publicPreview, REVALIDATED);
+    publicHeaders(publicNotModified, REVALIDATED);
   });
 
   it('does not extend a viewer cookie past a near-term share expiry', async () => {
@@ -1122,8 +1127,8 @@ describe('share HTTP boundary', () => {
     expect(treeFile.rawPayload.toString()).toBe('export {};');
     expect(treeFile.headers['content-disposition']).toMatch(/^attachment;/u);
     publicHeaders(treeFile);
-    publicHeaders(protectedPreview);
-    publicHeaders(publicPreview);
+    publicHeaders(protectedPreview, REVALIDATED);
+    publicHeaders(publicPreview, REVALIDATED);
     publicHeaders(content);
   });
 });

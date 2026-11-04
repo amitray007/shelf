@@ -29,8 +29,11 @@ it redirects the frame to a revision-scoped folder session so the browser can lo
 The final artifact response blocks fetch/connect, forms, nested frames, workers, object content,
 and base URLs. External subresources are blocked unless the operator configures trusted resource
 origins as described below. Inline and `data:` scripts, inline styles, and data/blob media are
-allowed. Every response is `no-store`, `no-transform`, `no-referrer`, `nosniff`, and denies browser permissions. `no-transform` also
-prevents a CDN from injecting scripts into the isolated document.
+allowed. Every document is `no-store`, `no-transform`, `no-referrer`, `nosniff`, and denies browser permissions. `no-transform` also
+prevents a CDN from injecting scripts into the isolated document. Folder subresources are
+`private` and cacheable until their session expires, so moving between pages of a folder site
+reuses its scripts, styles, and images. Text responses are Brotli- or gzip-compressed for
+browsers that ask.
 
 ## Folder sessions
 

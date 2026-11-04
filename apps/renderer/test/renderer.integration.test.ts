@@ -1,3 +1,4 @@
+import { brotliDecompressSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createRendererApp, type RendererApp } from '../src/app.js';
@@ -526,6 +527,10 @@ describe('folder sessions', () => {
       content: new TextEncoder().encode('export const ready = true;'),
     },
     'img/a b.png': { mediaType: 'image/png', content: Uint8Array.from([1, 2, 3, 4, 5]) },
+    'js/vendor.js': {
+      mediaType: 'text/javascript',
+      content: new TextEncoder().encode('export const value = "shelf";\n'.repeat(400)),
+    },
   };
 
   async function folderApp(
@@ -636,6 +641,42 @@ describe('folder sessions', () => {
     expect(fetched.statusCode).toBe(200);
     expect(fetched.headers['content-security-policy']).toBe("default-src 'none'; sandbox");
     expect(fetched.body).toBe(indexHtml);
+  });
+
+  it('lets the frame reuse session subresources and compresses text ones', async () => {
+    const app = await folderApp();
+    const { location, sessionPath } = await openSession(app);
+
+    const script = await get(app, `${sessionPath}js/app.js`);
+    expect(script.headers['cache-control']).toMatch(/^private, max-age=\d+, immutable$/u);
+    const maxAge = Number(/max-age=(\d+)/u.exec(String(script.headers['cache-control']))?.[1]);
+    expect(maxAge).toBeGreaterThan(0);
+    expect(maxAge).toBeLessThanOrEqual(60 * 60);
+
+    const vendor = await get(app, `${sessionPath}js/vendor.js`, {
+      'sec-fetch-dest': 'script',
+      origin: 'null',
+      'accept-encoding': 'gzip, br',
+    });
+    expect(vendor.statusCode).toBe(200);
+    expect(vendor.headers['content-encoding']).toBe('br');
+    expect(vendor.headers.vary).toBe('Accept-Encoding');
+    expect(brotliDecompressSync(vendor.rawPayload).toString()).toBe(
+      new TextDecoder().decode(files['js/vendor.js'].content),
+    );
+
+    const ranged = await get(app, `${sessionPath}js/vendor.js`, {
+      'sec-fetch-dest': 'script',
+      origin: 'null',
+      'accept-encoding': 'br',
+      range: 'bytes=0-5',
+    });
+    expect(ranged.statusCode).toBe(206);
+    expect(ranged.headers['content-encoding']).toBeUndefined();
+    expect(ranged.body).toBe('export');
+
+    const document = await get(app, location, { 'sec-fetch-dest': 'iframe' });
+    expect(document.headers['cache-control']).toBe('no-store, no-transform');
   });
 
   it('keeps folder policies closed even when standalone CDN resources are trusted', async () => {
