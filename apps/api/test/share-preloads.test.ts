@@ -33,7 +33,7 @@ describe('share document preloads', () => {
 
 describe('share document boot', () => {
   const html =
-    '<html><head><script type="module" src="/assets/index-a.js"></script></head><body></body></html>';
+    '<html><head><script type="module" src="/assets/index-a.js"></script><link rel="stylesheet" href="/assets/a.css"></head><body></body></html>';
 
   it('runs the prefetch script before the main bundle and names the renderer', () => {
     const result = addShareBoot(html, {

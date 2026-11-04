@@ -114,14 +114,14 @@ export function addShareBoot(
     options.prefetchFile !== undefined &&
     /^assets\/share-prefetch-[\w-]+\.js$/.test(options.prefetchFile)
   ) {
-    // Module scripts run in document order, each as soon as it has loaded: this one must
-    // precede the main bundle so it never waits for it.
-    const tag = `<script type="module" crossorigin src="/${options.prefetchFile}"></script>`;
-    const firstScript = result.indexOf('<script');
+    // async runs it as soon as it arrives instead of after the main bundle, and placing it
+    // ahead of every stylesheet keeps the stylesheet download from holding it back.
+    const tag = `<script type="module" async crossorigin src="/${options.prefetchFile}"></script>`;
+    const first = result.search(/<script|<link rel="stylesheet"|<link rel="modulepreload"/);
     result =
-      firstScript === -1
+      first === -1
         ? result.replace('</head>', `${tag}</head>`)
-        : `${result.slice(0, firstScript)}${tag}${result.slice(firstScript)}`;
+        : `${result.slice(0, first)}${tag}${result.slice(first)}`;
   }
   return result;
 }
