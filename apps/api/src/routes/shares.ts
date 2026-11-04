@@ -408,7 +408,9 @@ export async function registerShareRoutes(
       resolved.revision.byteCount > MAX_INLINE_CONTENT_BYTES ||
       !(
         (mediaType.startsWith('text/') && mediaType !== 'text/html') ||
-        mediaType.startsWith('image/') ||
+        // Raster images stay out: base64 inflates them by a third, they do not compress, and
+        // they would block the whole response. The viewer fetches them as cacheable bytes.
+        mediaType === 'image/svg+xml' ||
         /^application\/(json|.*\+json|javascript|typescript|xml|.*\+xml)$/.test(mediaType)
       )
     )
