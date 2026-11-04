@@ -22,6 +22,11 @@ import {
   schedulePersistContent,
 } from './persistent-content.js';
 import {
+  protectedSessionRequest,
+  publicResolveRequest,
+  takePrefetchedResponse,
+} from './share-requests.js';
+import {
   type FileShareResolution,
   type FolderShareResolution,
   isFileShareResolution,
@@ -110,12 +115,43 @@ function jsonPost(body: object, signal?: AbortSignal): RequestInit {
 }
 
 async function anonymousFetch(input: string, init: RequestInit): Promise<Response> {
+  const early = takePrefetchedResponse(input, init);
+  if (early !== undefined) {
+    try {
+      return await adoptEarlyResponse(early, init.signal);
+    } catch {
+      // A failed early request costs nothing extra: send it now, as before.
+      init.signal?.throwIfAborted();
+    }
+  }
   try {
     return await fetch(input, init);
   } catch {
     if (init.signal?.aborted) throw init.signal.reason;
     throw new PublicShareUnavailableError({ failure: 'transient' });
   }
+}
+
+function adoptEarlyResponse(
+  early: Promise<Response>,
+  signal: AbortSignal | null | undefined,
+): Promise<Response> {
+  if (signal === null || signal === undefined) return early;
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    early.then(
+      (response) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(response);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
 }
 
 function definitiveClientFailure(status: number): boolean {
@@ -245,8 +281,25 @@ export function forgetViewerShareContent(reference: ViewerShareReference): void 
   );
 }
 
+/** The share document names the renderer origin, which saves a request on every open. */
+function documentClientConfig(): PublicClientConfig | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="shelf-renderer-origin"]');
+  if (meta === null) return undefined;
+  const origin = meta.content;
+  if (origin === '') return {};
+  try {
+    const url = new URL(origin);
+    return url.origin === origin ? { rendererOrigin: origin } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function loadPublicClientConfigOnce(signal?: AbortSignal): Promise<PublicClientConfig> {
   if (publicConfig !== undefined && publicConfig.expiresAt > Date.now()) return publicConfig.value;
+  const fromDocument = documentClientConfig();
+  if (fromDocument !== undefined) return fromDocument;
   const response = await anonymousFetch('/api/v1/public/config', {
     ...anonymousRequest(signal),
     method: 'GET',
@@ -274,16 +327,8 @@ async function establishProtectedSessionOnce(
   authority: { readonly secret: string } | { readonly token: string },
   signal?: AbortSignal,
 ): Promise<ProtectedSessionAuthority> {
-  const init = jsonPost({ sessionId, ...authority }, signal);
-  const headers = new Headers(init.headers);
-  headers.set('X-Shelf-Inline-Content', 'true');
-  const value = await responseJson(
-    await anonymousFetch(`/api/v1/public/shares/${encodeURIComponent(shareId)}/sessions`, {
-      ...init,
-      headers,
-      credentials: 'include',
-    }),
-  );
+  const request = protectedSessionRequest(shareId, sessionId, authority, signal);
+  const value = await responseJson(await anonymousFetch(request.url, request.init));
   if (
     !isProtectedSessionAuthority(value) ||
     value.shareId !== shareId ||
@@ -383,22 +428,20 @@ async function resolveViewerShareOnce(
 ): Promise<FileShareResolution | FolderShareResolution> {
   if (reference.accessType !== authority.accessType)
     throw new PublicShareUnavailableError({ failure: 'terminal' });
-  const url =
+  const request =
     reference.accessType === 'protected'
-      ? `/api/v1/public/shares/${encodeURIComponent(reference.shareId)}/resolve`
-      : `/api/v1/public/links/${encodeURIComponent(reference.publicCode)}/resolve${revisionId === undefined ? '' : `?${new URLSearchParams({ revisionId }).toString()}`}`;
-  const init =
-    authority.accessType === 'protected'
-      ? jsonPost(
-          { token: authority.token, ...(revisionId === undefined ? {} : { revisionId }) },
-          signal,
-        )
-      : {
-          ...anonymousRequest(signal),
-          method: 'GET',
-          headers: { 'X-Shelf-Inline-Content': 'true' },
-        };
-  const value = await responseJson(await anonymousFetch(url, init));
+      ? {
+          url: `/api/v1/public/shares/${encodeURIComponent(reference.shareId)}/resolve`,
+          init: jsonPost(
+            {
+              token: (authority as { readonly token: string }).token,
+              ...(revisionId === undefined ? {} : { revisionId }),
+            },
+            signal,
+          ),
+        }
+      : publicResolveRequest(reference.publicCode, revisionId, signal);
+  const value = await responseJson(await anonymousFetch(request.url, request.init));
   if (!isPublicShareResolution(value)) throw new PublicShareUnavailableError();
   if (value.accessType !== authority.accessType) throw new PublicShareUnavailableError();
   if (isFileShareResolution(value) || isFolderShareResolution(value)) return value;

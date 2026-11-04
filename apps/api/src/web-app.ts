@@ -86,6 +86,46 @@ export function addSharePreloads(document: string, manifest: unknown): string {
   return document.replace('</head>', `${hints.join('')}</head>`);
 }
 
+function escapeAttribute(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+/**
+ * Start the share request before the main bundle arrives, and hand the viewer its renderer
+ * origin so it neither waits on a config request nor opens the renderer connection late.
+ */
+export function addShareBoot(
+  document: string,
+  options: {
+    readonly prefetchFile?: string | undefined;
+    readonly rendererOrigin?: string | undefined;
+  },
+): string {
+  const origin = options.rendererOrigin ?? '';
+  let head = `<meta name="shelf-renderer-origin" content="${escapeAttribute(origin)}">`;
+  if (origin !== '')
+    head += `<link rel="preconnect" href="${escapeAttribute(origin)}" crossorigin>`;
+  let result = document.replace('</head>', `${head}</head>`);
+  if (
+    options.prefetchFile !== undefined &&
+    /^assets\/share-prefetch-[\w-]+\.js$/.test(options.prefetchFile)
+  ) {
+    // Module scripts run in document order, each as soon as it has loaded: this one must
+    // precede the main bundle so it never waits for it.
+    const tag = `<script type="module" crossorigin src="/${options.prefetchFile}"></script>`;
+    const firstScript = result.indexOf('<script');
+    result =
+      firstScript === -1
+        ? result.replace('</head>', `${tag}</head>`)
+        : `${result.slice(0, firstScript)}${tag}${result.slice(firstScript)}`;
+  }
+  return result;
+}
+
 export async function registerWebApp(app: FastifyInstance, options: WebAppOptions): Promise<void> {
   const root = resolve(options.root);
   const metadata = await lstat(root);
@@ -159,6 +199,27 @@ export async function registerWebApp(app: FastifyInstance, options: WebAppOption
       'Vite manifest unavailable or invalid; serving share shell without preloads.',
     );
   }
+  let prefetchFile: string | undefined;
+  try {
+    const descriptor: unknown = JSON.parse(
+      await readFile(join(root, '.vite/share-prefetch.json'), 'utf8'),
+    );
+    if (
+      typeof descriptor === 'object' &&
+      descriptor !== null &&
+      'file' in descriptor &&
+      typeof descriptor.file === 'string'
+    )
+      prefetchFile = descriptor.file;
+  } catch {
+    app.log.warn(
+      'Share prefetch script unavailable; shares start their requests from the main bundle.',
+    );
+  }
+  shareDocument = addShareBoot(shareDocument, {
+    prefetchFile,
+    rendererOrigin: options.rendererOrigin,
+  });
   if (options.shareReader !== undefined) {
     registerShareDocuments(app, options.shareReader, shareDocument, (reply) =>
       applyDocumentHeaders(reply, options.rendererOrigin, options.allowedFrameOrigins),

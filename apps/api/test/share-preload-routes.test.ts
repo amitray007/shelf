@@ -4,9 +4,10 @@ import { join } from 'node:path';
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 
-import { registerWebApp } from '../src/web-app.js';
+import { addShareBoot, registerWebApp } from '../src/web-app.js';
 
 const html = '<!doctype html><html><head><title>Shelf</title></head><body></body></html>';
+const prefetchFile = 'assets/share-prefetch-Test1234.js';
 const manifest = {
   'index.html': { file: 'assets/entry.js' },
   'src/viewer-loader.ts': { file: 'assets/loader.js', imports: ['_shared.js'] },
@@ -30,10 +31,12 @@ describe('share document preload routes', () => {
       await mkdir(join(root, 'assets'));
       await writeFile(join(root, 'index.html'), html);
       await writeFile(join(root, 'favicon.svg'), '<svg></svg>');
-      if (contents !== undefined) {
-        await mkdir(join(root, '.vite'));
-        await writeFile(join(root, '.vite/manifest.json'), contents);
-      }
+      await mkdir(join(root, '.vite'));
+      await writeFile(
+        join(root, '.vite/share-prefetch.json'),
+        JSON.stringify({ file: prefetchFile }),
+      );
+      if (contents !== undefined) await writeFile(join(root, '.vite/manifest.json'), contents);
       await registerWebApp(app, { root });
       for (let request = 0; request < 2; request += 1) {
         const response = await app.inject({ method: 'GET', url: '/s/shr_test' });
@@ -43,8 +46,9 @@ describe('share document preload routes', () => {
           for (const file of ['loader', 'page', 'shared'])
             expect(response.body).toContain(`rel="modulepreload" href="/assets/${file}.js"`);
           expect(response.body).not.toContain('href="/assets/entry.js"');
+          expect(response.body).toContain(`src="/${prefetchFile}"`);
         } else {
-          expect(response.body).toBe(html);
+          expect(response.body).toBe(addShareBoot(html, { prefetchFile }));
         }
       }
       expect(warn).toHaveBeenCalledTimes(kind === 'valid' ? 0 : 1);

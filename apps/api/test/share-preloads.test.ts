@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addSharePreloads } from '../src/web-app.js';
+import { addShareBoot, addSharePreloads } from '../src/web-app.js';
 
 describe('share document preloads', () => {
   const html = '<html><head></head><body></body></html>';
@@ -28,5 +28,35 @@ describe('share document preloads', () => {
   });
   it('leaves the document intact without a manifest', () => {
     expect(addSharePreloads(html, null)).toBe(html);
+  });
+});
+
+describe('share document boot', () => {
+  const html =
+    '<html><head><script type="module" src="/assets/index-a.js"></script></head><body></body></html>';
+
+  it('runs the prefetch script before the main bundle and names the renderer', () => {
+    const result = addShareBoot(html, {
+      prefetchFile: 'assets/share-prefetch-Ab12-_cd.js',
+      rendererOrigin: 'https://render.example',
+    });
+    expect(result.indexOf('share-prefetch-Ab12-_cd.js')).toBeLessThan(result.indexOf('index-a.js'));
+    expect(result).toContain(
+      '<meta name="shelf-renderer-origin" content="https://render.example">',
+    );
+    expect(result).toContain('<link rel="preconnect" href="https://render.example" crossorigin>');
+  });
+
+  it('marks a missing renderer and ignores an unexpected prefetch path', () => {
+    const result = addShareBoot(html, { prefetchFile: '../evil.js' });
+    expect(result).toContain('<meta name="shelf-renderer-origin" content="">');
+    expect(result).not.toContain('evil');
+    expect(result).not.toContain('preconnect');
+  });
+
+  it('escapes the renderer origin', () => {
+    expect(addShareBoot(html, { rendererOrigin: 'https://a.example/"><script>' })).not.toContain(
+      '"><script>',
+    );
   });
 });
