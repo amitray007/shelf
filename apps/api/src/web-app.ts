@@ -64,10 +64,22 @@ export function addSharePreloads(document: string, manifest: unknown): string {
   for (const key of ['src/viewer-loader.ts', 'src/viewer-page.tsx']) {
     const chunk = entries[key];
     if (!chunk || typeof chunk !== 'object') continue;
-    const direct = [chunk.file];
-    if (Array.isArray(chunk.imports)) {
-      for (const dependency of chunk.imports)
-        if (typeof dependency === 'string') direct.push(entries[dependency]?.file);
+    // The whole static graph: the share request no longer waits on the main bundle, so the
+    // viewer's UI chunks can download alongside it instead of after it executes.
+    const direct: unknown[] = [];
+    const visited = new Set<string>();
+    const pending = [key];
+    while (pending.length > 0) {
+      const current = pending.pop() as string;
+      if (visited.has(current)) continue;
+      visited.add(current);
+      const node = entries[current];
+      if (!node || typeof node !== 'object') continue;
+      direct.push(node.file);
+      if (Array.isArray(node.imports))
+        for (const dependency of node.imports)
+          if (typeof dependency === 'string' && dependency !== 'index.html')
+            pending.push(dependency);
     }
     for (const file of direct)
       if (

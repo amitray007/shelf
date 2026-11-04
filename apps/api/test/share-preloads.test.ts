@@ -3,7 +3,7 @@ import { addShareBoot, addSharePreloads } from '../src/web-app.js';
 
 describe('share document preloads', () => {
   const html = '<html><head></head><body></body></html>';
-  it('adds viewer chunks and their static dependencies', () => {
+  it('adds viewer chunks and their whole static import graph', () => {
     const result = addSharePreloads(html, {
       'index.html': { file: 'assets/entry.js', imports: ['_entry-dep.js'] },
       '_entry-dep.js': { file: 'assets/entry-dep.js' },
@@ -23,8 +23,9 @@ describe('share document preloads', () => {
     expect(result).toContain('rel="modulepreload" href="/assets/loader-a.js"');
     expect(result).toContain('rel="modulepreload" href="/assets/page-b.js"');
     expect(result).toContain('rel="modulepreload" href="/assets/shared-d.js"');
+    expect(result).toContain('rel="modulepreload" href="/assets/nested.js"');
     expect(result).toContain('rel="preload" as="style" href="/assets/page-c.css"');
-    expect(result).not.toMatch(/entry\.js|entry-dep|nested|dynamic/);
+    expect(result).not.toMatch(/entry\.js|entry-dep|dynamic/);
   });
   it('leaves the document intact without a manifest', () => {
     expect(addSharePreloads(html, null)).toBe(html);
